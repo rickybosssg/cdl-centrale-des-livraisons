@@ -55,6 +55,15 @@ const AuthenticatedApp = () => {
         <Route path="/gerer-courses" element={<GererCourses />} />
         <Route path="/gerer-livreurs" element={<GererLivreurs />} />
         <Route path="/statistiques" element={<Statistiques />} />
+        <Route path="/dispatcher/DispatcherDashboard" element={<Home />} />
+        <Route path="/dispatcher/GererCourses" element={<GererCourses />} />
+        <Route path="/dispatcher/GererLivreurs" element={<GererLivreurs />} />
+        <Route path="/dispatcher/Statistiques" element={<Statistiques />} />
+        <Route path="/client/ClientHome" element={<Home />} />
+        <Route path="/client/CreateCourse" element={<CreateCourse />} />
+        <Route path="/client/MesCourses" element={<MesCourses />} />
+        <Route path="/livreur/CoursesDisponibles" element={<CoursesDisponibles />} />
+        <Route path="/livreur/MesLivraisons" element={<MesLivraisons />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
