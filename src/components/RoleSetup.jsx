@@ -3,13 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Package, Truck, User } from "lucide-react";
+import { Package, Truck, User, Radio } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import QuartierSelect from "./QuartierSelect";
 
 const ROLES = [
   { value: "client", label: "Client", icon: User, desc: "Commander des livraisons" },
   { value: "livreur", label: "Livreur", icon: Truck, desc: "Effectuer des livraisons" },
+  { value: "dispatcher", label: "Dispatcher", icon: Radio, desc: "Gérer les courses et livreurs" },
 ];
 
 export default function RoleSetup({ onComplete }) {
