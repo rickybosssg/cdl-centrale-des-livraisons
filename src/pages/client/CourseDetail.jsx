@@ -14,6 +14,10 @@ export default function CourseDetail() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!id || id === ':id') {
+      setLoading(false);
+      return;
+    }
     const load = async () => {
       const courses = await base44.entities.Course.filter({ id });
       if (courses.length > 0) setCourse(courses[0]);
