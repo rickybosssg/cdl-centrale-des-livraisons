@@ -5,7 +5,18 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
-// Add page imports here
+import Home from './pages/Home';
+import CreateCourse from './pages/client/CreateCourse';
+import MesCourses from './pages/client/MesCourses';
+import CourseDetail from './pages/client/CourseDetail';
+import CoursesDisponibles from './pages/livreur/CoursesDisponibles';
+import CourseLivreur from './pages/livreur/CourseLivreur';
+import MesLivraisons from './pages/livreur/MesLivraisons';
+import GererCourses from './pages/dispatcher/GererCourses';
+import GererLivreurs from './pages/dispatcher/GererLivreurs';
+import Statistiques from './pages/dispatcher/Statistiques';
+import AppLayout from './components/AppLayout';
+import AppLayoutWrapper from './components/AppLayoutWrapper';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -33,7 +44,18 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
-      {/* Add your page Route elements here */}
+      <Route element={<AppLayoutWrapper />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/commander" element={<CreateCourse />} />
+        <Route path="/mes-courses" element={<MesCourses />} />
+        <Route path="/course/:id" element={<CourseDetail />} />
+        <Route path="/courses-disponibles" element={<CoursesDisponibles />} />
+        <Route path="/course-livreur/:id" element={<CourseLivreur />} />
+        <Route path="/mes-livraisons" element={<MesLivraisons />} />
+        <Route path="/gerer-courses" element={<GererCourses />} />
+        <Route path="/gerer-livreurs" element={<GererLivreurs />} />
+        <Route path="/statistiques" element={<Statistiques />} />
+      </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
