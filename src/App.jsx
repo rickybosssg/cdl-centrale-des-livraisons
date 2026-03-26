@@ -15,6 +15,8 @@ import MesLivraisons from './pages/livreur/MesLivraisons';
 import GererCourses from './pages/dispatcher/GererCourses';
 import GererLivreurs from './pages/dispatcher/GererLivreurs';
 import Statistiques from './pages/dispatcher/Statistiques';
+import SuiviCommissions from './pages/dispatcher/SuiviCommissions';
+import ValidationLivreurs from './pages/dispatcher/ValidationLivreurs';
 import AppLayout from './components/AppLayout';
 import AppLayoutWrapper from './components/AppLayoutWrapper';
 
@@ -55,6 +57,8 @@ const AuthenticatedApp = () => {
         <Route path="/gerer-courses" element={<GererCourses />} />
         <Route path="/gerer-livreurs" element={<GererLivreurs />} />
         <Route path="/statistiques" element={<Statistiques />} />
+        <Route path="/suivi-commissions" element={<SuiviCommissions />} />
+        <Route path="/validation-livreurs" element={<ValidationLivreurs />} />
         <Route path="/dispatcher/DispatcherDashboard" element={<Home />} />
         <Route path="/dispatcher/GererCourses" element={<GererCourses />} />
         <Route path="/dispatcher/GererLivreurs" element={<GererLivreurs />} />

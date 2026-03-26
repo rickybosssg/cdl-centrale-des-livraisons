@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Users, TrendingUp, Clock, CheckCircle2, Truck, BarChart3 } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, CheckCircle2, Truck, BarChart3, Settings, ShieldCheck, CreditCard } from "lucide-react";
+import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
 import moment from "moment";
@@ -10,12 +11,19 @@ export default function DispatcherDashboard() {
   const [courses, setCourses] = useState([]);
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dispatchMode, setDispatchModeState] = useState(getDispatchMode());
+
+  const toggleDispatchMode = () => {
+    const newMode = dispatchMode === 'auto' ? 'manuel' : 'auto';
+    setDispatchMode(newMode);
+    setDispatchModeState(newMode);
+  };
 
   useEffect(() => {
     const load = async () => {
       const [coursesData, livreursData] = await Promise.all([
         base44.entities.Course.list("-created_date", 50),
-        base44.entities.User.filter({ role: "livreur" }),
+        base44.entities.User.filter({ user_type: "livreur" }),
       ]);
       setCourses(coursesData);
       setLivreurs(livreursData);
@@ -42,9 +50,21 @@ export default function DispatcherDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard CDL</h1>
-        <p className="text-sm text-muted-foreground">Centrale des Livraisons - Ouagadougou</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard CDL</h1>
+          <p className="text-sm text-muted-foreground">Centrale des Livraisons - Ouagadougou</p>
+        </div>
+        <button
+          onClick={toggleDispatchMode}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+            dispatchMode === 'auto'
+              ? 'bg-green-100 text-green-700 border-green-300'
+              : 'bg-amber-100 text-amber-700 border-amber-300'
+          }`}
+        >
+          {dispatchMode === 'auto' ? '⚡ Mode Auto' : '✋ Mode Manuel'}
+        </button>
       </div>
 
       {/* Stats */}
@@ -147,6 +167,22 @@ export default function DispatcherDashboard() {
             <CardContent className="p-4 text-center space-y-2">
               <Users className="h-8 w-8 text-accent mx-auto" />
               <p className="text-sm font-medium">Gérer les livreurs</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/suivi-commissions">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <CreditCard className="h-8 w-8 text-primary mx-auto" />
+              <p className="text-sm font-medium">Commissions</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/validation-livreurs">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <ShieldCheck className="h-8 w-8 text-green-600 mx-auto" />
+              <p className="text-sm font-medium">Validation</p>
             </CardContent>
           </Card>
         </Link>

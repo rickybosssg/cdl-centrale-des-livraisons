@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Phone, Package, ArrowLeft } from "lucide-react";
 import QuartierSelect from "../../components/QuartierSelect";
+import { lancerDispatch } from "@/lib/dispatch";
 import { PRIX_PAR_TYPE } from "@/lib/quartiers";
 import { toast } from "sonner";
 
@@ -53,7 +54,7 @@ export default function CreateCourse() {
     }
     setLoading(true);
     const statut_paiement = form.mode_paiement === "Paiement à la livraison" ? "paiement_livraison" : "en_attente";
-    await base44.entities.Course.create({
+    const courseData = await base44.entities.Course.create({
       ...form,
       statut: "en_attente",
       statut_paiement,
@@ -62,8 +63,14 @@ export default function CreateCourse() {
       prix: prix,
       commission: commission,
       commission_active: true,
+      commission_cdl: commission,
+      gain_livreur: prix - commission,
+      statut_paiement_livreur: "Commission due",
+      nombre_tentatives: 0,
     });
-    toast.success("Course créée avec succès !");
+    // Lancer le dispatch automatique
+    lancerDispatch(courseData);
+    toast.success("Course créée ! Recherche d'un livreur en cours...");
     navigate("/mes-courses");
   };
 

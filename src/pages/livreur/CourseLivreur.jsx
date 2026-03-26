@@ -53,10 +53,28 @@ export default function CourseLivreur() {
 
   const livrerColis = async () => {
     setUpdating(true);
+    const commissionCdl = (course.prix || 0) * 0.2;
+    const gainLivreur = (course.prix || 0) * 0.8;
     await base44.entities.Course.update(id, {
       statut: "livree",
       date_livraison: new Date().toISOString(),
+      commission_cdl: commissionCdl,
+      gain_livreur: gainLivreur,
+      statut_paiement_livreur: "Commission due",
     });
+    // Mettre à jour le solde du livreur
+    const livreurs = await base44.entities.User.filter({ email: course.livreur_email });
+    if (livreurs.length > 0) {
+      const livreur = livreurs[0];
+      const nouveauSolde = (livreur.solde_commission_du || 0) + commissionCdl;
+      await base44.entities.User.update(livreur.id, {
+        solde_commission_du: nouveauSolde,
+        total_courses_livrees: (livreur.total_courses_livrees || 0) + 1,
+        total_commissions_generees: (livreur.total_commissions_generees || 0) + commissionCdl,
+        statut_financier_livreur: "Doit une commission",
+        nombre_courses_actives: Math.max(0, (livreur.nombre_courses_actives || 0) - 1),
+      });
+    }
     setCourse(prev => ({ ...prev, statut: "livree", date_livraison: new Date().toISOString() }));
     toast.success("Colis livré avec succès !");
     setUpdating(false);

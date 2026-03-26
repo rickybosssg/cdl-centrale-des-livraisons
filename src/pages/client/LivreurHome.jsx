@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin } from "lucide-react";
+import SoldeBlock from "../../components/SoldeBlock";
+import CoursePendante from "../livreur/CoursePendante";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -32,6 +34,30 @@ export default function LivreurHome({ user }) {
   };
 
   const activeCourse = courses.find(c => ["acceptee", "en_cours"].includes(c.statut));
+  const coursePendante = courses.find(c => c.statut === "assignee_attente" && c.livreur_email === user.email);
+
+  // Vérification blocage
+  if (user.livreur_bloque) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <SoldeBlock user={user} />
+      </div>
+    );
+  }
+
+  // Vérification validation
+  if (user.statut_validation_livreur && user.statut_validation_livreur !== "valide") {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <p className="text-lg font-bold">Compte en attente</p>
+          <p className="text-sm text-muted-foreground">
+            Votre compte est en attente de validation par l’administration CDL.
+          </p>
+        </div>
+      </div>
+    );
+  }
   const completedToday = courses.filter(c => {
     if (c.statut !== "livree") return false;
     const today = new Date().toDateString();
@@ -40,6 +66,17 @@ export default function LivreurHome({ user }) {
 
   return (
     <div className="space-y-6">
+      {/* Course pendante (dispatch auto) */}
+      {coursePendante && (
+        <CoursePendante
+          course={coursePendante}
+          onRespond={() => setLoading(true)}
+        />
+      )}
+
+      {/* Solde */}
+      <SoldeBlock user={user} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

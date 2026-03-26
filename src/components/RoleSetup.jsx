@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Package, Truck, User, Radio } from "lucide-react";
+import { Package, Truck, User, Radio, Upload } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import QuartierSelect from "./QuartierSelect";
+import { toast } from "sonner";
 
 const ROLES = [
   { value: "client", label: "Client", icon: User, desc: "Commander des livraisons" },
@@ -17,19 +18,54 @@ export default function RoleSetup({ onComplete }) {
   const [step, setStep] = useState(1);
   const [selectedRole, setSelectedRole] = useState(null);
   const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "" });
+  const [docs, setDocs] = useState({ photo_profil: null, photo_identite_recto: null, photo_identite_verso: null, photo_moto: null });
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const uploadFile = async (file) => {
+    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    return file_url;
+  };
+
   const handleSubmit = async () => {
+    if (selectedRole === "livreur" && (!docs.photo_profil || !docs.photo_identite_recto || !docs.photo_identite_verso || !docs.photo_moto)) {
+      toast.error("Veuillez fournir tous les documents demandés");
+      return;
+    }
     setLoading(true);
+    let docUrls = {};
+    if (selectedRole === "livreur") {
+      setUploading(true);
+      const uploads = await Promise.all([
+        uploadFile(docs.photo_profil),
+        uploadFile(docs.photo_identite_recto),
+        uploadFile(docs.photo_identite_verso),
+        uploadFile(docs.photo_moto),
+      ]);
+      docUrls = {
+        photo_profil: uploads[0],
+        photo_identite_recto: uploads[1],
+        photo_identite_verso: uploads[2],
+        photo_moto: uploads[3],
+      };
+      setUploading(false);
+    }
     await base44.auth.updateMe({
       user_type: selectedRole,
       telephone: form.telephone,
       whatsapp: form.whatsapp || form.telephone,
       quartier: form.quartier,
-      disponible: selectedRole === "livreur",
+      disponible: false,
+      actif: true,
+      profil_valide: selectedRole !== "livreur",
+      statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : "valide",
       verified: selectedRole === "client",
       total_courses: 0,
       commission_mode: true,
+      solde_commission_du: 0,
+      statut_financier_livreur: "À jour",
+      livreur_bloque: false,
+      ...docUrls,
     });
     setLoading(false);
     onComplete();
@@ -125,16 +161,51 @@ export default function RoleSetup({ onComplete }) {
           </div>
         </div>
 
+        {selectedRole === "livreur" && (
+          <div className="space-y-3">
+            <p className="text-sm font-semibold">Documents obligatoires</p>
+            {[
+              { key: "photo_profil", label: "Photo de profil (selfie)" },
+              { key: "photo_identite_recto", label: "CNI / Carte d'identité (recto)" },
+              { key: "photo_identite_verso", label: "CNI / Carte d'identité (verso)" },
+              { key: "photo_moto", label: "Photo de votre moto" },
+            ].map(doc => (
+              <div key={doc.key} className="space-y-1">
+                <Label>{doc.label} *</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    id={doc.key}
+                    onChange={e => setDocs(d => ({ ...d, [doc.key]: e.target.files[0] }))}
+                  />
+                  <label
+                    htmlFor={doc.key}
+                    className={`flex-1 flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-sm transition-colors ${
+                      docs[doc.key] ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {docs[doc.key] ? docs[doc.key].name : "Choisir une photo"}
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
             Retour
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!form.telephone || !form.quartier || loading}
+            disabled={!form.telephone || !form.quartier || loading || uploading}
             className="flex-1"
           >
-            {loading ? "Enregistrement..." : "Commencer"}
+            {uploading ? "Upload en cours..." : loading ? "Enregistrement..." : "Commencer"}
           </Button>
         </div>
       </div>

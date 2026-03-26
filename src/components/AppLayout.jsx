@@ -16,10 +16,10 @@ const NAV_ITEMS = {
     { path: "/mes-livraisons", icon: Truck, label: "Mes livraisons" },
   ],
   dispatcher: [
-    { path: "/", icon: Home, label: "Tableau de bord" },
+    { path: "/", icon: Home, label: "Accueil" },
     { path: "/gerer-courses", icon: Package, label: "Courses" },
     { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
-    { path: "/statistiques", icon: BarChart3, label: "Statistiques" },
+    { path: "/suivi-commissions", icon: BarChart3, label: "Commissions" },
   ],
 };
 
