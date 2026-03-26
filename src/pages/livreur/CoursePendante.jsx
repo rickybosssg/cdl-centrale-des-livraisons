@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { reassignerCourse } from "@/lib/dispatch";
 
 export default function CoursePendante({ course, onRespond }) {
-  const [remaining, setRemaining] = useState(45);
+  const [remaining, setRemaining] = useState(30);
   const [responding, setResponding] = useState(false);
 
   useEffect(() => {
@@ -79,8 +79,8 @@ export default function CoursePendante({ course, onRespond }) {
     onRespond?.();
   };
 
-  const pct = (remaining / 45) * 100;
-  const urgent = remaining <= 15;
+  const pct = (remaining / 30) * 100;
+  const urgent = remaining <= 10;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end justify-center p-4">

@@ -136,6 +136,16 @@ export default function LivreurHome({ user }) {
         </div>
       )}
 
+      {/* Gains du jour */}
+      {(user.solde_commission_du || 0) === 0 && (
+        <Card className="bg-green-50 border-green-200">
+          <CardContent className="p-3 flex items-center justify-between">
+            <p className="text-sm font-medium text-green-700">Commission CDL</p>
+            <span className="text-sm font-bold text-green-600">À jour ✅</span>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Actions */}
       <div className="grid grid-cols-2 gap-3">
         <Link to="/courses-disponibles">
@@ -151,6 +161,14 @@ export default function LivreurHome({ user }) {
             <CardContent className="p-4 text-center space-y-2">
               <MapPin className="h-8 w-8 text-primary mx-auto" />
               <p className="text-sm font-medium">Mes livraisons</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/mes-gains" className="col-span-2">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer h-full bg-primary/5 border-primary/20">
+            <CardContent className="p-4 text-center space-y-2">
+              <CheckCircle2 className="h-8 w-8 text-primary mx-auto" />
+              <p className="text-sm font-medium text-primary">Voir mes gains et commissions</p>
             </CardContent>
           </Card>
         </Link>

@@ -42,6 +42,16 @@ export default function CourseDetail() {
     );
   }
 
+  const STATUT_CLIENT = {
+    en_attente: { label: "Recherche d'un livreur en cours...", color: "text-amber-600", bg: "bg-amber-50 border-amber-200" },
+    assignee_attente: { label: "Un livreur a été trouvé !", color: "text-blue-600", bg: "bg-blue-50 border-blue-200" },
+    acceptee: { label: "Votre course a été acceptée", color: "text-indigo-600", bg: "bg-indigo-50 border-indigo-200" },
+    en_cours: { label: "Votre colis est en cours de livraison", color: "text-purple-600", bg: "bg-purple-50 border-purple-200" },
+    livree: { label: "Votre colis a été livré !", color: "text-green-600", bg: "bg-green-50 border-green-200" },
+    annulee: { label: "Course annulée", color: "text-red-600", bg: "bg-red-50 border-red-200" },
+    aucun_livreur: { label: "Aucun livreur disponible pour le moment. Veuillez patienter.", color: "text-red-600", bg: "bg-red-50 border-red-200" },
+  };
+
   if (!course) {
     return (
       <div className="text-center py-12">
@@ -50,6 +60,8 @@ export default function CourseDetail() {
     );
   }
 
+  const statutInfo = STATUT_CLIENT[course.statut] || STATUT_CLIENT.en_attente;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -57,10 +69,15 @@ export default function CourseDetail() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-lg font-bold">Détails de la course</h1>
+          <h1 className="text-lg font-bold">Suivi de la course</h1>
           <p className="text-xs text-muted-foreground">#{course.id?.slice(0, 8)}</p>
         </div>
         <StatusBadge statut={course.statut} />
+      </div>
+
+      {/* Bannière statut client */}
+      <div className={`rounded-xl border p-3 ${statutInfo.bg}`}>
+        <p className={`text-sm font-semibold ${statutInfo.color}`}>{statutInfo.label}</p>
       </div>
 
       {/* Itinerary */}

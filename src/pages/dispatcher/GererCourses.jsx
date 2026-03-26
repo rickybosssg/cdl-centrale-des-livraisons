@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, UserPlus, X } from "lucide-react";
+import { ArrowLeft, UserPlus, X, RefreshCw, Eye, Clock, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import CourseCard from "../../components/CourseCard";
+import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
 import { toast } from "sonner";
+import { lancerDispatch } from "@/lib/dispatch";
+import moment from "moment";
 
 export default function GererCourses() {
   const navigate = useNavigate();
@@ -17,10 +18,11 @@ export default function GererCourses() {
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [assignDialog, setAssignDialog] = useState(false);
+  const [detailDialog, setDetailDialog] = useState(false);
 
   const loadData = async () => {
     const [coursesData, livreursData] = await Promise.all([
-      base44.entities.Course.list("-created_date", 100),
+      base44.entities.Course.list("-created_date", 200),
       base44.entities.User.filter({ user_type: "livreur" }),
     ]);
     setCourses(coursesData);
@@ -31,11 +33,17 @@ export default function GererCourses() {
   useEffect(() => { loadData(); }, []);
 
   const assignerLivreur = async (livreur) => {
+    const now = new Date().toISOString();
+    const hist = selectedCourse.historique_assignation ? JSON.parse(selectedCourse.historique_assignation) : [];
+    hist.push({ livreur_email: livreur.email, livreur_nom: livreur.full_name, heure: now, statut: "manuel" });
     await base44.entities.Course.update(selectedCourse.id, {
       statut: "acceptee",
       livreur_email: livreur.email,
       livreur_name: livreur.full_name,
-      date_acceptation: new Date().toISOString(),
+      date_acceptation: now,
+      heure_assignation: now,
+      mode_assignation: "manuel",
+      historique_assignation: JSON.stringify(hist),
     });
     toast.success(`Course assignée à ${livreur.full_name}`);
     setAssignDialog(false);
@@ -43,16 +51,50 @@ export default function GererCourses() {
     loadData();
   };
 
+  const relancerDispatch = async (course) => {
+    toast.info("Dispatch automatique en cours...");
+    const result = await lancerDispatch(course);
+    if (result) {
+      toast.success(`Course envoyée à ${result.full_name}`);
+    } else {
+      toast.error("Aucun livreur disponible");
+    }
+    loadData();
+  };
+
   const changerStatut = async (courseId, newStatut) => {
     const updateData = { statut: newStatut };
-    if (newStatut === "livree") updateData.date_livraison = new Date().toISOString();
+    if (newStatut === "livree") {
+      updateData.date_livraison = new Date().toISOString();
+      const course = courses.find(c => c.id === courseId);
+      if (course) {
+        updateData.commission_cdl = (course.prix || 0) * 0.2;
+        updateData.gain_livreur = (course.prix || 0) * 0.8;
+        updateData.statut_paiement_livreur = "Commission due";
+        // Mise à jour solde livreur
+        const livreurs = await base44.entities.User.filter({ email: course.livreur_email });
+        if (livreurs.length > 0) {
+          const l = livreurs[0];
+          const commissionCdl = (course.prix || 0) * 0.2;
+          await base44.entities.User.update(l.id, {
+            solde_commission_du: (l.solde_commission_du || 0) + commissionCdl,
+            total_courses_livrees: (l.total_courses_livrees || 0) + 1,
+            total_commissions_generees: (l.total_commissions_generees || 0) + commissionCdl,
+            statut_financier_livreur: "Doit une commission",
+            nombre_courses_actives: Math.max(0, (l.nombre_courses_actives || 0) - 1),
+          });
+        }
+      }
+    }
     if (newStatut === "en_cours") updateData.date_recuperation = new Date().toISOString();
+    if (newStatut === "annulee") updateData.date_livraison = new Date().toISOString();
     await base44.entities.Course.update(courseId, updateData);
     toast.success("Statut mis à jour");
     loadData();
   };
 
-  const enAttente = courses.filter(c => c.statut === "en_attente");
+  const enAttente = courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut));
+  const assignees = courses.filter(c => c.statut === "assignee_attente");
   const enCours = courses.filter(c => ["acceptee", "en_cours"].includes(c.statut));
   const terminees = courses.filter(c => ["livree", "annulee"].includes(c.statut));
 
@@ -64,19 +106,70 @@ export default function GererCourses() {
     );
   }
 
+  const CourseRow = ({ course, actions }) => (
+    <Card className="border-l-4 border-l-primary">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-mono text-muted-foreground">#{course.id?.slice(0, 8)}</span>
+              <StatusBadge statut={course.statut} />
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-sm">
+              <span className="font-medium">{course.quartier_depart}</span>
+              <span className="text-muted-foreground">→</span>
+              <span className="font-medium">{course.quartier_arrivee}</span>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+              <span>{course.type_colis}</span>
+              {course.prix && <span className="font-semibold text-primary">{course.prix} FCFA</span>}
+              {course.mode_paiement && <span>{course.mode_paiement}</span>}
+            </div>
+            {course.livreur_name && (
+              <p className="text-xs text-muted-foreground mt-1">🛵 {course.livreur_name}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-0.5">
+              <Clock className="h-3 w-3 inline mr-0.5" />
+              {moment(course.created_date).format("DD/MM HH:mm")}
+              {course.heure_assignation && ` • Assignée ${moment(course.heure_assignation).format("HH:mm")}`}
+              {course.date_livraison && ` • Livrée ${moment(course.date_livraison).format("HH:mm")}`}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 flex-shrink-0"
+            onClick={() => { setSelectedCourse(course); setDetailDialog(true); }}
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
+        </div>
+        {actions && <div className="flex gap-2 mt-2">{actions}</div>}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-xl font-bold">Gérer les courses</h1>
+        </div>
+        <Button variant="outline" size="sm" onClick={loadData}>
+          <RefreshCw className="h-4 w-4" />
         </Button>
-        <h1 className="text-xl font-bold">Gérer les courses</h1>
       </div>
 
       <Tabs defaultValue="attente">
         <TabsList className="w-full">
           <TabsTrigger value="attente" className="flex-1 text-xs">
             Attente ({enAttente.length})
+          </TabsTrigger>
+          <TabsTrigger value="assignees" className="flex-1 text-xs">
+            Assignées ({assignees.length})
           </TabsTrigger>
           <TabsTrigger value="encours" className="flex-1 text-xs">
             En cours ({enCours.length})
@@ -88,85 +181,96 @@ export default function GererCourses() {
 
         <TabsContent value="attente" className="space-y-3 mt-3">
           {enAttente.map((course) => (
-            <CourseCard key={course.id} course={course}>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  className="flex-1"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedCourse(course);
-                    setAssignDialog(true);
-                  }}
-                >
-                  <UserPlus className="h-3 w-3 mr-1" />
-                  Assigner
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    changerStatut(course.id, "annulee");
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            </CourseCard>
+            <CourseRow
+              key={course.id}
+              course={course}
+              actions={
+                <>
+                  <Button size="sm" className="flex-1 h-8 text-xs" onClick={() => relancerDispatch(course)}>
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Dispatch auto
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => { setSelectedCourse(course); setAssignDialog(true); }}>
+                    <UserPlus className="h-3 w-3 mr-1" />
+                    Manuel
+                  </Button>
+                  <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => changerStatut(course.id, "annulee")}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </>
+              }
+            />
           ))}
-          {enAttente.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">Aucune course en attente</p>
-          )}
+          {enAttente.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course en attente</p>}
+        </TabsContent>
+
+        <TabsContent value="assignees" className="space-y-3 mt-3">
+          {assignees.map((course) => (
+            <CourseRow
+              key={course.id}
+              course={course}
+              actions={
+                <>
+                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => { setSelectedCourse(course); setAssignDialog(true); }}>
+                    <UserPlus className="h-3 w-3 mr-1" />
+                    Réassigner
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs text-green-600 border-green-300" onClick={() => changerStatut(course.id, "acceptee")}>
+                    Forcer acceptation
+                  </Button>
+                </>
+              }
+            />
+          ))}
+          {assignees.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course assignée en attente</p>}
         </TabsContent>
 
         <TabsContent value="encours" className="space-y-3 mt-3">
           {enCours.map((course) => (
-            <CourseCard key={course.id} course={course}>
-              <Select
-                value={course.statut}
-                onValueChange={(v) => changerStatut(course.id, v)}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="acceptee">Acceptée</SelectItem>
-                  <SelectItem value="en_cours">En cours</SelectItem>
-                  <SelectItem value="livree">Livrée</SelectItem>
-                  <SelectItem value="annulee">Annulée</SelectItem>
-                </SelectContent>
-              </Select>
-            </CourseCard>
+            <CourseRow
+              key={course.id}
+              course={course}
+              actions={
+                <>
+                  {course.statut === "acceptee" && (
+                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => changerStatut(course.id, "en_cours")}>
+                      Marquer récupéré
+                    </Button>
+                  )}
+                  {course.statut === "en_cours" && (
+                    <Button size="sm" className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700" onClick={() => changerStatut(course.id, "livree")}>
+                      Marquer livré
+                    </Button>
+                  )}
+                  <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => changerStatut(course.id, "annulee")}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </>
+              }
+            />
           ))}
-          {enCours.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">Aucune course en cours</p>
-          )}
+          {enCours.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course en cours</p>}
         </TabsContent>
 
         <TabsContent value="terminees" className="space-y-3 mt-3">
           {terminees.map((course) => (
-            <CourseCard key={course.id} course={course} />
+            <CourseRow key={course.id} course={course} />
           ))}
-          {terminees.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">Aucune course terminée</p>
-          )}
+          {terminees.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course terminée</p>}
         </TabsContent>
       </Tabs>
 
-      {/* Assign Dialog */}
+      {/* Dialog assigner manuellement */}
       <Dialog open={assignDialog} onOpenChange={setAssignDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assigner un livreur</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-            {livreurs.filter(l => l.disponible).length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Aucun livreur disponible
-              </p>
+            {livreurs.filter(l => l.disponible && l.statut_validation_livreur === "valide" && !l.livreur_bloque).length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Aucun livreur disponible et validé</p>
             ) : (
-              livreurs.filter(l => l.disponible).map((livreur) => (
+              livreurs.filter(l => l.disponible && l.statut_validation_livreur === "valide" && !l.livreur_bloque).map((livreur) => (
                 <div
                   key={livreur.id}
                   className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted cursor-pointer"
@@ -175,12 +279,61 @@ export default function GererCourses() {
                   <div>
                     <p className="font-medium text-sm">{livreur.full_name}</p>
                     <p className="text-xs text-muted-foreground">{livreur.quartier} • {livreur.telephone}</p>
+                    <p className="text-xs text-muted-foreground">{livreur.nombre_courses_actives || 0} course(s) active(s)</p>
                   </div>
                   <div className="h-2 w-2 rounded-full bg-green-500" />
                 </div>
               ))
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog détails course */}
+      <Dialog open={detailDialog} onOpenChange={setDetailDialog}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Détails de la course</DialogTitle>
+          </DialogHeader>
+          {selectedCourse && (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-muted-foreground">#{selectedCourse.id?.slice(0, 8)}</span>
+                <StatusBadge statut={selectedCourse.statut} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 bg-muted rounded"><p className="text-muted-foreground">Départ</p><p className="font-medium">{selectedCourse.quartier_depart}</p></div>
+                <div className="p-2 bg-muted rounded"><p className="text-muted-foreground">Arrivée</p><p className="font-medium">{selectedCourse.quartier_arrivee}</p></div>
+                <div className="p-2 bg-muted rounded"><p className="text-muted-foreground">Colis</p><p className="font-medium">{selectedCourse.type_colis}</p></div>
+                <div className="p-2 bg-muted rounded"><p className="text-muted-foreground">Montant</p><p className="font-bold text-primary">{selectedCourse.prix} FCFA</p></div>
+                <div className="p-2 bg-muted rounded"><p className="text-muted-foreground">Paiement</p><p className="font-medium">{selectedCourse.mode_paiement || "—"}</p></div>
+                <div className="p-2 bg-muted rounded"><p className="text-muted-foreground">Livreur</p><p className="font-medium">{selectedCourse.livreur_name || "Non assigné"}</p></div>
+              </div>
+              {selectedCourse.commission_cdl > 0 && (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 bg-primary/5 rounded"><p className="text-muted-foreground">Commission CDL (20%)</p><p className="font-bold text-primary">{Math.round(selectedCourse.commission_cdl).toLocaleString()} FCFA</p></div>
+                  <div className="p-2 bg-green-50 rounded"><p className="text-muted-foreground">Gain livreur (80%)</p><p className="font-bold text-green-600">{Math.round(selectedCourse.gain_livreur).toLocaleString()} FCFA</p></div>
+                </div>
+              )}
+              {/* Historique assignation */}
+              {selectedCourse.historique_assignation && (
+                <div className="space-y-2">
+                  <p className="font-semibold text-xs">Historique d'assignation</p>
+                  {(() => {
+                    try {
+                      const hist = JSON.parse(selectedCourse.historique_assignation);
+                      return hist.map((h, i) => (
+                        <div key={i} className="p-2 bg-muted rounded text-xs">
+                          <p className="font-medium">{h.livreur_nom || h.livreur_email}</p>
+                          <p className="text-muted-foreground">{moment(h.heure).format("DD/MM HH:mm")} • {h.statut}</p>
+                        </div>
+                      ));
+                    } catch { return null; }
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

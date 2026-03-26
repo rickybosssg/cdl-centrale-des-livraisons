@@ -1,0 +1,137 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "default": "user"
+    },
+    "user_type": {
+      "type": "string",
+      "enum": [
+        "client",
+        "livreur",
+        "dispatcher"
+      ],
+      "title": "Type d'utilisateur"
+    },
+    "telephone": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone"
+    },
+    "whatsapp": {
+      "type": "string",
+      "title": "WhatsApp"
+    },
+    "quartier": {
+      "type": "string",
+      "title": "Quartier"
+    },
+    "disponible": {
+      "type": "boolean",
+      "title": "Disponible / En ligne"
+    },
+    "actif": {
+      "type": "boolean",
+      "title": "Actif"
+    },
+    "profil_valide": {
+      "type": "boolean",
+      "title": "Profil valid\u00e9"
+    },
+    "statut_validation_livreur": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "valide",
+        "refuse"
+      ],
+      "title": "Statut de validation livreur"
+    },
+    "motif_refus": {
+      "type": "string",
+      "title": "Motif de refus"
+    },
+    "date_validation": {
+      "type": "string",
+      "title": "Date de validation"
+    },
+    "livreur_bloque": {
+      "type": "boolean",
+      "title": "Livreur bloqu\u00e9"
+    },
+    "motif_blocage": {
+      "type": "string",
+      "title": "Motif de blocage"
+    },
+    "statut_financier_livreur": {
+      "type": "string",
+      "enum": [
+        "\u00c0 jour",
+        "Doit une commission",
+        "Bloqu\u00e9"
+      ],
+      "title": "Statut financier"
+    },
+    "solde_commission_du": {
+      "type": "number",
+      "title": "Solde commission d\u00fb (FCFA)"
+    },
+    "total_courses_livrees": {
+      "type": "number",
+      "title": "Total courses livr\u00e9es"
+    },
+    "nombre_courses_actives": {
+      "type": "number",
+      "title": "Nombre courses actives"
+    },
+    "total_commissions_generees": {
+      "type": "number",
+      "title": "Total commissions g\u00e9n\u00e9r\u00e9es (FCFA)"
+    },
+    "total_commissions_payees": {
+      "type": "number",
+      "title": "Total commissions pay\u00e9es (FCFA)"
+    },
+    "date_dernier_paiement": {
+      "type": "string",
+      "title": "Date du dernier paiement"
+    },
+    "derniere_course_attribuee_at": {
+      "type": "string",
+      "title": "Derni\u00e8re course attribu\u00e9e le"
+    },
+    "gps_latitude": {
+      "type": "number",
+      "title": "Latitude GPS"
+    },
+    "gps_longitude": {
+      "type": "number",
+      "title": "Longitude GPS"
+    },
+    "photo_profil": {
+      "type": "string",
+      "title": "Photo de profil"
+    },
+    "photo_identite_recto": {
+      "type": "string",
+      "title": "CNI recto"
+    },
+    "photo_identite_verso": {
+      "type": "string",
+      "title": "CNI verso"
+    },
+    "photo_moto": {
+      "type": "string",
+      "title": "Photo de la moto"
+    },
+    "commission_mode": {
+      "type": "boolean",
+      "title": "Mode commission activ\u00e9"
+    }
+  }
+}

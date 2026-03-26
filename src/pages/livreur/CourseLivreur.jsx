@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Phone, Package, MapPin, CheckCircle2, Navigation } from "lucide-react";
+import { ArrowLeft, Phone, Package, MapPin, CheckCircle2, Navigation, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
@@ -27,16 +27,18 @@ export default function CourseLivreur() {
   useEffect(() => {
     if (!course || !['acceptee', 'en_cours'].includes(course.statut)) return;
     if (!navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        base44.entities.Course.update(id, {
-          livreur_lat: pos.coords.latitude,
-          livreur_lng: pos.coords.longitude,
-        });
-      },
-      null,
-      { enableHighAccuracy: true, maximumAge: 8000, timeout: 10000 }
-    );
+    const update = (pos) => {
+      base44.entities.Course.update(id, {
+        livreur_lat: pos.coords.latitude,
+        livreur_lng: pos.coords.longitude,
+      });
+      // Aussi sur le profil livreur
+      base44.auth.updateMe({
+        gps_latitude: pos.coords.latitude,
+        gps_longitude: pos.coords.longitude,
+      });
+    };
+    const watchId = navigator.geolocation.watchPosition(update, null, { enableHighAccuracy: true, maximumAge: 8000, timeout: 10000 });
     return () => navigator.geolocation.clearWatch(watchId);
   }, [course?.statut, id]);
 

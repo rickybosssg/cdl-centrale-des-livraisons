@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Users, TrendingUp, Clock, CheckCircle2, Truck, BarChart3, Settings, ShieldCheck, CreditCard } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, CheckCircle2, Truck, BarChart3, Settings, ShieldCheck, CreditCard, AlarmClock } from "lucide-react";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
@@ -34,11 +34,17 @@ export default function DispatcherDashboard() {
 
   const today = new Date().toDateString();
   const coursesToday = courses.filter(c => new Date(c.created_date).toDateString() === today);
-  const enAttente = courses.filter(c => c.statut === "en_attente");
+  const enAttente = courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut));
+  const enCours = courses.filter(c => ["assignee_attente", "acceptee", "en_cours"].includes(c.statut));
+  const terminees = courses.filter(c => c.statut === "livree");
   const livreursActifs = livreurs.filter(l => l.disponible);
-  const totalRevenu = courses
-    .filter(c => c.statut === "livree" && c.commission_active)
-    .reduce((sum, c) => sum + (c.commission || 0), 0);
+  const livreursValides = livreurs.filter(l => l.statut_validation_livreur === "valide");
+  const livreursEnAttente = livreurs.filter(l => !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente");
+  const livreursBlockes = livreurs.filter(l => l.livreur_bloque);
+  const totalCommissionsJour = courses
+    .filter(c => c.statut === "livree" && new Date(c.date_livraison).toDateString() === today)
+    .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
+  const totalImpaye = livreurs.reduce((sum, l) => sum + (l.solde_commission_du || 0), 0);
 
   if (loading) {
     return (
@@ -52,7 +58,7 @@ export default function DispatcherDashboard() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard CDL</h1>
+          <h1 className="text-2xl font-bold">Tableau de bord CDL</h1>
           <p className="text-sm text-muted-foreground">Centrale des Livraisons - Ouagadougou</p>
         </div>
         <button
@@ -63,7 +69,7 @@ export default function DispatcherDashboard() {
               : 'bg-amber-100 text-amber-700 border-amber-300'
           }`}
         >
-          {dispatchMode === 'auto' ? '⚡ Mode Auto' : '✋ Mode Manuel'}
+          {dispatchMode === 'auto' ? '⚡ Mode automatique' : '✋ Mode manuel'}
         </button>
       </div>
 
@@ -123,20 +129,6 @@ export default function DispatcherDashboard() {
         </Card>
       </div>
 
-      {/* Today */}
-      <Card className="bg-primary/5 border-primary/20">
-        <CardContent className="p-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Aujourd'hui</p>
-            <p className="text-xs text-muted-foreground">{moment().format("DD MMMM YYYY")}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-primary">{coursesToday.length}</p>
-            <p className="text-xs text-muted-foreground">courses</p>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Pending courses */}
       {enAttente.length > 0 && (
         <div className="space-y-3">
@@ -152,7 +144,8 @@ export default function DispatcherDashboard() {
         </div>
       )}
 
-      {/* Quick links */}
+      {/* Raccourcis */}
+      <h2 className="font-semibold text-sm text-muted-foreground">Accès rapides</h2>
       <div className="grid grid-cols-2 gap-3">
         <Link to="/gerer-courses">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
@@ -174,7 +167,7 @@ export default function DispatcherDashboard() {
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 text-center space-y-2">
               <CreditCard className="h-8 w-8 text-primary mx-auto" />
-              <p className="text-sm font-medium">Commissions</p>
+              <p className="text-sm font-medium">Suivi des commissions</p>
             </CardContent>
           </Card>
         </Link>
@@ -182,7 +175,28 @@ export default function DispatcherDashboard() {
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 text-center space-y-2">
               <ShieldCheck className="h-8 w-8 text-green-600 mx-auto" />
-              <p className="text-sm font-medium">Validation</p>
+              <p className="text-sm font-medium">Validation livreurs</p>
+              {livreursEnAttente.length > 0 && (
+                <span className="inline-block bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {livreursEnAttente.length}
+                </span>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/statistiques">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <BarChart3 className="h-8 w-8 text-purple-600 mx-auto" />
+              <p className="text-sm font-medium">Statistiques</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/parametres">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <Settings className="h-8 w-8 text-muted-foreground mx-auto" />
+              <p className="text-sm font-medium">Paramètres</p>
             </CardContent>
           </Card>
         </Link>

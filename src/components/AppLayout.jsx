@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { Package, Home, Clock, Users, BarChart3, Truck, Plus, Menu, X, LogOut } from "lucide-react";
+import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,8 @@ const NAV_ITEMS = {
   livreur: [
     { path: "/", icon: Home, label: "Accueil" },
     { path: "/courses-disponibles", icon: Package, label: "Disponibles" },
-    { path: "/mes-livraisons", icon: Truck, label: "Mes livraisons" },
+    { path: "/mes-livraisons", icon: Truck, label: "Livraisons" },
+    { path: "/mes-gains", icon: TrendingUp, label: "Gains" },
   ],
   dispatcher: [
     { path: "/", icon: Home, label: "Accueil" },
