@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, MapPin, Phone, Shield, ShieldOff, CheckCircle2, XCircle, CreditCard, History, Lock, Unlock, Eye } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Shield, ShieldOff, CheckCircle2, XCircle, CreditCard, History, Lock, Unlock, Eye, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -260,7 +260,7 @@ export default function GererLivreurs() {
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-2 text-center text-xs bg-muted/50 rounded-lg p-2">
+              <div className="grid grid-cols-4 gap-2 text-center text-xs bg-muted/50 rounded-lg p-2">
                 <div>
                   <p className="font-bold">{livreur.total_courses_livrees || 0}</p>
                   <p className="text-muted-foreground">Livrées</p>
@@ -274,6 +274,13 @@ export default function GererLivreurs() {
                     {Math.round(livreur.solde_commission_du || 0).toLocaleString()} F
                   </p>
                   <p className="text-muted-foreground">Dû CDL</p>
+                </div>
+                <div>
+                  <p className="font-bold flex items-center justify-center gap-0.5">
+                    <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                    {livreur.note_moyenne ? livreur.note_moyenne.toFixed(1) : "—"}
+                  </p>
+                  <p className="text-muted-foreground">Note ({livreur.total_notes || 0})</p>
                 </div>
               </div>
 

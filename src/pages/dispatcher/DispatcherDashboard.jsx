@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Users, TrendingUp, Clock, CheckCircle2, Truck, BarChart3, Settings, ShieldCheck, CreditCard, AlarmClock } from "lucide-react";
+import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
@@ -127,6 +128,15 @@ export default function DispatcherDashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Carte GPS temps réel */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-sm">🗺️ Livreurs en temps réel</h2>
+          <span className="text-xs text-muted-foreground">{livreursActifs.filter(l => l.gps_latitude).length} avec GPS</span>
+        </div>
+        <MapLivreursActifs livreurs={livreurs} courses={courses} height="250px" />
       </div>
 
       {/* Pending courses */}

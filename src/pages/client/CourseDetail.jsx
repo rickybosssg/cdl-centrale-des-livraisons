@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation } from "lucide-react";
+import NotationCourse from "../../components/NotationCourse";
 import MapSuivi from "../../components/MapSuivi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -194,6 +195,24 @@ export default function CourseDetail() {
           <span className="text-2xl font-bold text-primary">{course.prix} FCFA</span>
         </CardContent>
       </Card>
+
+      {/* Notation */}
+      {course.statut === "livree" && course.livreur_email && !course.note_donnee && (
+        <NotationCourse course={course} onDone={() => setCourse(prev => ({ ...prev, note_donnee: true }))} />
+      )}
+      {course.note_donnee && course.note_client && (
+        <Card className="bg-green-50 border-green-200">
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold text-green-700">✅ Votre avis a été pris en compte</p>
+            <div className="flex gap-0.5 mt-1">
+              {[1,2,3,4,5].map(s => (
+                <span key={s} className={s <= course.note_client ? "text-amber-400" : "text-muted-foreground"}>★</span>
+              ))}
+            </div>
+            {course.commentaire_client && <p className="text-xs text-muted-foreground mt-1">{course.commentaire_client}</p>}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

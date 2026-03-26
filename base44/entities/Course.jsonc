@@ -1,0 +1,197 @@
+{
+  "name": "Course",
+  "type": "object",
+  "properties": {
+    "quartier_depart": {
+      "type": "string",
+      "title": "Quartier de d\u00e9part"
+    },
+    "quartier_arrivee": {
+      "type": "string",
+      "title": "Quartier d'arriv\u00e9e"
+    },
+    "telephone_expediteur": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone exp\u00e9diteur"
+    },
+    "telephone_destinataire": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone destinataire"
+    },
+    "type_colis": {
+      "type": "string",
+      "enum": [
+        "Documents",
+        "Petit colis",
+        "Colis moyen",
+        "Gros colis",
+        "Nourriture",
+        "Autre"
+      ],
+      "title": "Type de colis"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "assignee_attente",
+        "acceptee",
+        "en_cours",
+        "livree",
+        "annulee",
+        "aucun_livreur",
+        "refusee"
+      ],
+      "title": "Statut"
+    },
+    "mode_paiement": {
+      "type": "string",
+      "enum": [
+        "Orange Money",
+        "Moov Money",
+        "Telecel Money",
+        "Paiement \u00e0 la livraison"
+      ],
+      "title": "Mode de paiement"
+    },
+    "statut_paiement": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "paye",
+        "paiement_livraison"
+      ],
+      "title": "Statut paiement"
+    },
+    "client_email": {
+      "type": "string",
+      "title": "Email client"
+    },
+    "client_name": {
+      "type": "string",
+      "title": "Nom client"
+    },
+    "livreur_email": {
+      "type": "string",
+      "title": "Email livreur"
+    },
+    "livreur_name": {
+      "type": "string",
+      "title": "Nom livreur"
+    },
+    "prix": {
+      "type": "number",
+      "title": "Prix (FCFA)"
+    },
+    "commission": {
+      "type": "number",
+      "title": "Commission (FCFA)"
+    },
+    "commission_active": {
+      "type": "boolean",
+      "title": "Commission active"
+    },
+    "commission_cdl": {
+      "type": "number",
+      "title": "Commission CDL (FCFA)"
+    },
+    "gain_livreur": {
+      "type": "number",
+      "title": "Gain livreur (FCFA)"
+    },
+    "statut_paiement_livreur": {
+      "type": "string",
+      "enum": [
+        "Commission due",
+        "Partiellement pay\u00e9",
+        "Pay\u00e9"
+      ],
+      "title": "Statut paiement livreur"
+    },
+    "date_acceptation": {
+      "type": "string",
+      "title": "Date acceptation"
+    },
+    "date_recuperation": {
+      "type": "string",
+      "title": "Date r\u00e9cup\u00e9ration"
+    },
+    "date_livraison": {
+      "type": "string",
+      "title": "Date livraison"
+    },
+    "date_paiement_commission": {
+      "type": "string",
+      "title": "Date paiement commission"
+    },
+    "livreur_lat": {
+      "type": "number",
+      "title": "Latitude livreur"
+    },
+    "livreur_lng": {
+      "type": "number",
+      "title": "Longitude livreur"
+    },
+    "latitude_depart": {
+      "type": "number",
+      "title": "Latitude d\u00e9part"
+    },
+    "longitude_depart": {
+      "type": "number",
+      "title": "Longitude d\u00e9part"
+    },
+    "latitude_arrivee": {
+      "type": "number",
+      "title": "Latitude arriv\u00e9e"
+    },
+    "longitude_arrivee": {
+      "type": "number",
+      "title": "Longitude arriv\u00e9e"
+    },
+    "mode_assignation": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "manuel"
+      ],
+      "title": "Mode d'assignation"
+    },
+    "heure_assignation": {
+      "type": "string",
+      "title": "Heure d'assignation"
+    },
+    "nombre_tentatives": {
+      "type": "number",
+      "title": "Nombre de tentatives"
+    },
+    "historique_assignation": {
+      "type": "string",
+      "title": "Historique assignation (JSON)"
+    },
+    "note_client": {
+      "type": "number",
+      "title": "Note du client (1-5)"
+    },
+    "commentaire_client": {
+      "type": "string",
+      "title": "Commentaire du client"
+    },
+    "note_donnee": {
+      "type": "boolean",
+      "title": "Note d\u00e9j\u00e0 donn\u00e9e"
+    }
+  },
+  "required": [
+    "quartier_depart",
+    "quartier_arrivee",
+    "telephone_expediteur",
+    "telephone_destinataire",
+    "type_colis",
+    "statut",
+    "client_email"
+  ]
+}

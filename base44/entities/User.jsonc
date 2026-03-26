@@ -132,6 +132,18 @@
     "commission_mode": {
       "type": "boolean",
       "title": "Mode commission activ\u00e9"
+    },
+    "note_moyenne": {
+      "type": "number",
+      "title": "Note moyenne (1-5)"
+    },
+    "total_notes": {
+      "type": "number",
+      "title": "Nombre de notes re\u00e7ues"
+    },
+    "somme_notes": {
+      "type": "number",
+      "title": "Somme des notes (pour calcul moyenne)"
     }
   }
 }
