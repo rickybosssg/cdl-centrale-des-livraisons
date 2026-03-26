@@ -1,0 +1,49 @@
+{
+  "name": "Message",
+  "type": "object",
+  "properties": {
+    "course_id": {
+      "type": "string",
+      "title": "ID Course"
+    },
+    "sender_email": {
+      "type": "string",
+      "title": "Email exp\u00e9diteur"
+    },
+    "sender_name": {
+      "type": "string",
+      "title": "Nom exp\u00e9diteur"
+    },
+    "sender_role": {
+      "type": "string",
+      "enum": [
+        "client",
+        "livreur"
+      ],
+      "title": "R\u00f4le"
+    },
+    "contenu": {
+      "type": "string",
+      "title": "Message"
+    }
+  },
+  "required": [
+    "course_id",
+    "sender_email",
+    "contenu"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

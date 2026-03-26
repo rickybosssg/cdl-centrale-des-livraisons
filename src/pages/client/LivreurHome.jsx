@@ -13,6 +13,37 @@ export default function LivreurHome({ user }) {
   const [courses, setCourses] = useState([]);
   const [disponible, setDisponible] = useState(user.disponible !== false);
   const [loading, setLoading] = useState(true);
+  const [gpsBloque, setGpsBloque] = useState(false);
+
+  // Demande GPS obligatoire
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsBloque(false);
+        base44.auth.updateMe({
+          gps_latitude: pos.coords.latitude,
+          gps_longitude: pos.coords.longitude,
+          gps_enabled: true,
+        });
+        // Mise à jour GPS toutes les 15s
+        const interval = setInterval(() => {
+          navigator.geolocation.getCurrentPosition((p) => {
+            base44.auth.updateMe({
+              gps_latitude: p.coords.latitude,
+              gps_longitude: p.coords.longitude,
+            });
+          });
+        }, 15000);
+        return () => clearInterval(interval);
+      },
+      () => {
+        setGpsBloque(true);
+        base44.auth.updateMe({ gps_enabled: false });
+      },
+      { enableHighAccuracy: true }
+    );
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -35,6 +66,29 @@ export default function LivreurHome({ user }) {
 
   const activeCourse = courses.find(c => ["acceptee", "en_cours"].includes(c.statut));
   const coursePendante = courses.find(c => c.statut === "assignee_attente" && c.livreur_email === user.email);
+
+  // GPS bloqué
+  if (gpsBloque) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <div className="text-center space-y-4 max-w-xs">
+          <div className="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center mx-auto">
+            <MapPin className="h-8 w-8 text-red-500" />
+          </div>
+          <p className="text-lg font-bold">Localisation requise</p>
+          <p className="text-sm text-muted-foreground">
+            CDL a besoin de votre position GPS pour vous attribuer des courses et permettre le suivi en temps réel.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm"
+          >
+            Activer la localisation
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Vérification blocage
   if (user.livreur_bloque) {

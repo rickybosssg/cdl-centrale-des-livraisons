@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Phone, Package, MapPin, CheckCircle2, Navigation, TrendingUp } from "lucide-react";
+import MiniChat from "../../components/MiniChat";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
@@ -187,6 +188,11 @@ export default function CourseLivreur() {
         <Navigation className="h-4 w-4 mr-2" />
         Voir l'itinéraire sur Google Maps
       </Button>
+
+      {/* Mini Chat */}
+      {["acceptee", "en_cours"].includes(course.statut) && (
+        <MiniChat course={course} user={{ email: course.livreur_email, full_name: course.livreur_name, user_type: "livreur" }} />
+      )}
 
       {/* Action buttons */}
       {course.statut === "acceptee" && (

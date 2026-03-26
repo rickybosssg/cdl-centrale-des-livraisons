@@ -1,4 +1,5 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
+import WhatsAppButton from "./WhatsAppButton";
 import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
@@ -82,6 +83,7 @@ export default function AppLayout({ userRole }) {
           })}
         </div>
       </nav>
+      <WhatsAppButton />
     </div>
   );
 }

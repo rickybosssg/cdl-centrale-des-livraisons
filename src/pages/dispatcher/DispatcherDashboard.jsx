@@ -13,6 +13,7 @@ export default function DispatcherDashboard() {
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dispatchMode, setDispatchModeState] = useState(getDispatchMode());
+  const [carteVisible, setCarteVisible] = useState(false);
 
   const toggleDispatchMode = () => {
     const newMode = dispatchMode === 'auto' ? 'manuel' : 'auto';
@@ -130,13 +131,32 @@ export default function DispatcherDashboard() {
         </Card>
       </div>
 
-      {/* Carte GPS temps réel */}
+      {/* Carte GPS temps réel - toggle */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-sm">🗺️ Livreurs en temps réel</h2>
-          <span className="text-xs text-muted-foreground">{livreursActifs.filter(l => l.gps_latitude).length} avec GPS</span>
-        </div>
-        <MapLivreursActifs livreurs={livreurs} courses={courses} height="250px" />
+        <button
+          onClick={() => setCarteVisible(!carteVisible)}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border bg-card hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base">🗺️</span>
+            <div className="text-left">
+              <p className="text-sm font-semibold">Livreurs en temps réel</p>
+              <p className="text-xs text-muted-foreground">
+                {livreursActifs.filter(l => l.gps_latitude).length} livreur(s) avec GPS • {carteVisible ? "Cliquez pour fermer" : "Cliquez pour afficher"}
+              </p>
+            </div>
+          </div>
+          <span className={`text-xs font-medium px-2 py-1 rounded-full transition-all ${
+            carteVisible ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          }`}>
+            {carteVisible ? "Fermer" : "Voir carte"}
+          </span>
+        </button>
+        {carteVisible && (
+          <div className="animate-in slide-in-from-top-2 duration-200">
+            <MapLivreursActifs livreurs={livreurs} courses={courses} height="250px" />
+          </div>
+        )}
       </div>
 
       {/* Pending courses */}

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation } from "lucide-react";
 import NotationCourse from "../../components/NotationCourse";
+import MiniChat from "../../components/MiniChat";
 import MapSuivi from "../../components/MapSuivi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -195,6 +196,11 @@ export default function CourseDetail() {
           <span className="text-2xl font-bold text-primary">{course.prix} FCFA</span>
         </CardContent>
       </Card>
+
+      {/* Mini Chat - uniquement si course active et livreur assigné */}
+      {course.livreur_email && ["acceptee", "en_cours"].includes(course.statut) && (
+        <MiniChat course={course} user={{ email: course.client_email, full_name: course.client_name, user_type: "client" }} />
+      )}
 
       {/* Notation */}
       {course.statut === "livree" && course.livreur_email && !course.note_donnee && (
