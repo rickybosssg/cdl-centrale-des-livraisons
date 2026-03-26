@@ -76,10 +76,8 @@ export default function RoleSetup({ onComplete }) {
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
         <div className="w-full max-w-sm space-y-6">
           <div className="text-center space-y-2">
-            <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center mx-auto">
-              <Package className="h-8 w-8 text-primary-foreground" />
-            </div>
-            <h1 className="text-2xl font-bold">CDL</h1>
+            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg" alt="CDL" className="h-16 w-16 rounded-2xl object-cover mx-auto" />
+            <h1 className="text-2xl font-bold">CDL APP</h1>
             <p className="text-sm text-muted-foreground">Centrale des Livraisons</p>
             <p className="text-xs text-muted-foreground">Ouagadougou</p>
           </div>

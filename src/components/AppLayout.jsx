@@ -35,10 +35,8 @@ export default function AppLayout({ userRole }) {
       <header className="sticky top-0 z-50 bg-card border-b shadow-sm">
         <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <Package className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-lg">CDL</span>
+            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg" alt="CDL" className="h-8 w-8 rounded-lg object-cover" />
+            <span className="font-bold text-lg">CDL APP</span>
           </Link>
           <div className="flex items-center gap-2">
             <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium capitalize">
