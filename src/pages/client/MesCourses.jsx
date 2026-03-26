@@ -9,10 +9,12 @@ import CourseCard from "../../components/CourseCard";
 export default function MesCourses() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       const user = await base44.auth.me();
+      setUserEmail(user.email);
       const data = await base44.entities.Course.filter(
         { client_email: user.email },
         "-created_date",
@@ -23,6 +25,21 @@ export default function MesCourses() {
     };
     load();
   }, []);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    const unsub = base44.entities.Course.subscribe((event) => {
+      if (event.data?.client_email !== userEmail) return;
+      if (event.type === 'create') {
+        setCourses(prev => [event.data, ...prev]);
+      } else if (event.type === 'update') {
+        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+      } else if (event.type === 'delete') {
+        setCourses(prev => prev.filter(c => c.id !== event.id));
+      }
+    });
+    return unsub;
+  }, [userEmail]);
 
   const actives = courses.filter(c => !["livree", "annulee"].includes(c.statut));
   const terminees = courses.filter(c => ["livree", "annulee"].includes(c.statut));

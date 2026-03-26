@@ -8,10 +8,12 @@ import CourseCard from "../../components/CourseCard";
 export default function MesLivraisons() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       const user = await base44.auth.me();
+      setUserEmail(user.email);
       const data = await base44.entities.Course.filter(
         { livreur_email: user.email },
         "-created_date",
@@ -22,6 +24,21 @@ export default function MesLivraisons() {
     };
     load();
   }, []);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    const unsub = base44.entities.Course.subscribe((event) => {
+      if (event.data?.livreur_email !== userEmail && event.type === 'create') return;
+      if (event.type === 'create' && event.data?.livreur_email === userEmail) {
+        setCourses(prev => [event.data, ...prev]);
+      } else if (event.type === 'update') {
+        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+      } else if (event.type === 'delete') {
+        setCourses(prev => prev.filter(c => c.id !== event.id));
+      }
+    });
+    return unsub;
+  }, [userEmail]);
 
   const actives = courses.filter(c => ["acceptee", "en_cours"].includes(c.statut));
   const terminees = courses.filter(c => c.statut === "livree");

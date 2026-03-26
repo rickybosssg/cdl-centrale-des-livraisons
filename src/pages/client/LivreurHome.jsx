@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin } from "lucide-react";
+import { toast } from "sonner";
 import SoldeBlock from "../../components/SoldeBlock";
 import CoursePendante from "../livreur/CoursePendante";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,6 +57,16 @@ export default function LivreurHome({ user }) {
       setLoading(false);
     };
     load();
+
+    const unsub = base44.entities.Course.subscribe((event) => {
+      if (event.type === 'create' && event.data?.livreur_email === user.email) {
+        setCourses(prev => [event.data, ...prev]);
+        toast.info('Nouvelle course disponible !');
+      } else if (event.type === 'update' && event.data?.livreur_email === user.email) {
+        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+      }
+    });
+    return unsub;
   }, [user.email]);
 
   const toggleDisponible = async () => {

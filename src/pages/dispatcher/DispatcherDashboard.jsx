@@ -32,6 +32,19 @@ export default function DispatcherDashboard() {
       setLoading(false);
     };
     load();
+
+    const unsubCourse = base44.entities.Course.subscribe((event) => {
+      if (event.type === 'create') setCourses(prev => [event.data, ...prev]);
+      else if (event.type === 'update') setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+      else if (event.type === 'delete') setCourses(prev => prev.filter(c => c.id !== event.id));
+    });
+    const unsubUser = base44.entities.User.subscribe((event) => {
+      if (event.data?.user_type !== 'livreur') return;
+      if (event.type === 'create') setLivreurs(prev => [...prev, event.data]);
+      else if (event.type === 'update') setLivreurs(prev => prev.map(l => l.id === event.id ? event.data : l));
+      else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
+    });
+    return () => { unsubCourse(); unsubUser(); };
   }, []);
 
   const today = new Date().toDateString();

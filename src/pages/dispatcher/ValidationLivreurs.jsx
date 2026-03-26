@@ -24,7 +24,21 @@ export default function ValidationLivreurs() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    const unsub = base44.entities.User.subscribe((event) => {
+      if (event.data?.user_type !== 'livreur') return;
+      if (event.type === 'create') {
+        setLivreurs(prev => [...prev, event.data]);
+        toast.info('Nouveau livreur en attente de validation !');
+      } else if (event.type === 'update') {
+        setLivreurs(prev => prev.map(l => l.id === event.id ? event.data : l));
+      } else if (event.type === 'delete') {
+        setLivreurs(prev => prev.filter(l => l.id !== event.id));
+      }
+    });
+    return unsub;
+  }, []);
 
   const valider = async (livreur) => {
     setProcessing(true);

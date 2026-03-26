@@ -8,15 +8,21 @@ import { base44 } from "@/api/base44Client";
 import QuartierSelect from "./QuartierSelect";
 import { toast } from "sonner";
 
-const ROLES = [
+const PUBLIC_ROLES = [
+  { value: "client", label: "Client", icon: User, desc: "Commander des livraisons" },
+  { value: "livreur", label: "Livreur", icon: Truck, desc: "Effectuer des livraisons" },
+];
+
+const ADMIN_ROLES = [
   { value: "client", label: "Client", icon: User, desc: "Commander des livraisons" },
   { value: "livreur", label: "Livreur", icon: Truck, desc: "Effectuer des livraisons" },
   { value: "dispatcher", label: "Dispatcher", icon: Radio, desc: "Gérer les courses et livreurs" },
 ];
 
-export default function RoleSetup({ onComplete }) {
+export default function RoleSetup({ onComplete, isAdmin = false }) {
   const [step, setStep] = useState(1);
   const [selectedRole, setSelectedRole] = useState(null);
+  const ROLES = isAdmin ? ADMIN_ROLES : PUBLIC_ROLES;
   const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "" });
   const [docs, setDocs] = useState({ photo_profil: null, photo_identite_recto: null, photo_identite_verso: null, photo_moto: null });
   const [uploading, setUploading] = useState(false);

@@ -21,6 +21,7 @@ import Parametres from './pages/dispatcher/Parametres';
 import GainsLivreur from './pages/livreur/GainsLivreur';
 import AppLayout from './components/AppLayout';
 import AppLayoutWrapper from './components/AppLayoutWrapper';
+import DispatcherGuard from './components/DispatcherGuard';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -56,12 +57,14 @@ const AuthenticatedApp = () => {
         <Route path="/courses-disponibles" element={<CoursesDisponibles />} />
         <Route path="/course-livreur/:id" element={<CourseLivreur />} />
         <Route path="/mes-livraisons" element={<MesLivraisons />} />
-        <Route path="/gerer-courses" element={<GererCourses />} />
-        <Route path="/gerer-livreurs" element={<GererLivreurs />} />
-        <Route path="/statistiques" element={<Statistiques />} />
-        <Route path="/suivi-commissions" element={<SuiviCommissions />} />
-        <Route path="/validation-livreurs" element={<ValidationLivreurs />} />
-        <Route path="/parametres" element={<Parametres />} />
+        <Route element={<DispatcherGuard />}>
+          <Route path="/gerer-courses" element={<GererCourses />} />
+          <Route path="/gerer-livreurs" element={<GererLivreurs />} />
+          <Route path="/statistiques" element={<Statistiques />} />
+          <Route path="/suivi-commissions" element={<SuiviCommissions />} />
+          <Route path="/validation-livreurs" element={<ValidationLivreurs />} />
+          <Route path="/parametres" element={<Parametres />} />
+        </Route>
         <Route path="/mes-gains" element={<GainsLivreur />} />
         <Route path="/dispatcher/DispatcherDashboard" element={<Home />} />
         <Route path="/dispatcher/GererCourses" element={<GererCourses />} />

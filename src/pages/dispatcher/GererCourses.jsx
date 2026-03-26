@@ -30,7 +30,20 @@ export default function GererCourses() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    const unsub = base44.entities.Course.subscribe((event) => {
+      if (event.type === 'create') {
+        setCourses(prev => [event.data, ...prev]);
+        toast.info('Nouvelle course créée !');
+      } else if (event.type === 'update') {
+        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+      } else if (event.type === 'delete') {
+        setCourses(prev => prev.filter(c => c.id !== event.id));
+      }
+    });
+    return unsub;
+  }, []);
 
   const assignerLivreur = async (livreur) => {
     const now = new Date().toISOString();

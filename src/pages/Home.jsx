@@ -28,7 +28,7 @@ export default function Home() {
   }
 
   if (!user?.user_type) {
-    return <RoleSetup onComplete={loadUser} />;
+    return <RoleSetup onComplete={loadUser} isAdmin={user?.role === 'admin'} />;
   }
 
   switch (user.user_type) {

@@ -78,7 +78,16 @@ export default function GererLivreurs() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    const unsubUser = base44.entities.User.subscribe((event) => {
+      if (event.data?.user_type !== 'livreur') return;
+      if (event.type === 'create') setLivreurs(prev => [...prev, event.data]);
+      else if (event.type === 'update') setLivreurs(prev => prev.map(l => l.id === event.id ? event.data : l));
+      else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
+    });
+    return unsubUser;
+  }, []);
 
   const valider = async (livreur) => {
     await base44.entities.User.update(livreur.id, {
