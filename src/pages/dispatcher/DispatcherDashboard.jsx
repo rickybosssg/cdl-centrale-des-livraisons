@@ -109,7 +109,7 @@ export default function DispatcherDashboard() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{livreursActifs.length}/{livreurs.length}</p>
-                <p className="text-xs text-muted-foreground">Livreurs actifs</p>
+                <p className="text-xs text-muted-foreground">Livreurs en ligne</p>
               </div>
             </div>
           </CardContent>
@@ -121,8 +121,8 @@ export default function DispatcherDashboard() {
                 <TrendingUp className="h-5 w-5 text-accent" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{totalRevenu}</p>
-                <p className="text-xs text-muted-foreground">Commissions (FCFA)</p>
+                <p className="text-2xl font-bold">{Math.round(totalCommissionsJour).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Commissions du jour</p>
               </div>
             </div>
           </CardContent>
