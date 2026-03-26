@@ -1,12 +1,18 @@
 import { MapPin, Phone, Package, Clock, User } from "lucide-react";
+import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "./StatusBadge";
 import moment from "moment";
 
 export default function CourseCard({ course, onClick, children }) {
   return (
+    <motion.div
+      whileTap={onClick ? { scale: 0.97 } : {}}
+      transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+      style={{ willChange: "transform" }}
+    >
     <Card 
-      className="cursor-pointer hover:shadow-md transition-all duration-200 border-l-4 border-l-primary"
+      className="cursor-pointer border-l-4 border-l-primary rounded-2xl overflow-hidden"
       onClick={() => onClick?.(course)}
     >
       <CardContent className="p-4">
@@ -52,5 +58,6 @@ export default function CourseCard({ course, onClick, children }) {
         {children && <div className="mt-3 pt-3 border-t">{children}</div>}
       </CardContent>
     </Card>
+    </motion.div>
   );
 }

@@ -1,6 +1,7 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
-import WhatsAppButton from "./WhatsAppButton";
+import { Link, useLocation } from "react-router-dom";
 import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp, MessageCircle } from "lucide-react";
+import { motion } from "framer-motion";
+import PageTransition from "./PageTransition";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -44,26 +45,26 @@ export default function AppLayout({ userRole }) {
             <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium capitalize">
               {userRole}
             </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
+              className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
               onClick={() => base44.auth.logout()}
             >
               <LogOut className="h-4 w-4" />
-            </Button>
+            </motion.button>
           </div>
         </div>
       </header>
 
       {/* Main */}
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4">
-        <Outlet />
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 overflow-hidden">
+        <PageTransition />
       </main>
 
       {/* Bottom Nav */}
       <nav className="sticky bottom-0 z-50 bg-card border-t shadow-lg">
-        <div className="max-w-lg mx-auto flex">
+        <div className="max-w-lg mx-auto flex relative">
           {items.map((item) => {
             const Icon = item.icon;
             const active = location.pathname === item.path;
@@ -74,10 +75,16 @@ export default function AppLayout({ userRole }) {
                   href="https://wa.me/message/EH7SMNHNHL7RN1?text=Bonjour%20CDL%2C%20j%27ai%20besoin%20d%27assistance."
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 flex flex-col items-center py-2 gap-0.5 transition-colors text-green-600 hover:text-green-700"
+                  className="flex-1 flex flex-col items-center py-2 gap-0.5 text-green-600"
                 >
-                  <Icon className="h-5 w-5" />
-                  <span className="text-[10px] font-medium">{item.label}</span>
+                  <motion.div
+                    whileTap={{ scale: 1.18 }}
+                    transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
+                    className="flex flex-col items-center gap-0.5"
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="text-[10px] font-semibold">{item.label}</span>
+                  </motion.div>
                 </a>
               );
             }
@@ -85,20 +92,37 @@ export default function AppLayout({ userRole }) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex-1 flex flex-col items-center py-2 gap-0.5 transition-colors ${
-                  active 
-                    ? "text-primary" 
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className="flex-1 flex flex-col items-center py-2 gap-0.5"
               >
-                <Icon className="h-5 w-5" />
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <motion.div
+                  whileTap={{ scale: 1.18 }}
+                  transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
+                  className={`flex flex-col items-center gap-0.5 transition-colors ${
+                    active ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  <motion.div
+                    animate={active ? { scale: 1.12 } : { scale: 1 }}
+                    transition={{ duration: 0.2, ease: [0.4,0,0.2,1] }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </motion.div>
+                  <span className={`text-[10px] font-semibold transition-all ${
+                    active ? "text-primary" : ""
+                  }`}>{item.label}</span>
+                  {active && (
+                    <motion.div
+                      layoutId="nav-indicator"
+                      className="absolute -bottom-0 h-0.5 w-6 bg-primary rounded-full"
+                      transition={{ duration: 0.22, ease: [0.4,0,0.2,1] }}
+                    />
+                  )}
+                </motion.div>
               </Link>
             );
           })}
         </div>
       </nav>
-      <WhatsAppButton />
     </div>
   );
 }
