@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import WhatsAppButton from "./WhatsAppButton";
-import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp } from "lucide-react";
+import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp, MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ const NAV_ITEMS = {
     { path: "/gerer-courses", icon: Package, label: "Courses" },
     { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
     { path: "/suivi-commissions", icon: BarChart3, label: "Commissions" },
+    { path: "whatsapp", icon: MessageCircle, label: "WhatsApp", external: true },
   ],
 };
 
@@ -66,6 +67,20 @@ export default function AppLayout({ userRole }) {
           {items.map((item) => {
             const Icon = item.icon;
             const active = location.pathname === item.path;
+            if (item.external) {
+              return (
+                <a
+                  key={item.path}
+                  href="https://wa.me/message/EH7SMNHNHL7RN1?text=Bonjour%20CDL%2C%20j%27ai%20besoin%20d%27assistance."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex flex-col items-center py-2 gap-0.5 transition-colors text-green-600 hover:text-green-700"
+                >
+                  <Icon className="h-5 w-5" />
+                  <span className="text-[10px] font-medium">{item.label}</span>
+                </a>
+              );
+            }
             return (
               <Link
                 key={item.path}
