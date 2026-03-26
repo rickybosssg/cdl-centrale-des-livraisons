@@ -23,6 +23,23 @@ export default function CourseLivreur() {
     load();
   }, [id]);
 
+  // GPS tracking — partage la position du livreur en temps réel
+  useEffect(() => {
+    if (!course || !['acceptee', 'en_cours'].includes(course.statut)) return;
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        base44.entities.Course.update(id, {
+          livreur_lat: pos.coords.latitude,
+          livreur_lng: pos.coords.longitude,
+        });
+      },
+      null,
+      { enableHighAccuracy: true, maximumAge: 8000, timeout: 10000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [course?.statut, id]);
+
   const recupererColis = async () => {
     setUpdating(true);
     await base44.entities.Course.update(id, {

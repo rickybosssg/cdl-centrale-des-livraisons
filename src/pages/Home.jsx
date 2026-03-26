@@ -27,11 +27,11 @@ export default function Home() {
     );
   }
 
-  if (!user?.role) {
+  if (!user?.user_type) {
     return <RoleSetup onComplete={loadUser} />;
   }
 
-  switch (user.role) {
+  switch (user.user_type) {
     case "client":
       return <ClientHome user={user} />;
     case "livreur":

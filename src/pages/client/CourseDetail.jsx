@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation } from "lucide-react";
+import MapSuivi from "../../components/MapSuivi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
@@ -114,6 +115,19 @@ export default function CourseDetail() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Suivi GPS */}
+      {course.livreur_lat && course.livreur_lng && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <Navigation className="h-4 w-4 text-primary" />
+              Suivi en temps réel
+            </p>
+            <MapSuivi livreurLat={course.livreur_lat} livreurLng={course.livreur_lng} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Livreur */}
       {course.livreur_name && (

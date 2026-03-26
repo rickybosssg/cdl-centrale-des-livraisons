@@ -13,6 +13,7 @@ import { PRIX_PAR_TYPE } from "@/lib/quartiers";
 import { toast } from "sonner";
 
 const TYPES_COLIS = ["Documents", "Petit colis", "Colis moyen", "Gros colis", "Nourriture", "Autre"];
+const MODES_PAIEMENT = ["Orange Money", "Moov Money", "Telecel Money", "Paiement à la livraison"];
 
 export default function CreateCourse() {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ export default function CreateCourse() {
     telephone_destinataire: "",
     type_colis: "",
     description: "",
+    mode_paiement: "",
   });
 
   useEffect(() => {
@@ -45,9 +47,16 @@ export default function CreateCourse() {
       return;
     }
     setLoading(true);
+    if (!form.mode_paiement) {
+      toast.error("Veuillez choisir un mode de paiement");
+      return;
+    }
+    setLoading(true);
+    const statut_paiement = form.mode_paiement === "Paiement à la livraison" ? "paiement_livraison" : "en_attente";
     await base44.entities.Course.create({
       ...form,
       statut: "en_attente",
+      statut_paiement,
       client_email: user.email,
       client_name: user.full_name,
       prix: prix,
@@ -154,7 +163,36 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
-      {/* Price */}
+      {/* Paiement */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <span className="text-lg">💳</span>
+            Mode de paiement *
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-2">
+          {MODES_PAIEMENT.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setForm({ ...form, mode_paiement: mode })}
+              className={`p-3 rounded-lg border text-sm font-medium text-left transition-all ${
+                form.mode_paiement === mode
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border hover:bg-muted"
+              }`}
+            >
+              {mode === "Orange Money" && "🟠 "}
+              {mode === "Moov Money" && "🔵 "}
+              {mode === "Telecel Money" && "🟢 "}
+              {mode === "Paiement à la livraison" && "🤝 "}
+              {mode}
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+
       {prix > 0 && (
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="p-4">

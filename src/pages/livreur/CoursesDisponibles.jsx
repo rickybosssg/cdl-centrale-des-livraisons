@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Package, MapPin, RefreshCw } from "lucide-react";
+import { RefreshCw, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CourseCard from "../../components/CourseCard";
 import { toast } from "sonner";
@@ -8,21 +8,19 @@ import { toast } from "sonner";
 export default function CoursesDisponibles() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [accepting, setAccepting] = useState(null);
+  const [user, setUser] = useState(null);
 
-  const loadCourses = async () => {
+  const loadData = async () => {
     setLoading(true);
-    const data = await base44.entities.Course.filter(
-      { statut: "en_attente" },
-      "-created_date",
-      20
-    );
+    const me = await base44.auth.me();
+    setUser(me);
+    const data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 50);
     setCourses(data);
     setLoading(false);
   };
 
   useEffect(() => {
-    loadCourses();
+    loadData();
     const unsub = base44.entities.Course.subscribe((event) => {
       if (event.type === "create" && event.data.statut === "en_attente") {
         setCourses(prev => [event.data, ...prev]);
@@ -33,18 +31,16 @@ export default function CoursesDisponibles() {
     return unsub;
   }, []);
 
-  const accepterCourse = async (course) => {
-    setAccepting(course.id);
-    const user = await base44.auth.me();
+  const accepter = async (course) => {
+    if (!user) return;
     await base44.entities.Course.update(course.id, {
       statut: "acceptee",
       livreur_email: user.email,
       livreur_name: user.full_name,
       date_acceptation: new Date().toISOString(),
     });
-    setCourses(prev => prev.filter(c => c.id !== course.id));
     toast.success("Course acceptée !");
-    setAccepting(null);
+    setCourses(prev => prev.filter(c => c.id !== course.id));
   };
 
   if (loading) {
@@ -59,16 +55,16 @@ export default function CoursesDisponibles() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Courses disponibles</h1>
-        <Button variant="ghost" size="icon" onClick={loadCourses}>
+        <Button variant="outline" size="icon" onClick={loadData}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
 
       {courses.length === 0 ? (
         <div className="text-center py-16 space-y-3">
-          <Package className="h-12 w-12 text-muted-foreground/40 mx-auto" />
-          <p className="text-muted-foreground">Aucune course disponible</p>
-          <p className="text-xs text-muted-foreground">Revenez plus tard</p>
+          <Package className="h-12 w-12 text-muted-foreground/30 mx-auto" />
+          <p className="text-muted-foreground text-sm">Aucune course disponible</p>
+          <Button variant="outline" size="sm" onClick={loadData}>Actualiser</Button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -76,13 +72,10 @@ export default function CoursesDisponibles() {
             <CourseCard key={course.id} course={course}>
               <Button
                 className="w-full"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  accepterCourse(course);
-                }}
-                disabled={accepting === course.id}
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); accepter(course); }}
               >
-                {accepting === course.id ? "Acceptation..." : "Accepter la course"}
+                ✅ Accepter cette course
               </Button>
             </CourseCard>
           ))}

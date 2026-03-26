@@ -22,7 +22,7 @@ export default function RoleSetup({ onComplete }) {
   const handleSubmit = async () => {
     setLoading(true);
     await base44.auth.updateMe({
-      role: selectedRole,
+      user_type: selectedRole,
       telephone: form.telephone,
       whatsapp: form.whatsapp || form.telephone,
       quartier: form.quartier,

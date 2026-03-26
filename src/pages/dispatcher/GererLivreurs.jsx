@@ -12,7 +12,7 @@ export default function GererLivreurs() {
   const [loading, setLoading] = useState(true);
 
   const loadLivreurs = async () => {
-    const data = await base44.entities.User.filter({ role: "livreur" });
+    const data = await base44.entities.User.filter({ user_type: "livreur" });
     setLivreurs(data);
     setLoading(false);
   };

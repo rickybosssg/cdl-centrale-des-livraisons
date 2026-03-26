@@ -9,7 +9,7 @@ export default function AppLayoutWrapper() {
   useEffect(() => {
     const load = async () => {
       const me = await base44.auth.me();
-      setUserRole(me.role || "client");
+      setUserRole(me.user_type || me.role || "client");
       setLoading(false);
     };
     load();

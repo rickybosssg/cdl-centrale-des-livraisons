@@ -21,7 +21,7 @@ export default function GererCourses() {
   const loadData = async () => {
     const [coursesData, livreursData] = await Promise.all([
       base44.entities.Course.list("-created_date", 100),
-      base44.entities.User.filter({ role: "livreur" }),
+      base44.entities.User.filter({ user_type: "livreur" }),
     ]);
     setCourses(coursesData);
     setLivreurs(livreursData);
