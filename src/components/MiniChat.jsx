@@ -26,15 +26,14 @@ export default function MiniChat({ course, user }) {
 
   useEffect(() => { openRef.current = open; }, [open]);
 
-  // Charger les messages initiaux
+  // Charger les messages via la fonction backend (contourne la RLS)
+  const chargerMessages = async () => {
+    const res = await base44.functions.invoke('getMessages', { course_id: course.id });
+    if (res.data?.messages) setMessages(res.data.messages);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const data = await base44.entities.Message.filter(
-        { course_id: course.id }, "created_date", 100
-      );
-      setMessages(data);
-    };
-    load();
+    chargerMessages();
   }, [course.id]);
 
   // Souscription temps réel — TOUJOURS active (pas conditionnée à open)
@@ -43,12 +42,9 @@ export default function MiniChat({ course, user }) {
       if (event.data?.course_id !== course.id) return;
       if (event.type === "create") {
         const nouveau = event.data;
-        setMessages(prev => {
-          // Éviter doublons
-          if (prev.find(m => m.id === nouveau.id)) return prev;
-          return [...prev, nouveau];
-        });
-        // Si message de l'autre personne
+        // Recharger via backend pour avoir tous les messages sans restriction RLS
+        chargerMessages();
+        // Notification si message de l'autre
         if (nouveau.sender_email !== user.email) {
           vibrateLight();
           if (!openRef.current) {
@@ -80,12 +76,11 @@ export default function MiniChat({ course, user }) {
     if (!contenu.trim() || courseTerminee || sending) return;
     setSending(true);
     vibrateLight();
-    await base44.entities.Message.create({
+    // Utilise la fonction backend pour contourner la RLS
+    await base44.functions.invoke('sendMessage', {
       course_id: course.id,
-      sender_email: user.email,
-      sender_name: user.full_name,
-      sender_role: user.user_type || "client",
       contenu: contenu.trim(),
+      sender_role: user.user_type || 'client',
     });
     setTexte("");
     setSending(false);
