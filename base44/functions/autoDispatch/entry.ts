@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
       d.actif !== false &&
       d.statut_validation_livreur === 'valide' &&
       !d.livreur_bloque &&
-      (d.nombre_courses_actives || 0) < 3 &&
+      (d.nombre_courses_actives || 0) < 5 &&
       !excludeEmails.includes(d.email) &&
       (d.quartier || d.gps_latitude)
     );
