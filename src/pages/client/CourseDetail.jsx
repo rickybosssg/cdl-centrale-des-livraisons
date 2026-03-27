@@ -5,6 +5,7 @@ import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation } from "luci
 import NotationCourse from "../../components/NotationCourse";
 import MiniChat from "../../components/MiniChat";
 import MapSuivi from "../../components/MapSuivi";
+import PaiementMobile from "../../components/PaiementMobile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
@@ -202,6 +203,33 @@ export default function CourseDetail() {
           <span className="text-2xl font-bold text-primary">{course.prix} FCFA</span>
         </CardContent>
       </Card>
+
+      {/* Paiement mobile */}
+      {course.mode_paiement && course.mode_paiement !== "Paiement à la livraison" && course.statut_paiement === "en_attente" && (  
+        <PaiementMobile course={course} onConfirmed={() => setCourse(prev => ({ ...prev, statut_paiement: "paye" }))} />
+      )}
+
+      {/* Appel livreur */}
+      {course.livreur_email && ["acceptee", "en_cours"].includes(course.statut) && course.telephone_livreur && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Phone className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Appeler le livreur</p>
+                <p className="font-medium">{course.livreur_name}</p>
+              </div>
+            </div>
+            <a href={`tel:${course.telephone_livreur}`}>
+              <Button size="sm" className="bg-primary">
+                <Phone className="h-4 w-4 mr-1" /> Appeler
+              </Button>
+            </a>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Mini Chat - uniquement si course active et livreur assigné */}
       {course.livreur_email && ["acceptee", "en_cours"].includes(course.statut) && (

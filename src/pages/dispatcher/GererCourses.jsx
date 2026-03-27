@@ -53,6 +53,7 @@ export default function GererCourses() {
       livreur_email: livreur.email,
       livreur_name: livreur.full_name,
       date_acceptation: now,
+      telephone_livreur: livreur.telephone || "",
       heure_assignation: now,
       mode_assignation: "manuel",
       historique_assignation: JSON.stringify(hist),

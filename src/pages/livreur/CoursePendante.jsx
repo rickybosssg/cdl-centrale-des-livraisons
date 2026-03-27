@@ -11,6 +11,40 @@ export default function CoursePendante({ course, onRespond }) {
   const [remaining, setRemaining] = useState(TIMER);
   const [responding, setResponding] = useState(false);
 
+  const accepter = async () => {
+    setResponding(true);
+    const user = await base44.auth.me();
+    await base44.entities.Course.update(course.id, {
+      statut: "acceptee",
+      date_acceptation: new Date().toISOString(),
+      telephone_livreur: user.telephone || "",
+    });
+    await base44.auth.updateMe({
+      nombre_courses_actives: (user.nombre_courses_actives || 0) + 1,
+      derniere_course_attribuee_at: new Date().toISOString(),
+    });
+    toast.success("✅ Course acceptée !");
+    onRespond?.('accepted');
+    setResponding(false);
+  };
+
+  const refuser = async () => {
+    setResponding(true);
+    await base44.functions.invoke('reDispatch', { course_id: course.id });
+    const user = await base44.auth.me();
+    await base44.auth.updateMe({
+      nombre_courses_actives: Math.max(0, (user.nombre_courses_actives || 0) - 1),
+    });
+    toast.info("Course refusée");
+    onRespond?.('refused');
+    setResponding(false);
+  };
+
+  const handleTimeout = async () => {
+    await base44.functions.invoke('reDispatch', { course_id: course.id });
+    onRespond?.('timeout');
+  };
+
   useEffect(() => {
     // Vibration à l'arrivée
     if (navigator.vibrate) navigator.vibrate([300, 100, 300]);

@@ -83,6 +83,10 @@
       "type": "string",
       "title": "Nom livreur"
     },
+    "telephone_livreur": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone livreur"
+    },
     "prix": {
       "type": "number",
       "title": "Prix (FCFA)"

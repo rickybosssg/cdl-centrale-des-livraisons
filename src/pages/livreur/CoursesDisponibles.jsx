@@ -39,6 +39,7 @@ export default function CoursesDisponibles() {
       livreur_name: user.full_name,
       date_acceptation: new Date().toISOString(),
       mode_assignation: "manuel",
+      telephone_livreur: user.telephone || "",
     });
     // Incrémenter les courses actives
     await base44.auth.updateMe({
