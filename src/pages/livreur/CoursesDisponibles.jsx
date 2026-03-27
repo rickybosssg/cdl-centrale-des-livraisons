@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { RefreshCw, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CourseCard from "../../components/CourseCard";
+import usePullToRefresh from "../../hooks/usePullToRefresh";
 import { toast } from "sonner";
 
 export default function CoursesDisponibles() {
@@ -10,14 +11,16 @@ export default function CoursesDisponibles() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     const me = await base44.auth.me();
     setUser(me);
     const data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 50);
     setCourses(data);
     setLoading(false);
-  };
+  }, []);
+
+  const { refreshing } = usePullToRefresh(loadData);
 
   useEffect(() => {
     loadData();
@@ -62,10 +65,14 @@ export default function CoursesDisponibles() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Courses disponibles</h1>
-        <Button variant="outline" size="icon" onClick={loadData}>
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          {refreshing && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <Button variant="outline" size="icon" onClick={loadData}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+      <p className="text-[11px] text-muted-foreground text-center md:hidden">↓ Tirez vers le bas pour actualiser</p>
 
       {courses.length === 0 ? (
         <div className="text-center py-16 space-y-3">

@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
+import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
 const STORAGE_KEY = "cdl_parametres";
@@ -30,6 +32,9 @@ export default function Parametres() {
   const navigate = useNavigate();
   const [params, setParams] = useState(getParams());
   const [saved, setSaved] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
 
   useEffect(() => {
     setParams(prev => ({ ...prev, mode_dispatch: getDispatchMode() }));
@@ -41,6 +46,19 @@ export default function Parametres() {
     setSaved(true);
     toast.success("Paramètres sauvegardés !");
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const supprimerCompte = async () => {
+    setDeleting(true);
+    try {
+      const user = await base44.auth.me();
+      await base44.entities.User.delete(user.id);
+      toast.success("Compte supprimé.");
+      base44.auth.logout();
+    } catch (e) {
+      toast.error("Erreur lors de la suppression.");
+    }
+    setDeleting(false);
   };
 
   const update = (key, value) => setParams(prev => ({ ...prev, [key]: value }));
@@ -142,6 +160,58 @@ export default function Parametres() {
         <Save className="h-4 w-4 mr-2" />
         {saved ? "Sauvegardé !" : "Sauvegarder les paramètres"}
       </Button>
+
+      {/* Danger zone */}
+      <Card className="border-destructive/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-destructive flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Zone dangereuse
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="destructive"
+            className="w-full"
+            onClick={() => setDeleteDialog(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Supprimer mon compte
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Confirmation dialog */}
+      <Dialog open={deleteDialog} onOpenChange={setDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> Supprimer mon compte
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Cette action est <strong>irréversible</strong>. Toutes vos données seront définitivement supprimées.
+            </p>
+            <p className="text-sm font-medium">Tapez <strong>SUPPRIMER</strong> pour confirmer :</p>
+            <Input
+              placeholder="SUPPRIMER"
+              value={confirmText}
+              onChange={e => setConfirmText(e.target.value)}
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setDeleteDialog(false); setConfirmText(""); }}>Annuler</Button>
+            <Button
+              variant="destructive"
+              disabled={confirmText !== "SUPPRIMER" || deleting}
+              onClick={supprimerCompte}
+            >
+              {deleting ? "Suppression..." : "Confirmer la suppression"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

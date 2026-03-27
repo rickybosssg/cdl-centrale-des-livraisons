@@ -35,7 +35,7 @@ export default function AppLayout({ userRole }) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-card border-b shadow-sm">
+      <header className="sticky top-0 z-50 bg-card border-b shadow-sm app-header">
         <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg" alt="CDL" className="h-8 w-8 rounded-lg object-cover" />
@@ -63,7 +63,7 @@ export default function AppLayout({ userRole }) {
       </main>
 
       {/* Bottom Nav */}
-      <nav className="sticky bottom-0 z-50 bg-card border-t shadow-lg">
+      <nav className="sticky bottom-0 z-50 bg-card border-t shadow-lg bottom-nav">
         <div className="max-w-lg mx-auto flex relative">
           {items.map((item) => {
             const Icon = item.icon;

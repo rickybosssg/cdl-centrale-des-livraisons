@@ -1,15 +1,34 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Filter } from "lucide-react";
+import { Package, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CourseCard from "../../components/CourseCard";
+import usePullToRefresh from "../../hooks/usePullToRefresh";
 
 export default function MesCourses() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState(null);
+
+  const loadCourses = useCallback(async () => {
+    const user = await base44.auth.me();
+    setUserEmail(user.email);
+    const data = await base44.entities.Course.filter(
+      { client_email: user.email },
+      "-created_date",
+      50
+    );
+    setCourses(data);
+    setLoading(false);
+  }, []);
+
+  const { refreshing } = usePullToRefresh(loadCourses);
+
+  useEffect(() => {
+    loadCourses();
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -54,7 +73,18 @@ export default function MesCourses() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Mes courses</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">Mes courses</h1>
+        {refreshing && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <RefreshCw className="h-3 w-3 animate-spin" />
+            Actualisation...
+          </div>
+        )}
+      </div>
+
+      {/* Pull-to-refresh hint on mobile */}
+      <p className="text-[11px] text-muted-foreground text-center md:hidden">↓ Tirez vers le bas pour actualiser</p>
 
       <Tabs defaultValue="actives">
         <TabsList className="w-full">
