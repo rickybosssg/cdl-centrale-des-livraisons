@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp, MessageCircle } from "lucide-react";
+import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp, MessageCircle, Database } from "lucide-react";
 import { motion } from "framer-motion";
 import PageTransition from "./PageTransition";
 import { useState } from "react";
@@ -22,8 +22,8 @@ const NAV_ITEMS = {
     { path: "/", icon: Home, label: "Accueil" },
     { path: "/gerer-courses", icon: Package, label: "Courses" },
     { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
+    { path: "/base-clients", icon: Database, label: "Clients" },
     { path: "/suivi-commissions", icon: BarChart3, label: "Commissions" },
-    { path: "whatsapp", icon: MessageCircle, label: "WhatsApp", external: true },
   ],
 };
 

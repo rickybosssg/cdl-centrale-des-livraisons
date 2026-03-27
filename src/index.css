@@ -132,4 +132,3 @@ button, [role="button"], a, .cursor-pointer, [data-radix-collection-item] {
 .bottom-nav {
   padding-bottom: env(safe-area-inset-bottom);
 }
-}

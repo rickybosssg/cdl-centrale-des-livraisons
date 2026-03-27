@@ -1,0 +1,64 @@
+{
+  "name": "Client",
+  "type": "object",
+  "properties": {
+    "nom_complet": {
+      "type": "string",
+      "title": "Nom complet"
+    },
+    "numero_telephone": {
+      "type": "string",
+      "title": "Num\u00e9ro de t\u00e9l\u00e9phone"
+    },
+    "email": {
+      "type": "string",
+      "title": "Email"
+    },
+    "quartier_principal": {
+      "type": "string",
+      "title": "Quartier principal"
+    },
+    "adresse_principale": {
+      "type": "string",
+      "title": "Adresse principale"
+    },
+    "point_de_repere": {
+      "type": "string",
+      "title": "Point de rep\u00e8re"
+    },
+    "date_inscription": {
+      "type": "string",
+      "title": "Date d'inscription"
+    },
+    "nombre_total_courses": {
+      "type": "number",
+      "title": "Nombre total de courses"
+    },
+    "total_depense": {
+      "type": "number",
+      "title": "Total d\u00e9pens\u00e9 (FCFA)"
+    },
+    "date_derniere_course": {
+      "type": "string",
+      "title": "Date derni\u00e8re course"
+    },
+    "statut_client": {
+      "type": "string",
+      "enum": [
+        "Actif",
+        "Fr\u00e9quent",
+        "VIP",
+        "Inactif",
+        "Bloqu\u00e9"
+      ],
+      "title": "Statut client"
+    },
+    "note_admin": {
+      "type": "string",
+      "title": "Note administrateur"
+    }
+  },
+  "required": [
+    "numero_telephone"
+  ]
+}
