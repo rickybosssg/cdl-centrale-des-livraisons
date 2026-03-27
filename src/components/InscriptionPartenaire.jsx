@@ -135,6 +135,8 @@ export default function InscriptionPartenaire({ onBack, onComplete }) {
           )}
           <div><Label>Horaires / Disponibilité</Label>
             <Input placeholder="Ex: Lun-Sam 7h-20h ou Sur rendez-vous" value={form.horaires} onChange={e => setForm(f => ({ ...f, horaires: e.target.value }))} /></div>
+          <div>
+            <Label>Photo</Label>
             <div className="mt-1">
               <input type="file" accept="image/*" className="hidden" id="photo_commerce" onChange={e => setPhotoFile(e.target.files[0])} />
               <label htmlFor="photo_commerce" className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer text-sm transition-colors ${photoFile ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted"}`}>
