@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { vibrateLight } from "@/lib/vibration";
-import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp, Database } from "lucide-react";
+import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp, Database, Store } from "lucide-react";
 import { motion } from "framer-motion";
 import PageTransition from "./PageTransition";
 import { useState } from "react";
@@ -23,8 +23,11 @@ const NAV_ITEMS = {
     { path: "/", icon: Home, label: "Accueil" },
     { path: "/gerer-courses", icon: Package, label: "Courses" },
     { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
-    { path: "/base-clients", icon: Database, label: "Clients" },
+    { path: "/gerer-partenaires", icon: Store, label: "Partenaires" },
     { path: "/suivi-commissions", icon: BarChart3, label: "Commissions" },
+  ],
+  partenaire: [
+    { path: "/", icon: Home, label: "Mon commerce" },
   ],
 };
 

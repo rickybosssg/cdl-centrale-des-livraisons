@@ -1,0 +1,43 @@
+{
+  "name": "ProduitPartenaire",
+  "type": "object",
+  "properties": {
+    "partenaire_id": {
+      "type": "string",
+      "title": "ID Partenaire"
+    },
+    "partenaire_email": {
+      "type": "string",
+      "title": "Email partenaire"
+    },
+    "nom": {
+      "type": "string",
+      "title": "Nom du produit"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description"
+    },
+    "prix": {
+      "type": "number",
+      "title": "Prix (FCFA)"
+    },
+    "photo": {
+      "type": "string",
+      "title": "Photo"
+    },
+    "categorie": {
+      "type": "string",
+      "title": "Cat\u00e9gorie"
+    },
+    "disponible": {
+      "type": "boolean",
+      "title": "Disponible"
+    }
+  },
+  "required": [
+    "partenaire_id",
+    "nom",
+    "prix"
+  ]
+}

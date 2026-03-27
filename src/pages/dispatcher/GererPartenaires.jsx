@@ -1,0 +1,211 @@
+import { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Search, RefreshCw, Eye, ShoppingBag, TrendingUp, Ban, UserCheck, Store } from "lucide-react";
+import { toast } from "sonner";
+import moment from "moment";
+
+const STATUT_ABONN = {
+  Actif: "bg-green-100 text-green-700",
+  Expiré: "bg-red-100 text-red-700",
+  Bloqué: "bg-gray-100 text-gray-700",
+};
+
+const TYPE_EMOJI = {
+  Restaurant: "🍽️", Pharmacie: "💊", Boutique: "🛍️", Alimentation: "🥗", Boissons: "🥤"
+};
+
+export default function GererPartenaires() {
+  const navigate = useNavigate();
+  const [partenaires, setPartenaires] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("Tous");
+  const [selected, setSelected] = useState(null);
+  const [savingId, setSavingId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    const data = await base44.entities.Partenaire.list("-created_date", 500);
+    setPartenaires(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const bloquer = async (p) => {
+    setSavingId(p.id);
+    await base44.entities.Partenaire.update(p.id, { statut: "suspendu", statut_abonnement: "Bloqué" });
+    setPartenaires(prev => prev.map(x => x.id === p.id ? { ...x, statut: "suspendu", statut_abonnement: "Bloqué" } : x));
+    if (selected?.id === p.id) setSelected(s => ({ ...s, statut: "suspendu", statut_abonnement: "Bloqué" }));
+    toast.success("Partenaire bloqué");
+    setSavingId(null);
+  };
+
+  const activer = async (p) => {
+    setSavingId(p.id);
+    const expiration = new Date();
+    expiration.setMonth(expiration.getMonth() + 1);
+    await base44.entities.Partenaire.update(p.id, { statut: "actif", statut_abonnement: "Actif", date_expiration_abonnement: expiration.toISOString() });
+    setPartenaires(prev => prev.map(x => x.id === p.id ? { ...x, statut: "actif", statut_abonnement: "Actif" } : x));
+    if (selected?.id === p.id) setSelected(s => ({ ...s, statut: "actif", statut_abonnement: "Actif" }));
+    toast.success("Partenaire activé");
+    setSavingId(null);
+  };
+
+  const filtered = partenaires.filter(p => {
+    const q = search.toLowerCase();
+    const match = !q || (p.nom_commerce || "").toLowerCase().includes(q) || (p.quartier || "").toLowerCase().includes(q) || (p.telephone || "").includes(q);
+    const matchType = filterType === "Tous" || p.type_commerce === filterType;
+    return match && matchType;
+  });
+
+  const stats = {
+    total: partenaires.length,
+    actifs: partenaires.filter(p => p.statut === "actif").length,
+    en_attente: partenaires.filter(p => p.statut === "en_attente").length,
+    suspendus: partenaires.filter(p => p.statut === "suspendu").length,
+    revenue: partenaires.filter(p => p.statut_abonnement === "Actif").length * 30000,
+  };
+
+  if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
+        <h1 className="text-xl font-bold flex-1">Partenaires</h1>
+        <Button variant="outline" size="icon" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-2">
+        <Card><CardContent className="p-3"><p className="text-xl font-bold text-primary">{stats.total}</p><p className="text-[10px] text-muted-foreground">Total partenaires</p></CardContent></Card>
+        <Card><CardContent className="p-3"><p className="text-xl font-bold text-green-600">{stats.actifs}</p><p className="text-[10px] text-muted-foreground">Actifs</p></CardContent></Card>
+        <Card><CardContent className="p-3"><p className="text-xl font-bold text-amber-600">{stats.en_attente}</p><p className="text-[10px] text-muted-foreground">En attente</p></CardContent></Card>
+        <Card><CardContent className="p-3"><p className="text-sm font-bold text-primary">{stats.revenue.toLocaleString()} FCFA</p><p className="text-[10px] text-muted-foreground">Revenu mensuel</p></CardContent></Card>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input className="pl-9" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {["Tous", "Restaurant", "Pharmacie", "Boutique", "Alimentation", "Boissons"].map(t => (
+          <button key={t} onClick={() => setFilterType(t)} className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filterType === t ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border"}`}>
+            {TYPE_EMOJI[t] || ""} {t}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-xs text-muted-foreground">{filtered.length} partenaire(s)</p>
+
+      <div className="space-y-2">
+        {filtered.map(p => (
+          <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelected(p)}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl flex-shrink-0">
+                    {p.photo_principale
+                      ? <img src={p.photo_principale} alt="" className="h-10 w-10 rounded-xl object-cover" />
+                      : TYPE_EMOJI[p.type_commerce] || "🏪"}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">{p.nom_commerce}</p>
+                    <p className="text-xs text-muted-foreground">{p.type_commerce} · {p.quartier}</p>
+                    <p className="text-xs text-muted-foreground">{p.telephone}</p>
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0 space-y-1">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUT_ABONN[p.statut_abonnement] || STATUT_ABONN.Actif}`}>
+                    {p.statut_abonnement || "Actif"}
+                  </span>
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground justify-end">
+                    <span className="flex items-center gap-0.5"><Eye className="h-2.5 w-2.5" />{p.nombre_vues || 0}</span>
+                    <span className="flex items-center gap-0.5"><ShoppingBag className="h-2.5 w-2.5" />{p.nombre_commandes || 0}</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-center py-12"><Store className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" /><p className="text-sm text-muted-foreground">Aucun partenaire</p></div>
+        )}
+      </div>
+
+      {/* Fiche partenaire */}
+      {selected && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end justify-center" onClick={() => setSelected(null)}>
+          <div className="bg-background w-full max-w-lg rounded-t-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-background border-b px-4 py-3 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold">{selected.nom_commerce}</h2>
+                <p className="text-xs text-muted-foreground">{selected.type_commerce} · {selected.quartier}</p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(null)}>✕</Button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <Card><CardContent className="p-3"><p className="text-lg font-bold text-primary">{selected.nombre_vues || 0}</p><p className="text-[10px] text-muted-foreground">Vues</p></CardContent></Card>
+                <Card><CardContent className="p-3"><p className="text-lg font-bold text-accent">{selected.nombre_clics_commander || 0}</p><p className="text-[10px] text-muted-foreground">Clics</p></CardContent></Card>
+                <Card><CardContent className="p-3"><p className="text-lg font-bold text-green-600">{selected.nombre_commandes || 0}</p><p className="text-[10px] text-muted-foreground">Cmdes</p></CardContent></Card>
+              </div>
+              {/* Conversion */}
+              {selected.nombre_vues > 0 && (
+                <div className="bg-muted rounded-xl p-3 text-sm">
+                  <p className="text-muted-foreground text-xs">Taux de conversion</p>
+                  <p className="font-bold text-lg">{Math.round((selected.nombre_commandes || 0) / selected.nombre_vues * 100)}%</p>
+                </div>
+              )}
+              {/* Abonnement */}
+              <Card className={selected.statut_abonnement === "Expiré" ? "border-red-200" : "border-green-200"}>
+                <CardContent className="p-3">
+                  <p className="text-xs font-semibold mb-1">Abonnement (30 000 FCFA/mois)</p>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Statut : <span className="font-semibold">{selected.statut_abonnement}</span></span>
+                    <span className="text-muted-foreground">Expire : {selected.date_expiration_abonnement ? moment(selected.date_expiration_abonnement).format("DD/MM/YY") : "—"}</span>
+                  </div>
+                </CardContent>
+              </Card>
+              {/* Infos */}
+              <div className="text-sm space-y-1">
+                <p><span className="text-muted-foreground">Responsable :</span> {selected.nom_responsable || "—"}</p>
+                <p><span className="text-muted-foreground">Tél :</span> {selected.telephone}</p>
+                <p><span className="text-muted-foreground">Adresse :</span> {selected.adresse || "—"}</p>
+                <p><span className="text-muted-foreground">Inscrit :</span> {moment(selected.created_date).format("DD/MM/YYYY")}</p>
+              </div>
+              {/* Voir page */}
+              <Button variant="outline" className="w-full" onClick={() => { navigate(`/commerce/${selected.id}`); setSelected(null); }}>
+                <Eye className="h-4 w-4 mr-1" />Voir la page publique
+              </Button>
+              {/* Actions admin */}
+              <div className="flex gap-2">
+                {selected.statut !== "suspendu" ? (
+                  <Button variant="destructive" className="flex-1" disabled={savingId === selected.id} onClick={() => bloquer(selected)}>
+                    <Ban className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Bloquer"}
+                  </Button>
+                ) : (
+                  <Button className="flex-1 bg-green-600 hover:bg-green-700" disabled={savingId === selected.id} onClick={() => activer(selected)}>
+                    <UserCheck className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Activer"}
+                  </Button>
+                )}
+                {selected.statut === "en_attente" && (
+                  <Button className="flex-1" disabled={savingId === selected.id} onClick={() => activer(selected)}>
+                    <UserCheck className="h-4 w-4 mr-1" />Valider
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

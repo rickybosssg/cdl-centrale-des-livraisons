@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Package, Truck, User, Radio, Upload } from "lucide-react";
+import { Package, Truck, User, Radio, Upload, Store } from "lucide-react";
+import InscriptionPartenaire from "./InscriptionPartenaire";
 import { base44 } from "@/api/base44Client";
 import QuartierSelect from "./QuartierSelect";
 import { toast } from "sonner";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
 const PUBLIC_ROLES = [
   { value: "client", label: "Client", icon: User, desc: "Commander des livraisons" },
   { value: "livreur", label: "Livreur", icon: Truck, desc: "Effectuer des livraisons" },
+  { value: "partenaire", label: "Partenaire", icon: Store, desc: "Restaurant, boutique, pharmacie..." },
 ];
 
 const ADMIN_ROLES = [
@@ -22,6 +24,7 @@ const ADMIN_ROLES = [
 export default function RoleSetup({ onComplete, isAdmin = false }) {
   const [step, setStep] = useState(1);
   const [selectedRole, setSelectedRole] = useState(null);
+  const [showPartenaire, setShowPartenaire] = useState(false);
   const ROLES = isAdmin ? ADMIN_ROLES : PUBLIC_ROLES;
   const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "" });
   const [docs, setDocs] = useState({ photo_profil: null, photo_identite_recto: null, photo_identite_verso: null, photo_moto: null });
@@ -77,6 +80,10 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
     onComplete();
   };
 
+  if (showPartenaire) {
+    return <InscriptionPartenaire onBack={() => setShowPartenaire(false)} onComplete={onComplete} />;
+  }
+
   if (step === 1) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
@@ -117,7 +124,10 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
           <Button
             className="w-full"
             disabled={!selectedRole}
-            onClick={() => setStep(2)}
+            onClick={() => {
+              if (selectedRole === 'partenaire') setShowPartenaire(true);
+              else setStep(2);
+            }}
           >
             Continuer
           </Button>

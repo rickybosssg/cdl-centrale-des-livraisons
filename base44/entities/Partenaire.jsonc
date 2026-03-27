@@ -1,0 +1,109 @@
+{
+  "name": "Partenaire",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "nom_commerce": {
+      "type": "string",
+      "title": "Nom du commerce"
+    },
+    "nom_responsable": {
+      "type": "string",
+      "title": "Nom du responsable"
+    },
+    "telephone": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone"
+    },
+    "type_commerce": {
+      "type": "string",
+      "enum": [
+        "Restaurant",
+        "Pharmacie",
+        "Boutique",
+        "Alimentation",
+        "Boissons"
+      ],
+      "title": "Type de commerce"
+    },
+    "quartier": {
+      "type": "string",
+      "title": "Quartier"
+    },
+    "adresse": {
+      "type": "string",
+      "title": "Adresse"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description"
+    },
+    "photo_principale": {
+      "type": "string",
+      "title": "Photo principale"
+    },
+    "photos": {
+      "type": "string",
+      "title": "Photos (JSON)"
+    },
+    "ouvert": {
+      "type": "boolean",
+      "title": "Ouvert"
+    },
+    "horaires": {
+      "type": "string",
+      "title": "Horaires d'ouverture"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "actif",
+        "suspendu"
+      ],
+      "title": "Statut"
+    },
+    "statut_abonnement": {
+      "type": "string",
+      "enum": [
+        "Actif",
+        "Expir\u00e9",
+        "Bloqu\u00e9"
+      ],
+      "title": "Statut abonnement"
+    },
+    "date_paiement_abonnement": {
+      "type": "string",
+      "title": "Date paiement abonnement"
+    },
+    "date_expiration_abonnement": {
+      "type": "string",
+      "title": "Date expiration abonnement"
+    },
+    "nombre_vues": {
+      "type": "number",
+      "title": "Nombre de vues"
+    },
+    "nombre_clics_commander": {
+      "type": "number",
+      "title": "Clics Commander"
+    },
+    "nombre_commandes": {
+      "type": "number",
+      "title": "Nombre commandes"
+    },
+    "note_admin": {
+      "type": "string",
+      "title": "Note admin"
+    }
+  },
+  "required": [
+    "user_email",
+    "nom_commerce",
+    "telephone",
+    "type_commerce"
+  ]
+}

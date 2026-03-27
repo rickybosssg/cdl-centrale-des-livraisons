@@ -20,6 +20,18 @@ import ValidationLivreurs from './pages/dispatcher/ValidationLivreurs';
 import Parametres from './pages/dispatcher/Parametres';
 import GainsLivreur from './pages/livreur/GainsLivreur';
 import BaseClients from './pages/dispatcher/BaseClients';
+import GererPartenaires from './pages/dispatcher/GererPartenaires';
+import DashboardPartenaire from './pages/partenaire/DashboardPartenaire';
+import PagePartenaire from './pages/partenaire/PagePartenaire';
+import { useEffect, useState } from 'react';
+import { base44 as b44 } from '@/api/base44Client';
+
+function DashboardPartenaireWrapper() {
+  const [user, setUser] = useState(null);
+  useEffect(() => { b44.auth.me().then(setUser); }, []);
+  if (!user) return null;
+  return <DashboardPartenaire user={user} />;
+}
 import AppLayout from './components/AppLayout';
 import AppLayoutWrapper from './components/AppLayoutWrapper';
 import DispatcherGuard from './components/DispatcherGuard';
@@ -67,7 +79,10 @@ const AuthenticatedApp = () => {
           <Route path="/parametres" element={<Parametres />} />
         </Route>
         <Route path="/mes-gains" element={<GainsLivreur />} />
+        <Route path="/dashboard-partenaire" element={<DashboardPartenaireWrapper />} />
         <Route path="/base-clients" element={<BaseClients />} />
+        <Route path="/gerer-partenaires" element={<GererPartenaires />} />
+        <Route path="/commerce/:id" element={<PagePartenaire />} />
         <Route path="/dispatcher/DispatcherDashboard" element={<Home />} />
         <Route path="/dispatcher/GererCourses" element={<GererCourses />} />
         <Route path="/dispatcher/GererLivreurs" element={<GererLivreurs />} />

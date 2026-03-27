@@ -1,0 +1,35 @@
+{
+  "name": "VisitePartenaire",
+  "type": "object",
+  "properties": {
+    "partenaire_id": {
+      "type": "string",
+      "title": "ID Partenaire"
+    },
+    "visiteur_email": {
+      "type": "string",
+      "title": "Email visiteur"
+    },
+    "visiteur_nom": {
+      "type": "string",
+      "title": "Nom visiteur"
+    },
+    "type_action": {
+      "type": "string",
+      "enum": [
+        "vue",
+        "commander_click",
+        "whatsapp_click"
+      ],
+      "title": "Type action"
+    },
+    "date_visite": {
+      "type": "string",
+      "title": "Date visite"
+    }
+  },
+  "required": [
+    "partenaire_id",
+    "type_action"
+  ]
+}

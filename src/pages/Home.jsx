@@ -4,6 +4,7 @@ import RoleSetup from "../components/RoleSetup";
 import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
+import DashboardPartenaire from "./partenaire/DashboardPartenaire";
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -38,6 +39,8 @@ export default function Home() {
       return <LivreurHome user={user} />;
     case "dispatcher":
       return <DispatcherDashboard />;
+    case "partenaire":
+      return <DashboardPartenaire user={user} />;
     default:
       return <ClientHome user={user} />;
   }
