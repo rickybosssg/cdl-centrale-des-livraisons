@@ -37,24 +37,34 @@ function scoreDriver(driver, course) {
 
   // Proximité par quartier
   if (driver.quartier === quartierDepart) score += 100;
-  else if (ZONES_PROCHES[quartierDepart]?.includes(driver.quartier)) score += 50;
+  else if (ZONES_PROCHES[quartierDepart]?.includes(driver.quartier)) score += 60;
 
-  // Proximité GPS
+  // Proximité GPS (poids augmenté)
   if (driver.gps_latitude && driver.gps_longitude && course.latitude_depart && course.longitude_depart) {
     const dist = distanceKm(driver.gps_latitude, driver.gps_longitude, course.latitude_depart, course.longitude_depart);
-    score += Math.max(0, 30 - dist * 3);
+    if (dist < 1) score += 80;
+    else if (dist < 3) score += 50;
+    else if (dist < 7) score += 20;
   }
 
   // Moins de courses actives = meilleur score
   const actives = driver.nombre_courses_actives || 0;
-  score += (3 - actives) * 10;
+  score += Math.max(0, (5 - actives) * 15);
+
+  // Taux d'acceptation du livreur
+  const totalCourses = driver.total_courses_livrees || 0;
+  if (totalCourses > 10) score += 20;
+  else if (totalCourses > 5) score += 10;
+
+  // Note moyenne
+  if (driver.note_moyenne) score += (driver.note_moyenne - 3) * 10;
 
   // Attend depuis longtemps = priorité
   if (driver.derniere_course_attribuee_at) {
     const heuresAttente = (Date.now() - new Date(driver.derniere_course_attribuee_at).getTime()) / 3600000;
-    score += Math.min(heuresAttente, 5);
+    score += Math.min(heuresAttente * 5, 30);
   } else {
-    score += 5;
+    score += 30;
   }
 
   return score;
@@ -129,7 +139,7 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, message: 'Aucun livreur disponible' });
     }
 
-    // Sélectionner le meilleur livreur
+    // Sélectionner le meilleur livreur (cascade: top 3 disponibles)
     const scored = eligibles
       .map(d => ({ driver: d, score: scoreDriver(d, course) }))
       .sort((a, b) => b.score - a.score);

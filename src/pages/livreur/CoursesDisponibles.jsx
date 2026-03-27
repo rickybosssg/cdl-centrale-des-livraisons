@@ -38,8 +38,14 @@ export default function CoursesDisponibles() {
       livreur_email: user.email,
       livreur_name: user.full_name,
       date_acceptation: new Date().toISOString(),
+      mode_assignation: "manuel",
     });
-    toast.success("Course acceptée !");
+    // Incrémenter les courses actives
+    await base44.auth.updateMe({
+      nombre_courses_actives: (user.nombre_courses_actives || 0) + 1,
+      derniere_course_attribuee_at: new Date().toISOString(),
+    });
+    toast.success("🛵 Course acceptée ! Bonne livraison !");
     setCourses(prev => prev.filter(c => c.id !== course.id));
   };
 

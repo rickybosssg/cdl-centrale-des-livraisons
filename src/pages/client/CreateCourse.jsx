@@ -40,6 +40,7 @@ export default function CreateCourse() {
   }, []);
 
   const prix = PRIX_PAR_TYPE[form.type_colis] || 0;
+  const gainLivreur = Math.round(prix * 0.8);
   const commission = Math.round(prix * 0.2);
 
   const handleSubmit = async () => {
@@ -202,11 +203,22 @@ export default function CreateCourse() {
 
       {prix > 0 && (
         <Card className="bg-primary/5 border-primary/20">
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Prix de la course</span>
               <span className="text-2xl font-bold text-primary">{prix} FCFA</span>
             </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2 rounded-lg bg-card border">
+                <p className="text-muted-foreground">Gain livreur (80%)</p>
+                <p className="font-bold text-green-600">{gainLivreur} FCFA</p>
+              </div>
+              <div className="p-2 rounded-lg bg-card border">
+                <p className="text-muted-foreground">Commission CDL (20%)</p>
+                <p className="font-bold text-primary">{commission} FCFA</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground text-center">⏱ Livraison estimée : 20-45 minutes selon le trafic</p>
           </CardContent>
         </Card>
       )}
@@ -214,9 +226,9 @@ export default function CreateCourse() {
       <Button
         className="w-full h-12 text-base font-semibold"
         onClick={handleSubmit}
-        disabled={loading}
+        disabled={loading || !form.quartier_depart || !form.quartier_arrivee || !form.type_colis || !form.mode_paiement}
       >
-        {loading ? "Création en cours..." : "Commander la course"}
+        {loading ? "⏳ Recherche d'un livreur..." : "🛵 Commander la course"}
       </Button>
     </div>
   );

@@ -45,13 +45,13 @@ export default function CourseDetail() {
   }
 
   const STATUT_CLIENT = {
-    en_attente: { label: "Recherche d'un livreur en cours...", color: "text-amber-600", bg: "bg-amber-50 border-amber-200" },
-    assignee_attente: { label: "Un livreur a été trouvé !", color: "text-blue-600", bg: "bg-blue-50 border-blue-200" },
-    acceptee: { label: "Votre course a été acceptée", color: "text-indigo-600", bg: "bg-indigo-50 border-indigo-200" },
-    en_cours: { label: "Votre colis est en cours de livraison", color: "text-purple-600", bg: "bg-purple-50 border-purple-200" },
-    livree: { label: "Votre colis a été livré !", color: "text-green-600", bg: "bg-green-50 border-green-200" },
-    annulee: { label: "Course annulée", color: "text-red-600", bg: "bg-red-50 border-red-200" },
-    aucun_livreur: { label: "Aucun livreur disponible pour le moment. Veuillez patienter.", color: "text-red-600", bg: "bg-red-50 border-red-200" },
+    en_attente: { label: "🔍 Recherche d’un livreur en cours...", color: "text-amber-600", bg: "bg-amber-50 border-amber-200", pulse: true },
+    assignee_attente: { label: "🛵 Un livreur a été trouvé ! En attente de confirmation...", color: "text-blue-600", bg: "bg-blue-50 border-blue-200", pulse: true },
+    acceptee: { label: "✅ Votre course a été acceptée ! Le livreur arrive...", color: "text-indigo-600", bg: "bg-indigo-50 border-indigo-200", pulse: true },
+    en_cours: { label: "📦 Votre colis est en route !", color: "text-purple-600", bg: "bg-purple-50 border-purple-200", pulse: true },
+    livree: { label: "🎉 Votre colis a été livré !", color: "text-green-600", bg: "bg-green-50 border-green-200", pulse: false },
+    annulee: { label: "❌ Course annulée", color: "text-red-600", bg: "bg-red-50 border-red-200", pulse: false },
+    aucun_livreur: { label: "⏳ Aucun livreur disponible pour le moment. Nous continuons de chercher...", color: "text-red-600", bg: "bg-red-50 border-red-200", pulse: true },
   };
 
   if (!course) {
@@ -78,7 +78,13 @@ export default function CourseDetail() {
       </div>
 
       {/* Bannière statut client */}
-      <div className={`rounded-xl border p-3 ${statutInfo.bg}`}>
+      <div className={`rounded-xl border p-4 ${statutInfo.bg} flex items-center gap-3`}>
+        {statutInfo.pulse && (
+          <div className="relative flex-shrink-0">
+            <div className={`h-3 w-3 rounded-full ${statutInfo.color.replace('text-', 'bg-')}`} />
+            <div className={`absolute inset-0 h-3 w-3 rounded-full ${statutInfo.color.replace('text-', 'bg-')} animate-ping opacity-75`} />
+          </div>
+        )}
         <p className={`text-sm font-semibold ${statutInfo.color}`}>{statutInfo.label}</p>
       </div>
 
