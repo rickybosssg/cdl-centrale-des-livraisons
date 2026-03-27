@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import CourseCard from "../../components/CourseCard";
 import usePullToRefresh from "../../hooks/usePullToRefresh";
 import { toast } from "sonner";
+import { vibrateSuccess } from "@/lib/vibration";
 
 export default function CoursesDisponibles() {
   const [courses, setCourses] = useState([]);
@@ -49,6 +50,7 @@ export default function CoursesDisponibles() {
       nombre_courses_actives: (user.nombre_courses_actives || 0) + 1,
       derniere_course_attribuee_at: new Date().toISOString(),
     });
+    vibrateSuccess();
     toast.success("🛵 Course acceptée ! Bonne livraison !");
     setCourses(prev => prev.filter(c => c.id !== course.id));
   };

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
 import { toast } from "sonner";
+import { vibrateSuccess, vibrateMedium } from "@/lib/vibration";
 
 export default function CourseLivreur() {
   const { id } = useParams();
@@ -50,6 +51,7 @@ export default function CourseLivreur() {
       date_recuperation: new Date().toISOString(),
     });
     setCourse(prev => ({ ...prev, statut: "en_cours", date_recuperation: new Date().toISOString() }));
+    vibrateSuccess();
     toast.success("Colis récupéré !");
     setUpdating(false);
   };
@@ -79,6 +81,7 @@ export default function CourseLivreur() {
       });
     }
     setCourse(prev => ({ ...prev, statut: "livree", date_livraison: new Date().toISOString() }));
+    vibrateSuccess();
     toast.success("Colis livré avec succès !");
     setUpdating(false);
   };

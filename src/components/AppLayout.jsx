@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { vibrateLight } from "@/lib/vibration";
 import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp, MessageCircle, Database } from "lucide-react";
 import { motion } from "framer-motion";
 import PageTransition from "./PageTransition";
@@ -93,6 +94,7 @@ export default function AppLayout({ userRole }) {
                 key={item.path}
                 to={item.path}
                 className="flex-1 flex flex-col items-center py-2 gap-0.5"
+                onClick={() => !active && vibrateLight()}
               >
                 <motion.div
                   whileTap={{ scale: 1.18 }}

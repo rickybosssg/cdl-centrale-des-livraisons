@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { vibrateSuccess, vibrateMedium } from "@/lib/vibration";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +72,7 @@ export default function CreateCourse() {
     });
     // Lancer le dispatch automatique
     lancerDispatch(courseData);
+    vibrateSuccess();
     toast.success("Course créée ! Recherche d'un livreur en cours...");
     navigate("/mes-courses");
   };
