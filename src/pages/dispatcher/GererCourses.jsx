@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, UserPlus, X, RefreshCw, Eye, Clock, ChevronDown } from "lucide-react";
+import { ArrowLeft, UserPlus, X, RefreshCw, Eye, Clock, Zap, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
 import { toast } from "sonner";
-import { lancerDispatch } from "@/lib/dispatch";
 import moment from "moment";
 
 export default function GererCourses() {
@@ -65,12 +64,16 @@ export default function GererCourses() {
   };
 
   const relancerDispatch = async (course) => {
-    toast.info("Dispatch automatique en cours...");
-    const result = await lancerDispatch(course);
-    if (result) {
-      toast.success(`Course envoyée à ${result.full_name}`);
-    } else {
-      toast.error("Aucun livreur disponible");
+    toast.info("Re-dispatch en cours...");
+    try {
+      const result = await base44.functions.invoke('autoDispatch', { course_id: course.id });
+      if (result?.data?.success) {
+        toast.success(`Course envoyée à ${result.data.livreur?.nom}`);
+      } else {
+        toast.error("Aucun livreur disponible");
+      }
+    } catch (e) {
+      toast.error("Erreur lors du dispatch");
     }
     loadData();
   };
@@ -84,10 +87,9 @@ export default function GererCourses() {
         updateData.commission_cdl = (course.prix || 0) * 0.2;
         updateData.gain_livreur = (course.prix || 0) * 0.8;
         updateData.statut_paiement_livreur = "Commission due";
-        // Mise à jour solde livreur
-        const livreurs = await base44.entities.User.filter({ email: course.livreur_email });
-        if (livreurs.length > 0) {
-          const l = livreurs[0];
+        const livreursData = await base44.entities.User.filter({ email: course.livreur_email });
+        if (livreursData.length > 0) {
+          const l = livreursData[0];
           const commissionCdl = (course.prix || 0) * 0.2;
           await base44.entities.User.update(l.id, {
             solde_commission_du: (l.solde_commission_du || 0) + commissionCdl,
@@ -127,6 +129,16 @@ export default function GererCourses() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-mono text-muted-foreground">#{course.id?.slice(0, 8)}</span>
               <StatusBadge statut={course.statut} />
+              {course.mode_assignation === 'auto' && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                  <Zap className="h-2.5 w-2.5" />Auto
+                </span>
+              )}
+              {course.mode_assignation === 'manuel' && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                  <User className="h-2.5 w-2.5" />Manuel
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 mt-1 text-sm">
               <span className="font-medium">{course.quartier_depart}</span>
@@ -201,7 +213,7 @@ export default function GererCourses() {
                 <>
                   <Button size="sm" className="flex-1 h-8 text-xs" onClick={() => relancerDispatch(course)}>
                     <RefreshCw className="h-3 w-3 mr-1" />
-                    Dispatch auto
+                    Re-dispatch
                   </Button>
                   <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => { setSelectedCourse(course); setAssignDialog(true); }}>
                     <UserPlus className="h-3 w-3 mr-1" />
@@ -310,9 +322,19 @@ export default function GererCourses() {
           </DialogHeader>
           {selectedCourse && (
             <div className="space-y-3 text-sm">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-xs text-muted-foreground">#{selectedCourse.id?.slice(0, 8)}</span>
                 <StatusBadge statut={selectedCourse.statut} />
+                {selectedCourse.mode_assignation === 'auto' && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                    <Zap className="h-2.5 w-2.5" />Assignation automatique
+                  </span>
+                )}
+                {selectedCourse.mode_assignation === 'manuel' && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                    <User className="h-2.5 w-2.5" />Assignation manuelle
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="p-2 bg-muted rounded"><p className="text-muted-foreground">Départ</p><p className="font-medium">{selectedCourse.quartier_depart}</p></div>
@@ -328,23 +350,43 @@ export default function GererCourses() {
                   <div className="p-2 bg-green-50 rounded"><p className="text-muted-foreground">Gain livreur (80%)</p><p className="font-bold text-green-600">{Math.round(selectedCourse.gain_livreur).toLocaleString()} FCFA</p></div>
                 </div>
               )}
-              {/* Historique assignation */}
-              {selectedCourse.historique_assignation && (
-                <div className="space-y-2">
-                  <p className="font-semibold text-xs">Historique d'assignation</p>
-                  {(() => {
-                    try {
-                      const hist = JSON.parse(selectedCourse.historique_assignation);
-                      return hist.map((h, i) => (
-                        <div key={i} className="p-2 bg-muted rounded text-xs">
-                          <p className="font-medium">{h.livreur_nom || h.livreur_email}</p>
-                          <p className="text-muted-foreground">{moment(h.heure).format("DD/MM HH:mm")} • {h.statut}</p>
-                        </div>
-                      ));
-                    } catch { return null; }
-                  })()}
+              {(selectedCourse.nombre_tentatives > 0) && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Tentatives :</span>
+                  <span className="font-bold">{selectedCourse.nombre_tentatives}</span>
+                  {selectedCourse.heure_assignation && (
+                    <span className="text-muted-foreground">• Assignée à {moment(selectedCourse.heure_assignation).format("HH:mm")}</span>
+                  )}
                 </div>
               )}
+              {selectedCourse.historique_assignation && (() => {
+                try {
+                  const hist = JSON.parse(selectedCourse.historique_assignation);
+                  if (!hist.length) return null;
+                  const STATUT_LABELS = {
+                    proposee: '⏳ Proposée',
+                    acceptee: '✅ Acceptée',
+                    refuse: '❌ Refusée',
+                    no_response: '⏰ Sans réponse',
+                    manuel: '🖐 Manuel',
+                    aucun_livreur: '🚫 Aucun livreur',
+                  };
+                  return (
+                    <div className="space-y-1.5">
+                      <p className="font-semibold text-xs">Historique d'assignation ({hist.length} entrée{hist.length > 1 ? 's' : ''})</p>
+                      {hist.map((h, i) => (
+                        <div key={i} className="p-2 bg-muted rounded text-xs flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-medium">{h.livreur_nom || h.message || '—'}</p>
+                            <p className="text-muted-foreground">{STATUT_LABELS[h.statut] || h.statut}</p>
+                          </div>
+                          <p className="text-muted-foreground whitespace-nowrap">{moment(h.heure).format('DD/MM HH:mm')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                } catch { return null; }
+              })()}
             </div>
           )}
         </DialogContent>
