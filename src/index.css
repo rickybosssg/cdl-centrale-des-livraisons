@@ -98,7 +98,6 @@
     transform: scale(0.96);
   }
 
-  /* Safe areas for notch/home indicator on mobile */
   .safe-top {
     padding-top: env(safe-area-inset-top);
   }
@@ -106,7 +105,6 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
-  /* Pull to refresh indicator */
   .pull-indicator {
     position: fixed;
     top: 0;
@@ -116,19 +114,16 @@
   }
 }
 
-/* Prevent text selection on interactive elements */
 button, [role="button"], a, .cursor-pointer, [data-radix-collection-item] {
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* App header safe area */
 .app-header {
   padding-top: env(safe-area-inset-top);
 }
 
-/* Bottom nav safe area */
 .bottom-nav {
   padding-bottom: env(safe-area-inset-bottom);
 }
