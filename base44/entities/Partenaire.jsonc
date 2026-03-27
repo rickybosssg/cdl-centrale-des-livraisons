@@ -8,7 +8,7 @@
     },
     "nom_commerce": {
       "type": "string",
-      "title": "Nom du commerce"
+      "title": "Nom du commerce / activit\u00e9"
     },
     "nom_responsable": {
       "type": "string",
@@ -25,9 +25,15 @@
         "Pharmacie",
         "Boutique",
         "Alimentation",
-        "Boissons"
+        "Boissons",
+        "Vitrine"
       ],
       "title": "Type de commerce"
+    },
+    "type_activite": {
+      "type": "string",
+      "title": "Type d'activit\u00e9 (pour Vitrine)",
+      "description": "Ex: Commerce, Service, Freelance, Artisan, etc."
     },
     "quartier": {
       "type": "string",
@@ -49,9 +55,17 @@
       "type": "string",
       "title": "Photos (JSON)"
     },
+    "videos": {
+      "type": "string",
+      "title": "Vid\u00e9os (JSON URLs)"
+    },
+    "catalogue_url": {
+      "type": "string",
+      "title": "URL Catalogue (PDF/image)"
+    },
     "ouvert": {
       "type": "boolean",
-      "title": "Ouvert"
+      "title": "Ouvert / Actif"
     },
     "horaires": {
       "type": "string",
@@ -90,6 +104,10 @@
     "nombre_clics_commander": {
       "type": "number",
       "title": "Clics Commander"
+    },
+    "nombre_contacts": {
+      "type": "number",
+      "title": "Nombre de contacts WhatsApp"
     },
     "nombre_commandes": {
       "type": "number",

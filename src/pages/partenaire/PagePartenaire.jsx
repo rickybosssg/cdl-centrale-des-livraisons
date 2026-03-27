@@ -12,8 +12,10 @@ import QuartierSelect from "../../components/QuartierSelect";
 import moment from "moment";
 
 const TYPE_EMOJI = {
-  Restaurant: "🍽️", Pharmacie: "💊", Boutique: "🛍️", Alimentation: "🥗", Boissons: "🥤"
+  Restaurant: "🍽️", Pharmacie: "💊", Boutique: "🛍️", Alimentation: "🥗", Boissons: "🥤", Vitrine: "✨"
 };
+
+const IS_LIVRABLE = ["Restaurant", "Pharmacie", "Boutique", "Alimentation", "Boissons"];
 
 export default function PagePartenaire() {
   const { id } = useParams();
@@ -150,14 +152,29 @@ export default function PagePartenaire() {
 
       {/* Actions */}
       <div className="flex gap-2">
-        <Button className="flex-1" onClick={() => { vibrateLight(); setShowCommander(true); }}>
-          <ShoppingCart className="h-4 w-4 mr-1" />Commander
-        </Button>
+        {IS_LIVRABLE.includes(partenaire.type_commerce) && (
+          <Button className="flex-1" onClick={() => { vibrateLight(); setShowCommander(true); }}>
+            <ShoppingCart className="h-4 w-4 mr-1" />Commander
+          </Button>
+        )}
         {partenaire.telephone && (
-          <a href={`https://wa.me/${partenaire.telephone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" className="bg-green-50 border-green-200 text-green-700">
-              <MessageCircle className="h-4 w-4" />
+          <a
+            href={`https://wa.me/${partenaire.telephone.replace(/\D/g, "")}`}
+            target="_blank" rel="noopener noreferrer"
+            className="flex-1"
+            onClick={() => {
+              base44.entities.Partenaire.update(partenaire.id, { nombre_contacts: (partenaire.nombre_contacts || 0) + 1 });
+              base44.entities.VisitePartenaire.create({ partenaire_id: partenaire.id, visiteur_email: user?.email || "", visiteur_nom: user?.full_name || "", type_action: "whatsapp_click", date_visite: new Date().toISOString() });
+            }}
+          >
+            <Button className={`w-full ${!IS_LIVRABLE.includes(partenaire.type_commerce) ? "" : ""} bg-green-600 hover:bg-green-700`}>
+              <MessageCircle className="h-4 w-4 mr-1" />Contacter
             </Button>
+          </a>
+        )}
+        {partenaire.telephone && (
+          <a href={`tel:${partenaire.telephone}`}>
+            <Button variant="outline" size="icon"><Phone className="h-4 w-4" /></Button>
           </a>
         )}
       </div>
@@ -183,10 +200,20 @@ export default function PagePartenaire() {
         </Card>
       )}
 
-      {/* Catalogue */}
+      {/* Vitrine : catalogue image / vidéos */}
+      {partenaire.type_commerce === "Vitrine" && partenaire.catalogue_url && (
+        <div className="space-y-2">
+          <h2 className="font-bold text-base">📋 Catalogue / Portfolio</h2>
+          <a href={partenaire.catalogue_url} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" className="w-full">Voir le catalogue</Button>
+          </a>
+        </div>
+      )}
+
+      {/* Catalogue produits */}
       {produits.length > 0 && (
         <div className="space-y-3">
-          <h2 className="font-bold text-base">{partenaire.type_commerce === "Restaurant" ? "🍽️ Menu" : "🛍️ Catalogue"}</h2>
+          <h2 className="font-bold text-base">{partenaire.type_commerce === "Restaurant" ? "🍽️ Menu" : partenaire.type_commerce === "Vitrine" ? "✨ Nos services" : "🛍️ Catalogue"}</h2>
           {(categories.length > 0 ? categories : [null]).map(cat => (
             <div key={cat || "all"}>
               {cat && <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{cat}</p>}
@@ -196,7 +223,7 @@ export default function PagePartenaire() {
                     <CardContent className="p-3 flex items-center gap-3">
                       {prod.photo
                         ? <img src={prod.photo} alt={prod.nom} className="h-14 w-14 rounded-xl object-cover flex-shrink-0" />
-                        : <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center text-2xl flex-shrink-0">🍱</div>
+                        : <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center text-2xl flex-shrink-0">{partenaire.type_commerce === "Vitrine" ? "✨" : "🍱"}</div>
                       }
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm">{prod.nom}</p>

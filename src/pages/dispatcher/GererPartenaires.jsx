@@ -15,7 +15,7 @@ const STATUT_ABONN = {
 };
 
 const TYPE_EMOJI = {
-  Restaurant: "🍽️", Pharmacie: "💊", Boutique: "🛍️", Alimentation: "🥗", Boissons: "🥤"
+  Restaurant: "🍽️", Pharmacie: "💊", Boutique: "🛍️", Alimentation: "🥗", Boissons: "🥤", Vitrine: "✨"
 };
 
 export default function GererPartenaires() {
@@ -95,7 +95,7 @@ export default function GererPartenaires() {
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {["Tous", "Restaurant", "Pharmacie", "Boutique", "Alimentation", "Boissons"].map(t => (
+        {["Tous", "Restaurant", "Pharmacie", "Boutique", "Alimentation", "Boissons", "Vitrine"].map(t => (
           <button key={t} onClick={() => setFilterType(t)} className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filterType === t ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border"}`}>
             {TYPE_EMOJI[t] || ""} {t}
           </button>
@@ -155,6 +155,7 @@ export default function GererPartenaires() {
               <div className="grid grid-cols-3 gap-2 text-center">
                 <Card><CardContent className="p-3"><p className="text-lg font-bold text-primary">{selected.nombre_vues || 0}</p><p className="text-[10px] text-muted-foreground">Vues</p></CardContent></Card>
                 <Card><CardContent className="p-3"><p className="text-lg font-bold text-accent">{selected.nombre_clics_commander || 0}</p><p className="text-[10px] text-muted-foreground">Clics</p></CardContent></Card>
+                <Card><CardContent className="p-3"><p className="text-lg font-bold text-green-500">{selected.nombre_contacts || 0}</p><p className="text-[10px] text-muted-foreground">Contacts</p></CardContent></Card>
                 <Card><CardContent className="p-3"><p className="text-lg font-bold text-green-600">{selected.nombre_commandes || 0}</p><p className="text-[10px] text-muted-foreground">Cmdes</p></CardContent></Card>
               </div>
               {/* Conversion */}

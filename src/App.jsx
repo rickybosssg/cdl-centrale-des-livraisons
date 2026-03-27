@@ -24,6 +24,7 @@ import GererPartenaires from './pages/dispatcher/GererPartenaires';
 import DashboardPartenaire from './pages/partenaire/DashboardPartenaire';
 import PagePartenaire from './pages/partenaire/PagePartenaire';
 import CommandesPartenaire from './pages/partenaire/CommandesPartenaire';
+import Vitrines from './pages/client/Vitrines';
 import { useEffect, useState } from 'react';
 import { base44 as b44 } from '@/api/base44Client';
 
@@ -91,6 +92,7 @@ const AuthenticatedApp = () => {
         <Route path="/base-clients" element={<BaseClients />} />
         <Route path="/gerer-partenaires" element={<GererPartenaires />} />
         <Route path="/commerce/:id" element={<PagePartenaire />} />
+        <Route path="/vitrines" element={<Vitrines />} />
         <Route path="/commandes-partenaire" element={<CommandesPartenaireWrapper />} />
         <Route path="/dispatcher/DispatcherDashboard" element={<Home />} />
         <Route path="/dispatcher/GererCourses" element={<GererCourses />} />
