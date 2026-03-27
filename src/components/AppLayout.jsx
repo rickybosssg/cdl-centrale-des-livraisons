@@ -27,7 +27,8 @@ const NAV_ITEMS = {
     { path: "/suivi-commissions", icon: BarChart3, label: "Commissions" },
   ],
   partenaire: [
-    { path: "/", icon: Home, label: "Mon commerce" },
+    { path: "/", icon: Home, label: "Commerce" },
+    { path: "/commandes-partenaire", icon: Package, label: "Commandes" },
   ],
 };
 

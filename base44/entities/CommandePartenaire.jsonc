@@ -1,0 +1,77 @@
+{
+  "name": "CommandePartenaire",
+  "type": "object",
+  "properties": {
+    "partenaire_id": {
+      "type": "string",
+      "title": "ID Partenaire"
+    },
+    "partenaire_email": {
+      "type": "string",
+      "title": "Email partenaire"
+    },
+    "partenaire_nom": {
+      "type": "string",
+      "title": "Nom commerce"
+    },
+    "client_email": {
+      "type": "string",
+      "title": "Email client"
+    },
+    "client_nom": {
+      "type": "string",
+      "title": "Nom client"
+    },
+    "client_telephone": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone client"
+    },
+    "quartier_livraison": {
+      "type": "string",
+      "title": "Quartier de livraison"
+    },
+    "note_client": {
+      "type": "string",
+      "title": "Note du client"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "en_attente_partenaire",
+        "acceptee",
+        "refusee",
+        "en_preparation",
+        "prete",
+        "en_livraison",
+        "livree"
+      ],
+      "title": "Statut"
+    },
+    "course_id": {
+      "type": "string",
+      "title": "ID Course CDL associ\u00e9e"
+    },
+    "montant_livraison": {
+      "type": "number",
+      "title": "Montant livraison (FCFA)"
+    },
+    "motif_refus": {
+      "type": "string",
+      "title": "Motif de refus"
+    },
+    "date_acceptation": {
+      "type": "string",
+      "title": "Date acceptation"
+    },
+    "date_refus": {
+      "type": "string",
+      "title": "Date refus"
+    }
+  },
+  "required": [
+    "partenaire_id",
+    "partenaire_email",
+    "client_email",
+    "statut"
+  ]
+}

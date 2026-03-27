@@ -1,15 +1,18 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, ShoppingBag, TrendingUp, Plus, ToggleLeft, ToggleRight, Trash2, Upload, Clock } from "lucide-react";
+import { Eye, ShoppingBag, TrendingUp, Plus, ToggleLeft, ToggleRight, Trash2, Upload, Clock, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { vibrateLight } from "@/lib/vibration";
 import moment from "moment";
 
 export default function DashboardPartenaire({ user }) {
+  const navigate = useNavigate();
+  const [nbCommandes, setNbCommandes] = useState(0);
   const [partenaire, setPartenaire] = useState(null);
   const [produits, setProduits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +31,8 @@ export default function DashboardPartenaire({ user }) {
         setProduits(prods);
         const visits = await base44.entities.VisitePartenaire.filter({ partenaire_id: parts[0].id }, "-created_date", 50);
         setVisiteurs(visits);
+        const cmds = await base44.entities.CommandePartenaire.filter({ partenaire_id: parts[0].id, statut: "en_attente_partenaire" });
+        setNbCommandes(cmds.length);
       }
       setLoading(false);
     };
@@ -109,6 +114,25 @@ export default function DashboardPartenaire({ user }) {
 
   return (
     <div className="space-y-4">
+      {/* Bouton commandes */}
+      <button
+        onClick={() => navigate('/commandes-partenaire')}
+        className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <Bell className="h-5 w-5 text-primary" />
+          <div className="text-left">
+            <p className="font-semibold text-sm">Mes commandes</p>
+            <p className="text-xs text-muted-foreground">Voir et gérer les commandes</p>
+          </div>
+        </div>
+        {nbCommandes > 0 && (
+          <span className="h-6 min-w-6 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center animate-pulse">
+            {nbCommandes}
+          </span>
+        )}
+      </button>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">{partenaire.nom_commerce}</h1>

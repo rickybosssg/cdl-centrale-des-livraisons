@@ -23,7 +23,7 @@ export default function PagePartenaire() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCommander, setShowCommander] = useState(false);
-  const [formCommande, setFormCommande] = useState({ quartier_arrivee: "", telephone_destinataire: "", mode_paiement: "Paiement à la livraison" });
+  const [formCommande, setFormCommande] = useState({ quartier_arrivee: "", telephone_destinataire: "", note: "" });
   const [ordering, setOrdering] = useState(false);
 
   useEffect(() => {
@@ -70,29 +70,21 @@ export default function PagePartenaire() {
       nombre_commandes: (partenaire.nombre_commandes || 0) + 1,
     });
 
-    const courseData = await base44.entities.Course.create({
-      quartier_depart: partenaire.quartier,
-      quartier_arrivee: formCommande.quartier_arrivee,
-      telephone_expediteur: partenaire.telephone,
-      telephone_destinataire: formCommande.telephone_destinataire,
-      type_colis: "Petit colis",
-      description: `Commande chez ${partenaire.nom_commerce}`,
-      statut: "en_attente",
-      statut_paiement: "paiement_livraison",
-      mode_paiement: formCommande.mode_paiement,
+    // Créer une CommandePartenaire — le partenaire valide AVANT le dispatch
+    await base44.entities.CommandePartenaire.create({
+      partenaire_id: partenaire.id,
+      partenaire_email: partenaire.user_email,
+      partenaire_nom: partenaire.nom_commerce,
       client_email: user.email,
-      client_name: user.full_name,
-      prix: 1500,
-      commission: 300,
-      commission_active: true,
-      commission_cdl: 300,
-      gain_livreur: 1200,
-      statut_paiement_livreur: "Commission due",
-      nombre_tentatives: 0,
+      client_nom: user.full_name,
+      client_telephone: formCommande.telephone_destinataire,
+      quartier_livraison: formCommande.quartier_arrivee,
+      note_client: formCommande.note,
+      statut: "en_attente_partenaire",
+      montant_livraison: 1500,
     });
-    lancerDispatch(courseData);
     vibrateSuccess();
-    toast.success("Commande envoyée ! Un livreur arrive bientôt 🛵");
+    toast.success("Commande envoyée au partenaire ! En attente de validation 🛵");
     setShowCommander(false);
     setOrdering(false);
   };
@@ -179,6 +171,8 @@ export default function PagePartenaire() {
               <QuartierSelect value={formCommande.quartier_arrivee} onValueChange={v => setFormCommande(f => ({ ...f, quartier_arrivee: v }))} placeholder="Où livrer ?" /></div>
             <div><Label className="text-xs">Votre téléphone *</Label>
               <input className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" placeholder="+226 XX XX XX XX" value={formCommande.telephone_destinataire} onChange={e => setFormCommande(f => ({ ...f, telephone_destinataire: e.target.value }))} /></div>
+            <div><Label className="text-xs">Note / Instructions (optionnel)</Label>
+              <input className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" placeholder="Ex: Sans piment, 3ème porte..." value={formCommande.note} onChange={e => setFormCommande(f => ({ ...f, note: e.target.value }))} /></div>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => setShowCommander(false)}>Annuler</Button>
               <Button className="flex-1" onClick={handleCommander} disabled={ordering}>
