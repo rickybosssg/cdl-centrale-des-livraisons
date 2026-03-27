@@ -9,10 +9,11 @@ import FicheClient from "../../components/FicheClient";
 import moment from "moment";
 
 const STATUT_CONFIG = {
+  Nouveau: { color: "bg-gray-100 text-gray-700 border-gray-200" },
   Actif: { color: "bg-green-100 text-green-700 border-green-200" },
-  Fréquent: { color: "bg-blue-100 text-blue-700 border-blue-200" },
+  Fidèle: { color: "bg-blue-100 text-blue-700 border-blue-200" },
   VIP: { color: "bg-amber-100 text-amber-700 border-amber-200" },
-  Inactif: { color: "bg-gray-100 text-gray-600 border-gray-200" },
+  Inactif: { color: "bg-orange-100 text-orange-700 border-orange-200" },
   Bloqué: { color: "bg-red-100 text-red-700 border-red-200" },
 };
 
@@ -65,7 +66,7 @@ export default function BaseClients() {
     total: clients.length,
     nouveaux: clients.filter(c => new Date(c.date_inscription) >= startOfMonth).length,
     actifs: clients.filter(c => c.statut_client === "Actif").length,
-    frequents: clients.filter(c => c.statut_client === "Fréquent").length,
+    fideles: clients.filter(c => c.statut_client === "Fidèle").length,
     vip: clients.filter(c => c.statut_client === "VIP").length,
     inactifs: clients.filter(c => c.statut_client === "Inactif").length,
   };
@@ -111,8 +112,8 @@ export default function BaseClients() {
         </Card>
         <Card className="text-center">
           <CardContent className="p-3">
-            <p className="text-xl font-bold text-blue-600">{stats.frequents}</p>
-            <p className="text-[10px] text-muted-foreground">Fréquents</p>
+            <p className="text-xl font-bold text-blue-600">{stats.fideles}</p>
+            <p className="text-[10px] text-muted-foreground">Fidèles</p>
           </CardContent>
         </Card>
         <Card className="text-center">
@@ -142,7 +143,7 @@ export default function BaseClients() {
 
       {/* Filtres statut */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {["Tous", "Actif", "Fréquent", "VIP", "Inactif", "Bloqué"].map(s => (
+        {["Tous", "Nouveau", "Actif", "Fidèle", "VIP", "Inactif", "Bloqué"].map(s => (
           <button
             key={s}
             onClick={() => setFilterStatut(s)}

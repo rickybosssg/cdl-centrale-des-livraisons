@@ -45,8 +45,9 @@
     "statut_client": {
       "type": "string",
       "enum": [
+        "Nouveau",
         "Actif",
-        "Fr\u00e9quent",
+        "Fid\u00e8le",
         "VIP",
         "Inactif",
         "Bloqu\u00e9"

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { X, Phone, MapPin, Calendar, Package, TrendingUp, Edit2, Save, Ban, UserCheck } from "lucide-react";
+import { X, Phone, MapPin, Calendar, Save, Ban, UserCheck, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,17 +10,18 @@ import StatusBadge from "./StatusBadge";
 import moment from "moment";
 import { toast } from "sonner";
 
-const STATUTS = ["Actif", "Fréquent", "VIP", "Inactif", "Bloqué"];
+const STATUTS = ["Nouveau", "Actif", "Fidèle", "VIP", "Inactif", "Bloqué"];
+
 const STATUT_COLORS = {
+  Nouveau: "bg-gray-100 text-gray-700",
   Actif: "bg-green-100 text-green-700",
-  Fréquent: "bg-blue-100 text-blue-700",
+  Fidèle: "bg-blue-100 text-blue-700",
   VIP: "bg-amber-100 text-amber-700",
-  Inactif: "bg-gray-100 text-gray-600",
+  Inactif: "bg-orange-100 text-orange-700",
   Bloqué: "bg-red-100 text-red-700",
 };
 
 export default function FicheClient({ client, onClose, onUpdated }) {
-  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [courses, setCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
@@ -30,7 +31,7 @@ export default function FicheClient({ client, onClose, onUpdated }) {
     quartier_principal: client.quartier_principal || "",
     adresse_principale: client.adresse_principale || "",
     point_de_repere: client.point_de_repere || "",
-    statut_client: client.statut_client || "Actif",
+    statut_client: client.statut_client || "Nouveau",
     note_admin: client.note_admin || "",
   });
 
@@ -50,23 +51,34 @@ export default function FicheClient({ client, onClose, onUpdated }) {
     await base44.entities.Client.update(client.id, form);
     toast.success("Fiche client mise à jour");
     onUpdated?.({ ...client, ...form });
-    setEditing(false);
     setSaving(false);
   };
 
   const bloquer = async () => {
+    const updated = { ...form, statut_client: "Bloqué" };
     await base44.entities.Client.update(client.id, { statut_client: "Bloqué" });
     toast.success("Client bloqué");
-    onUpdated?.({ ...client, statut_client: "Bloqué" });
-    setForm(f => ({ ...f, statut_client: "Bloqué" }));
+    setForm(updated);
+    onUpdated?.({ ...client, ...updated });
   };
 
   const reactiver = async () => {
+    const updated = { ...form, statut_client: "Actif" };
     await base44.entities.Client.update(client.id, { statut_client: "Actif" });
     toast.success("Client réactivé");
-    onUpdated?.({ ...client, statut_client: "Actif" });
-    setForm(f => ({ ...f, statut_client: "Actif" }));
+    setForm(updated);
+    onUpdated?.({ ...client, ...updated });
   };
+
+  const relancerWhatsApp = (message) => {
+    const tel = (form.numero_telephone || "").replace(/\D/g, "");
+    const texte = encodeURIComponent(message);
+    window.open(`https://wa.me/${tel}?text=${texte}`, "_blank");
+  };
+
+  const msgInactif = `Bonjour ${form.nom_complet || ""},\nCDL vous manque 😊. Profitez de nos services de livraison rapide aujourd'hui !\nPassez votre commande maintenant 🚀`;
+  const msgVIP = `Bonjour ${form.nom_complet || ""},\nMerci pour votre fidélité 💙. Vous êtes un client VIP CDL !\nNous sommes toujours là pour vous servir avec excellence.`;
+  const msgPromo = `Bonjour ${form.nom_complet || ""},\nCDL vous offre une livraison rapide aujourd'hui 🚀. Commandez maintenant !`;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end justify-center" onClick={onClose}>
@@ -77,36 +89,25 @@ export default function FicheClient({ client, onClose, onUpdated }) {
         {/* Header */}
         <div className="sticky top-0 bg-background border-b px-4 py-3 flex items-center justify-between">
           <div>
-            <h2 className="font-bold text-base">{client.nom_complet || "Client"}</h2>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUT_COLORS[form.statut_client] || STATUT_COLORS.Actif}`}>
+            <h2 className="font-bold text-base">{form.nom_complet || "Client"}</h2>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUT_COLORS[form.statut_client] || STATUT_COLORS.Nouveau}`}>
               {form.statut_client}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {editing ? (
-              <Button size="sm" onClick={sauvegarder} disabled={saving}>
-                <Save className="h-3.5 w-3.5 mr-1" />{saving ? "..." : "Sauvegarder"}
-              </Button>
-            ) : (
-              <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-                <Edit2 className="h-3.5 w-3.5 mr-1" />Modifier
-              </Button>
-            )}
-            <Button size="icon" variant="ghost" onClick={onClose}><X className="h-4 w-4" /></Button>
-          </div>
+          <Button size="icon" variant="ghost" onClick={onClose}><X className="h-4 w-4" /></Button>
         </div>
 
         <div className="p-4 space-y-4">
           <Tabs defaultValue="info">
             <TabsList className="w-full">
-              <TabsTrigger value="info" className="flex-1 text-xs">Informations</TabsTrigger>
+              <TabsTrigger value="info" className="flex-1 text-xs">Infos</TabsTrigger>
               <TabsTrigger value="courses" className="flex-1 text-xs">Courses ({courses.length})</TabsTrigger>
-              <TabsTrigger value="admin" className="flex-1 text-xs">Administration</TabsTrigger>
+              <TabsTrigger value="relance" className="flex-1 text-xs">Relance</TabsTrigger>
+              <TabsTrigger value="admin" className="flex-1 text-xs">Admin</TabsTrigger>
             </TabsList>
 
             {/* Onglet Infos */}
             <TabsContent value="info" className="space-y-3 mt-3">
-              {/* Stats */}
               <div className="grid grid-cols-3 gap-2">
                 <Card className="text-center">
                   <CardContent className="p-3">
@@ -117,39 +118,40 @@ export default function FicheClient({ client, onClose, onUpdated }) {
                 <Card className="text-center">
                   <CardContent className="p-3">
                     <p className="text-sm font-bold text-green-600">{(client.total_depense || 0).toLocaleString()}</p>
-                    <p className="text-[10px] text-muted-foreground">FCFA dépensés</p>
+                    <p className="text-[10px] text-muted-foreground">FCFA</p>
                   </CardContent>
                 </Card>
                 <Card className="text-center">
                   <CardContent className="p-3">
                     <p className="text-xs font-bold">{client.date_derniere_course ? moment(client.date_derniere_course).fromNow() : "—"}</p>
-                    <p className="text-[10px] text-muted-foreground">Dernière course</p>
+                    <p className="text-[10px] text-muted-foreground">Dernière</p>
                   </CardContent>
                 </Card>
               </div>
 
-              {editing ? (
-                <div className="space-y-3">
-                  <div><label className="text-xs font-medium">Nom complet</label>
-                    <Input value={form.nom_complet} onChange={e => setForm(f => ({ ...f, nom_complet: e.target.value }))} /></div>
-                  <div><label className="text-xs font-medium">Téléphone</label>
-                    <Input value={form.numero_telephone} onChange={e => setForm(f => ({ ...f, numero_telephone: e.target.value }))} /></div>
-                  <div><label className="text-xs font-medium">Quartier principal</label>
-                    <Input value={form.quartier_principal} onChange={e => setForm(f => ({ ...f, quartier_principal: e.target.value }))} /></div>
-                  <div><label className="text-xs font-medium">Adresse principale</label>
-                    <Input value={form.adresse_principale} onChange={e => setForm(f => ({ ...f, adresse_principale: e.target.value }))} /></div>
-                  <div><label className="text-xs font-medium">Point de repère</label>
-                    <Input value={form.point_de_repere} onChange={e => setForm(f => ({ ...f, point_de_repere: e.target.value }))} /></div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <InfoRow icon={Phone} label="Téléphone" value={client.numero_telephone} />
-                  <InfoRow icon={MapPin} label="Quartier" value={client.quartier_principal} />
-                  <InfoRow icon={MapPin} label="Adresse" value={client.adresse_principale} />
-                  <InfoRow icon={MapPin} label="Repère" value={client.point_de_repere} />
-                  <InfoRow icon={Calendar} label="Inscription" value={client.date_inscription ? moment(client.date_inscription).format("DD/MM/YYYY") : "—"} />
+              <div className="space-y-3">
+                <div><label className="text-xs font-medium">Nom complet</label>
+                  <Input value={form.nom_complet} onChange={e => setForm(f => ({ ...f, nom_complet: e.target.value }))} /></div>
+                <div><label className="text-xs font-medium">Téléphone</label>
+                  <Input value={form.numero_telephone} onChange={e => setForm(f => ({ ...f, numero_telephone: e.target.value }))} /></div>
+                <div><label className="text-xs font-medium">Quartier principal</label>
+                  <Input value={form.quartier_principal} onChange={e => setForm(f => ({ ...f, quartier_principal: e.target.value }))} /></div>
+                <div><label className="text-xs font-medium">Adresse</label>
+                  <Input value={form.adresse_principale} onChange={e => setForm(f => ({ ...f, adresse_principale: e.target.value }))} /></div>
+                <div><label className="text-xs font-medium">Point de repère</label>
+                  <Input value={form.point_de_repere} onChange={e => setForm(f => ({ ...f, point_de_repere: e.target.value }))} /></div>
+              </div>
+
+              {client.date_inscription && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Calendar className="h-3 w-3" />
+                  Client depuis le {moment(client.date_inscription).format("DD/MM/YYYY")}
                 </div>
               )}
+
+              <Button className="w-full" onClick={sauvegarder} disabled={saving}>
+                <Save className="h-4 w-4 mr-1" />{saving ? "Sauvegarde..." : "Sauvegarder"}
+              </Button>
             </TabsContent>
 
             {/* Onglet Courses */}
@@ -183,6 +185,47 @@ export default function FicheClient({ client, onClose, onUpdated }) {
               )}
             </TabsContent>
 
+            {/* Onglet Relance WhatsApp */}
+            <TabsContent value="relance" className="space-y-3 mt-3">
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl">
+                <MessageCircle className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="text-sm font-semibold text-green-700">Relance WhatsApp</p>
+                  <p className="text-xs text-green-600">{form.numero_telephone || "Aucun numéro"}</p>
+                </div>
+              </div>
+
+              <Card>
+                <CardContent className="p-3 space-y-2">
+                  <p className="text-xs font-semibold">Message promotionnel</p>
+                  <p className="text-xs text-muted-foreground">{msgPromo}</p>
+                  <Button className="w-full bg-green-600 hover:bg-green-700" size="sm" onClick={() => relancerWhatsApp(msgPromo)}>
+                    <MessageCircle className="h-4 w-4 mr-1" />Envoyer via WhatsApp
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-3 space-y-2">
+                  <p className="text-xs font-semibold">Message client inactif</p>
+                  <p className="text-xs text-muted-foreground">{msgInactif}</p>
+                  <Button className="w-full bg-green-600 hover:bg-green-700" size="sm" onClick={() => relancerWhatsApp(msgInactif)}>
+                    <MessageCircle className="h-4 w-4 mr-1" />Envoyer via WhatsApp
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-3 space-y-2">
+                  <p className="text-xs font-semibold">Message client VIP</p>
+                  <p className="text-xs text-muted-foreground">{msgVIP}</p>
+                  <Button className="w-full bg-green-600 hover:bg-green-700" size="sm" onClick={() => relancerWhatsApp(msgVIP)}>
+                    <MessageCircle className="h-4 w-4 mr-1" />Envoyer via WhatsApp
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             {/* Onglet Admin */}
             <TabsContent value="admin" className="space-y-4 mt-3">
               <div>
@@ -212,10 +255,10 @@ export default function FicheClient({ client, onClose, onUpdated }) {
                 />
               </div>
 
-              {client.note_admin && !editing && (
+              {client.note_admin && (
                 <Card className="bg-amber-50 border-amber-200">
                   <CardContent className="p-3">
-                    <p className="text-xs font-semibold text-amber-700 mb-1">Note admin</p>
+                    <p className="text-xs font-semibold text-amber-700 mb-1">Note actuelle</p>
                     <p className="text-sm text-amber-800">{client.note_admin}</p>
                   </CardContent>
                 </Card>
@@ -238,19 +281,6 @@ export default function FicheClient({ client, onClose, onUpdated }) {
             </TabsContent>
           </Tabs>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ icon: Icon, label, value }) {
-  if (!value) return null;
-  return (
-    <div className="flex items-start gap-3">
-      <Icon className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium">{value}</p>
       </div>
     </div>
   );
