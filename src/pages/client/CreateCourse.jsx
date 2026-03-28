@@ -91,7 +91,7 @@ export default function CreateCourse() {
       return;
     }
     setLoading(true);
-    const statut_paiement = form.mode_paiement === "Paiement à la livraison" ? "paiement_livraison" : "en_attente";
+    const statut_paiement = form.mode_paiement === "Paiement cash à la livraison" ? "paiement_livraison" : "en_attente";
     // Récupérer la position GPS du client pour le départ
     let clientLat = user.gps_latitude || null;
     let clientLng = user.gps_longitude || null;
@@ -277,6 +277,40 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
+      {/* Code promo */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <span className="text-lg">🎁</span>Code promotionnel
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {codePromoApplique ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+              <span className="text-green-700 text-sm font-bold flex-1">✅ Code <strong>{codePromoApplique.code}</strong> appliqué — -20% !</span>
+              <button onClick={() => setCodePromoApplique(null)} className="text-xs text-red-500 font-medium">Retirer</button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Input
+                placeholder="Entrez un code promo..."
+                value={codePromo}
+                onChange={e => setCodePromo(e.target.value.toUpperCase())}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={checkingCode || !codePromo.trim()}
+                onClick={verifierCode}
+              >
+                {checkingCode ? "..." : "OK"}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Paiement */}
       <Card>
         <CardHeader className="pb-3">
@@ -295,7 +329,7 @@ export default function CreateCourse() {
               {mode === "Orange Money" && "🟠 "}
               {mode === "Moov Money" && "🔵 "}
               {mode === "Telecel Money" && "🟢 "}
-              {mode === "Paiement à la livraison" && "🤝 "}
+              {mode === "Paiement cash à la livraison" && "🤝 "}
               {mode}
             </button>
           ))}

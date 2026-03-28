@@ -80,7 +80,7 @@ export default function AppLayout({ userRole }) {
       </header>
 
       {/* Main */}
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 overflow-hidden">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 overflow-y-auto pb-24">
         <PageTransition />
       </main>
 

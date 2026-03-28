@@ -31,12 +31,24 @@ export default function ClientHome({ user }) {
       const data = await base44.entities.Course.filter(
         { client_email: user.email },
         "-created_date",
-        5
+        20
       );
       setCourses(data);
       setLoading(false);
     };
     load();
+
+    const unsub = base44.entities.Course.subscribe((event) => {
+      if (!event.data || event.data.client_email !== user.email) return;
+      if (event.type === "create") {
+        setCourses(prev => [event.data, ...prev]);
+      } else if (event.type === "update") {
+        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+      } else if (event.type === "delete") {
+        setCourses(prev => prev.filter(c => c.id !== event.id));
+      }
+    });
+    return unsub;
   }, [user.email]);
 
   const activeCourses = courses.filter(c => !["livree", "annulee"].includes(c.statut));

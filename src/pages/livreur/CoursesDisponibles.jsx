@@ -37,6 +37,14 @@ export default function CoursesDisponibles() {
 
   const accepter = async (course) => {
     if (!user) return;
+    if (!user.disponible) {
+      toast.error("Vous devez être disponible pour accepter une course");
+      return;
+    }
+    if (user.livreur_bloque) {
+      toast.error("Votre compte est bloqué. Contactez l'administration.");
+      return;
+    }
     await base44.entities.Course.update(course.id, {
       statut: "acceptee",
       livreur_email: user.email,
@@ -45,13 +53,12 @@ export default function CoursesDisponibles() {
       mode_assignation: "manuel",
       telephone_livreur: user.telephone || "",
     });
-    // Incrémenter les courses actives
     await base44.auth.updateMe({
       nombre_courses_actives: (user.nombre_courses_actives || 0) + 1,
       derniere_course_attribuee_at: new Date().toISOString(),
     });
     vibrateSuccess();
-    toast.success("🛵 Course acceptée ! Bonne livraison !");
+    toast.success("🛥 Course acceptée ! Bonne livraison !");
     setCourses(prev => prev.filter(c => c.id !== course.id));
   };
 
