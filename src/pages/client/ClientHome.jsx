@@ -11,6 +11,21 @@ export default function ClientHome({ user }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Demande géolocalisation à la première connexion
+  useEffect(() => {
+    if (!user.gps_latitude && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          base44.auth.updateMe({
+            gps_latitude: pos.coords.latitude,
+            gps_longitude: pos.coords.longitude,
+          });
+        },
+        () => {} // silencieux si refusé
+      );
+    }
+  }, [user.id]);
+
   useEffect(() => {
     const load = async () => {
       const data = await base44.entities.Course.filter(

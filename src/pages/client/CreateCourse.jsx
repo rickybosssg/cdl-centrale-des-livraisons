@@ -92,9 +92,22 @@ export default function CreateCourse() {
     }
     setLoading(true);
     const statut_paiement = form.mode_paiement === "Paiement à la livraison" ? "paiement_livraison" : "en_attente";
+    // Récupérer la position GPS du client pour le départ
+    let clientLat = user.gps_latitude || null;
+    let clientLng = user.gps_longitude || null;
+    if (!clientLat && navigator.geolocation) {
+      try {
+        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000 }));
+        clientLat = pos.coords.latitude;
+        clientLng = pos.coords.longitude;
+        base44.auth.updateMe({ gps_latitude: clientLat, gps_longitude: clientLng });
+      } catch (_) {}
+    }
     const courseData = await base44.entities.Course.create({
       quartier_depart: form.quartier_depart,
       quartier_arrivee: form.quartier_arrivee,
+      latitude_depart: clientLat,
+      longitude_depart: clientLng,
       telephone_expediteur: form.telephone_expediteur,
       telephone_destinataire: form.telephone_destinataire,
       type_colis: form.type_colis,

@@ -110,6 +110,17 @@ export default function CourseLivreur() {
   };
 
   const openMaps = () => {
+    // L'itinéraire va toujours vers le point de DÉPART (récupération du colis)
+    let dest;
+    if (course.latitude_depart && course.longitude_depart) {
+      dest = `${course.latitude_depart},${course.longitude_depart}`;
+    } else {
+      dest = encodeURIComponent(`${course.quartier_depart}, Ouagadougou, Burkina Faso`);
+    }
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, "_blank");
+  };
+
+  const openMapsArrivee = () => {
     const dest = encodeURIComponent(`${course.quartier_arrivee}, Ouagadougou, Burkina Faso`);
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, "_blank");
   };
@@ -226,10 +237,16 @@ export default function CourseLivreur() {
       </Card>
 
       {/* Google Maps */}
-      <Button variant="outline" className="w-full" onClick={openMaps}>
-        <Navigation className="h-4 w-4 mr-2" />
-        Voir l'itinéraire sur Google Maps
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" className="w-full" onClick={openMaps}>
+          <Navigation className="h-4 w-4 mr-2" />
+          Aller au départ
+        </Button>
+        <Button variant="outline" className="w-full" onClick={openMapsArrivee}>
+          <Navigation className="h-4 w-4 mr-2" />
+          Aller à l'arrivée
+        </Button>
+      </div>
 
       {/* Mini Chat */}
       {["acceptee", "en_cours"].includes(course.statut) && (
