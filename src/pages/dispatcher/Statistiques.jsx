@@ -15,7 +15,6 @@ export default function Statistiques() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [livreurs, setLivreurs] = useState([]);
-  const [commissionActive, setCommissionActive] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,17 +26,10 @@ export default function Statistiques() {
       ]);
       setCourses(coursesData);
       setLivreurs(livreursData);
-      setCommissionActive(me.commission_mode !== false);
       setLoading(false);
     };
     load();
   }, []);
-
-  const toggleCommission = async () => {
-    const newVal = !commissionActive;
-    setCommissionActive(newVal);
-    await base44.auth.updateMe({ commission_mode: newVal });
-  };
 
   // Stats calculations
   const livrees = courses.filter(c => c.statut === "livree");
@@ -108,23 +100,6 @@ export default function Statistiques() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Commission toggle */}
-      <Card className="bg-accent/5 border-accent/20">
-        <CardContent className="p-4 flex items-center justify-between">
-          <div>
-            <p className="font-medium text-sm">Commission (20%)</p>
-            <p className="text-xs text-muted-foreground">
-              {commissionActive ? "Active" : "Mode promo — désactivée"}
-            </p>
-            <p className="text-lg font-bold text-accent mt-1">{totalRevenu.toLocaleString()} FCFA</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs">{commissionActive ? "ON" : "OFF"}</Label>
-            <Switch checked={commissionActive} onCheckedChange={toggleCommission} />
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Bar chart */}
       <Card>
