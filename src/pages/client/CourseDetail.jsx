@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation } from "lucide-react";
 import NotationCourse from "../../components/NotationCourse";
@@ -16,6 +17,8 @@ export default function CourseDetail() {
   const navigate = useNavigate();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [nouveauPrix, setNouveauPrix] = useState("");
+  const [relancant, setRelancant] = useState(false);
 
   useEffect(() => {
     if (!id || id === ':id') {
@@ -36,6 +39,25 @@ export default function CourseDetail() {
     });
     return unsub;
   }, [id]);
+
+  const relancerAvecNouveauPrix = async () => {
+    const px = parseInt(nouveauPrix, 10);
+    if (!px || px <= 0) return;
+    setRelancant(true);
+    await base44.entities.Course.update(course.id, {
+      prix: px,
+      commission_cdl: Math.round(px * 0.2),
+      gain_livreur: Math.round(px * 0.8),
+      statut: "en_attente",
+      nombre_tentatives: 0,
+    });
+    try {
+      await base44.functions.invoke('autoDispatch', { course_id: course.id });
+    } catch (_) {}
+    setCourse(prev => ({ ...prev, prix: px, statut: "en_attente" }));
+    setNouveauPrix("");
+    setRelancant(false);
+  };
 
   if (loading) {
     return (
@@ -257,6 +279,35 @@ export default function CourseDetail() {
       {/* Mini Chat - uniquement si course active et livreur assigné */}
       {course.livreur_email && ["acceptee", "en_cours"].includes(course.statut) && (
         <MiniChat course={course} user={{ email: course.client_email, full_name: course.client_name, user_type: "client" }} />
+      )}
+
+      {/* Suggestion augmenter le prix si aucun livreur */}
+      {course.statut === "aucun_livreur" && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-sm font-bold text-amber-800">😔 Aucun livreur disponible pour le moment</p>
+            <p className="text-xs text-amber-700">Essayez d'augmenter le montant de la course pour attirer un livreur plus rapidement.</p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  type="number"
+                  placeholder={`Nouveau prix (actuel: ${course.prix} FCFA)`}
+                  value={nouveauPrix}
+                  onChange={e => setNouveauPrix(e.target.value)}
+                  className="pr-14"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">FCFA</span>
+              </div>
+              <Button
+                onClick={relancerAvecNouveauPrix}
+                disabled={relancant || !nouveauPrix || parseInt(nouveauPrix) <= 0}
+                className="bg-amber-600 hover:bg-amber-700"
+              >
+                {relancant ? "..." : "Relancer"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Notation */}
