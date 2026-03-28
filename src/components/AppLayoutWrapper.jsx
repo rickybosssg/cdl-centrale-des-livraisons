@@ -13,9 +13,9 @@ export default function AppLayoutWrapper() {
     const load = async () => {
       const me = await base44.auth.me();
       setUserRole(me.user_type || me.role || "client");
+      window.__cdl_user_email = me.email;
       const firstName = me.full_name?.split(" ")[0] || "";
       setPrenom(firstName);
-      // Afficher le splash une seule fois par session
       const key = `splash_shown_${me.id}`;
       if (!sessionStorage.getItem(key)) {
         sessionStorage.setItem(key, '1');

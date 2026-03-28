@@ -52,6 +52,7 @@ export default function NotationCourse({ course, onDone }) {
     base44.functions.invoke('ratingNotify', {
       livreur_email: course.livreur_email,
       livreur_name: course.livreur_name,
+      client_name: course.client_name,
       new_rating: note,
       course_id: course.id,
     }).catch(() => {});

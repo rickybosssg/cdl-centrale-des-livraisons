@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import NotificationBell from "./NotificationBell";
 import { vibrateLight } from "@/lib/vibration";
 import { Package, Home, Clock, Users, BarChart3, Truck, Plus, LogOut, TrendingUp, Database, Store, Sparkles, Megaphone, Tag } from "lucide-react";
 import { motion } from "framer-motion";
@@ -62,6 +63,7 @@ export default function AppLayout({ userRole }) {
             WhatsApp
           </a>
           <div className="flex items-center gap-2">
+            <NotificationBell userEmail={window.__cdl_user_email} />
             <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium capitalize">
               {userRole}
             </span>

@@ -1,0 +1,47 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "destinataire_email": {
+      "type": "string",
+      "title": "Email destinataire"
+    },
+    "destinataire_role": {
+      "type": "string",
+      "title": "R\u00f4le destinataire (admin, livreur, client)"
+    },
+    "titre": {
+      "type": "string",
+      "title": "Titre"
+    },
+    "message": {
+      "type": "string",
+      "title": "Message"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "success",
+        "danger"
+      ],
+      "title": "Type"
+    },
+    "lue": {
+      "type": "boolean",
+      "title": "Lue",
+      "default": false
+    },
+    "course_id": {
+      "type": "string",
+      "title": "Course li\u00e9e (optionnel)"
+    }
+  },
+  "required": [
+    "destinataire_email",
+    "titre",
+    "message",
+    "type"
+  ]
+}
