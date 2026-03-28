@@ -27,12 +27,13 @@ Deno.serve(async (req) => {
       return Response.json({ message: 'Pas de client à mettre à jour' });
     }
 
+    const eventType = body.event?.type; // 'create' ou 'update'
     const email = course.client_email;
     const existing = await base44.asServiceRole.entities.Client.filter({ email });
     const now = new Date().toISOString();
 
     if (existing.length === 0) {
-      // Nouveau client
+      // Nouveau client - créer seulement si c'est un événement create
       await base44.asServiceRole.entities.Client.create({
         nom_complet: course.client_name || '',
         email,
@@ -46,8 +47,14 @@ Deno.serve(async (req) => {
       });
     } else {
       const client = existing[0];
-      const nbCourses = (client.nombre_total_courses || 0) + 1;
-      const totalDepense = (client.total_depense || 0) + (course.statut === 'livree' ? (course.prix || 0) : 0);
+      // Incrémenter le nb de courses seulement sur create
+      const nbCourses = eventType === 'create'
+        ? (client.nombre_total_courses || 0) + 1
+        : (client.nombre_total_courses || 0);
+      // Ajouter la dépense seulement quand la course passe à livree
+      const ajoutDepense = (course.statut === 'livree' && body.old_data?.statut !== 'livree')
+        ? (course.prix || 0) : 0;
+      const totalDepense = (client.total_depense || 0) + ajoutDepense;
       const statut = calculerStatut(nbCourses, totalDepense, client.statut_client);
 
       await base44.asServiceRole.entities.Client.update(client.id, {

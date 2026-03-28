@@ -18,9 +18,13 @@ export default function BannierePublicitaire({ placement }) {
         return matchPlacement && started && notExpired;
       });
       setPubs(filtered);
-      // Track impression
+      // Track impression une seule fois par session par pub
       filtered.forEach(p => {
-        base44.entities.Publicite.update(p.id, { impressions: (p.impressions || 0) + 1 });
+        const key = `pub_seen_${p.id}`;
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1');
+          base44.entities.Publicite.update(p.id, { impressions: (p.impressions || 0) + 1 });
+        }
       });
     };
     load();

@@ -23,6 +23,14 @@ export default function CourseLivreur() {
       setLoading(false);
     };
     load();
+
+    // Subscription temps réel
+    const unsub = base44.entities.Course.subscribe((event) => {
+      if (event.id === id && event.data) {
+        setCourse(event.data);
+      }
+    });
+    return unsub;
   }, [id]);
 
   // GPS tracking — partage la position du livreur en temps réel

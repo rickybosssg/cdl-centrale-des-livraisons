@@ -158,6 +158,7 @@ Deno.serve(async (req) => {
       statut: 'assignee_attente',
       livreur_email: best.email,
       livreur_name: best.full_name,
+      telephone_livreur: best.telephone || '',
       heure_assignation: now,
       mode_assignation: 'auto',
       nombre_tentatives: (course.nombre_tentatives || 0) + 1,
