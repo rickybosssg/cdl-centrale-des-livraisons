@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Users, TrendingUp, Clock, CheckCircle2, Truck, BarChart3, Settings, ShieldCheck, CreditCard, AlarmClock, Megaphone } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
@@ -248,6 +248,22 @@ export default function DispatcherDashboard() {
             <CardContent className="p-4 text-center space-y-2">
               <Megaphone className="h-8 w-8 text-accent mx-auto" />
               <p className="text-sm font-medium">Publicités</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/gerer-partenaires">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <Store className="h-8 w-8 text-blue-600 mx-auto" />
+              <p className="text-sm font-medium">Partenaires</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/gerer-commerciaux">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <Tag className="h-8 w-8 text-purple-600 mx-auto" />
+              <p className="text-sm font-medium">Commerciaux</p>
             </CardContent>
           </Card>
         </Link>
