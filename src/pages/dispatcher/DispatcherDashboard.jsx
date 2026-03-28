@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Users, TrendingUp, Clock, CheckCircle2, Truck, BarChart3, Settings, ShieldCheck, CreditCard, AlarmClock } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, CheckCircle2, Truck, BarChart3, Settings, ShieldCheck, CreditCard, AlarmClock, Megaphone } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
@@ -240,6 +240,14 @@ export default function DispatcherDashboard() {
             <CardContent className="p-4 text-center space-y-2">
               <Settings className="h-8 w-8 text-muted-foreground mx-auto" />
               <p className="text-sm font-medium">Paramètres</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/gerer-publicites">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-accent/30">
+            <CardContent className="p-4 text-center space-y-2">
+              <Megaphone className="h-8 w-8 text-accent mx-auto" />
+              <p className="text-sm font-medium">Publicités</p>
             </CardContent>
           </Card>
         </Link>
