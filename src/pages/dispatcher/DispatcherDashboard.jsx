@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
@@ -264,6 +264,14 @@ export default function DispatcherDashboard() {
             <CardContent className="p-4 text-center space-y-2">
               <Tag className="h-8 w-8 text-purple-600 mx-auto" />
               <p className="text-sm font-medium">Gérer les commerciaux</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/base-clients">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <Database className="h-8 w-8 text-orange-600 mx-auto" />
+              <p className="text-sm font-medium">Gérer les clients</p>
             </CardContent>
           </Card>
         </Link>
