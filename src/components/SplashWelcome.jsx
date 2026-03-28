@@ -8,7 +8,7 @@ export default function SplashWelcome({ prenom, onDone }) {
     const timer = setTimeout(() => {
       setVisible(false);
       setTimeout(onDone, 600); // attendre la fin de l'animation de sortie
-    }, 2500);
+    }, 4000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -67,7 +67,7 @@ export default function SplashWelcome({ prenom, onDone }) {
             <motion.div
               initial={{ width: "0%" }}
               animate={{ width: "100%" }}
-              transition={{ duration: 2.5, ease: "linear" }}
+              transition={{ duration: 4, ease: "linear" }}
               className="h-full bg-white rounded-full"
             />
           </motion.div>
