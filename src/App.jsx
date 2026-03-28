@@ -21,6 +21,7 @@ import Parametres from './pages/dispatcher/Parametres';
 import GainsLivreur from './pages/livreur/GainsLivreur';
 import BaseClients from './pages/dispatcher/BaseClients';
 import GererPartenaires from './pages/dispatcher/GererPartenaires';
+import GererPublicites from './pages/dispatcher/GererPublicites';
 import DashboardPartenaire from './pages/partenaire/DashboardPartenaire';
 import PagePartenaire from './pages/partenaire/PagePartenaire';
 import CommandesPartenaire from './pages/partenaire/CommandesPartenaire';
@@ -91,6 +92,7 @@ const AuthenticatedApp = () => {
         <Route path="/dashboard-partenaire" element={<DashboardPartenaireWrapper />} />
         <Route path="/base-clients" element={<BaseClients />} />
         <Route path="/gerer-partenaires" element={<GererPartenaires />} />
+          <Route path="/gerer-publicites" element={<GererPublicites />} />
         <Route path="/commerce/:id" element={<PagePartenaire />} />
         <Route path="/vitrines" element={<Vitrines />} />
         <Route path="/commandes-partenaire" element={<CommandesPartenaireWrapper />} />

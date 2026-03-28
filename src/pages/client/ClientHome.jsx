@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Plus, Clock, CheckCircle2, Truck, Store } from "lucide-react";
+import BannierePublicitaire from "../../components/BannierePublicitaire";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
@@ -34,23 +35,11 @@ export default function ClientHome({ user }) {
         <p className="text-sm text-muted-foreground">Bienvenue sur CDL - Centrale des Livraisons</p>
       </div>
 
-      {/* Quick action */}
-      <Link to="/vitrines">
-        <Card className="bg-gradient-to-r from-pink-500 to-accent hover:opacity-90 transition-opacity cursor-pointer">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center">
-              <Store className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <p className="font-semibold text-lg text-white">Commerces & Vitrines</p>
-              <p className="text-sm text-white/80">Découvrez les pros de Ouaga</p>
-            </div>
-          </CardContent>
-        </Card>
-      </Link>
+      {/* Bannière publicitaire */}
+      <BannierePublicitaire placement="home_client" />
 
       {/* Quick action */}
-      <Link to="/commander">
+      <Link to="/vitrines">
         <Card className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
           <CardContent className="p-4 flex items-center gap-4">
             <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center">

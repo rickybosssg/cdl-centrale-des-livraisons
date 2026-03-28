@@ -1,0 +1,60 @@
+{
+  "name": "Publicite",
+  "type": "object",
+  "properties": {
+    "titre": {
+      "type": "string",
+      "title": "Titre"
+    },
+    "image_url": {
+      "type": "string",
+      "title": "Image URL"
+    },
+    "lien_url": {
+      "type": "string",
+      "title": "Lien de redirection"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description"
+    },
+    "placement": {
+      "type": "string",
+      "enum": [
+        "home_client",
+        "home_livreur",
+        "toutes_pages"
+      ],
+      "title": "Emplacement"
+    },
+    "date_debut": {
+      "type": "string",
+      "title": "Date de d\u00e9but"
+    },
+    "date_fin": {
+      "type": "string",
+      "title": "Date de fin"
+    },
+    "active": {
+      "type": "boolean",
+      "title": "Active"
+    },
+    "impressions": {
+      "type": "number",
+      "title": "Impressions"
+    },
+    "clics": {
+      "type": "number",
+      "title": "Clics"
+    },
+    "nom_annonceur": {
+      "type": "string",
+      "title": "Nom de l'annonceur"
+    }
+  },
+  "required": [
+    "titre",
+    "image_url",
+    "placement"
+  ]
+}

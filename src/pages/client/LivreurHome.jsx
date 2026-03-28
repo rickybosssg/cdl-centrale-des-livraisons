@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin } from "lucide-react";
+import BannierePublicitaire from "../../components/BannierePublicitaire";
 import { toast } from "sonner";
 import SoldeBlock from "../../components/SoldeBlock";
 import CoursePendante from "../livreur/CoursePendante";
@@ -165,6 +166,9 @@ export default function LivreurHome({ user }) {
           </p>
         </CardContent>
       </Card>
+
+      {/* Bannière publicitaire */}
+      <BannierePublicitaire placement="home_livreur" />
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
