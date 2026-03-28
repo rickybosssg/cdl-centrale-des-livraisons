@@ -65,6 +65,8 @@ export default function GererLivreurs() {
   const [formPaiement, setFormPaiement] = useState({ montant: "", date_paiement: new Date().toISOString().split("T")[0], mode_paiement: "", reference: "", commentaire: "" });
   const [saving, setSaving] = useState(false);
   const [filtre, setFiltre] = useState("tous");
+  const [coursesLivreur, setCoursesLivreur] = useState([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
 
   const loadData = async () => {
     const [livreursData, paiementsData, me] = await Promise.all([
@@ -183,6 +185,15 @@ export default function GererLivreurs() {
 
   const paiementsLivreur = selectedLivreur ? paiements.filter(p => p.livreur_email === selectedLivreur.email) : [];
 
+  const ouvrirProfil = async (livreur) => {
+    setSelectedLivreur(livreur);
+    setDialogProfil(true);
+    setLoadingCourses(true);
+    const courses = await base44.entities.Course.filter({ livreur_email: livreur.email }, "-created_date", 100);
+    setCoursesLivreur(courses);
+    setLoadingCourses(false);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -299,7 +310,7 @@ export default function GererLivreurs() {
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs flex-1"
-                  onClick={() => { setSelectedLivreur(livreur); setDialogProfil(true); }}
+                  onClick={() => ouvrirProfil(livreur)}
                 >
                   <Eye className="h-3 w-3 mr-1" />
                   Profil
@@ -362,94 +373,142 @@ export default function GererLivreurs() {
             <DialogTitle>Dossier livreur</DialogTitle>
           </DialogHeader>
           {selectedLivreur && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                {selectedLivreur.photo_profil ? (
-                  <img src={selectedLivreur.photo_profil} alt="" className="h-16 w-16 rounded-full object-cover border-2 border-primary" />
-                ) : (
-                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
-                    {selectedLivreur.full_name?.charAt(0)}
+            <Tabs defaultValue="profil">
+              <TabsList className="w-full">
+                <TabsTrigger value="profil" className="flex-1">Profil</TabsTrigger>
+                <TabsTrigger value="courses" className="flex-1">Courses ({loadingCourses ? "..." : coursesLivreur.length})</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="profil" className="space-y-4 mt-4">
+                <div className="flex items-center gap-3">
+                  {selectedLivreur.photo_profil ? (
+                    <img src={selectedLivreur.photo_profil} alt="" className="h-16 w-16 rounded-full object-cover border-2 border-primary" />
+                  ) : (
+                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+                      {selectedLivreur.full_name?.charAt(0)}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-bold">{selectedLivreur.full_name}</p>
+                    <p className="text-sm text-muted-foreground">{selectedLivreur.telephone}</p>
+                    <p className="text-sm text-muted-foreground">{selectedLivreur.quartier}</p>
+                    <p className="text-xs text-muted-foreground">Inscrit le {moment(selectedLivreur.created_date).format("DD/MM/YYYY")}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 flex-wrap">
+                  <StatutValidationBadge statut={selectedLivreur.statut_validation_livreur} />
+                  <StatutFinancierBadge statut={selectedLivreur.statut_financier_livreur} />
+                  {selectedLivreur.livreur_bloque && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">Bloqué</span>
+                  )}
+                </div>
+
+                {selectedLivreur.motif_refus && (
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    <p className="font-medium">Motif de refus :</p>
+                    <p>{selectedLivreur.motif_refus}</p>
                   </div>
                 )}
-                <div>
-                  <p className="font-bold">{selectedLivreur.full_name}</p>
-                  <p className="text-sm text-muted-foreground">{selectedLivreur.telephone}</p>
-                  <p className="text-sm text-muted-foreground">{selectedLivreur.quartier}</p>
-                  <p className="text-xs text-muted-foreground">Inscrit le {moment(selectedLivreur.created_date).format("DD/MM/YYYY")}</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2 flex-wrap">
-                <StatutValidationBadge statut={selectedLivreur.statut_validation_livreur} />
-                <StatutFinancierBadge statut={selectedLivreur.statut_financier_livreur} />
-                {selectedLivreur.livreur_bloque && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">Bloqué</span>
+                {selectedLivreur.motif_blocage && (
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    <p className="font-medium">Motif de blocage :</p>
+                    <p>{selectedLivreur.motif_blocage}</p>
+                  </div>
                 )}
-              </div>
 
-              {selectedLivreur.motif_refus && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-                  <p className="font-medium">Motif de refus :</p>
-                  <p>{selectedLivreur.motif_refus}</p>
+                {/* Documents */}
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">Documents</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: "CNI Recto", url: selectedLivreur.photo_identite_recto },
+                      { label: "CNI Verso", url: selectedLivreur.photo_identite_verso },
+                      { label: "Photo moto", url: selectedLivreur.photo_moto },
+                    ].map(doc => (
+                      <div key={doc.label} className="border rounded-lg overflow-hidden">
+                        {doc.url ? (
+                          <a href={doc.url} target="_blank" rel="noreferrer">
+                            <img src={doc.url} alt={doc.label} className="w-full h-20 object-cover hover:opacity-80 transition-opacity" />
+                          </a>
+                        ) : (
+                          <div className="h-20 bg-muted flex items-center justify-center">
+                            <p className="text-xs text-muted-foreground">Non fourni</p>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-center py-1 text-muted-foreground">{doc.label}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )}
-              {selectedLivreur.motif_blocage && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-                  <p className="font-medium">Motif de blocage :</p>
-                  <p>{selectedLivreur.motif_blocage}</p>
-                </div>
-              )}
 
-              {/* Documents */}
-              <div className="space-y-2">
-                <p className="text-sm font-semibold">Documents</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: "CNI Recto", url: selectedLivreur.photo_identite_recto },
-                    { label: "CNI Verso", url: selectedLivreur.photo_identite_verso },
-                    { label: "Photo moto", url: selectedLivreur.photo_moto },
-                  ].map(doc => (
-                    <div key={doc.label} className="border rounded-lg overflow-hidden">
-                      {doc.url ? (
-                        <a href={doc.url} target="_blank" rel="noreferrer">
-                          <img src={doc.url} alt={doc.label} className="w-full h-20 object-cover hover:opacity-80 transition-opacity" />
-                        </a>
-                      ) : (
-                        <div className="h-20 bg-muted flex items-center justify-center">
-                          <p className="text-xs text-muted-foreground">Non fourni</p>
-                        </div>
-                      )}
-                      <p className="text-[10px] text-center py-1 text-muted-foreground">{doc.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Actions validation */}
-              {(!selectedLivreur.statut_validation_livreur || selectedLivreur.statut_validation_livreur === "en_attente") && (
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 border-red-300 text-red-600 hover:bg-red-50" onClick={() => refuser(selectedLivreur)}>
-                    <XCircle className="h-4 w-4 mr-1" />
-                    Refuser
+                {/* Actions validation */}
+                {(!selectedLivreur.statut_validation_livreur || selectedLivreur.statut_validation_livreur === "en_attente") && (
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1 border-red-300 text-red-600 hover:bg-red-50" onClick={() => refuser(selectedLivreur)}>
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Refuser
+                    </Button>
+                    <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => valider(selectedLivreur)}>
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Valider
+                    </Button>
+                  </div>
+                )}
+                {selectedLivreur.statut_validation_livreur === "valide" && (
+                  <Button variant="outline" className="w-full border-red-300 text-red-600" onClick={() => refuser(selectedLivreur)}>
+                    Révoquer la validation
                   </Button>
-                  <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => valider(selectedLivreur)}>
+                )}
+                {selectedLivreur.statut_validation_livreur === "refuse" && (
+                  <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => valider(selectedLivreur)}>
                     <CheckCircle2 className="h-4 w-4 mr-1" />
-                    Valider
+                    Valider quand même
                   </Button>
-                </div>
-              )}
-              {selectedLivreur.statut_validation_livreur === "valide" && (
-                <Button variant="outline" className="w-full border-red-300 text-red-600" onClick={() => refuser(selectedLivreur)}>
-                  Révoquer la validation
-                </Button>
-              )}
-              {selectedLivreur.statut_validation_livreur === "refuse" && (
-                <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => valider(selectedLivreur)}>
-                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                  Valider quand même
-                </Button>
-              )}
-            </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="courses" className="mt-4">
+                {loadingCourses ? (
+                  <div className="flex justify-center py-8"><div className="w-6 h-6 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>
+                ) : coursesLivreur.length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground py-8">Aucune course effectuée</p>
+                ) : (
+                  <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                    {coursesLivreur.map(c => {
+                      const statutColors = {
+                        livree: "bg-green-100 text-green-700",
+                        en_cours: "bg-blue-100 text-blue-700",
+                        acceptee: "bg-amber-100 text-amber-700",
+                        annulee: "bg-red-100 text-red-700",
+                      };
+                      const statutLabels = {
+                        livree: "Livrée", en_cours: "En cours", acceptee: "Acceptée", annulee: "Annulée",
+                        en_attente: "En attente", refusee: "Refusée",
+                      };
+                      return (
+                        <div key={c.id} className="border rounded-lg p-3 text-sm space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statutColors[c.statut] || "bg-muted text-muted-foreground"}`}>
+                              {statutLabels[c.statut] || c.statut}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{moment(c.created_date).format("DD/MM/YY HH:mm")}</span>
+                          </div>
+                          <p className="font-medium">{c.quartier_depart} → {c.quartier_arrivee}</p>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>{c.type_colis}</span>
+                            <span className="font-semibold text-primary">{(c.prix || 0).toLocaleString()} FCFA</span>
+                          </div>
+                          {c.gain_livreur && (
+                            <p className="text-xs text-green-600">Gain livreur : {c.gain_livreur.toLocaleString()} FCFA</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           )}
         </DialogContent>
       </Dialog>
