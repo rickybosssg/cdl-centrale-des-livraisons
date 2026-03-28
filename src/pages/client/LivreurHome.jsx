@@ -15,6 +15,12 @@ export default function LivreurHome({ user }) {
   const [courses, setCourses] = useState([]);
   const [disponible, setDisponible] = useState(user.disponible !== false);
   const [loading, setLoading] = useState(true);
+
+  const reloadCourses = async () => {
+    const data = await base44.entities.Course.filter({ livreur_email: user.email }, "-created_date", 10);
+    setCourses(data);
+    setLoading(false);
+  };
   const [gpsBloque, setGpsBloque] = useState(false);
 
   // Demande GPS obligatoire
@@ -48,16 +54,7 @@ export default function LivreurHome({ user }) {
   }, []);
 
   useEffect(() => {
-    const load = async () => {
-      const data = await base44.entities.Course.filter(
-        { livreur_email: user.email },
-        "-created_date",
-        10
-      );
-      setCourses(data);
-      setLoading(false);
-    };
-    load();
+    reloadCourses();
 
     const unsub = base44.entities.Course.subscribe((event) => {
       if (event.type === 'create' && event.data?.livreur_email === user.email) {
@@ -136,7 +133,7 @@ export default function LivreurHome({ user }) {
       {coursePendante && (
         <CoursePendante
           course={coursePendante}
-          onRespond={() => setLoading(true)}
+          onRespond={reloadCourses}
         />
       )}
 

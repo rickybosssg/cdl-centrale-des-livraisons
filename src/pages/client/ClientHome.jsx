@@ -39,7 +39,7 @@ export default function ClientHome({ user }) {
       <BannierePublicitaire placement="home_client" />
 
       {/* Quick action */}
-      <Link to="/vitrines">
+      <Link to="/commander">
         <Card className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
           <CardContent className="p-4 flex items-center gap-4">
             <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center">

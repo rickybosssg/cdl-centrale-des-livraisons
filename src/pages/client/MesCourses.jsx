@@ -31,21 +31,6 @@ export default function MesCourses() {
   }, []);
 
   useEffect(() => {
-    const load = async () => {
-      const user = await base44.auth.me();
-      setUserEmail(user.email);
-      const data = await base44.entities.Course.filter(
-        { client_email: user.email },
-        "-created_date",
-        50
-      );
-      setCourses(data);
-      setLoading(false);
-    };
-    load();
-  }, []);
-
-  useEffect(() => {
     if (!userEmail) return;
     const unsub = base44.entities.Course.subscribe((event) => {
       if (event.data?.client_email !== userEmail) return;

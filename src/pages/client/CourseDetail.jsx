@@ -33,7 +33,7 @@ export default function CourseDetail() {
     load();
 
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.id === id) {
+      if (event.id === id && event.data) {
         setCourse(event.data);
       }
     });
