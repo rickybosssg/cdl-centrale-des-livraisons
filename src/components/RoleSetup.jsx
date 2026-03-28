@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Package, Truck, User, Radio, Upload, Store } from "lucide-react";
+import { Package, Truck, User, Radio, Upload, Store, Megaphone } from "lucide-react";
 import InscriptionPartenaire from "./InscriptionPartenaire";
 import { base44 } from "@/api/base44Client";
 import QuartierSelect from "./QuartierSelect";
@@ -13,6 +13,7 @@ const PUBLIC_ROLES = [
   { value: "client", label: "Client", icon: User, desc: "Commander des livraisons" },
   { value: "livreur", label: "Livreur", icon: Truck, desc: "Effectuer des livraisons" },
   { value: "partenaire", label: "Partenaire", icon: Store, desc: "Restaurant, boutique, pharmacie..." },
+  { value: "commercial", label: "Commercial", icon: Megaphone, desc: "Promouvoir CDL et gagner des commissions" },
 ];
 
 const ADMIN_ROLES = [
@@ -66,8 +67,9 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
       quartier: form.quartier,
       disponible: false,
       actif: true,
-      profil_valide: selectedRole !== "livreur",
+      profil_valide: selectedRole !== "livreur" && selectedRole !== "commercial",
       statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : "valide",
+      statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
       verified: selectedRole === "client",
       total_courses: 0,
       commission_mode: true,
@@ -126,6 +128,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
             disabled={!selectedRole}
             onClick={() => {
               if (selectedRole === 'partenaire') setShowPartenaire(true);
+              else if (selectedRole === 'commercial') setStep(2);
               else setStep(2);
             }}
           >

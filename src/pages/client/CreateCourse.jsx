@@ -21,6 +21,9 @@ export default function CreateCourse() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
+  const [codePromo, setCodePromo] = useState("");
+  const [codePromoApplique, setCodePromoApplique] = useState(null);
+  const [checkingCode, setCheckingCode] = useState(false);
   const [form, setForm] = useState({
     quartier_depart: "",
     quartier_arrivee: "",
@@ -41,8 +44,27 @@ export default function CreateCourse() {
   }, []);
 
   const prix = PRIX_PAR_TYPE[form.type_colis] || 0;
-  const gainLivreur = Math.round(prix * 0.8);
-  const commission = Math.round(prix * 0.2);
+  const prixAvecPromo = codePromoApplique ? Math.round(prix * 0.8) : prix;
+  const gainLivreur = Math.round(prixAvecPromo * 1); // livreur reçoit tout le montant client si promo
+  const commission = codePromoApplique ? 0 : Math.round(prix * 0.2);
+
+  const verifierCode = async () => {
+    if (!codePromo.trim()) return;
+    if (user?.code_promo_utilise) {
+      toast.error("Vous avez déjà utilisé un code promo");
+      return;
+    }
+    setCheckingCode(true);
+    const codes = await base44.entities.CodePromo.filter({ code: codePromo.toUpperCase(), statut: "valide", actif: true });
+    if (codes.length === 0) {
+      toast.error("Code promo invalide ou non activé");
+      setCodePromoApplique(null);
+    } else {
+      setCodePromoApplique(codes[0]);
+      toast.success(`Code ${codePromo.toUpperCase()} appliqué ! -20% sur cette course 🎉`);
+    }
+    setCheckingCode(false);
+  };
 
   const handleSubmit = async () => {
     if (!form.quartier_depart || !form.quartier_arrivee || !form.telephone_expediteur || !form.telephone_destinataire || !form.type_colis) {
@@ -56,20 +78,34 @@ export default function CreateCourse() {
     }
     setLoading(true);
     const statut_paiement = form.mode_paiement === "Paiement à la livraison" ? "paiement_livraison" : "en_attente";
+    const prixFinal = codePromoApplique ? Math.round(prix * 0.8) : prix;
+    const commissionFinal = codePromoApplique ? 0 : Math.round(prix * 0.2);
+    const gainFinal = prixFinal; // si promo, livreur reçoit tout
     const courseData = await base44.entities.Course.create({
       ...form,
       statut: "en_attente",
       statut_paiement,
       client_email: user.email,
       client_name: user.full_name,
-      prix: prix,
-      commission: commission,
-      commission_active: true,
-      commission_cdl: commission,
-      gain_livreur: prix - commission,
+      prix: prixFinal,
+      commission: commissionFinal,
+      commission_active: !codePromoApplique,
+      commission_cdl: commissionFinal,
+      gain_livreur: gainFinal,
       statut_paiement_livreur: "Commission due",
       nombre_tentatives: 0,
+      code_promo_utilise: codePromoApplique?.code || null,
     });
+    // Si code promo utilisé : mettre à jour le code promo et marquer le client
+    if (codePromoApplique) {
+      const nouvNb = (codePromoApplique.nombre_utilisations || 0) + 1;
+      await base44.entities.CodePromo.update(codePromoApplique.id, {
+        nombre_utilisations: nouvNb,
+        commission_due: (codePromoApplique.commission_due || 0) + 50,
+        statut_paiement: "Doit",
+      });
+      await base44.auth.updateMe({ code_promo_utilise: codePromoApplique.code });
+    }
     // Lancer le dispatch automatique
     lancerDispatch(courseData);
     vibrateSuccess();
@@ -203,20 +239,55 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
+      {/* Code promo */}
+      {!user?.code_promo_utilise && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <p className="text-sm font-semibold">🎁 Code promotionnel</p>
+            {codePromoApplique ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                <span className="text-green-700 text-sm font-bold flex-1">✅ {codePromoApplique.code} — -20% appliqué !</span>
+                <button onClick={() => { setCodePromoApplique(null); setCodePromo(""); }} className="text-xs text-red-500">Retirer</button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Entrez un code promo..."
+                  value={codePromo}
+                  onChange={e => setCodePromo(e.target.value.toUpperCase())}
+                  className="flex-1"
+                />
+                <Button variant="outline" onClick={verifierCode} disabled={checkingCode || !codePromo.trim()}>
+                  {checkingCode ? "..." : "OK"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {prix > 0 && (
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Prix de la course</span>
-              <span className="text-2xl font-bold text-primary">{prix} FCFA</span>
+              <div className="text-right">
+                {codePromoApplique && <p className="text-xs text-muted-foreground line-through">{prix} FCFA</p>}
+                <span className="text-2xl font-bold text-primary">{prixAvecPromo} FCFA</span>
+              </div>
             </div>
+            {codePromoApplique && (
+              <div className="p-2 rounded-lg bg-green-50 border border-green-200 text-xs text-green-700 font-medium text-center">
+                🎉 -20% grâce au code promo — CDL ne prend pas de commission sur cette course
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-2 rounded-lg bg-card border">
-                <p className="text-muted-foreground">Gain livreur (80%)</p>
-                <p className="font-bold text-green-600">{gainLivreur} FCFA</p>
+                <p className="text-muted-foreground">Gain livreur</p>
+                <p className="font-bold text-green-600">{codePromoApplique ? prixAvecPromo : gainLivreur} FCFA</p>
               </div>
               <div className="p-2 rounded-lg bg-card border">
-                <p className="text-muted-foreground">Commission CDL (20%)</p>
+                <p className="text-muted-foreground">Commission CDL</p>
                 <p className="font-bold text-primary">{commission} FCFA</p>
               </div>
             </div>

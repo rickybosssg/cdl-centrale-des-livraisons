@@ -5,6 +5,7 @@ import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
 import DashboardPartenaire from "./partenaire/DashboardPartenaire";
+import DashboardCommercial from "./commercial/DashboardCommercial";
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -41,6 +42,8 @@ export default function Home() {
       return <DispatcherDashboard />;
     case "partenaire":
       return <DashboardPartenaire user={user} />;
+    case "commercial":
+      return <DashboardCommercial user={user} />;
     default:
       return <ClientHome user={user} />;
   }

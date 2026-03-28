@@ -1,0 +1,59 @@
+{
+  "name": "CodePromo",
+  "type": "object",
+  "properties": {
+    "commercial_email": {
+      "type": "string",
+      "title": "Email commercial"
+    },
+    "commercial_name": {
+      "type": "string",
+      "title": "Nom commercial"
+    },
+    "code": {
+      "type": "string",
+      "title": "Code promo"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "valide",
+        "refuse"
+      ],
+      "title": "Statut"
+    },
+    "actif": {
+      "type": "boolean",
+      "title": "Actif"
+    },
+    "nombre_utilisations": {
+      "type": "number",
+      "title": "Nombre d'utilisations"
+    },
+    "commission_due": {
+      "type": "number",
+      "title": "Commission due (FCFA)"
+    },
+    "commission_payee": {
+      "type": "number",
+      "title": "Commission pay\u00e9e (FCFA)"
+    },
+    "statut_paiement": {
+      "type": "string",
+      "enum": [
+        "\u00c0 jour",
+        "Doit"
+      ],
+      "title": "Statut paiement commercial"
+    },
+    "motif_refus": {
+      "type": "string",
+      "title": "Motif de refus"
+    }
+  },
+  "required": [
+    "commercial_email",
+    "code"
+  ]
+}
