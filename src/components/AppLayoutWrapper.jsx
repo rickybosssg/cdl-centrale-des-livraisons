@@ -1,15 +1,26 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import AppLayout from "./AppLayout";
+import SplashWelcome from "./SplashWelcome";
 
 export default function AppLayoutWrapper() {
   const [userRole, setUserRole] = useState("client");
   const [loading, setLoading] = useState(true);
+  const [prenom, setPrenom] = useState("");
+  const [showSplash, setShowSplash] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       const me = await base44.auth.me();
       setUserRole(me.user_type || me.role || "client");
+      const firstName = me.full_name?.split(" ")[0] || "";
+      setPrenom(firstName);
+      // Afficher le splash une seule fois par session
+      const key = `splash_shown_${me.id}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        setShowSplash(true);
+      }
       setLoading(false);
     };
     load();
@@ -23,5 +34,12 @@ export default function AppLayoutWrapper() {
     );
   }
 
-  return <AppLayout userRole={userRole} />;
+  return (
+    <>
+      {showSplash && (
+        <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />
+      )}
+      <AppLayout userRole={userRole} />
+    </>
+  );
 }
