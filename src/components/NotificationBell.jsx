@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Bell } from "lucide-react";
+import { vibrateNotif, playNotificationSound } from "@/lib/vibration";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function NotificationBell({ userEmail }) {
@@ -17,8 +18,13 @@ export default function NotificationBell({ userEmail }) {
     loadNotifs();
     const unsub = base44.entities.Notification.subscribe((event) => {
       if (event.data?.destinataire_email === userEmail) {
-        if (event.type === 'create') setNotifs(prev => [event.data, ...prev]);
-        else if (event.type === 'update') setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
+        if (event.type === 'create') {
+          setNotifs(prev => [event.data, ...prev]);
+          playNotificationSound();
+          vibrateNotif();
+        } else if (event.type === 'update') {
+          setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
+        }
       }
     });
     return unsub;

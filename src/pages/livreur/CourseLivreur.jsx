@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
 import { toast } from "sonner";
-import { vibrateSuccess, vibrateMedium } from "@/lib/vibration";
+import { vibrateSuccess, vibrateMedium, vibrateNotif, playNotificationSound } from "@/lib/vibration";
 
 export default function CourseLivreur() {
   const { id } = useParams();
@@ -93,6 +93,19 @@ export default function CourseLivreur() {
     setCourse(prev => ({ ...prev, statut: "livree", date_livraison: new Date().toISOString() }));
     vibrateSuccess();
     toast.success("Colis livré avec succès !");
+    setUpdating(false);
+  };
+
+  const marquerCourseEffectuee = async () => {
+    setUpdating(true);
+    const me = await base44.auth.me();
+    await base44.auth.updateMe({
+      disponible: true,
+      nombre_courses_actives: Math.max(0, (me.nombre_courses_actives || 0) - 1),
+    });
+    vibrateSuccess();
+    toast.success("Vous êtes de nouveau disponible pour de nouvelles courses !");
+    navigate("/mes-livraisons");
     setUpdating(false);
   };
 
@@ -244,6 +257,23 @@ export default function CourseLivreur() {
           <CheckCircle2 className="h-5 w-5 mr-2" />
           {updating ? "Mise à jour..." : "Colis livré"}
         </Button>
+      )}
+
+      {course.statut === "livree" && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="p-4 space-y-3 text-center">
+            <p className="text-green-700 font-semibold text-sm">🎉 Course livrée avec succès !</p>
+            <p className="text-xs text-green-600">Cliquez ci-dessous pour confirmer et vous remettre disponible pour de nouvelles courses.</p>
+            <Button
+              className="w-full h-12 text-base font-semibold bg-primary"
+              onClick={marquerCourseEffectuee}
+              disabled={updating}
+            >
+              <CheckCircle2 className="h-5 w-5 mr-2" />
+              {updating ? "Mise à jour..." : "✅ Course effectuée — Je suis disponible"}
+            </Button>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
