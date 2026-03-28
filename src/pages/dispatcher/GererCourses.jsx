@@ -85,18 +85,22 @@ export default function GererCourses() {
       updateData.date_livraison = new Date().toISOString();
       const course = courses.find(c => c.id === courseId);
       if (course) {
-        updateData.commission_cdl = (course.prix || 0) * 0.2;
-        updateData.gain_livreur = (course.prix || 0) * 0.8;
-        updateData.statut_paiement_livreur = "Commission due";
+        // Si code promo : pas de commission CDL
+        const avecPromo = !!course.code_promo_utilise;
+        const commissionCdl = avecPromo ? 0 : (course.prix || 0) * 0.2;
+        const gainLivreur = avecPromo ? (course.prix || 0) : (course.prix || 0) * 0.8;
+        updateData.commission_cdl = commissionCdl;
+        updateData.gain_livreur = gainLivreur;
+        updateData.statut_paiement_livreur = avecPromo ? "Payé" : "Commission due";
         const livreursData = await base44.entities.User.filter({ email: course.livreur_email });
         if (livreursData.length > 0) {
           const l = livreursData[0];
-          const commissionCdl = (course.prix || 0) * 0.2;
+          const nouveauSolde = (l.solde_commission_du || 0) + commissionCdl;
           await base44.entities.User.update(l.id, {
-            solde_commission_du: (l.solde_commission_du || 0) + commissionCdl,
+            solde_commission_du: nouveauSolde,
             total_courses_livrees: (l.total_courses_livrees || 0) + 1,
             total_commissions_generees: (l.total_commissions_generees || 0) + commissionCdl,
-            statut_financier_livreur: "Doit une commission",
+            statut_financier_livreur: nouveauSolde > 0 ? "Doit une commission" : "À jour",
             nombre_courses_actives: Math.max(0, (l.nombre_courses_actives || 0) - 1),
           });
         }

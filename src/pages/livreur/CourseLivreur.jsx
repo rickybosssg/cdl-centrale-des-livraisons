@@ -66,14 +66,16 @@ export default function CourseLivreur() {
 
   const livrerColis = async () => {
     setUpdating(true);
-    const commissionCdl = (course.prix || 0) * 0.2;
-    const gainLivreur = (course.prix || 0) * 0.8;
+    // Si code promo utilisé : pas de commission CDL sur cette course
+    const avecPromo = !!course.code_promo_utilise;
+    const commissionCdl = avecPromo ? 0 : (course.prix || 0) * 0.2;
+    const gainLivreur = avecPromo ? (course.prix || 0) : (course.prix || 0) * 0.8;
     await base44.entities.Course.update(id, {
       statut: "livree",
       date_livraison: new Date().toISOString(),
       commission_cdl: commissionCdl,
       gain_livreur: gainLivreur,
-      statut_paiement_livreur: "Commission due",
+      statut_paiement_livreur: avecPromo ? "Payé" : "Commission due",
     });
     // Mettre à jour le solde du livreur
     const livreurs = await base44.entities.User.filter({ email: course.livreur_email });
@@ -84,7 +86,7 @@ export default function CourseLivreur() {
         solde_commission_du: nouveauSolde,
         total_courses_livrees: (livreur.total_courses_livrees || 0) + 1,
         total_commissions_generees: (livreur.total_commissions_generees || 0) + commissionCdl,
-        statut_financier_livreur: "Doit une commission",
+        statut_financier_livreur: nouveauSolde > 0 ? "Doit une commission" : "À jour",
         nombre_courses_actives: Math.max(0, (livreur.nombre_courses_actives || 0) - 1),
       });
     }
