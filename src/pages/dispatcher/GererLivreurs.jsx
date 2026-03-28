@@ -288,27 +288,41 @@ export default function GererLivreurs() {
 
               {/* Stats */}
               <div className="grid grid-cols-4 gap-2 text-center text-xs bg-muted/50 rounded-lg p-2">
-                <div>
-                  <p className="font-bold">{livreur.total_courses_livrees || 0}</p>
-                  <p className="text-muted-foreground">Livrées</p>
-                </div>
-                <div>
-                  <p className="font-bold">{livreur.nombre_courses_actives || 0}</p>
-                  <p className="text-muted-foreground">Actives</p>
-                </div>
-                <div>
-                  <p className={`font-bold ${(livreur.solde_commission_du || 0) > 0 ? "text-amber-600" : "text-green-600"}`}>
-                    {Math.round(livreur.solde_commission_du || 0).toLocaleString()} F
-                  </p>
-                  <p className="text-muted-foreground">Dû CDL</p>
-                </div>
-                <div>
-                  <p className="font-bold flex items-center justify-center gap-0.5">
-                    <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-                    {livreur.note_moyenne ? livreur.note_moyenne.toFixed(1) : "—"}
-                  </p>
-                  <p className="text-muted-foreground">Note ({livreur.total_notes || 0})</p>
-                </div>
+              <div>
+                <p className="font-bold">{livreur.total_courses_livrees || 0}</p>
+                <p className="text-muted-foreground">Livrées</p>
+              </div>
+              <div>
+                <p className="font-bold">{livreur.nombre_courses_actives || 0}</p>
+                <p className="text-muted-foreground">Actives</p>
+              </div>
+              <div>
+                <p className={`font-bold ${(livreur.solde_commission_du || 0) > 0 ? "text-amber-600" : "text-green-600"}`}>
+                  {Math.round(livreur.solde_commission_du || 0).toLocaleString()} F
+                </p>
+                <p className="text-muted-foreground">Dû CDL</p>
+              </div>
+              <div>
+                {livreur.note_semaine != null ? (
+                  <>
+                    <p className={`font-bold flex items-center justify-center gap-0.5 ${livreur.note_semaine < 3 ? 'text-red-600' : 'text-amber-600'}`}>
+                      <Star className={`h-3 w-3 ${livreur.note_semaine < 3 ? 'text-red-500 fill-red-500' : 'text-amber-400 fill-amber-400'}`} />
+                      {livreur.note_semaine.toFixed(1)}
+                    </p>
+                    <p className={`text-[9px] font-medium ${livreur.note_semaine < 3 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                      {livreur.note_semaine < 3 ? '⚠️ Faible' : '7 jours'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold flex items-center justify-center gap-0.5">
+                      <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                      {livreur.note_moyenne ? livreur.note_moyenne.toFixed(1) : "—"}
+                    </p>
+                    <p className="text-muted-foreground">Note ({livreur.total_notes || 0})</p>
+                  </>
+                )}
+              </div>
               </div>
 
               {/* Actions rapides */}

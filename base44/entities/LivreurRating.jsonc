@@ -1,0 +1,66 @@
+{
+  "name": "LivreurRating",
+  "type": "object",
+  "properties": {
+    "livreur_email": {
+      "type": "string",
+      "title": "Email du livreur"
+    },
+    "client_email": {
+      "type": "string",
+      "title": "Email du client"
+    },
+    "course_id": {
+      "type": "string",
+      "title": "ID de la course"
+    },
+    "rating": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 5,
+      "title": "Note (1-5)"
+    },
+    "comment": {
+      "type": "string",
+      "title": "Commentaire"
+    },
+    "week_start_date": {
+      "type": "string",
+      "title": "D\u00e9but de la semaine"
+    }
+  },
+  "required": [
+    "livreur_email",
+    "client_email",
+    "course_id",
+    "rating"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.client_email": "{{user.email}}"
+        },
+        {
+          "data.livreur_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

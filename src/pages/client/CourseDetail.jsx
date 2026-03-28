@@ -157,17 +157,40 @@ export default function CourseDetail() {
 
       {/* Livreur */}
       {course.livreur_name && (
-        <Card>
+        <Card className="border-indigo-200 bg-indigo-50">
           <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-2">Votre livreur</p>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <User className="h-5 w-5 text-primary" />
-              </div>
+              {course.livreur_photo ? (
+                <img src={course.livreur_photo} alt="" className="h-12 w-12 rounded-full object-cover border-2 border-indigo-300" />
+              ) : (
+                <div className="h-12 w-12 rounded-full bg-indigo-200 flex items-center justify-center text-xl font-bold text-indigo-700">
+                  {course.livreur_name?.charAt(0)}
+                </div>
+              )}
               <div className="flex-1">
-                <p className="text-xs text-muted-foreground">Livreur</p>
-                <p className="font-medium">{course.livreur_name}</p>
+                <p className="font-semibold text-sm">{course.livreur_name}</p>
+                {course.livreur_note_semaine != null ? (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {[1,2,3,4,5].map(s => (
+                      <span key={s} className={`text-base ${s <= Math.round(course.livreur_note_semaine) ? (course.livreur_note_semaine < 3 ? 'text-red-500' : 'text-amber-400') : 'text-muted-foreground'}`}>★</span>
+                    ))}
+                    <span className={`text-xs font-semibold ml-1 ${course.livreur_note_semaine < 3 ? 'text-red-600' : 'text-amber-600'}`}>
+                      {course.livreur_note_semaine.toFixed(1)}/5
+                    </span>
+                    <span className="text-xs text-muted-foreground">(7 derniers jours)</span>
+                  </div>
+                ) : course.livreur_note_moyenne != null ? (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {[1,2,3,4,5].map(s => (
+                      <span key={s} className={`text-base ${s <= Math.round(course.livreur_note_moyenne) ? 'text-amber-400' : 'text-muted-foreground'}`}>★</span>
+                    ))}
+                    <span className="text-xs font-semibold ml-1 text-amber-600">{course.livreur_note_moyenne.toFixed(1)}/5</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Pas encore de note</p>
+                )}
               </div>
-              <Navigation className="h-5 w-5 text-primary" />
             </div>
           </CardContent>
         </Card>

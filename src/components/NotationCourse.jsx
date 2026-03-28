@@ -14,12 +14,28 @@ export default function NotationCourse({ course, onDone }) {
   const soumettre = async () => {
     if (note === 0) { toast.error("Veuillez choisir une note"); return; }
     setSaving(true);
+
+    // Enregistrer la note dans la course
     await base44.entities.Course.update(course.id, {
       note_client: note,
       commentaire_client: commentaire,
       note_donnee: true,
     });
-    // Mettre à jour la moyenne du livreur
+
+    // Sauvegarder dans LivreurRating pour la moyenne hebdomadaire
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    await base44.entities.LivreurRating.create({
+      livreur_email: course.livreur_email,
+      client_email: course.client_email,
+      course_id: course.id,
+      rating: note,
+      comment: commentaire,
+      week_start_date: weekStart.toISOString().split('T')[0],
+    });
+
+    // Mettre à jour la moyenne globale du livreur
     const livreurs = await base44.entities.User.filter({ email: course.livreur_email });
     if (livreurs.length > 0) {
       const l = livreurs[0];
@@ -31,6 +47,15 @@ export default function NotationCourse({ course, onDone }) {
         note_moyenne: sommeNotes / totalNotes,
       });
     }
+
+    // Appel backend pour calcul note semaine + alertes si < 3
+    base44.functions.invoke('ratingNotify', {
+      livreur_email: course.livreur_email,
+      livreur_name: course.livreur_name,
+      new_rating: note,
+      course_id: course.id,
+    }).catch(() => {});
+
     toast.success("Merci pour votre avis !");
     setSaving(false);
     onDone?.();

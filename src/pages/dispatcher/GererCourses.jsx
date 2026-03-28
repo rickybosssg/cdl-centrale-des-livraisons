@@ -57,6 +57,9 @@ export default function GererCourses() {
       heure_assignation: now,
       mode_assignation: "manuel",
       historique_assignation: JSON.stringify(hist),
+      livreur_photo: livreur.photo_profil || null,
+      livreur_note_moyenne: livreur.note_moyenne || null,
+      livreur_note_semaine: livreur.note_semaine || null,
     });
     toast.success(`Course assignée à ${livreur.full_name}`);
     setAssignDialog(false);

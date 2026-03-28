@@ -135,7 +135,7 @@
     },
     "note_moyenne": {
       "type": "number",
-      "title": "Note moyenne (1-5)"
+      "title": "Note moyenne globale (1-5)"
     },
     "total_notes": {
       "type": "number",
@@ -144,6 +144,15 @@
     "somme_notes": {
       "type": "number",
       "title": "Somme des notes (pour calcul moyenne)"
+    },
+    "note_semaine": {
+      "type": "number",
+      "title": "Moyenne des notes sur 7 jours"
+    },
+    "alerte_qualite_envoyee": {
+      "type": "string",
+      "title": "Date derni\u00e8re alerte qualit\u00e9 envoy\u00e9e"
     }
-  }
+  },
+  "required": []
 }

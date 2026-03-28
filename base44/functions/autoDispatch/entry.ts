@@ -163,6 +163,9 @@ Deno.serve(async (req) => {
       mode_assignation: 'auto',
       nombre_tentatives: (course.nombre_tentatives || 0) + 1,
       historique_assignation: JSON.stringify(historique),
+      livreur_photo: best.photo_profil || null,
+      livreur_note_moyenne: best.note_moyenne || null,
+      livreur_note_semaine: best.note_semaine || null,
     });
 
     // Mettre à jour le livreur
