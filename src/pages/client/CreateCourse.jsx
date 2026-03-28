@@ -14,7 +14,7 @@ import { lancerDispatch } from "@/lib/dispatch";
 import { toast } from "sonner";
 
 const TYPES_COLIS = ["Documents", "Petit colis", "Colis moyen", "Gros colis", "Nourriture", "Autre"];
-const MODES_PAIEMENT = ["Orange Money", "Moov Money", "Telecel Money", "Paiement à la livraison"];
+const MODES_PAIEMENT = ["Orange Money", "Moov Money", "Telecel Money", "Paiement cash à la livraison"];
 
 export default function CreateCourse() {
   const navigate = useNavigate();
@@ -289,25 +289,7 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
-      {/* Code promo */}
-      {!user?.code_promo_utilise && (
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <p className="text-sm font-semibold">🎁 Code promotionnel</p>
-            {codePromoApplique ? (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-                <span className="text-green-700 text-sm font-bold flex-1">✅ {codePromoApplique.code} — -20% appliqué !</span>
-                <button onClick={() => { setCodePromoApplique(null); setCodePromo(""); }} className="text-xs text-red-500">Retirer</button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <Input placeholder="Entrez un code promo..." value={codePromo} onChange={e => setCodePromo(e.target.value.toUpperCase())} className="flex-1" />
-                <Button variant="outline" onClick={verifierCode} disabled={checkingCode || !codePromo.trim()}>{checkingCode ? "..." : "OK"}</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+
 
       {/* Récapitulatif */}
       {prixBase > 0 && (
@@ -336,16 +318,7 @@ export default function CreateCourse() {
                 <span className="text-primary text-xl">{prixAvecPromo} FCFA</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2 rounded-lg bg-card border">
-                <p className="text-muted-foreground">Gain livreur (80%)</p>
-                <p className="font-bold text-green-600">{gainLivreur} FCFA</p>
-              </div>
-              <div className="p-2 rounded-lg bg-card border">
-                <p className="text-muted-foreground">Commission CDL (20%)</p>
-                <p className="font-bold text-primary">{commission} FCFA</p>
-              </div>
-            </div>
+
             {codePromoApplique && (
               <p className="text-xs text-green-700 text-center font-medium">🎉 CDL ne prend pas de commission sur cette course</p>
             )}

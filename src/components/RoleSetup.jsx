@@ -27,7 +27,9 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
   const [selectedRole, setSelectedRole] = useState(null);
   const [showPartenaire, setShowPartenaire] = useState(false);
   const ROLES = isAdmin ? ADMIN_ROLES : PUBLIC_ROLES;
-  const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "" });
+  const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "", code_promo: "" });
+  const [checkingCode, setCheckingCode] = useState(false);
+  const [codePromoApplique, setCodePromoApplique] = useState(null);
   const [docs, setDocs] = useState({ photo_profil: null, photo_identite_recto: null, photo_identite_verso: null, photo_moto: null });
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -60,24 +62,19 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
       };
       setUploading(false);
     }
+    // Vérifier et appliquer le code promo si renseigné
+    if (selectedRole === "client" && form.code_promo.trim() && codePromoApplique) {
+      const nouvNb = (codePromoApplique.nombre_utilisations || 0) + 1;
+      await base44.entities.CodePromo.update(codePromoApplique.id, {
+        nombre_utilisations: nouvNb,
+        commission_due: (codePromoApplique.commission_due || 0) + 50,
+        statut_paiement: "Doit",
+      });
+    }
     await base44.auth.updateMe({
       user_type: selectedRole,
       telephone: form.telephone,
-      whatsapp: form.whatsapp || form.telephone,
-      quartier: form.quartier,
-      disponible: false,
-      actif: true,
-      profil_valide: selectedRole !== "livreur" && selectedRole !== "commercial",
-      statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : "valide",
-      statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
-      verified: selectedRole === "client",
-      total_courses: 0,
-      commission_mode: true,
-      solde_commission_du: 0,
-      statut_financier_livreur: "À jour",
-      livreur_bloque: false,
-      ...docUrls,
-    });
+      code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
     setLoading(false);
     onComplete();
   };
@@ -176,6 +173,41 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
               placeholder="Votre quartier"
             />
           </div>
+
+          {selectedRole === "client" && (
+            <div className="space-y-2">
+              <Label>Code promotionnel (optionnel)</Label>
+              {codePromoApplique ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                  <span className="text-green-700 text-sm font-bold flex-1">✅ {codePromoApplique.code} — -20% sur votre 1ère course !</span>
+                  <button onClick={() => { setCodePromoApplique(null); setForm(f => ({ ...f, code_promo: "" })); }} className="text-xs text-red-500">Retirer</button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Entrez un code promo..."
+                    value={form.code_promo}
+                    onChange={e => setForm({ ...form, code_promo: e.target.value.toUpperCase() })}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={checkingCode || !form.code_promo.trim()}
+                    onClick={async () => {
+                      setCheckingCode(true);
+                      const codes = await base44.entities.CodePromo.filter({ code: form.code_promo, statut: "valide", actif: true });
+                      if (codes.length === 0) { toast.error("Code promo invalide ou non activé"); }
+                      else { setCodePromoApplique(codes[0]); toast.success(`Code ${form.code_promo} appliqué ! -20% sur votre 1ère course 🎉`); }
+                      setCheckingCode(false);
+                    }}
+                  >
+                    {checkingCode ? "..." : "OK"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {selectedRole === "livreur" && (
