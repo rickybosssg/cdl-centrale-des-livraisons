@@ -136,21 +136,27 @@ export default function GererCommerciaux() {
       </div>
 
       {/* Filtres */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {filtres.map(f => (
-          <button
-            key={f.val}
-            onClick={() => setFiltre(f.val)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
-              filtre === f.val ? "bg-primary text-primary-foreground border-primary" : "border-border"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="grid grid-cols-2 gap-2">
+        {filtres.map(f => {
+          const FILTRE_EMOJI = { tous: "👥", en_attente: "⏳", valide: "✅", doit: "💰" };
+          return (
+            <button
+              key={f.val}
+              onClick={() => setFiltre(f.val)}
+              className={`flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all ${
+                filtre === f.val
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                  : "bg-card border-border hover:bg-muted"
+              }`}
+            >
+              <span className="text-2xl">{FILTRE_EMOJI[f.val]}</span>
+              <span className="text-xs font-medium">{f.label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Liste */}
+      {/* Liste */
       <div className="space-y-3">
         {filtres_commerciaux.map(commercial => {
           const code = getCodeForCommercial(commercial.email);

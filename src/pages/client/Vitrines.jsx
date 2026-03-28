@@ -68,16 +68,19 @@ export default function Vitrines() {
       </div>
 
       {/* Filtre type */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
+      <div className="grid grid-cols-3 gap-2">
         {TYPES.map(t => (
           <button
             key={t}
             onClick={() => setFilterType(t)}
-            className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-              filterType === t ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border"
+            className={`flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all ${
+              filterType === t
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "bg-card border-border hover:bg-muted"
             }`}
           >
-            {TYPE_EMOJI[t] || ""} {t}
+            <span className="text-2xl">{TYPE_EMOJI[t] || "🏪"}</span>
+            <span className="text-xs font-medium leading-tight">{t}</span>
           </button>
         ))}
       </div>
