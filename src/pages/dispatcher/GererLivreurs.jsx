@@ -376,7 +376,9 @@ export default function GererLivreurs() {
             <Tabs defaultValue="profil">
               <TabsList className="w-full">
                 <TabsTrigger value="profil" className="flex-1">Profil</TabsTrigger>
-                <TabsTrigger value="courses" className="flex-1">Courses ({loadingCourses ? "..." : coursesLivreur.length})</TabsTrigger>
+                {admin?.role === "admin" && (
+                  <TabsTrigger value="courses" className="flex-1">Courses ({loadingCourses ? "..." : coursesLivreur.length})</TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="profil" className="space-y-4 mt-4">
