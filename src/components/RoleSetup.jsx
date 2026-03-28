@@ -71,25 +71,40 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
         statut_paiement: "Doit",
       });
     }
+    const me = await base44.auth.me();
     await base44.auth.updateMe({
-      user_type: selectedRole,
-      telephone: form.telephone,
-      whatsapp: form.whatsapp || form.telephone,
-      quartier: form.quartier,
-      disponible: false,
-      actif: true,
-      profil_valide: selectedRole !== "livreur" && selectedRole !== "commercial",
-      statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : "valide",
-      statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
-      verified: selectedRole === "client",
-      total_courses: 0,
-      commission_mode: true,
-      solde_commission_du: 0,
-      statut_financier_livreur: "À jour",
-      livreur_bloque: false,
-      code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
-      ...docUrls,
+     user_type: selectedRole,
+     telephone: form.telephone,
+     whatsapp: form.whatsapp || form.telephone,
+     quartier: form.quartier,
+     disponible: false,
+     actif: true,
+     profil_valide: selectedRole !== "livreur" && selectedRole !== "commercial",
+     statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : "valide",
+     statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
+     verified: selectedRole === "client",
+     total_courses: 0,
+     commission_mode: true,
+     solde_commission_du: 0,
+     statut_financier_livreur: "À jour",
+     livreur_bloque: false,
+     code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
+     ...docUrls,
     });
+    // Créer un Client si c'est un client
+    if (selectedRole === "client") {
+      const updatedMe = await base44.auth.me();
+      await base44.asServiceRole.entities.Client.create({
+        nom_complet: updatedMe.full_name || "",
+        numero_telephone: form.telephone,
+        email: updatedMe.email,
+        quartier_principal: form.quartier,
+        date_inscription: new Date().toISOString(),
+        statut_client: "Nouveau",
+        nombre_total_courses: 0,
+        total_depense: 0,
+      });
+    }
     setLoading(false);
     onComplete();
   };
