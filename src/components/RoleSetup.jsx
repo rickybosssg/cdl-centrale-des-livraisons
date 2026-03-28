@@ -91,22 +91,15 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
      code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
      ...docUrls,
     });
-    // Créer un Client si c'est un client
-    if (selectedRole === "client") {
-      const updatedMe = await base44.auth.me();
-      await base44.asServiceRole.entities.Client.create({
-        nom_complet: updatedMe.full_name || "",
-        numero_telephone: form.telephone,
-        email: updatedMe.email,
-        quartier_principal: form.quartier,
-        date_inscription: new Date().toISOString(),
-        statut_client: "Nouveau",
-        nombre_total_courses: 0,
-        total_depense: 0,
-      });
-    }
-    setLoading(false);
-    onComplete();
+     // Créer un Client si c'est un client (via backend)
+     if (selectedRole === "client") {
+     await base44.functions.invoke('createClientOnSignup', {
+       telephone: form.telephone,
+       quartier: form.quartier,
+     });
+     }
+     setLoading(false);
+     onComplete();
   };
 
   if (showPartenaire) {
