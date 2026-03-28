@@ -20,9 +20,6 @@ export default function CreateCourse() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
-  const [codePromo, setCodePromo] = useState("");
-  const [codePromoApplique, setCodePromoApplique] = useState(null);
-  const [checkingCode, setCheckingCode] = useState(false);
   const [urgent, setUrgent] = useState(false);
   const [tresUrgent, setTresUrgent] = useState(false);
   const [form, setForm] = useState({
@@ -47,10 +44,9 @@ export default function CreateCourse() {
 
   const prixBase = parseInt(form.prix_base, 10) || 0;
   const supplement = tresUrgent ? 1000 : urgent ? 500 : 0;
-  const prixAvantPromo = prixBase + supplement;
-  const prixAvecPromo = codePromoApplique ? Math.round(prixAvantPromo * 0.8) : prixAvantPromo;
-  const commission = codePromoApplique ? 0 : Math.round(prixAvecPromo * 0.2);
-  const gainLivreur = codePromoApplique ? prixAvecPromo : prixAvecPromo - commission;
+  const prixAvecPromo = prixBase + supplement;
+  const commission = Math.round(prixAvecPromo * 0.2);
+  const gainLivreur = prixAvecPromo - commission;
 
   const handleUrgent = (val) => {
     setUrgent(val);
@@ -60,21 +56,6 @@ export default function CreateCourse() {
   const handleTresUrgent = (val) => {
     setTresUrgent(val);
     if (val) setUrgent(false);
-  };
-
-  const verifierCode = async () => {
-    if (!codePromo.trim()) return;
-    if (user?.code_promo_utilise) { toast.error("Vous avez déjà utilisé un code promo"); return; }
-    setCheckingCode(true);
-    const codes = await base44.entities.CodePromo.filter({ code: codePromo.toUpperCase(), statut: "valide", actif: true });
-    if (codes.length === 0) {
-      toast.error("Code promo invalide ou non activé");
-      setCodePromoApplique(null);
-    } else {
-      setCodePromoApplique(codes[0]);
-      toast.success(`Code ${codePromo.toUpperCase()} appliqué ! -20% 🎉`);
-    }
-    setCheckingCode(false);
   };
 
   const handleSubmit = async () => {
@@ -119,24 +100,13 @@ export default function CreateCourse() {
       client_name: user.full_name,
       prix: prixAvecPromo,
       commission: commission,
-      commission_active: !codePromoApplique,
+      commission_active: true,
       commission_cdl: commission,
       gain_livreur: gainLivreur,
       statut_paiement_livreur: "Commission due",
       nombre_tentatives: 0,
-      code_promo_utilise: codePromoApplique?.code || null,
       urgence: tresUrgent ? "tres_urgent" : urgent ? "urgent" : null,
     });
-
-    if (codePromoApplique) {
-      const nouvNb = (codePromoApplique.nombre_utilisations || 0) + 1;
-      await base44.entities.CodePromo.update(codePromoApplique.id, {
-        nombre_utilisations: nouvNb,
-        commission_due: (codePromoApplique.commission_due || 0) + 50,
-        statut_paiement: "Doit",
-      });
-      await base44.auth.updateMe({ code_promo_utilise: codePromoApplique.code });
-    }
 
     lancerDispatch(courseData);
     vibrateSuccess();
@@ -277,40 +247,6 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
-      {/* Code promo */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <span className="text-lg">🎁</span>Code promotionnel
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {codePromoApplique ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-              <span className="text-green-700 text-sm font-bold flex-1">✅ Code <strong>{codePromoApplique.code}</strong> appliqué — -20% !</span>
-              <button onClick={() => setCodePromoApplique(null)} className="text-xs text-red-500 font-medium">Retirer</button>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Input
-                placeholder="Entrez un code promo..."
-                value={codePromo}
-                onChange={e => setCodePromo(e.target.value.toUpperCase())}
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={checkingCode || !codePromo.trim()}
-                onClick={verifierCode}
-              >
-                {checkingCode ? "..." : "OK"}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Paiement */}
       <Card>
         <CardHeader className="pb-3">
@@ -336,8 +272,6 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
-
-
       {/* Récapitulatif */}
       {prixBase > 0 && (
         <Card className="bg-primary/5 border-primary/20">
@@ -354,21 +288,11 @@ export default function CreateCourse() {
                   <span>+{supplement} FCFA</span>
                 </div>
               )}
-              {codePromoApplique && (
-                <div className="flex justify-between text-green-700">
-                  <span>Code promo -20%</span>
-                  <span>-{prixAvantPromo - prixAvecPromo} FCFA</span>
-                </div>
-              )}
               <div className="border-t pt-2 flex justify-between font-bold text-base">
                 <span>Montant total</span>
                 <span className="text-primary text-xl">{prixAvecPromo} FCFA</span>
               </div>
             </div>
-
-            {codePromoApplique && (
-              <p className="text-xs text-green-700 text-center font-medium">🎉 CDL ne prend pas de commission sur cette course</p>
-            )}
             <p className="text-[10px] text-muted-foreground text-center">
               {tresUrgent ? "🚨 Livraison en moins de 20 min" : urgent ? "🔔 Livraison en moins de 30 min" : "⏱ Livraison estimée : 20-45 min selon le trafic"}
             </p>
