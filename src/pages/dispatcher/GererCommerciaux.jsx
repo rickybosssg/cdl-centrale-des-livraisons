@@ -25,6 +25,8 @@ export default function GererCommerciaux() {
   const [formPaiement, setFormPaiement] = useState({ montant: "", mode: "" });
   const [saving, setSaving] = useState(false);
   const [filtre, setFiltre] = useState("tous");
+  const [showCommissionsDues, setShowCommissionsDues] = useState(false);
+  const [paiementEnCours, setPaiementEnCours] = useState({});
 
   const loadData = async () => {
     const [usersData, codesData] = await Promise.all([
@@ -85,6 +87,18 @@ export default function GererCommerciaux() {
     loadData();
   };
 
+  const marquerCommePayeDirectement = async (code) => {
+    setPaiementEnCours(prev => ({ ...prev, [code.id]: true }));
+    const montantDu = (code.commission_due || 0) - (code.commission_payee || 0);
+    await base44.entities.CodePromo.update(code.id, {
+      commission_payee: code.commission_due,
+      statut_paiement: "À jour",
+    });
+    toast.success("Commission marquée comme payée !");
+    setPaiementEnCours(prev => ({ ...prev, [code.id]: false }));
+    loadData();
+  };
+
   const filtres = [
     { val: "tous", label: "Tous" },
     { val: "en_attente", label: "À valider" },
@@ -134,6 +148,11 @@ export default function GererCommerciaux() {
           <p className="text-muted-foreground">Dû total</p>
         </div>
       </div>
+
+      {/* Btn commissions dues */}
+      <Button className="w-full" onClick={() => setShowCommissionsDues(true)}>
+        💰 Voir les commissions dues
+      </Button>
 
       {/* Filtres */}
       <div className="grid grid-cols-2 gap-2">
@@ -344,6 +363,48 @@ export default function GererCommerciaux() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
+
+      {/* Dialog Commissions dues */}
+      <Dialog open={showCommissionsDues} onOpenChange={setShowCommissionsDues}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Commissions dues</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {codes
+              .filter(c => c.statut === "valide" && (c.commission_due || 0) - (c.commission_payee || 0) > 0)
+              .map(code => {
+                const commercial = commerciaux.find(c => c.email === code.commercial_email);
+                const montantDu = (code.commission_due || 0) - (code.commission_payee || 0);
+                return (
+                  <div key={code.id} className="p-3 rounded-lg border bg-card space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-semibold text-sm">{commercial?.full_name || "Commercial"}</p>
+                        <p className="text-xs text-muted-foreground">{code.code}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-amber-600">{montantDu} F</p>
+                        <p className="text-xs text-muted-foreground">Dû</p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full h-7 text-xs"
+                      onClick={() => marquerCommePayeDirectement(code)}
+                      disabled={paiementEnCours[code.id]}
+                    >
+                      {paiementEnCours[code.id] ? "Enregistrement..." : "✅ Marquer comme payé"}
+                    </Button>
+                  </div>
+                );
+              })}
+            {codes.filter(c => c.statut === "valide" && (c.commission_due || 0) - (c.commission_payee || 0) > 0).length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-6">Aucune commission due</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      </div>
+      );
+      }
