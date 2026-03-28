@@ -43,6 +43,13 @@ function CommandesPartenaireWrapper() {
   if (!user) return null;
   return <CommandesPartenaire user={user} />;
 }
+
+function AppLayoutWithUser() {
+  const [user, setUser] = useState(null);
+  useEffect(() => { b44.auth.me().then(setUser); }, []);
+  return <AppLayoutWrapper user={user} />;
+}
+
 import AppLayout from './components/AppLayout';
 import AppLayoutWrapper from './components/AppLayoutWrapper';
 import DispatcherGuard from './components/DispatcherGuard';
@@ -73,7 +80,7 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
-      <Route element={<AppLayoutWrapper />}>
+      <Route element={<AppLayoutWithUser />}>
         <Route path="/" element={<Home />} />
         <Route path="/commander" element={<CreateCourse />} />
         <Route path="/mes-courses" element={<MesCourses />} />

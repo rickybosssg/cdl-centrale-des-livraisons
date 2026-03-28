@@ -3,8 +3,9 @@ import { base44 } from "@/api/base44Client";
 import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 
-export default function AppLayoutWrapper() {
+export default function AppLayoutWrapper({ user }) {
   const [userRole, setUserRole] = useState("client");
+  const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [prenom, setPrenom] = useState("");
   const [showSplash, setShowSplash] = useState(false);
@@ -16,6 +17,7 @@ export default function AppLayoutWrapper() {
       window.__cdl_user_email = me.email;
       const firstName = me.full_name?.split(" ")[0] || "";
       setPrenom(firstName);
+      setUserEmail(me.email);
       const key = `splash_shown_${me.id}`;
       if (!sessionStorage.getItem(key)) {
         sessionStorage.setItem(key, '1');
@@ -39,7 +41,7 @@ export default function AppLayoutWrapper() {
       {showSplash && (
         <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />
       )}
-      <AppLayout userRole={userRole} />
+      <AppLayout userRole={userRole} userEmail={userEmail} />
     </>
   );
 }
