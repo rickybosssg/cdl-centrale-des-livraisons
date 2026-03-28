@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, MapPin, Phone, Shield, ShieldOff, CheckCircle2, XCircle, CreditCard, History, Lock, Unlock, Eye, Star } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Shield, ShieldOff, CheckCircle2, XCircle, CreditCard, History, Lock, Unlock, Eye, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -124,6 +124,13 @@ export default function GererLivreurs() {
     toast.success("Livreur bloqué");
     setDialogBlocage(false);
     setMotifBlocage("");
+    loadData();
+  };
+
+  const supprimerLivreur = async (livreur) => {
+    if (!window.confirm(`Supprimer définitivement ${livreur.full_name} ? Cette action est irréversible.`)) return;
+    await base44.entities.User.delete(livreur.id);
+    toast.success("Livreur supprimé");
     loadData();
   };
 
@@ -352,6 +359,16 @@ export default function GererLivreurs() {
                   >
                     <Lock className="h-3 w-3 mr-1" />
                     Bloquer
+                  </Button>
+                )}
+                {admin?.role === 'admin' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs text-red-700 border-red-400 hover:bg-red-50"
+                    onClick={() => supprimerLivreur(livreur)}
+                  >
+                    <Trash2 className="h-3 w-3" />
                   </Button>
                 )}
               </div>
