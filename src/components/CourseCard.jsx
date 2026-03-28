@@ -47,17 +47,23 @@ export default function CourseCard({ course, onClick, children }) {
             )}
           </div>
 
+          {course.client_name && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <User className="h-3 w-3" />
+              <span className="font-medium">Client:</span> {course.client_name}
+            </div>
+          )}
           {course.livreur_name && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <User className="h-3 w-3" />
-              {course.livreur_name}
+              <span className="font-medium">Livreur:</span> {course.livreur_name}
             </div>
           )}
-        </div>
+          </div>
 
-        {children && <div className="mt-3 pt-3 border-t">{children}</div>}
-      </CardContent>
-    </Card>
-    </motion.div>
+          {children && <div className="mt-3 pt-3 border-t">{children}</div>}
+          </CardContent>
+          </Card>
+          </motion.div>
   );
 }
