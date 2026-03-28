@@ -156,7 +156,7 @@ export default function GererCommerciaux() {
         })}
       </div>
 
-      {/* Liste */
+      {/* Liste */}
       <div className="space-y-3">
         {filtres_commerciaux.map(commercial => {
           const code = getCodeForCommercial(commercial.email);
