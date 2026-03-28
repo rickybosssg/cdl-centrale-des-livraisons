@@ -54,11 +54,12 @@ export default function CourseLivreur() {
 
   const recupererColis = async () => {
     setUpdating(true);
+    // Optimistic UI
+    setCourse(prev => ({ ...prev, statut: "en_cours", date_recuperation: new Date().toISOString() }));
     await base44.entities.Course.update(id, {
       statut: "en_cours",
       date_recuperation: new Date().toISOString(),
     });
-    setCourse(prev => ({ ...prev, statut: "en_cours", date_recuperation: new Date().toISOString() }));
     vibrateSuccess();
     toast.success("Colis récupéré !");
     setUpdating(false);
@@ -70,6 +71,8 @@ export default function CourseLivreur() {
     const avecPromo = !!course.code_promo_utilise;
     const commissionCdl = avecPromo ? 0 : (course.prix || 0) * 0.2;
     const gainLivreur = avecPromo ? (course.prix || 0) : (course.prix || 0) * 0.8;
+    // Optimistic UI
+    setCourse(prev => ({ ...prev, statut: "livree", date_livraison: new Date().toISOString() }));
     await base44.entities.Course.update(id, {
       statut: "livree",
       date_livraison: new Date().toISOString(),
@@ -90,7 +93,6 @@ export default function CourseLivreur() {
         nombre_courses_actives: Math.max(0, (livreur.nombre_courses_actives || 0) - 1),
       });
     }
-    setCourse(prev => ({ ...prev, statut: "livree", date_livraison: new Date().toISOString() }));
     vibrateSuccess();
     toast.success("Colis livré avec succès !");
     setUpdating(false);

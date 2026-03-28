@@ -45,6 +45,9 @@ export default function CoursesDisponibles() {
       toast.error("Votre compte est bloqué. Contactez l'administration.");
       return;
     }
+    // Optimistic UI — remove immediately
+    setCourses(prev => prev.filter(c => c.id !== course.id));
+    // Then send request in background
     await base44.entities.Course.update(course.id, {
       statut: "acceptee",
       livreur_email: user.email,
@@ -59,7 +62,6 @@ export default function CoursesDisponibles() {
     });
     vibrateSuccess();
     toast.success("🛥 Course acceptée ! Bonne livraison !");
-    setCourses(prev => prev.filter(c => c.id !== course.id));
   };
 
   if (loading) {
@@ -97,6 +99,7 @@ export default function CoursesDisponibles() {
                 className="w-full"
                 size="sm"
                 onClick={(e) => { e.stopPropagation(); accepter(course); }}
+                variant="default"
               >
                 ✅ Accepter cette course
               </Button>

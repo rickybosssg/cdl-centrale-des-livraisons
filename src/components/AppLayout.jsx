@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { vibrateLight } from "@/lib/vibration";
 import { Package, Home, Clock, Users, BarChart3, Truck, Plus, TrendingUp, Database, Store, Sparkles, Megaphone, Tag } from "lucide-react";
 import { motion } from "framer-motion";
@@ -38,6 +38,7 @@ const NAV_ITEMS = {
 
 export default function AppLayout({ userRole, userEmail }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { scrollContainerRef, isRootTab } = useTabNavigation();
   const items = NAV_ITEMS[userRole] || NAV_ITEMS.client;
 
@@ -84,7 +85,15 @@ export default function AppLayout({ userRole, userEmail }) {
                 key={item.path}
                 to={item.path}
                 className="flex-1 flex flex-col items-center py-2 gap-0.5"
-                onClick={() => !active && vibrateLight()}
+                onClick={(e) => {
+                  if (active) {
+                    e.preventDefault();
+                    navigate(item.path);
+                    scrollContainerRef?.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                  } else {
+                    vibrateLight();
+                  }
+                }}
               >
                 <motion.div
                   whileTap={{ scale: 1.18 }}
