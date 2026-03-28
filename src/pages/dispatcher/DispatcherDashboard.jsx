@@ -255,7 +255,7 @@ export default function DispatcherDashboard() {
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 text-center space-y-2">
               <Store className="h-8 w-8 text-blue-600 mx-auto" />
-              <p className="text-sm font-medium">Partenaires</p>
+              <p className="text-sm font-medium">Gérer les partenaires</p>
             </CardContent>
           </Card>
         </Link>
@@ -263,7 +263,7 @@ export default function DispatcherDashboard() {
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 text-center space-y-2">
               <Tag className="h-8 w-8 text-purple-600 mx-auto" />
-              <p className="text-sm font-medium">Commerciaux</p>
+              <p className="text-sm font-medium">Gérer les commerciaux</p>
             </CardContent>
           </Card>
         </Link>
