@@ -17,7 +17,7 @@ export default function MesLivraisons() {
       const data = await base44.entities.Course.filter(
         { livreur_email: user.email },
         "-created_date",
-        50
+        30
       );
       setCourses(data);
       setLoading(false);
