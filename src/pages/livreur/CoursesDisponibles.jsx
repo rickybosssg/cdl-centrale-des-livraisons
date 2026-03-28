@@ -16,7 +16,7 @@ export default function CoursesDisponibles() {
     setLoading(true);
     const me = await base44.auth.me();
     setUser(me);
-    const data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 25);
+    const data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 15);
     setCourses(data);
     setLoading(false);
   }, []);
