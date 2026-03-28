@@ -74,7 +74,22 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
     await base44.auth.updateMe({
       user_type: selectedRole,
       telephone: form.telephone,
+      whatsapp: form.whatsapp || form.telephone,
+      quartier: form.quartier,
+      disponible: false,
+      actif: true,
+      profil_valide: selectedRole !== "livreur" && selectedRole !== "commercial",
+      statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : "valide",
+      statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
+      verified: selectedRole === "client",
+      total_courses: 0,
+      commission_mode: true,
+      solde_commission_du: 0,
+      statut_financier_livreur: "À jour",
+      livreur_bloque: false,
       code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
+      ...docUrls,
+    });
     setLoading(false);
     onComplete();
   };
