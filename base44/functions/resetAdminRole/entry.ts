@@ -9,11 +9,21 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Remettre le rôle admin
+    // Ajouter le rôle admin aux rôles existants
+    let roles = [];
+    if (user.user_roles) {
+      try { roles = JSON.parse(user.user_roles); } catch (_) {}
+    }
+    if (user.user_type && !roles.includes(user.user_type)) {
+      roles.push(user.user_type);
+    }
+    if (!roles.includes('admin')) {
+      roles.push('admin');
+    }
+    
     await base44.asServiceRole.entities.User.update(user.id, {
       role: 'admin',
-      user_type: 'dispatcher',
-      user_roles: JSON.stringify(['admin']),
+      user_roles: JSON.stringify(roles),
     });
 
     return Response.json({ success: true, message: 'Vous êtes rétabli administrateur' });
