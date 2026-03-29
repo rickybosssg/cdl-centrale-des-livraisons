@@ -80,13 +80,14 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
     const me = await base44.auth.me();
     await base44.auth.updateMe({
       user_type: selectedRole,
+      user_roles: JSON.stringify([selectedRole]),
       telephone: form.telephone,
       whatsapp: form.whatsapp || form.telephone,
       quartier: form.quartier,
       disponible: false,
       actif: true,
       profil_valide: selectedRole !== "livreur" && selectedRole !== "commercial",
-      statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : "valide",
+      statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : undefined,
       statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
       verified: selectedRole === "client",
       total_courses: 0,
