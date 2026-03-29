@@ -32,7 +32,9 @@ export default function Statistiques() {
   }, []);
 
   // Stats calculations
-  const livrees = courses.filter(c => c.statut === "livree");
+  const coursesOnly = courses.filter(c => !c.moyen_transport);
+  const trajets = courses.filter(c => c.moyen_transport);
+  const livrees = coursesOnly.filter(c => c.statut === "livree");
   const totalRevenu = livrees.filter(c => c.commission_active).reduce((sum, c) => sum + (c.commission || 0), 0);
   const totalCA = livrees.reduce((sum, c) => sum + (c.prix || 0), 0);
 
@@ -74,8 +76,15 @@ export default function Statistiques() {
         <Card>
           <CardContent className="p-3 text-center">
             <Package className="h-5 w-5 text-primary mx-auto mb-1" />
-            <p className="text-2xl font-bold">{courses.length}</p>
+            <p className="text-2xl font-bold">{coursesOnly.length}</p>
             <p className="text-[10px] text-muted-foreground">Total courses</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 text-center">
+            <Truck className="h-5 w-5 text-blue-500 mx-auto mb-1" />
+            <p className="text-2xl font-bold">{trajets.length}</p>
+            <p className="text-[10px] text-muted-foreground">Total trajets</p>
           </CardContent>
         </Card>
         <Card>
