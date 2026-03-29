@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
+import { useMessageCount } from "@/hooks/useMessageCount";
 import MessageAlert from "@/components/MessageAlert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export default function DashboardPartenaire({ user }) {
   const [visiteurs, setVisiteurs] = useState([]);
   const [showMessages, setShowMessages] = useState(false);
   const newMsg = useMessageNotification(user.email);
+  const hasUnreadMessages = useMessageCount(user?.email, "partenaire");
 
   useEffect(() => {
     const load = async () => {
@@ -144,13 +146,19 @@ export default function DashboardPartenaire({ user }) {
       <button
         onClick={() => setShowMessages(!showMessages)}
         className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
-          showMessages ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
+          showMessages || !hasUnreadMessages ? "border-primary bg-primary/10" : "border-red-300 bg-red-50"
         }`}
       >
-        <MessageCircle className={`h-5 w-5 ${showMessages ? "text-primary" : "text-muted-foreground"}`} />
+        <MessageCircle className={`h-5 w-5 ${
+          showMessages || !hasUnreadMessages ? "text-primary" : "text-red-500"
+        }`} />
         <div className="text-left">
-          <p className="font-semibold text-sm">Messages CDL</p>
-          <p className="text-xs text-muted-foreground">Discussion avec l'admin</p>
+          <p className={`font-semibold text-sm ${
+            showMessages || !hasUnreadMessages ? "text-foreground" : "text-red-600"
+          }`}>Messages CDL</p>
+          <p className={`text-xs ${
+            showMessages || !hasUnreadMessages ? "text-muted-foreground" : "text-red-500"
+          }`}>Discussion avec l'admin</p>
         </div>
       </button>
 

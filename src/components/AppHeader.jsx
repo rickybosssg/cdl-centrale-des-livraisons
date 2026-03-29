@@ -2,6 +2,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, LogOut } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 import { base44 } from "@/api/base44Client";
+import { useMessageCount } from "@/hooks/useMessageCount";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
@@ -10,6 +11,7 @@ const ROOT_PATHS = ['/', '/courses-disponibles', '/mes-livraisons', '/vitrines',
 export default function AppHeader({ userRole, userEmail }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const hasUnread = useMessageCount(userEmail, userRole);
   
   const isRootPath = ROOT_PATHS.includes(location.pathname);
   const showBackButton = !isRootPath;
@@ -44,8 +46,10 @@ export default function AppHeader({ userRole, userEmail }) {
             </svg>
             WhatsApp
           </a>
-          <NotificationBell userEmail={userEmail} />
-          <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium capitalize hidden sm:inline">
+          <NotificationBell userEmail={userEmail} hasUnread={hasUnread} />
+          <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize hidden sm:inline transition-colors ${
+            hasUnread ? "bg-red-100 text-red-700" : "bg-primary/10 text-primary"
+          }`}>
             {userRole === 'dispatcher' ? 'Administrateur' : userRole}
           </span>
           <motion.button
