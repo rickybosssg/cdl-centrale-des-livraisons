@@ -27,7 +27,14 @@ const NAV_ITEMS = {
     { path: "/gerer-courses", icon: Package, label: "Courses" },
     { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
     { path: "/gerer-partenaires", icon: Store, label: "Partenaires" },
-    { path: "/gerer-commerciaux", icon: Tag, label: "Commerciaux" },
+    { path: "/messages-admin", icon: MessageCircle, label: "Messages" },
+  ],
+  admin: [
+    { path: "/", icon: Home, label: "Accueil" },
+    { path: "/gerer-courses", icon: Package, label: "Courses" },
+    { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
+    { path: "/gerer-partenaires", icon: Store, label: "Partenaires" },
+    { path: "/messages-admin", icon: MessageCircle, label: "Messages" },
   ],
   commercial: [
     { path: "/", icon: Home, label: "Accueil" },

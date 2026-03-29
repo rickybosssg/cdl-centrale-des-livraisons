@@ -30,6 +30,7 @@ import Vitrines from './pages/client/Vitrines';
 import GererCommerciaux from './pages/dispatcher/GererCommerciaux';
 import Settings from './pages/Settings';
 import MesMessages from './pages/MesMessages';
+import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
 import { useEffect, useState } from 'react';
 import { base44 as b44 } from '@/api/base44Client';
 
@@ -102,6 +103,7 @@ const AuthenticatedApp = () => {
         <Route path="/mes-gains" element={<GainsLivreur />} />
         <Route path="/mes-discussions" element={<MesDiscussions />} />
         <Route path="/mes-messages" element={<MesMessages />} />
+        <Route path="/messages-admin" element={<MessagesAdmin />} />
         <Route path="/dashboard-partenaire" element={<DashboardPartenaireWrapper />} />
         <Route path="/base-clients" element={<BaseClients />} />
         <Route path="/gerer-partenaires" element={<GererPartenaires />} />
