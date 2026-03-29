@@ -24,6 +24,9 @@ import MesDiscussions from './pages/livreur/MesDiscussions';
 import BaseClients from './pages/dispatcher/BaseClients';
 import GererPartenaires from './pages/dispatcher/GererPartenaires';
 import GererPublicites from './pages/dispatcher/GererPublicites';
+import BaseLivreurs from './pages/dispatcher/BaseLivreurs';
+import BasePartenaires from './pages/dispatcher/BasePartenaires';
+import BaseCommerciaux from './pages/dispatcher/BaseCommerciaux';
 import DashboardPartenaire from './pages/partenaire/DashboardPartenaire';
 import PagePartenaire from './pages/partenaire/PagePartenaire';
 import CommandesPartenaire from './pages/partenaire/CommandesPartenaire';
@@ -108,6 +111,9 @@ const AuthenticatedApp = () => {
         <Route path="/messages-admin" element={<MessagesAdmin />} />
         <Route path="/dashboard-partenaire" element={<DashboardPartenaireWrapper />} />
         <Route path="/base-clients" element={<BaseClients />} />
+        <Route path="/base-livreurs" element={<BaseLivreurs />} />
+        <Route path="/base-partenaires" element={<BasePartenaires />} />
+        <Route path="/base-commerciaux" element={<BaseCommerciaux />} />
         <Route path="/gerer-partenaires" element={<GererPartenaires />} />
           <Route path="/gerer-publicites" element={<GererPublicites />} />
           <Route path="/gerer-commerciaux" element={<GererCommerciaux />} />
