@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { User, Truck, Store, Megaphone, X, Upload, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import QuartierSelect from "./QuartierSelect";
+import { base44 } from "@/api/base44Client";
 
 const ALL_ROLES = [
   { value: "client",     label: "Client",      icon: User,      desc: "Commander des livraisons" },
