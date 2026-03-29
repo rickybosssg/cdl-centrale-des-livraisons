@@ -47,7 +47,7 @@ export default function PublicHome() {
     }
     setSignupLoading(true);
     try {
-      const newUser = await base44.auth.signup({
+      await base44.auth.signup({
         email: signupForm.email,
         password: signupForm.password,
         full_name: signupForm.nom_complet,
@@ -57,13 +57,13 @@ export default function PublicHome() {
         profil_valide: false,
       });
       toast.success("Compte créé! Vérifiez votre email et connectez-vous.");
-      setStep("choice");
+      // Reset form but DO NOT navigate — user doit rester bloqué ici
       setSignupForm({ nom_complet: "", email: "", password: "", telephone: "" });
       setSelectedRole(null);
       setShowPassword(false);
+      // Bloquer l'accès à l'appli jusqu'à la confirmation email
     } catch (err) {
       toast.error("Erreur: " + (err.message || err));
-    } finally {
       setSignupLoading(false);
     }
   };
