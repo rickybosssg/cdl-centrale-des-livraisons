@@ -36,19 +36,26 @@ export default function BaseClients() {
 
   const loadClients = async () => {
     setLoading(true);
-    const [clientsEntity, userClients] = await Promise.all([
-      base44.entities.Client.list("-date_derniere_course", 500),
+    // Charger SEULEMENT les clients
+    // 1. Utilisateurs avec user_type="client"
+    // 2. Profils Client existants
+    const [userClients, clientProfiles] = await Promise.all([
       base44.entities.User.filter({ user_type: "client" }),
+      base44.entities.Client.list("-date_derniere_course", 500),
     ]);
-    // Combiner et dédupliquer par email
+    
     const emailSet = new Set();
     const combined = [];
-    clientsEntity.forEach(c => {
+    
+    // Ajouter les profils Client d'abord
+    clientProfiles.forEach(c => {
       if (!emailSet.has(c.email)) {
         emailSet.add(c.email);
         combined.push(c);
       }
     });
+    
+    // Ajouter les User clients qui n'ont pas de profil
     userClients.forEach(u => {
       if (!emailSet.has(u.email)) {
         emailSet.add(u.email);
@@ -63,10 +70,10 @@ export default function BaseClients() {
           total_depense: 0,
           date_inscription: u.created_date,
           date_derniere_course: null,
-          source: "user",
         });
       }
     });
+    
     setClients(combined.sort((a, b) => new Date(b.date_derniere_course || b.date_inscription || 0) - new Date(a.date_derniere_course || a.date_inscription || 0)));
     setLoading(false);
   };
