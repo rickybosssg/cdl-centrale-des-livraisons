@@ -41,8 +41,13 @@ export default function DispatcherDashboard() {
       ]);
       const map = new Map();
       [...livreursPurs, ...livreursMultiAttente, ...livreursMultiValides, ...livreursMultiRefuses].forEach(u => map.set(u.id, u));
+      const tousLivreurs = Array.from(map.values()).filter(u => {
+        if (u.user_type === 'livreur') return true;
+        if (u.user_roles) { try { return JSON.parse(u.user_roles).includes('livreur'); } catch (_) {} }
+        return false;
+      });
       setCourses(coursesData);
-      setLivreurs(Array.from(map.values()));
+      setLivreurs(tousLivreurs);
       setLoading(false);
     };
     load();
