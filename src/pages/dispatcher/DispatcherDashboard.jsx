@@ -262,10 +262,14 @@ export default function DispatcherDashboard() {
       <h2 className="font-semibold text-sm text-muted-foreground">Accès rapides</h2>
       <div className="grid grid-cols-2 gap-3">
         <Link to="/gerer-courses">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary">
             <CardContent className="p-4 text-center space-y-2">
               <Package className="h-8 w-8 text-primary mx-auto" />
               <p className="text-sm font-medium">Courses Trajets</p>
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                <span>📦 {enAttente.length + enCours.length}</span>
+                <span>🏍️ {deplacementsMoto.length + deplotementsVehicule.length}</span>
+              </div>
             </CardContent>
           </Card>
         </Link>
