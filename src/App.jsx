@@ -36,6 +36,7 @@ import GererCommerciaux from './pages/dispatcher/GererCommerciaux';
 import Settings from './pages/Settings';
 import MesMessages from './pages/MesMessages';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
+import ResetAdmin from './pages/ResetAdmin';
 import { useEffect, useState } from 'react';
 import { base44 as b44 } from '@/api/base44Client';
 
@@ -110,6 +111,7 @@ const AuthenticatedApp = () => {
         <Route path="/dispatcher/GererCourses" element={<GererCourses />} />
         <Route path="/dispatcher/GererLivreurs" element={<GererLivreurs />} />
         <Route path="/dispatcher/Statistiques" element={<Statistiques />} />
+        <Route path="/reset-admin" element={<ResetAdmin />} />
         <Route path="/client/ClientHome" element={<Home />} />
         <Route path="/client/CreateCourse" element={<CreateCourse />} />
         <Route path="/client/MesCourses" element={<MesCourses />} />
