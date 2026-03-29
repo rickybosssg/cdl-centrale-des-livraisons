@@ -27,6 +27,7 @@ export default function SuiviCommissions() {
   const [formPaiement, setFormPaiement] = useState({ montant: "", date_paiement: "", mode_paiement: "", reference: "", commentaire: "" });
   const [saving, setSaving] = useState(false);
   const [admin, setAdmin] = useState(null);
+  const [dialogCommissions, setDialogCommissions] = useState(false);
 
   const loadData = async () => {
     const [livreursData, coursesData, paiementsData, me] = await Promise.all([
@@ -135,6 +136,11 @@ export default function SuiviCommissions() {
   const paiementsLivreur = selectedLivreur
     ? paiements.filter(p => p.livreur_email === selectedLivreur.email)
     : [];
+
+  const commissionsLivreur = selectedLivreur
+    ? courses.filter(c => c.livreur_email === selectedLivreur.email && c.statut === "livree")
+    : [];
+  const totalCommissionsLivreur = commissionsLivreur.reduce((s, c) => s + (c.commission_cdl || (c.prix * 0.2) || 0), 0);
 
   if (loading) {
     return (
@@ -260,6 +266,15 @@ export default function SuiviCommissions() {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs"
+                    onClick={() => { setSelectedLivreur(livreur); setDialogCommissions(true); }}
+                  >
+                    <TrendingUp className="h-3 w-3 mr-1" />
+                    Commissions
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
                     onClick={() => { setSelectedLivreur(livreur); setDialogHistorique(true); }}
                   >
                     <History className="h-3 w-3 mr-1" />
@@ -336,6 +351,61 @@ export default function SuiviCommissions() {
               <Button className="w-full" onClick={enregistrerPaiement} disabled={saving}>
                 {saving ? "Enregistrement..." : "Confirmer le paiement"}
               </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog commissions générées */}
+      <Dialog open={dialogCommissions} onOpenChange={setDialogCommissions}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Commissions générées par {selectedLivreur?.full_name}</DialogTitle>
+          </DialogHeader>
+          {selectedLivreur && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Courses livrées</p>
+                    <p className="text-lg font-bold text-primary">{commissionsLivreur.length}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Total généré</p>
+                    <p className="text-lg font-bold text-green-600">{Math.round(totalCommissionsLivreur).toLocaleString()} F</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Moyenne/course</p>
+                    <p className="text-lg font-bold">{commissionsLivreur.length > 0 ? Math.round(totalCommissionsLivreur / commissionsLivreur.length).toLocaleString() : 0} F</p>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              <div className="max-h-[50vh] overflow-y-auto space-y-2">
+                {commissionsLivreur.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">Aucune commission générée</p>
+                ) : (
+                  commissionsLivreur.map((c, idx) => (
+                    <div key={c.id} className="p-3 rounded-lg border text-sm">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1">
+                          <p className="font-medium text-xs text-muted-foreground">#{idx + 1}</p>
+                          <p className="text-sm">{c.quartier_depart} → {c.quartier_arrivee}</p>
+                          <p className="text-xs text-muted-foreground">{c.type_colis}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-bold text-green-600">{Math.round(c.commission_cdl || (c.prix * 0.2) || 0).toLocaleString()} F</p>
+                          <p className="text-xs text-muted-foreground">{moment(c.date_livraison).format("DD/MM/YY")}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
