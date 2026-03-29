@@ -8,7 +8,7 @@ Deno.serve(async (req) => {
     // Mapper les informations par type
     const getTitle = () => {
       if (entity_name === 'Client') return '🎯 Nouveau client inscrit';
-      if (entity_name === 'Livreur') return '🚚 Nouveau livreur';
+      if (entity_name === 'Livreur') return '🛵 Nouveau livreur en attente de validation';
       if (entity_name === 'Partenaire') return '🏪 Nouveau partenaire';
       if (entity_name === 'CodePromo') return '🎟️ Nouveau code promo créé';
       return 'Nouvelle inscription';
@@ -16,7 +16,10 @@ Deno.serve(async (req) => {
 
     const getMessage = () => {
       if (entity_name === 'Client') {
-        return `${entity_data.nom_complet || 'Client'} s'est inscrit\n📱 ${entity_data.numero_telephone}\n📍 ${entity_data.quartier_principal || 'N/A'}`;
+        return `${entity_data.nom_complet || 'Client'} s'est inscrit\n📱 ${entity_data.numero_telephone || entity_data.telephone}\n📍 ${entity_data.quartier_principal || entity_data.quartier || 'N/A'}`;
+      }
+      if (entity_name === 'Livreur') {
+        return `${entity_data.nom_complet || entity_data.full_name || 'Livreur'} a soumis son dossier livreur.\n📱 ${entity_data.telephone || 'N/A'}\n📍 ${entity_data.quartier || 'N/A'}\n✉️ ${entity_data.email || 'N/A'}\n👉 Rendez-vous dans Validation Livreurs pour examiner le dossier.`;
       }
       if (entity_name === 'Partenaire') {
         return `${entity_data.nom_commerce || 'Commerce'} s'est inscrit\n📞 ${entity_data.telephone}\n🏷️ ${entity_data.type_commerce}`;

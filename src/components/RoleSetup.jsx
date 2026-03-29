@@ -30,7 +30,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
   const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "", code_promo: "" });
   const [checkingCode, setCheckingCode] = useState(false);
   const [codePromoApplique, setCodePromoApplique] = useState(null);
-  const [docs, setDocs] = useState({ photo_profil: null, photo_identite_recto: null, photo_identite_verso: null, photo_moto: null });
+  const [docs, setDocs] = useState({ photo_profil: null, photo_identite_recto: null, photo_identite_verso: null, photo_moyen_deplacement: null });
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [livreursActifs, setLivreursActifs] = useState(null);
@@ -47,7 +47,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
   };
 
   const handleSubmit = async () => {
-    if (selectedRole === "livreur" && (!docs.photo_profil || !docs.photo_identite_recto || !docs.photo_identite_verso || !docs.photo_moto)) {
+    if (selectedRole === "livreur" && (!docs.photo_profil || !docs.photo_identite_recto || !docs.photo_identite_verso || !docs.photo_moyen_deplacement)) {
       toast.error("Veuillez fournir tous les documents demandés");
       return;
     }
@@ -59,13 +59,13 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
         uploadFile(docs.photo_profil),
         uploadFile(docs.photo_identite_recto),
         uploadFile(docs.photo_identite_verso),
-        uploadFile(docs.photo_moto),
+        uploadFile(docs.photo_moyen_deplacement),
       ]);
       docUrls = {
         photo_profil: uploads[0],
         photo_identite_recto: uploads[1],
         photo_identite_verso: uploads[2],
-        photo_moto: uploads[3],
+        photo_moyen_deplacement: uploads[3],
       };
       setUploading(false);
     }
@@ -103,6 +103,19 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
         telephone: form.telephone,
         quartier: form.quartier,
       });
+    }
+    // Notifier les admins pour livreur
+    if (selectedRole === "livreur") {
+      try {
+        await base44.functions.invoke('notifyAdminNewSignup', {
+          entity_name: 'Livreur',
+          entity_data: {
+            nom_complet: (await base44.auth.me()).full_name,
+            telephone: form.telephone,
+            quartier: form.quartier,
+          },
+        });
+      } catch (_) {}
     }
     setLoading(false);
     onComplete();
@@ -293,7 +306,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
               { key: "photo_profil", label: "Photo de profil (selfie)" },
               { key: "photo_identite_recto", label: "CNI / Pièce d'identité (recto)" },
               { key: "photo_identite_verso", label: "CNI / Pièce d'identité (verso)" },
-              { key: "photo_moto", label: "Photo de votre moto / vélo" },
+              { key: "photo_moyen_deplacement", label: "Photo de votre moyen de déplacement" },
             ].map(doc => (
               <div key={doc.key} className="space-y-1">
                 <Label>{doc.label} *</Label>

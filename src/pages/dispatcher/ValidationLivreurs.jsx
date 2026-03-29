@@ -224,9 +224,9 @@ export default function ValidationLivreurs() {
                     <p className="text-sm font-semibold">Documents fournis</p>
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { label: "CNI Recto", url: selectedLivreur.photo_identite_recto },
-                        { label: "CNI Verso", url: selectedLivreur.photo_identite_verso },
-                        { label: "Photo moto", url: selectedLivreur.photo_moto },
+                        { label: "CNIB Recto", url: selectedLivreur.photo_identite_recto },
+                        { label: "CNIB Verso", url: selectedLivreur.photo_identite_verso },
+                        { label: "Moyen de déplacement", url: selectedLivreur.photo_moyen_deplacement },
                       ].map(doc => (
                         <div key={doc.label} className="border rounded-lg overflow-hidden">
                           {doc.url ? (
