@@ -31,10 +31,11 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
 
   const available = ALL_ROLES.filter(r => {
     if (r.value === "admin" && !isAdmin) return false;
-    return !existingRoles.includes(r.value);
+    return isAvailable(r.value);
   });
 
   const allDocsProvided = docs.photo_identite_recto && docs.photo_identite_verso && docs.photo_moyen_deplacement;
+  const isAvailable = (role) => !existingRoles.includes(role);
 
   const handleAdd = async () => {
     if (selected === "livreur" && !allDocsProvided) {
@@ -77,13 +78,28 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
       } catch (_) {}
     }
 
+    if (selected === "partenaire") {
+      updates.statut_validation_partenaire = "en_attente";
+      try {
+        await base44.entities.Partenaire.create({
+          user_email: user.email,
+          nom_commerce: form.nom_commerce,
+          nom_responsable: user.full_name,
+          telephone: user.telephone || form.telephone,
+          type_commerce: "Vitrine",
+          statut: "en_attente",
+          statut_abonnement: "Actif",
+          ouvert: true,
+        });
+      } catch (err) {
+        console.error('Erreur création partenaire:', err);
+      }
+    }
+
     if (selected === "commercial") {
       updates.statut_validation_commercial = "en_attente";
     }
 
-    await base44.auth.updateMe(updates);
-
-    // Notifier les admins pour livreur
     if (selected === "livreur") {
       try {
         await base44.functions.invoke('notifyAdminNewSignup', {
@@ -98,9 +114,12 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
       } catch (_) {}
     }
 
+    await base44.auth.updateMe(updates);
+
     toast.success(`Profil ${selected} ajouté ! En attente de validation.`);
     setLoading(false);
     onAdded(selected);
+    setForm({ telephone: user?.telephone || "", quartier: user?.quartier || "", nom_commerce: "" });
   };
 
   return (
