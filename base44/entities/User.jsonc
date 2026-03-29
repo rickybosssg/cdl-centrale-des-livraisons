@@ -15,7 +15,9 @@
       "enum": [
         "client",
         "livreur",
-        "dispatcher"
+        "dispatcher",
+        "partenaire",
+        "commercial"
       ],
       "title": "Type d'utilisateur"
     },
@@ -154,5 +156,7 @@
       "title": "Date derni\u00e8re alerte qualit\u00e9 envoy\u00e9e"
     }
   },
-  "required": []
+  "required": [
+    "user_type"
+  ]
 }
