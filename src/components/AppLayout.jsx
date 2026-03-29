@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import PageTransition from "./PageTransition";
 import { useState } from "react";
 import { useTabNavigation } from "@/hooks/useTabNavigation";
+import { useMessageCount } from "@/hooks/useMessageCount";
 import AppHeader from "./AppHeader";
 
 const NAV_ITEMS = {
@@ -52,6 +53,7 @@ export default function AppLayout({ userRole, userEmail }) {
   const navigate = useNavigate();
   const { scrollContainerRef, isRootTab } = useTabNavigation();
   const items = NAV_ITEMS[userRole] || NAV_ITEMS.client;
+  const unreadCount = useMessageCount(userEmail);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -109,15 +111,21 @@ export default function AppLayout({ userRole, userEmail }) {
                 <motion.div
                   whileTap={{ scale: 1.18 }}
                   transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
-                  className={`flex flex-col items-center gap-0.5 transition-colors ${
+                  className={`flex flex-col items-center gap-0.5 transition-colors relative ${
                     active ? "text-primary" : "text-muted-foreground"
                   }`}
                 >
                   <motion.div
                     animate={active ? { scale: 1.12 } : { scale: 1 }}
                     transition={{ duration: 0.2, ease: [0.4,0,0.2,1] }}
+                    className="relative"
                   >
                     <Icon className="h-5 w-5" />
+                    {item.label === "Messages" && unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1.5 h-5 w-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
                   </motion.div>
                   <span className={`text-[10px] font-semibold transition-all ${
                     active ? "text-primary" : ""
