@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Plus, Clock, CheckCircle2, Truck, Store } from "lucide-react";
+import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle } from "lucide-react";
+import ChatAdmin from "@/components/ChatAdmin";
 import BannierePublicitaire from "../../components/BannierePublicitaire";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import CourseCard from "../../components/CourseCard";
 export default function ClientHome({ user }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showMessages, setShowMessages] = useState(false);
 
   // Demande géolocalisation à la première connexion
   useEffect(() => {
@@ -118,6 +120,29 @@ export default function ClientHome({ user }) {
             </Link>
           ))}
         </div>
+      )}
+
+      {/* Messages CDL */}
+      <button
+        onClick={() => setShowMessages(!showMessages)}
+        className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
+          showMessages ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
+        }`}
+      >
+        <MessageCircle className={`h-5 w-5 ${showMessages ? "text-primary" : "text-muted-foreground"}`} />
+        <div className="text-left">
+          <p className="font-semibold text-sm">Messages CDL</p>
+          <p className="text-xs text-muted-foreground">Discussion avec l'administration</p>
+        </div>
+      </button>
+
+      {showMessages && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold mb-3">💬 Discussion avec l'Administration CDL</p>
+            <ChatAdmin userEmail={user.email} userRole="client" currentUser={user} />
+          </CardContent>
+        </Card>
       )}
 
       {courses.length === 0 && !loading && (

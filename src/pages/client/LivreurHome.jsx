@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Truck, CheckCircle2, Clock, MapPin } from "lucide-react";
+import { Package, Truck, CheckCircle2, Clock, MapPin, MessageCircle } from "lucide-react";
+import ChatAdmin from "@/components/ChatAdmin";
 import BannierePublicitaire from "../../components/BannierePublicitaire";
 import { toast } from "sonner";
 import SoldeBlock from "../../components/SoldeBlock";
@@ -15,6 +16,7 @@ export default function LivreurHome({ user }) {
   const [courses, setCourses] = useState([]);
   const [disponible, setDisponible] = useState(user.disponible !== false);
   const [loading, setLoading] = useState(true);
+  const [showMessages, setShowMessages] = useState(false);
 
   const reloadCourses = async () => {
     const data = await base44.entities.Course.filter({ livreur_email: user.email }, "-created_date", 10);
@@ -226,6 +228,29 @@ export default function LivreurHome({ user }) {
           <CardContent className="p-3 flex items-center justify-between">
             <p className="text-sm font-medium text-green-700">Commission CDL</p>
             <span className="text-sm font-bold text-green-600">À jour ✅</span>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Messages CDL */}
+      <button
+        onClick={() => setShowMessages(!showMessages)}
+        className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
+          showMessages ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
+        }`}
+      >
+        <MessageCircle className={`h-5 w-5 ${showMessages ? "text-primary" : "text-muted-foreground"}`} />
+        <div className="text-left">
+          <p className="font-semibold text-sm">Messages CDL</p>
+          <p className="text-xs text-muted-foreground">Discussion avec l'administration</p>
+        </div>
+      </button>
+
+      {showMessages && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold mb-3">💬 Discussion avec l'Administration CDL</p>
+            <ChatAdmin userEmail={user.email} userRole="livreur" currentUser={user} />
           </CardContent>
         </Card>
       )}
