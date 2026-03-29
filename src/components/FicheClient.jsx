@@ -23,7 +23,7 @@ const STATUT_COLORS = {
   Bloqué: "bg-red-100 text-red-700",
 };
 
-export default function FicheClient({ client, onClose, onUpdated }) {
+export default function FicheClient({ client, onClose, onUpdated, onDeleted }) {
   const [adminUser, setAdminUser] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
   const [saving, setSaving] = useState(false);
@@ -368,7 +368,10 @@ export default function FicheClient({ client, onClose, onUpdated }) {
               <DeleteUserButton
                 email={client.email}
                 userName={form.nom_complet || "Ce client"}
-                onDeleted={onClose}
+                onDeleted={() => {
+                  onDeleted?.(client.id);
+                  onClose();
+                }}
               />
             </div>}
           </div>

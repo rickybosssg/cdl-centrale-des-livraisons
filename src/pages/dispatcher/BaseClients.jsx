@@ -272,6 +272,9 @@ export default function BaseClients() {
             setClients(prev => prev.map(c => c.id === updated.id ? updated : c));
             setSelectedClient(updated);
           }}
+          onDeleted={(clientId) => {
+            setClients(prev => prev.filter(c => c.id !== clientId));
+          }}
         />
       )}
     </div>
