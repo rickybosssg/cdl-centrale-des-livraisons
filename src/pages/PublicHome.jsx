@@ -59,8 +59,7 @@ export default function PublicHome() {
             </Button>
             <Button
               size="lg"
-              variant="outline"
-              className="w-full h-12 text-base font-semibold border-white text-white hover:bg-white/10"
+              className="w-full h-12 text-base font-semibold bg-white text-primary hover:bg-gray-100"
               onClick={() => setStep("signup")}
             >
               <Plus className="h-5 w-5 mr-2" />
