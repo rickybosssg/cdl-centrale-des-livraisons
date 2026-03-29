@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
+import { useMessageCount } from "@/hooks/useMessageCount";
 import { ArrowLeft, MessageCircle, Search } from "lucide-react";
 import { vibrateNotif, playNotificationSound } from "@/lib/vibration";
 import { useNavigate } from "react-router-dom";
@@ -24,6 +25,7 @@ export default function MessagesAdmin() {
   const [newMsgAlert, setNewMsgAlert] = useState(null);
   const [newMsgEmail, setNewMsgEmail] = useState(null);
   const alertTimeout = useRef(null);
+  const hasUnread = useMessageCount(adminUser?.email, "admin");
 
   useEffect(() => {
     const load = async () => {
@@ -138,8 +140,12 @@ export default function MessagesAdmin() {
         <button onClick={() => { if (selected) setSelected(null); else navigate(-1); }} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-muted">
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <div className="flex items-center gap-2 flex-1">
-          <MessageCircle className="h-5 w-5 text-primary" />
+        <div className={`flex items-center gap-2 flex-1 transition-colors ${
+          hasUnread && !selected ? "text-red-600" : ""
+        }`}>
+          <MessageCircle className={`h-5 w-5 ${
+            hasUnread && !selected ? "text-red-500" : "text-primary"
+          }`} />
           <h1 className="text-xl font-bold">{selected ? selected.email : "Messages"}</h1>
           {!selected && totalUnread > 0 && (
             <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{totalUnread}</span>

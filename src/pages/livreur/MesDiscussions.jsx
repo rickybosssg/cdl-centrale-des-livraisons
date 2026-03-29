@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
+import { useMessageCount } from "@/hooks/useMessageCount";
 import MessageAlert from "@/components/MessageAlert";
 import { MessageCircle } from "lucide-react";
 import ChatLivreur from "@/components/ChatLivreur";
@@ -9,6 +10,7 @@ export default function MesDiscussions() {
   const [user, setUser] = useState(null);
   const [unread, setUnread] = useState(0);
   const newMsg = useMessageNotification(user?.email);
+  const hasUnread = useMessageCount(user?.email, "livreur");
 
   useEffect(() => {
     base44.auth.me().then(async (me) => {
@@ -26,8 +28,12 @@ export default function MesDiscussions() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <MessageCircle className="h-6 w-6 text-primary" />
+      <div className={`flex items-center gap-2 transition-colors ${
+        hasUnread ? "text-red-600" : ""
+      }`}>
+        <MessageCircle className={`h-6 w-6 ${
+          hasUnread ? "text-red-500" : "text-primary"
+        }`} />
         <h1 className="text-xl font-bold">Discussion avec l'Administrateur</h1>
         {unread > 0 && (
           <span className="text-xs bg-red-500 text-white rounded-full px-2 py-0.5 font-bold">{unread}</span>
