@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useMessageCount } from "@/hooks/useMessageCount";
+import { useMessageNotification } from "@/hooks/useMessageNotification";
+import MessageAlert from "@/components/MessageAlert";
 import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
@@ -23,6 +25,7 @@ export default function DispatcherDashboard() {
   }, []);
   
   const hasUnreadMessages = useMessageCount(adminEmail, "admin");
+  const newMsg = useMessageNotification(adminEmail);
 
   const syncNotifications = async () => {
     setSyncingNotifs(true);
@@ -106,6 +109,8 @@ export default function DispatcherDashboard() {
 
   return (
     <div className="space-y-6">
+      <MessageAlert newMsg={newMsg} />
+      {newMsg && <div className="h-24" />}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Tableau de bord CDL</h1>
