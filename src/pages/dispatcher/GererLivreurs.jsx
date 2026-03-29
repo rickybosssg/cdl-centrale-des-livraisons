@@ -95,6 +95,8 @@ export default function GererLivreurs() {
 
   useEffect(() => {
     loadData();
+    // Rafraîchissement automatique toutes les 30 secondes
+    const interval = setInterval(loadData, 30000);
     const unsubUser = base44.entities.User.subscribe((event) => {
       if (event.type === 'update') {
         // Toujours mettre à jour si le livreur est déjà dans la liste
@@ -112,7 +114,7 @@ export default function GererLivreurs() {
         setLivreurs(prev => prev.filter(l => l.id !== event.id));
       }
     });
-    return unsubUser;
+    return () => { unsubUser(); clearInterval(interval); };
   }, []);
 
   const valider = async (livreur) => {
