@@ -22,6 +22,7 @@ const SORT_OPTIONS = [
   { value: "nombre_total_courses", label: "Nb courses" },
   { value: "total_depense", label: "Total dépensé" },
   { value: "date_inscription", label: "Date inscription" },
+  { value: "date_inscription", label: "Plus récent" },
 ];
 
 export default function BaseClients() {
@@ -35,8 +36,37 @@ export default function BaseClients() {
 
   const loadClients = async () => {
     setLoading(true);
-    const data = await base44.entities.Client.list("-date_derniere_course", 500);
-    setClients(data);
+    const [clientsEntity, usersClients] = await Promise.all([
+      base44.entities.Client.list("-date_derniere_course", 500),
+      base44.entities.User.filter({ user_type: "client" }),
+    ]);
+    // Combiner et dédupliquer par email
+    const emailSet = new Set();
+    const combined = [];
+    clientsEntity.forEach(c => {
+      if (!emailSet.has(c.email)) {
+        emailSet.add(c.email);
+        combined.push(c);
+      }
+    });
+    usersClients.forEach(u => {
+      if (!emailSet.has(u.email)) {
+        emailSet.add(u.email);
+        combined.push({
+          id: u.id,
+          nom_complet: u.full_name,
+          numero_telephone: u.telephone,
+          email: u.email,
+          quartier_principal: u.quartier,
+          statut_client: "Actif",
+          nombre_total_courses: 0,
+          total_depense: 0,
+          date_inscription: u.created_date,
+          date_derniere_course: null,
+        });
+      }
+    });
+    setClients(combined.sort((a, b) => new Date(b.date_derniere_course || b.date_inscription || 0) - new Date(a.date_derniere_course || a.date_inscription || 0)));
     setLoading(false);
   };
 
