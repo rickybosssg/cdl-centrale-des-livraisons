@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { X, Phone, MapPin, Calendar, Save, Ban, UserCheck, MessageCircle } from "lucide-react";
+import { X, Phone, MapPin, Calendar, Save, Ban, UserCheck, MessageCircle, UserPlus, Zap } from "lucide-react";
 import ChatAdmin from "./ChatAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,6 +110,7 @@ export default function FicheClient({ client, onClose, onUpdated }) {
               { val: "courses", label: `Courses (${courses.length})` },
               { val: "relance", label: "Relance" },
               { val: "messages", label: "💬 Chat" },
+              { val: "conversion", label: "Conversion" },
               { val: "admin", label: "Admin" },
             ].map(t => (
               <button
@@ -255,6 +256,60 @@ export default function FicheClient({ client, onClose, onUpdated }) {
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-6">Email client non disponible</p>
               )}
+            </div>}
+
+            {/* Onglet Conversion Rôle */}
+            {activeTab === "conversion" && <div className="space-y-3 mt-3">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-sm font-semibold text-blue-700 mb-1">🔄 Convertir en professionnel</p>
+                <p className="text-xs text-blue-600">Transformer ce client en livreur, partenaire ou commercial</p>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { role: "livreur", label: "🛵 Livreur", desc: "Peut recevoir des courses" },
+                  { role: "partenaire", label: "🏪 Partenaire", desc: "Peut vendre des produits" },
+                  { role: "commercial", label: "📣 Commercial", desc: "Peut promouvoir CDL" },
+                ].map(opt => (
+                  <Button
+                    key={opt.role}
+                    variant="outline"
+                    className="w-full justify-start h-auto py-3"
+                    onClick={async () => {
+                      setSaving(true);
+                      try {
+                        await base44.entities.User.filter({ email: client.email }).then(async (users) => {
+                          if (users.length === 0) {
+                            toast.error("Utilisateur non trouvé en User");
+                            return;
+                          }
+                          const user = users[0];
+                          const newRoles = [opt.role];
+                          await base44.auth.updateMe({
+                            user_type: opt.role,
+                            user_roles: JSON.stringify(newRoles),
+                            statut_validation_livreur: opt.role === "livreur" ? "en_attente" : undefined,
+                            statut_validation_partenaire: opt.role === "partenaire" ? "en_attente" : undefined,
+                            statut_validation_commercial: opt.role === "commercial" ? "en_attente" : undefined,
+                            profil_valide: false,
+                          });
+                          toast.success(`Client converti en ${opt.label} - En attente de validation`);
+                          setActiveTab("admin");
+                        });
+                      } catch (err) {
+                        toast.error("Erreur lors de la conversion");
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    disabled={saving}
+                  >
+                    <div className="text-left">
+                      <p className="font-medium text-sm">{opt.label}</p>
+                      <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                    </div>
+                  </Button>
+                ))}
+              </div>
             </div>}
 
             {/* Onglet Admin */}
