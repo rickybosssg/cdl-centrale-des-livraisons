@@ -31,7 +31,7 @@ export default function SuiviCommissions() {
   const loadData = async () => {
     const [livreursData, coursesData, paiementsData, me] = await Promise.all([
       base44.entities.User.filter({ user_type: "livreur" }),
-      base44.entities.Course.filter({ statut: "livree" }),
+      base44.entities.Course.filter({ $or: [{ statut: "livree" }, { moyen_transport: { $exists: true } }] }),
       base44.entities.PaiementCommission.list("-created_date", 200),
       base44.auth.me(),
     ]);
@@ -236,8 +236,9 @@ export default function SuiviCommissions() {
                     <StatutBadge statut={getStatut(livreur)} />
                   </div>
                   <p className="text-xs text-muted-foreground">{livreur.telephone} • {livreur.quartier}</p>
-                  <div className="flex gap-3 mt-2 text-xs">
+                  <div className="flex gap-3 mt-2 text-xs flex-wrap">
                     <span className="text-muted-foreground">Livrées: <strong>{livreur.total_courses_livrees || 0}</strong></span>
+                    <span className="text-muted-foreground">Trajets: <strong>{courses.filter(c => c.livreur_email === livreur.email && c.moyen_transport).length}</strong></span>
                     <span className="text-muted-foreground">Généré: <strong>{Math.round(livreur.total_commissions_generees || 0).toLocaleString()} F</strong></span>
                   </div>
                   {getSolde(livreur) > 0 && (
