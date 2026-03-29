@@ -39,14 +39,26 @@ export default function ChatLivreur({ livreurEmail, currentUser }) {
   const sendMessage = async () => {
     if (!newMsg.trim()) return;
     setSending(true);
+    const isAdmin = currentUser?.role === "admin";
     await base44.entities.MessageAdmin.create({
       livreur_email: livreurEmail,
       sender_email: currentUser?.email,
-      sender_role: currentUser?.role === "admin" ? "admin" : "livreur",
+      sender_role: isAdmin ? "admin" : "livreur",
       contenu: newMsg.trim(),
-      lu_admin: currentUser?.role === "admin",
-      lu_livreur: currentUser?.role !== "admin",
+      lu_admin: isAdmin,
+      lu_livreur: !isAdmin,
     });
+    // Si c'est l'admin qui envoie → notifier le livreur
+    if (isAdmin) {
+      await base44.entities.Notification.create({
+        destinataire_email: livreurEmail,
+        destinataire_role: "livreur",
+        titre: "📩 Nouveau message de l'Administrateur",
+        message: newMsg.trim(),
+        type: "info",
+        lue: false,
+      });
+    }
     setNewMsg("");
     setSending(false);
   };
