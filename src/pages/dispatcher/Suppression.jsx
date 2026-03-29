@@ -28,9 +28,9 @@ export default function Suppression() {
     let data = [];
     
     if (profile === "livreur" || profile === "partenaire" || profile === "commercial") {
-      data = await base44.asServiceRole.entities.User.filter({ user_type: profile }, "-created_date", 500);
+      data = await base44.entities.User.filter({ user_type: profile }, "-created_date", 500);
     } else if (profile === "client") {
-      data = await base44.asServiceRole.entities.Client.filter({}, "-created_date", 500);
+      data = await base44.entities.Client.filter({}, "-created_date", 500);
     }
     
     setMembers(data);
@@ -50,19 +50,20 @@ export default function Suppression() {
       
       // Supprimer l'entité spécifique
       if (selectedProfile === "client") {
-        await base44.asServiceRole.entities.Client.delete(member.id);
+        await base44.entities.Client.delete(member.id);
       } else if (selectedProfile === "partenaire") {
-        await base44.asServiceRole.entities.Partenaire.filter({ user_email: email }).then(async (partners) => {
-          for (const partner of partners) {
-            await base44.asServiceRole.entities.Partenaire.delete(partner.id);
-          }
-        });
+        const partners = await base44.entities.Partenaire.filter({ user_email: email });
+        for (const partner of partners) {
+          await base44.entities.Partenaire.delete(partner.id);
+        }
       }
       
-      // Supprimer l'utilisateur User
-      const users = await base44.asServiceRole.entities.User.filter({ email });
-      if (users.length > 0) {
-        await base44.asServiceRole.entities.User.delete(users[0].id);
+      // Supprimer l'utilisateur User (sauf pour client où on a juste supprimé l'entité)
+      if (selectedProfile !== "client") {
+        const users = await base44.entities.User.filter({ email });
+        if (users.length > 0) {
+          await base44.entities.User.delete(users[0].id);
+        }
       }
       
       toast.success(`${member.nom_complet || member.full_name || email} a été supprimé`);
