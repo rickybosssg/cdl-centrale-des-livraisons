@@ -193,7 +193,7 @@ export default function GererCourses() {
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-xl font-bold">Gérer les Courses et Trajet</h1>
+          <h1 className="text-xl font-bold">Gérer les Courses Trajets</h1>
         </div>
         <Button variant="outline" size="sm" onClick={loadData}>
           <RefreshCw className="h-4 w-4" />

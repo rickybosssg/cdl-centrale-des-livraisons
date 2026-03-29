@@ -265,7 +265,7 @@ export default function DispatcherDashboard() {
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 text-center space-y-2">
               <Package className="h-8 w-8 text-primary mx-auto" />
-              <p className="text-sm font-medium">Courses-Trajet</p>
+              <p className="text-sm font-medium">Courses Trajets</p>
             </CardContent>
           </Card>
         </Link>

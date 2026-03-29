@@ -25,7 +25,7 @@ const NAV_ITEMS = {
   ],
   dispatcher: [
     { path: "/", icon: Home, label: "Accueil" },
-    { path: "/gerer-courses", icon: Package, label: "Courses-Trajet" },
+    { path: "/gerer-courses", icon: Package, label: "Courses Trajets" },
     { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
     { path: "/gerer-partenaires", icon: Store, label: "Partenaires" },
     { path: "/messages-admin", icon: MessageCircle, label: "Messages" },
