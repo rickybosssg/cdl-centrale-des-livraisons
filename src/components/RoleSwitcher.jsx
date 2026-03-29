@@ -81,12 +81,12 @@ export default function RoleSwitcher({ user, roles, currentRole, onSwitch, onRol
             </SheetContent>
             </Sheet>
             {showAdd && (
-            <AddRoleModal
-            user={user}
-            onClose={() => setShowAdd(false)}
-            onRoleAdded={onRoleAdded}
-            />
+              <AddRoleModal
+                user={user}
+                existingRoles={roles}
+                onClose={() => setShowAdd(false)}
+                onAdded={onRoleAdded}
+              />
             )}
-            </>
             );
 }
