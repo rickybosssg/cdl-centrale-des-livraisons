@@ -18,12 +18,12 @@ export default function ResetAdmin() {
       await base44.functions.invoke('resetAdminRole', {});
       toast.success("Rôle administrateur rétabli !");
       setTimeout(() => {
-        window.location.reload();
-      }, 500);
+        window.location.href = '/';
+      }, 800);
     } catch (err) {
       toast.error("Erreur: " + err.message);
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
