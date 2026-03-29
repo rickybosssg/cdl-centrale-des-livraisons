@@ -40,7 +40,7 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
 
     const currentRoles = user.user_roles ? JSON.parse(user.user_roles) : [user.user_type];
     const newRoles = [...new Set([...currentRoles, selected])];
-    const updates = { user_roles: JSON.stringify(newRoles) };
+    const updates = { user_roles: JSON.stringify(newRoles), user_type: selected };
 
     if (selected === "livreur") {
       // Upload des documents
@@ -56,16 +56,18 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
       updates.statut_validation_livreur = "en_attente";
       updates.disponible = false;
       updates.total_courses = 0;
-      if (form.telephone) updates.telephone = form.telephone;
-      if (form.quartier) updates.quartier = form.quartier;
+      updates.moyen_deplacement = JSON.stringify(["moto"]);
+      updates.telephone = form.telephone || user?.telephone;
+      updates.quartier = form.quartier || user?.quartier;
     }
 
     if (selected === "client") {
-      updates.client_inscrit = true;
+      updates.telephone = form.telephone || user?.telephone;
+      updates.quartier = form.quartier || user?.quartier;
       try {
         await base44.functions.invoke('createClientOnSignup', {
-          telephone: form.telephone,
-          quartier: form.quartier,
+          telephone: updates.telephone,
+          quartier: updates.quartier,
         });
       } catch (_) {}
     }
