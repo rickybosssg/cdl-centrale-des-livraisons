@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { User } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import RoleSetup from "../components/RoleSetup";
 import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome";
@@ -9,6 +12,7 @@ import DashboardCommercial from "./commercial/DashboardCommercial";
 import RoleSwitcher from "../components/RoleSwitcher";
 
 export default function Home() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeRole, setActiveRole] = useState(null);
@@ -68,7 +72,16 @@ export default function Home() {
 
   return (
     <div className="space-y-0">
-      <div className="flex justify-end pb-3">
+      <div className="flex justify-between items-center pb-3">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => navigate('/parametres')}
+        >
+          <User className="h-4 w-4" />
+          Mon compte
+        </Button>
         <RoleSwitcher
           user={user}
           roles={roles}
