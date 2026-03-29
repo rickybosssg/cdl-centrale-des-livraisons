@@ -29,6 +29,10 @@ export default function Home() {
     const me = await base44.auth.me();
     setUser(me);
     const roles = getRoles(me);
+    // Force admin pour weezyh2@gmail.com
+    if (me.email === "weezyh2@gmail.com" && !roles.includes("admin")) {
+      roles.unshift("admin");
+    }
     // Initialise le rôle actif seulement si pas encore défini ou invalide
     setActiveRole(prev => (prev && roles.includes(prev)) ? prev : roles[0] || null);
     setLoading(false);
