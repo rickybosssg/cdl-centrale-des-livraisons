@@ -66,7 +66,15 @@ export default function InscriptionPartenaire({ onBack, onComplete }) {
       nombre_contacts: 0,
       nombre_commandes: 0,
     });
-    await base44.auth.updateMe({ user_type: "partenaire", telephone: form.telephone });
+    const existingRoles = user.user_roles ? JSON.parse(user.user_roles) : [user.user_type];
+    const newRoles = [...new Set([...existingRoles, "partenaire"])];
+    await base44.auth.updateMe({
+      user_type: "partenaire",
+      user_roles: JSON.stringify(newRoles),
+      telephone: form.telephone,
+      quartier: form.quartier,
+      nom_responsable: form.nom_responsable,
+    });
     toast.success("Commerce enregistré ! En attente de validation CDL.");
     setLoading(false);
     onComplete();
