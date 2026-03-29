@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, MessageCircle, Search } from "lucide-react";
+import { vibrateNotif, playNotificationSound } from "@/lib/vibration";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import ChatAdmin from "@/components/ChatAdmin";
@@ -20,6 +21,8 @@ export default function MessagesAdmin() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
+  const [newMsgAlert, setNewMsgAlert] = useState(null);
+  const alertTimeout = useRef(null);
 
   useEffect(() => {
     const load = async () => {
@@ -62,6 +65,18 @@ export default function MessagesAdmin() {
 
     const unsub = base44.entities.MessageAdmin.subscribe((event) => {
       if (event.type === "create") {
+        // Alerte si c'est un message entrant (pas de l'admin)
+        if (event.data?.sender_role !== "admin") {
+          playNotificationSound();
+          vibrateNotif();
+          setNewMsgAlert({
+            email: event.data.livreur_email,
+            role: event.data.sender_role,
+            contenu: event.data.contenu,
+          });
+          if (alertTimeout.current) clearTimeout(alertTimeout.current);
+          alertTimeout.current = setTimeout(() => setNewMsgAlert(null), 5000);
+        }
         setConversations(prev => {
           const email = event.data.livreur_email;
           const exists = prev.find(c => c.email === email);
@@ -75,7 +90,7 @@ export default function MessagesAdmin() {
         });
       }
     });
-    return unsub;
+    return () => { unsub(); if (alertTimeout.current) clearTimeout(alertTimeout.current); };
   }, []);
 
   const filtered = conversations.filter(c =>
@@ -92,6 +107,19 @@ export default function MessagesAdmin() {
 
   return (
     <div className="space-y-4">
+      {/* Alerte nouveau message entrant */}
+      {newMsgAlert && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-3 bg-primary text-white px-4 py-3 rounded-2xl shadow-2xl border border-white/20 max-w-xs">
+            <MessageCircle className="h-5 w-5 flex-shrink-0 animate-pulse" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold">{ROLE_LABELS[newMsgAlert.role] || "Utilisateur"}</p>
+              <p className="text-xs opacity-90 truncate">{newMsgAlert.contenu}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <button onClick={() => { if (selected) setSelected(null); else navigate(-1); }} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-muted">
           <ArrowLeft className="h-5 w-5" />
