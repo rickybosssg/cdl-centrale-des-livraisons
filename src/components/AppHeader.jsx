@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LogOut } from "lucide-react";
+import { ArrowLeft, LogOut, Settings } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 import { base44 } from "@/api/base44Client";
 import { useMessageCount } from "@/hooks/useMessageCount";
@@ -48,6 +48,14 @@ export default function AppHeader({ userRole, userEmail }) {
           }`}>
             {userRole === 'dispatcher' ? 'Administrateur' : userRole}
           </span>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
+            className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
+            onClick={() => navigate('/parametres')}
+          >
+            <Settings className="h-4 w-4" />
+          </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
