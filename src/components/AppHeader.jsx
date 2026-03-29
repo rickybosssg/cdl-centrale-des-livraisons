@@ -6,7 +6,7 @@ import { useMessageCount } from "@/hooks/useMessageCount";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
-const ROOT_PATHS = ['/', '/courses-disponibles', '/mes-livraisons', '/vitrines', '/dashboard-partenaire', '/gerer-courses', '/gerer-livreurs', '/statistiques', '/suivi-commissions', '/validation-livreurs', '/parametres', '/mes-gains', '/base-clients', '/gerer-partenaires', '/gerer-publicites', '/gerer-commerciaux', '/commandes-partenaire'];
+const ROOT_PATHS = ['/', '/courses-disponibles', '/mes-livraisons', '/vitrines', '/dashboard-partenaire', '/gerer-courses', '/gerer-livreurs', '/statistiques', '/suivi-commissions', '/validation-livreurs', '/parametres', '/mes-gains', '/mes-messages', '/messages-admin', '/base-clients', '/gerer-partenaires', '/gerer-publicites', '/gerer-commerciaux', '/commandes-partenaire'];
 
 export default function AppHeader({ userRole, userEmail }) {
   const navigate = useNavigate();
