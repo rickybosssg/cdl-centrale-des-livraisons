@@ -72,7 +72,7 @@ export default function Home() {
 
   return (
     <div className="space-y-0">
-      <div className="flex justify-between items-center pb-3">
+      <div className="flex justify-between items-center pb-3 px-4 pt-4">
         <Button
           variant="outline"
           size="sm"
