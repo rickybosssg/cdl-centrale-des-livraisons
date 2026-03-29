@@ -90,8 +90,6 @@ export default function DispatcherDashboard() {
   const enAttente = courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport);
   const enCours = courses.filter(c => ["assignee_attente", "acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport);
   const terminees = courses.filter(c => c.statut === "livree" && !c.moyen_transport);
-  const totalCourses = courses.filter(c => !c.moyen_transport).length;
-  const totalTrajets = courses.filter(c => c.moyen_transport).length;
   const livreursActifs = livreurs.filter(l => l.disponible);
   const livreursValides = livreurs.filter(l => l.statut_validation_livreur === "valide");
   const livreursEnAttente = livreurs.filter(l => !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente");
@@ -211,32 +209,6 @@ export default function DispatcherDashboard() {
               <div>
                 <p className="text-2xl font-bold">{Math.round(totalCommissionsJour).toLocaleString()}</p>
                 <p className="text-xs text-muted-foreground">Commissions du jour</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Package className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{totalCourses}</p>
-                <p className="text-xs text-muted-foreground">Total courses</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                <Truck className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{totalTrajets}</p>
-                <p className="text-xs text-muted-foreground">Total trajets</p>
               </div>
             </div>
           </CardContent>
