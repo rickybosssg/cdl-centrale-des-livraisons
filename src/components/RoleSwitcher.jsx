@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { User, Truck, Store, Megaphone, ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import AddRoleModal from "./AddRoleModal";
 
 const ROLE_CONFIG = {
@@ -37,6 +37,7 @@ export default function RoleSwitcher({ user, roles, currentRole, onSwitch, onRol
         <SheetContent side="bottom" className="rounded-t-2xl pb-8">
           <SheetHeader className="pb-4">
             <SheetTitle>Changer de profil</SheetTitle>
+            <SheetDescription>Basculez entre vos profils ou ajoutez-en un nouveau.</SheetDescription>
           </SheetHeader>
           <div className="space-y-2">
             {roles.map((role) => {

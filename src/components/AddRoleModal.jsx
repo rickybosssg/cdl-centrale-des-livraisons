@@ -27,11 +27,8 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
     const currentRoles = user.user_roles ? JSON.parse(user.user_roles) : [user.user_type];
     const newRoles = [...new Set([...currentRoles, selected])];
 
-    const updates = {
-      user_roles: JSON.stringify(newRoles),
-    };
+    const updates = { user_roles: JSON.stringify(newRoles) };
 
-    // Mise à jour spécifique selon le rôle ajouté
     if (selected === "client") {
       updates.client_inscrit = true;
       try {
@@ -44,7 +41,7 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
     if (selected === "livreur") {
       updates.statut_validation_livreur = "en_attente";
       updates.disponible = false;
-      updates.total_courses = updates.total_courses || 0;
+      updates.total_courses = 0;
     }
     if (selected === "commercial") {
       updates.statut_validation_commercial = "en_attente";

@@ -25,7 +25,8 @@ export default function Home() {
     const me = await base44.auth.me();
     setUser(me);
     const roles = getRoles(me);
-    if (!activeRole && roles.length > 0) setActiveRole(roles[0]);
+    // Initialise le rôle actif seulement si pas encore défini ou invalide
+    setActiveRole(prev => (prev && roles.includes(prev)) ? prev : roles[0] || null);
     setLoading(false);
   };
 
