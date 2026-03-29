@@ -27,7 +27,7 @@ const NAV_ITEMS = {
     { path: "/", icon: Home, label: "Accueil" },
     { path: "/gerer-courses", icon: Package, label: "Courses" },
     { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
-    { path: "/gerer-partenaires", icon: Store, label: "Partenaires" },
+    { path: "/inviter-admin", icon: Users, label: "Admins" },
     { path: "/messages-admin", icon: MessageCircle, label: "Messages" },
   ],
   commercial: [
