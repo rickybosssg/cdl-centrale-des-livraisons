@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useMessageNotification } from "@/hooks/useMessageNotification";
+import MessageAlert from "@/components/MessageAlert";
 import { ArrowLeft, CheckCircle2, XCircle, Users, Tag, Wallet, Eye } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,7 @@ export default function GererCommerciaux() {
   useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
   const [showCommissionsDues, setShowCommissionsDues] = useState(false);
   const [paiementEnCours, setPaiementEnCours] = useState({});
+  const newMsg = useMessageNotification(selected?.email);
 
   const loadData = async () => {
     const [usersData, codesData] = await Promise.all([
@@ -131,6 +134,8 @@ export default function GererCommerciaux() {
 
   return (
     <div className="space-y-4">
+      <MessageAlert newMsg={newMsg} />
+      {newMsg && <div className="h-24" />}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />

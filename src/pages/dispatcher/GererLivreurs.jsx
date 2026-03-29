@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useMessageNotification } from "@/hooks/useMessageNotification";
+import MessageAlert from "@/components/MessageAlert";
 import { ArrowLeft, MapPin, Phone, Shield, ShieldOff, CheckCircle2, XCircle, CreditCard, History, Lock, Unlock, Eye, Star, Trash2, MessageCircle } from "lucide-react";
 import ChatLivreur from "@/components/ChatLivreur";
 import { Button } from "@/components/ui/button";
@@ -69,6 +71,7 @@ export default function GererLivreurs() {
   const [coursesLivreur, setCoursesLivreur] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [activeTab, setActiveTab] = useState("profil");
+  const newMsg = useMessageNotification(selectedLivreur?.email);
 
   const loadData = async () => {
     const [livreursPurs, livreursAttente, livreursValides, livreursRefuses, paiementsData, me] = await Promise.all([
@@ -240,6 +243,8 @@ export default function GererLivreurs() {
 
   return (
     <div className="space-y-4">
+      <MessageAlert newMsg={newMsg} />
+      {newMsg && <div className="h-24" />}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />

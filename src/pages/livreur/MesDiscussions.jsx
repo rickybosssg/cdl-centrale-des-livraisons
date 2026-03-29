@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { useMessageNotification } from "@/hooks/useMessageNotification";
+import MessageAlert from "@/components/MessageAlert";
 import { MessageCircle } from "lucide-react";
 import ChatLivreur from "@/components/ChatLivreur";
 
 export default function MesDiscussions() {
   const [user, setUser] = useState(null);
   const [unread, setUnread] = useState(0);
+  const newMsg = useMessageNotification(user?.email);
 
   useEffect(() => {
     base44.auth.me().then(async (me) => {

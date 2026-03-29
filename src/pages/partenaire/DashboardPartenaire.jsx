@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useMessageNotification } from "@/hooks/useMessageNotification";
+import MessageAlert from "@/components/MessageAlert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +25,7 @@ export default function DashboardPartenaire({ user }) {
   const [savingProduit, setSavingProduit] = useState(false);
   const [visiteurs, setVisiteurs] = useState([]);
   const [showMessages, setShowMessages] = useState(false);
+  const newMsg = useMessageNotification(user.email);
 
   useEffect(() => {
     const load = async () => {
@@ -116,6 +119,8 @@ export default function DashboardPartenaire({ user }) {
 
   return (
     <div className="space-y-4">
+      <MessageAlert newMsg={newMsg} />
+      {newMsg && <div className="h-24" />}
       {/* Bouton commandes */}
       <button
         onClick={() => navigate('/commandes-partenaire')}

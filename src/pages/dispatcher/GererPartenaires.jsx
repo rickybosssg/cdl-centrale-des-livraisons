@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
+import { useMessageNotification } from "@/hooks/useMessageNotification";
+import MessageAlert from "@/components/MessageAlert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +32,7 @@ export default function GererPartenaires() {
   const [savingId, setSavingId] = useState(null);
   const [adminUser, setAdminUser] = useState(null);
   const [ficheTab, setFicheTab] = useState("infos");
+  const newMsg = useMessageNotification(selected?.user_email);
 
   useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
 
@@ -81,6 +84,8 @@ export default function GererPartenaires() {
 
   return (
     <div className="space-y-4">
+      <MessageAlert newMsg={newMsg} />
+      {newMsg && <div className="h-24" />}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="text-xl font-bold flex-1">Partenaires</h1>
