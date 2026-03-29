@@ -52,6 +52,9 @@ export default function DispatcherDashboard() {
     };
     load();
 
+    // Rafraîchissement automatique toutes les 30 secondes
+    const interval = setInterval(load, 30000);
+
     const unsubCourse = base44.entities.Course.subscribe((event) => {
       if (event.type === 'create') setCourses(prev => [event.data, ...prev]);
       else if (event.type === 'update') setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
@@ -68,7 +71,7 @@ export default function DispatcherDashboard() {
       });
       else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
     });
-    return () => { unsubCourse(); unsubUser(); };
+    return () => { unsubCourse(); unsubUser(); clearInterval(interval); };
   }, []);
 
   const today = new Date().toDateString();
