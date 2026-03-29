@@ -159,20 +159,21 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
               </div>
             )}
 
-            {(selected === "client" || selected === "livreur") && !user?.telephone && (
+            {(selected === "client" || selected === "livreur") && (
               <div className="space-y-2">
-                <Label>Téléphone *</Label>
+                <Label>Téléphone</Label>
                 <Input
                   placeholder="+226 XX XX XX XX"
                   value={form.telephone}
                   onChange={e => setForm({ ...form, telephone: e.target.value })}
+                  defaultValue={user?.telephone || ""}
                 />
               </div>
             )}
 
-            {(selected === "client" || selected === "livreur") && !user?.quartier && (
+            {(selected === "client" || selected === "livreur") && (
               <div className="space-y-2">
-                <Label>Quartier *</Label>
+                <Label>Quartier</Label>
                 <QuartierSelect
                   value={form.quartier}
                   onValueChange={v => setForm({ ...form, quartier: v })}

@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 
 import StatusBadge from "./StatusBadge";
+import DeleteUserButton from "./DeleteUserButton";
 import moment from "moment";
 import { toast } from "sonner";
 
@@ -364,6 +365,12 @@ export default function FicheClient({ client, onClose, onUpdated }) {
                   <Save className="h-4 w-4 mr-1" />{saving ? "..." : "Sauvegarder"}
                 </Button>
               </div>
+
+              <DeleteUserButton
+                email={client.email}
+                userName={form.nom_complet || "Ce client"}
+                onDeleted={onClose}
+              />
             </div>}
           </div>
         </div>
