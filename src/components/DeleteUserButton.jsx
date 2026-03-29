@@ -12,13 +12,13 @@ export default function DeleteUserButton({ email, userName, onDeleted }) {
     setDeleting(true);
     try {
       // Supprimer l'entité Client si elle existe
-      const clients = await base44.entities.Client.filter({ email });
+      const clients = await base44.asServiceRole.entities.Client.filter({ email });
       if (clients.length > 0) {
         await base44.asServiceRole.entities.Client.delete(clients[0].id);
       }
       
       // Supprimer l'utilisateur User
-      const users = await base44.entities.User.filter({ email });
+      const users = await base44.asServiceRole.entities.User.filter({ email });
       if (users.length > 0) {
         await base44.asServiceRole.entities.User.delete(users[0].id);
         toast.success(`${userName} a été supprimé`);
