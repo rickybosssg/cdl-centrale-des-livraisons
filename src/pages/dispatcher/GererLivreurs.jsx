@@ -69,12 +69,17 @@ export default function GererLivreurs() {
   const [loadingCourses, setLoadingCourses] = useState(false);
 
   const loadData = async () => {
-    const [livreursData, paiementsData, me] = await Promise.all([
+    const [livreursPurs, livreursAttente, livreursValides, livreursRefuses, paiementsData, me] = await Promise.all([
       base44.entities.User.filter({ user_type: "livreur" }),
+      base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
+      base44.entities.User.filter({ statut_validation_livreur: "valide" }),
+      base44.entities.User.filter({ statut_validation_livreur: "refuse" }),
       base44.entities.PaiementCommission.list("-created_date", 200),
       base44.auth.me(),
     ]);
-    setLivreurs(livreursData);
+    const map = new Map();
+    [...livreursPurs, ...livreursAttente, ...livreursValides, ...livreursRefuses].forEach(u => map.set(u.id, u));
+    setLivreurs(Array.from(map.values()));
     setPaiements(paiementsData);
     setAdmin(me);
     setLoading(false);
@@ -83,9 +88,14 @@ export default function GererLivreurs() {
   useEffect(() => {
     loadData();
     const unsubUser = base44.entities.User.subscribe((event) => {
-      if (event.data?.user_type !== 'livreur') return;
+      const isLivreur = event.data?.user_type === 'livreur' || event.data?.statut_validation_livreur;
+      if (!isLivreur) return;
       if (event.type === 'create') setLivreurs(prev => [...prev, event.data]);
-      else if (event.type === 'update') setLivreurs(prev => prev.map(l => l.id === event.id ? event.data : l));
+      else if (event.type === 'update') setLivreurs(prev => {
+        const exists = prev.find(l => l.id === event.id);
+        if (exists) return prev.map(l => l.id === event.id ? event.data : l);
+        return [...prev, event.data];
+      });
       else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
     });
     return unsubUser;
