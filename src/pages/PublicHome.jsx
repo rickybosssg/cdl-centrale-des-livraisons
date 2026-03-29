@@ -8,9 +8,12 @@ import RoleSetup from "@/components/RoleSetup";
 import { toast } from "sonner";
 
 export default function PublicHome() {
-  const [step, setStep] = useState("choice"); // "choice", "login", "signup"
+  const [step, setStep] = useState("choice"); // "choice", "login", "signup", "signup_basic"
   const [loginEmail, setLoginEmail] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+  const [signupForm, setSignupForm] = useState({ nom_complet: "", email: "", telephone: "" });
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [userCreated, setUserCreated] = useState(false);
 
   const handleLogin = async () => {
     if (!loginEmail.trim()) {
@@ -123,8 +126,87 @@ export default function PublicHome() {
     );
   }
 
-  // Inscription
-  if (step === "signup") {
+  // Inscription - Étape 1 : Infos de base
+  if (step === "signup" && !userCreated) {
+    const handleSignupBasic = async () => {
+      if (!signupForm.nom_complet.trim() || !signupForm.email.trim() || !signupForm.telephone.trim()) {
+        toast.error("Veuillez remplir tous les champs");
+        return;
+      }
+      setSignupLoading(true);
+      try {
+        await base44.auth.updateMe({
+          full_name: signupForm.nom_complet,
+          telephone: signupForm.telephone,
+        });
+        toast.success("Compte créé! Choisissez votre profil.");
+        setUserCreated(true);
+      } catch (err) {
+        toast.error("Erreur: " + (err.message || err));
+      } finally {
+        setSignupLoading(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-sm space-y-6">
+          <button
+            onClick={() => setStep("choice")}
+            className="text-sm text-primary hover:underline flex items-center gap-1"
+          >
+            ← Retour
+          </button>
+
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-bold">Créer un compte</h2>
+            <p className="text-sm text-muted-foreground">Étape 1 : Informations de base</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Nom complet *</label>
+              <Input
+                placeholder="Votre nom"
+                value={signupForm.nom_complet}
+                onChange={(e) => setSignupForm({ ...signupForm, nom_complet: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email *</label>
+              <Input
+                type="email"
+                placeholder="votre.email@gmail.com"
+                value={signupForm.email}
+                onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Téléphone *</label>
+              <Input
+                placeholder="+226 XX XX XX XX"
+                value={signupForm.telephone}
+                onChange={(e) => setSignupForm({ ...signupForm, telephone: e.target.value })}
+              />
+            </div>
+
+            <Button
+              className="w-full h-11 text-base font-semibold"
+              onClick={handleSignupBasic}
+              disabled={signupLoading}
+            >
+              {signupLoading ? "Création..." : "Continuer →"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Inscription - Étape 2 : Choix du profil et infos spécifiques
+  if (step === "signup" && userCreated) {
     return (
       <RoleSetup
         onComplete={() => window.location.reload()}
