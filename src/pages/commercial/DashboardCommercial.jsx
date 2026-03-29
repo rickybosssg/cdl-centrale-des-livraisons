@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle } from "lucide-react";
+import ChatAdmin from "@/components/ChatAdmin";
 import { toast } from "sonner";
 
 export default function DashboardCommercial({ user }) {
@@ -12,6 +13,7 @@ export default function DashboardCommercial({ user }) {
   const [loading, setLoading] = useState(true);
   const [newCode, setNewCode] = useState("");
   const [creating, setCreating] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
 
   useEffect(() => {
     loadCode();
@@ -70,10 +72,30 @@ export default function DashboardCommercial({ user }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold">Mon espace commercial</h1>
-        <p className="text-sm text-muted-foreground">Bienvenue, {user.full_name}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Mon espace commercial</h1>
+          <p className="text-sm text-muted-foreground">Bienvenue, {user.full_name}</p>
+        </div>
+        <button
+          onClick={() => setShowMessages(!showMessages)}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+            showMessages ? "bg-primary text-white border-primary" : "bg-card border-border"
+          }`}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Messages
+        </button>
       </div>
+
+      {showMessages && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold mb-3">💬 Discussion avec l'Administration</p>
+            <ChatAdmin userEmail={user.email} userRole="commercial" currentUser={user} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Profil en attente de validation */}
       {!user.profil_valide && (

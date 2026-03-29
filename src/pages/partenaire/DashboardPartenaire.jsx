@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, ShoppingBag, TrendingUp, Plus, ToggleLeft, ToggleRight, Trash2, Upload, Clock, Bell } from "lucide-react";
+import { Eye, ShoppingBag, TrendingUp, Plus, ToggleLeft, ToggleRight, Trash2, Upload, Clock, Bell, MessageCircle } from "lucide-react";
+import ChatAdmin from "@/components/ChatAdmin";
 import { toast } from "sonner";
 import { vibrateLight } from "@/lib/vibration";
 import moment from "moment";
@@ -21,6 +22,7 @@ export default function DashboardPartenaire({ user }) {
   const [photoFile, setPhotoFile] = useState(null);
   const [savingProduit, setSavingProduit] = useState(false);
   const [visiteurs, setVisiteurs] = useState([]);
+  const [showMessages, setShowMessages] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -132,6 +134,29 @@ export default function DashboardPartenaire({ user }) {
           </span>
         )}
       </button>
+
+      {/* Bouton Messages admin */}
+      <button
+        onClick={() => setShowMessages(!showMessages)}
+        className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
+          showMessages ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
+        }`}
+      >
+        <MessageCircle className={`h-5 w-5 ${showMessages ? "text-primary" : "text-muted-foreground"}`} />
+        <div className="text-left">
+          <p className="font-semibold text-sm">Messages CDL</p>
+          <p className="text-xs text-muted-foreground">Discussion avec l'admin</p>
+        </div>
+      </button>
+
+      {showMessages && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold mb-3">💬 Discussion avec l'Administration CDL</p>
+            <ChatAdmin userEmail={user.email} userRole="partenaire" currentUser={user} />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex items-center justify-between">
         <div>
