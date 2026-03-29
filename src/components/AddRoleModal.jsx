@@ -22,7 +22,6 @@ const LIVREUR_DOCS = [
 ];
 
 export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) {
-  const isAdmin = user?.email === "weezyh2@gmail.com" || user?.email === "eric@example.com";
   const [selected, setSelected] = useState(null);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ telephone: user?.telephone || "", quartier: user?.quartier || "", nom_commerce: "" });
