@@ -36,9 +36,9 @@ export default function BaseClients() {
 
   const loadClients = async () => {
     setLoading(true);
-    const [clientsEntity, usersClients] = await Promise.all([
+    const [clientsEntity, allUsers] = await Promise.all([
       base44.entities.Client.list("-date_derniere_course", 500),
-      base44.entities.User.filter({ user_type: "client" }),
+      base44.entities.User.list("-created_date", 1000),
     ]);
     // Combiner et dédupliquer par email
     const emailSet = new Set();
@@ -49,8 +49,8 @@ export default function BaseClients() {
         combined.push(c);
       }
     });
-    usersClients.forEach(u => {
-      if (!emailSet.has(u.email)) {
+    allUsers.forEach(u => {
+      if (!emailSet.has(u.email) && (u.user_type === "client" || u.role === "user")) {
         emailSet.add(u.email);
         combined.push({
           id: u.id,
