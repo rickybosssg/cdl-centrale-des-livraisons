@@ -56,6 +56,15 @@ export default function BasePartenaires() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between mb-4 pb-3 border-b">
+        <div className="flex items-center gap-2">
+          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center text-white font-bold">CDL</div>
+          <div>
+            <p className="font-bold text-lg">CDL APP</p>
+            <p className="text-[10px] text-muted-foreground">Centrale des Livraisons</p>
+          </div>
+        </div>
+      </div>
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
