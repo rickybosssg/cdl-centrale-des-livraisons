@@ -18,6 +18,7 @@ export default function GererCourses() {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [assignDialog, setAssignDialog] = useState(false);
   const [detailDialog, setDetailDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState('courses');
 
   const loadData = async () => {
     const [coursesData, livreursData] = await Promise.all([
@@ -116,10 +117,13 @@ export default function GererCourses() {
     loadData();
   };
 
-  const enAttente = courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut));
-  const assignees = courses.filter(c => c.statut === "assignee_attente");
-  const enCours = courses.filter(c => ["acceptee", "en_cours"].includes(c.statut));
-  const terminees = courses.filter(c => ["livree", "annulee"].includes(c.statut));
+  const enAttente = courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport);
+  const assignees = courses.filter(c => c.statut === "assignee_attente" && !c.moyen_transport);
+  const enCours = courses.filter(c => ["acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport);
+  const terminees = courses.filter(c => ["livree", "annulee"].includes(c.statut) && !c.moyen_transport);
+
+  const deplacementsMoto = courses.filter(c => c.moyen_transport === "moto");
+  const deplotementsVehicule = courses.filter(c => c.moyen_transport === "vehicule");
 
   if (loading) {
     return (
@@ -189,107 +193,123 @@ export default function GererCourses() {
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-xl font-bold">Gérer les courses</h1>
+          <h1 className="text-xl font-bold">Gérer les courses et déplacements</h1>
         </div>
         <Button variant="outline" size="sm" onClick={loadData}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
 
-      <Tabs defaultValue="attente">
-        <TabsList className="w-full">
-          <TabsTrigger value="attente" className="flex-1 text-xs">
-            Attente ({enAttente.length})
-          </TabsTrigger>
-          <TabsTrigger value="assignees" className="flex-1 text-xs">
-            Assignées ({assignees.length})
-          </TabsTrigger>
-          <TabsTrigger value="encours" className="flex-1 text-xs">
-            En cours ({enCours.length})
-          </TabsTrigger>
-          <TabsTrigger value="terminees" className="flex-1 text-xs">
-            Terminées ({terminees.length})
-          </TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="w-full grid grid-cols-3">
+          <TabsTrigger value="courses" className="text-xs">📦 Courses ({enAttente.length + assignees.length + enCours.length + terminees.length})</TabsTrigger>
+          <TabsTrigger value="moto" className="text-xs">🏍️ Motos ({deplacementsMoto.length})</TabsTrigger>
+          <TabsTrigger value="vehicule" className="text-xs">🚗 Véhicules ({deplotementsVehicule.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="attente" className="space-y-3 mt-3">
-          {enAttente.map((course) => (
-            <CourseRow
-              key={course.id}
-              course={course}
-              actions={
-                <>
-                  <Button size="sm" className="flex-1 h-8 text-xs" onClick={() => relancerDispatch(course)}>
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Re-dispatch
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => { setSelectedCourse(course); setAssignDialog(true); }}>
-                    <UserPlus className="h-3 w-3 mr-1" />
-                    Manuel
-                  </Button>
-                  <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => changerStatut(course.id, "annulee")}>
-                    <X className="h-3 w-3" />
-                  </Button>
-                </>
-              }
-            />
-          ))}
-          {enAttente.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course en attente</p>}
+        <TabsContent value="courses" className="space-y-3 mt-3">
+          <Tabs defaultValue="attente" className="w-full">
+            <TabsList className="w-full grid grid-cols-4">
+              <TabsTrigger value="attente" className="text-xs">Attente ({enAttente.length})</TabsTrigger>
+              <TabsTrigger value="assignees" className="text-xs">Assignées ({assignees.length})</TabsTrigger>
+              <TabsTrigger value="encours" className="text-xs">En cours ({enCours.length})</TabsTrigger>
+              <TabsTrigger value="terminees" className="text-xs">Terminées ({terminees.length})</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="attente" className="space-y-3 mt-3">
+              {enAttente.map((course) => (
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  actions={
+                    <>
+                      <Button size="sm" className="flex-1 h-8 text-xs" onClick={() => relancerDispatch(course)}>
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Re-dispatch
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => { setSelectedCourse(course); setAssignDialog(true); }}>
+                        <UserPlus className="h-3 w-3 mr-1" />
+                        Manuel
+                      </Button>
+                      <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => changerStatut(course.id, "annulee")}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </>
+                  }
+                />
+              ))}
+              {enAttente.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course en attente</p>}
+            </TabsContent>
+
+            <TabsContent value="assignees" className="space-y-3 mt-3">
+              {assignees.map((course) => (
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  actions={
+                    <>
+                      <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => { setSelectedCourse(course); setAssignDialog(true); }}>
+                        <UserPlus className="h-3 w-3 mr-1" />
+                        Réassigner
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8 text-xs text-green-600 border-green-300" onClick={() => changerStatut(course.id, "acceptee")}>
+                        Forcer acceptation
+                      </Button>
+                    </>
+                  }
+                />
+              ))}
+              {assignees.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course assignée en attente</p>}
+            </TabsContent>
+
+            <TabsContent value="encours" className="space-y-3 mt-3">
+              {enCours.map((course) => (
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  actions={
+                    <>
+                      {course.statut === "acceptee" && (
+                        <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => changerStatut(course.id, "en_cours")}>
+                          Marquer récupéré
+                        </Button>
+                      )}
+                      {course.statut === "en_cours" && (
+                        <Button size="sm" className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700" onClick={() => changerStatut(course.id, "livree")}>
+                          Marquer livré
+                        </Button>
+                      )}
+                      <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => changerStatut(course.id, "annulee")}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </>
+                  }
+                />
+              ))}
+              {enCours.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course en cours</p>}
+            </TabsContent>
+
+            <TabsContent value="terminees" className="space-y-3 mt-3">
+              {terminees.map((course) => (
+                <CourseRow key={course.id} course={course} />
+              ))}
+              {terminees.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course terminée</p>}
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
-        <TabsContent value="assignees" className="space-y-3 mt-3">
-          {assignees.map((course) => (
-            <CourseRow
-              key={course.id}
-              course={course}
-              actions={
-                <>
-                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => { setSelectedCourse(course); setAssignDialog(true); }}>
-                    <UserPlus className="h-3 w-3 mr-1" />
-                    Réassigner
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-8 text-xs text-green-600 border-green-300" onClick={() => changerStatut(course.id, "acceptee")}>
-                    Forcer acceptation
-                  </Button>
-                </>
-              }
-            />
-          ))}
-          {assignees.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course assignée en attente</p>}
-        </TabsContent>
-
-        <TabsContent value="encours" className="space-y-3 mt-3">
-          {enCours.map((course) => (
-            <CourseRow
-              key={course.id}
-              course={course}
-              actions={
-                <>
-                  {course.statut === "acceptee" && (
-                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => changerStatut(course.id, "en_cours")}>
-                      Marquer récupéré
-                    </Button>
-                  )}
-                  {course.statut === "en_cours" && (
-                    <Button size="sm" className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700" onClick={() => changerStatut(course.id, "livree")}>
-                      Marquer livré
-                    </Button>
-                  )}
-                  <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => changerStatut(course.id, "annulee")}>
-                    <X className="h-3 w-3" />
-                  </Button>
-                </>
-              }
-            />
-          ))}
-          {enCours.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course en cours</p>}
-        </TabsContent>
-
-        <TabsContent value="terminees" className="space-y-3 mt-3">
-          {terminees.map((course) => (
+        <TabsContent value="moto" className="space-y-3 mt-3">
+          {deplacementsMoto.map((course) => (
             <CourseRow key={course.id} course={course} />
           ))}
-          {terminees.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course terminée</p>}
+          {deplacementsMoto.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucun déplacement en motocyclette</p>}
+        </TabsContent>
+
+        <TabsContent value="vehicule" className="space-y-3 mt-3">
+          {deplotementsVehicule.map((course) => (
+            <CourseRow key={course.id} course={course} />
+          ))}
+          {deplotementsVehicule.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucun déplacement en véhicule</p>}
         </TabsContent>
       </Tabs>
 
