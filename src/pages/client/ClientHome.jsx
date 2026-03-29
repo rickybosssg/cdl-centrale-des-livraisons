@@ -63,15 +63,16 @@ export default function ClientHome({ user }) {
   return (
     <div className="space-y-6">
       {/* Mon compte button */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => navigate('/parametres')}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
-        >
-          <User className="h-4 w-4" />
-          Mon compte
-        </button>
-      </div>
+      <button
+        onClick={() => navigate('/parametres')}
+        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-semibold shadow-md"
+      >
+        <div className="flex items-center gap-2">
+          <User className="h-5 w-5" />
+          <span>Mon compte</span>
+        </div>
+        <span className="text-sm opacity-70">→</span>
+      </button>
 
       {/* Welcome */}
       <div className="space-y-1">
