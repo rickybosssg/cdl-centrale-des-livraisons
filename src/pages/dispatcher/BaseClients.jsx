@@ -36,9 +36,9 @@ export default function BaseClients() {
 
   const loadClients = async () => {
     setLoading(true);
-    const [clientsEntity, allUsers] = await Promise.all([
+    const [clientsEntity, userClients] = await Promise.all([
       base44.entities.Client.list("-date_derniere_course", 500),
-      base44.entities.User.list("-created_date", 1000),
+      base44.entities.User.filter({ user_type: "client" }),
     ]);
     // Combiner et dédupliquer par email
     const emailSet = new Set();
@@ -49,8 +49,8 @@ export default function BaseClients() {
         combined.push(c);
       }
     });
-    allUsers.forEach(u => {
-      if (!emailSet.has(u.email) && (u.user_type === "client" || u.role === "user")) {
+    userClients.forEach(u => {
+      if (!emailSet.has(u.email)) {
         emailSet.add(u.email);
         combined.push({
           id: u.id,
@@ -251,7 +251,6 @@ export default function BaseClients() {
       {selectedClient && (
         <FicheClient
           client={selectedClient}
-          source={selectedClient.source || "client"}
           onClose={() => setSelectedClient(null)}
           onUpdated={(updated) => {
             setClients(prev => prev.map(c => c.id === updated.id ? updated : c));

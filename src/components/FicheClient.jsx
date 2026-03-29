@@ -22,7 +22,7 @@ const STATUT_COLORS = {
   Bloqué: "bg-red-100 text-red-700",
 };
 
-export default function FicheClient({ client, source = "client", onClose, onUpdated }) {
+export default function FicheClient({ client, onClose, onUpdated }) {
   const [adminUser, setAdminUser] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
   const [saving, setSaving] = useState(false);
@@ -53,27 +53,15 @@ export default function FicheClient({ client, source = "client", onClose, onUpda
 
   const sauvegarder = async () => {
     setSaving(true);
-    if (source === "user") {
-      await base44.entities.User.update(client.id, {
-        full_name: form.nom_complet,
-        telephone: form.numero_telephone,
-        quartier: form.quartier_principal,
-      });
-    } else {
-      await base44.entities.Client.update(client.id, form);
-    }
+    await base44.entities.Client.update(client.id, form);
     toast.success("Fiche client mise à jour");
-    onUpdated?.({ ...client, ...form, source });
+    onUpdated?.({ ...client, ...form });
     setSaving(false);
   };
 
   const bloquer = async () => {
     const updated = { ...form, statut_client: "Bloqué" };
-    if (source === "user") {
-      await base44.entities.User.update(client.id, { bloque: true });
-    } else {
-      await base44.entities.Client.update(client.id, { statut_client: "Bloqué" });
-    }
+    await base44.entities.Client.update(client.id, { statut_client: "Bloqué" });
     toast.success("Client bloqué");
     setForm(updated);
     onUpdated?.({ ...client, ...updated });
@@ -81,11 +69,7 @@ export default function FicheClient({ client, source = "client", onClose, onUpda
 
   const reactiver = async () => {
     const updated = { ...form, statut_client: "Actif" };
-    if (source === "user") {
-      await base44.entities.User.update(client.id, { bloque: false });
-    } else {
-      await base44.entities.Client.update(client.id, { statut_client: "Actif" });
-    }
+    await base44.entities.Client.update(client.id, { statut_client: "Actif" });
     toast.success("Client réactivé");
     setForm(updated);
     onUpdated?.({ ...client, ...updated });
