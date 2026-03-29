@@ -79,7 +79,15 @@ export default function GererLivreurs() {
     ]);
     const map = new Map();
     [...livreursPurs, ...livreursAttente, ...livreursValides, ...livreursRefuses].forEach(u => map.set(u.id, u));
-    setLivreurs(Array.from(map.values()));
+    // Ne garder que les vrais livreurs (user_type livreur ou user_roles contient livreur)
+    const tousLivreurs = Array.from(map.values()).filter(u => {
+      if (u.user_type === 'livreur') return true;
+      if (u.user_roles) {
+        try { return JSON.parse(u.user_roles).includes('livreur'); } catch (_) {}
+      }
+      return false;
+    });
+    setLivreurs(tousLivreurs);
     setPaiements(paiementsData);
     setAdmin(me);
     setLoading(false);
