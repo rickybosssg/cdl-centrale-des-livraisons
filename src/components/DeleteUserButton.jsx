@@ -11,17 +11,27 @@ export default function DeleteUserButton({ email, userName, onDeleted }) {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      // Récupérer l'utilisateur et le supprimer
+      // Supprimer l'entité Client si elle existe
+      const clients = await base44.entities.Client.filter({ email });
+      if (clients.length > 0) {
+        await base44.asServiceRole.entities.Client.delete(clients[0].id);
+      }
+      
+      // Supprimer l'utilisateur User
       const users = await base44.entities.User.filter({ email });
       if (users.length > 0) {
         await base44.asServiceRole.entities.User.delete(users[0].id);
         toast.success(`${userName} a été supprimé`);
         onDeleted?.();
+      } else {
+        toast.error("Utilisateur non trouvé");
       }
     } catch (err) {
-      toast.error("Erreur lors de la suppression: " + err.message);
+      console.error('Erreur suppression:', err);
+      toast.error("Erreur: " + (err.message || err));
+    } finally {
+      setDeleting(false);
     }
-    setDeleting(false);
   };
 
   return (
