@@ -4,7 +4,7 @@
   "properties": {
     "livreur_email": {
       "type": "string",
-      "title": "Email livreur"
+      "title": "Email utilisateur"
     },
     "sender_email": {
       "type": "string",
@@ -14,7 +14,10 @@
       "type": "string",
       "enum": [
         "admin",
-        "livreur"
+        "livreur",
+        "client",
+        "partenaire",
+        "commercial"
       ],
       "title": "R\u00f4le exp\u00e9diteur"
     },
@@ -29,7 +32,7 @@
     },
     "lu_livreur": {
       "type": "boolean",
-      "title": "Lu par livreur",
+      "title": "Lu par utilisateur",
       "default": false
     }
   },

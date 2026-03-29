@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, RefreshCw, Eye, ShoppingBag, TrendingUp, Ban, UserCheck, Store } from "lucide-react";
+import { ArrowLeft, Search, RefreshCw, Eye, ShoppingBag, TrendingUp, Ban, UserCheck, Store, MessageCircle } from "lucide-react";
+import ChatAdmin from "@/components/ChatAdmin";
+import { useState as useAdminState } from "react";
 import { toast } from "sonner";
 import moment from "moment";
 
@@ -26,6 +28,10 @@ export default function GererPartenaires() {
   const [filterType, setFilterType] = useState("Tous");
   const [selected, setSelected] = useState(null);
   const [savingId, setSavingId] = useState(null);
+  const [adminUser, setAdminUser] = useState(null);
+  const [ficheTab, setFicheTab] = useState("infos");
+
+  useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
 
   const load = async () => {
     setLoading(true);
@@ -159,59 +165,69 @@ export default function GererPartenaires() {
               </div>
               <Button size="sm" variant="ghost" onClick={() => setSelected(null)}>✕</Button>
             </div>
+            {/* Tabs */}
+            <div className="flex border-b">
+              {[{val:"infos",label:"Infos"},{val:"messages",label:"💬 Chat"}].map(t => (
+                <button key={t.val} onClick={() => setFicheTab(t.val)}
+                  className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                    ficheTab === t.val ? "border-b-2 border-primary text-primary" : "text-muted-foreground"
+                  }`}>{t.label}</button>
+              ))}
+            </div>
             <div className="p-4 space-y-4">
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <Card><CardContent className="p-3"><p className="text-lg font-bold text-primary">{selected.nombre_vues || 0}</p><p className="text-[10px] text-muted-foreground">Vues</p></CardContent></Card>
-                <Card><CardContent className="p-3"><p className="text-lg font-bold text-accent">{selected.nombre_clics_commander || 0}</p><p className="text-[10px] text-muted-foreground">Clics</p></CardContent></Card>
-                <Card><CardContent className="p-3"><p className="text-lg font-bold text-green-500">{selected.nombre_contacts || 0}</p><p className="text-[10px] text-muted-foreground">Contacts</p></CardContent></Card>
-                <Card><CardContent className="p-3"><p className="text-lg font-bold text-green-600">{selected.nombre_commandes || 0}</p><p className="text-[10px] text-muted-foreground">Cmdes</p></CardContent></Card>
-              </div>
-              {/* Conversion */}
-              {selected.nombre_vues > 0 && (
-                <div className="bg-muted rounded-xl p-3 text-sm">
-                  <p className="text-muted-foreground text-xs">Taux de conversion</p>
-                  <p className="font-bold text-lg">{Math.round((selected.nombre_commandes || 0) / selected.nombre_vues * 100)}%</p>
-                </div>
-              )}
-              {/* Abonnement */}
-              <Card className={selected.statut_abonnement === "Expiré" ? "border-red-200" : "border-green-200"}>
-                <CardContent className="p-3">
-                  <p className="text-xs font-semibold mb-1">Abonnement (30 000 FCFA/mois)</p>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Statut : <span className="font-semibold">{selected.statut_abonnement}</span></span>
-                    <span className="text-muted-foreground">Expire : {selected.date_expiration_abonnement ? moment(selected.date_expiration_abonnement).format("DD/MM/YY") : "—"}</span>
+              {ficheTab === "messages" ? (
+                <ChatAdmin userEmail={selected.user_email} userRole="partenaire" currentUser={adminUser} />
+              ) : (
+                <>
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <Card><CardContent className="p-3"><p className="text-lg font-bold text-primary">{selected.nombre_vues || 0}</p><p className="text-[10px] text-muted-foreground">Vues</p></CardContent></Card>
+                    <Card><CardContent className="p-3"><p className="text-lg font-bold text-accent">{selected.nombre_clics_commander || 0}</p><p className="text-[10px] text-muted-foreground">Clics</p></CardContent></Card>
+                    <Card><CardContent className="p-3"><p className="text-lg font-bold text-green-500">{selected.nombre_contacts || 0}</p><p className="text-[10px] text-muted-foreground">Contacts</p></CardContent></Card>
+                    <Card><CardContent className="p-3"><p className="text-lg font-bold text-green-600">{selected.nombre_commandes || 0}</p><p className="text-[10px] text-muted-foreground">Cmdes</p></CardContent></Card>
                   </div>
-                </CardContent>
-              </Card>
-              {/* Infos */}
-              <div className="text-sm space-y-1">
-                <p><span className="text-muted-foreground">Responsable :</span> {selected.nom_responsable || "—"}</p>
-                <p><span className="text-muted-foreground">Tél :</span> {selected.telephone}</p>
-                <p><span className="text-muted-foreground">Adresse :</span> {selected.adresse || "—"}</p>
-                <p><span className="text-muted-foreground">Inscrit :</span> {moment(selected.created_date).format("DD/MM/YYYY")}</p>
-              </div>
-              {/* Voir page */}
-              <Button variant="outline" className="w-full" onClick={() => { navigate(`/commerce/${selected.id}`); setSelected(null); }}>
-                <Eye className="h-4 w-4 mr-1" />Voir la page publique
-              </Button>
-              {/* Actions admin */}
-              <div className="flex gap-2">
-                {selected.statut !== "suspendu" ? (
-                  <Button variant="destructive" className="flex-1" disabled={savingId === selected.id} onClick={() => bloquer(selected)}>
-                    <Ban className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Bloquer"}
+                  {selected.nombre_vues > 0 && (
+                    <div className="bg-muted rounded-xl p-3 text-sm">
+                      <p className="text-muted-foreground text-xs">Taux de conversion</p>
+                      <p className="font-bold text-lg">{Math.round((selected.nombre_commandes || 0) / selected.nombre_vues * 100)}%</p>
+                    </div>
+                  )}
+                  <Card className={selected.statut_abonnement === "Expiré" ? "border-red-200" : "border-green-200"}>
+                    <CardContent className="p-3">
+                      <p className="text-xs font-semibold mb-1">Abonnement (30 000 FCFA/mois)</p>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Statut : <span className="font-semibold">{selected.statut_abonnement}</span></span>
+                        <span className="text-muted-foreground">Expire : {selected.date_expiration_abonnement ? moment(selected.date_expiration_abonnement).format("DD/MM/YY") : "—"}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <div className="text-sm space-y-1">
+                    <p><span className="text-muted-foreground">Responsable :</span> {selected.nom_responsable || "—"}</p>
+                    <p><span className="text-muted-foreground">Tél :</span> {selected.telephone}</p>
+                    <p><span className="text-muted-foreground">Adresse :</span> {selected.adresse || "—"}</p>
+                    <p><span className="text-muted-foreground">Inscrit :</span> {moment(selected.created_date).format("DD/MM/YYYY")}</p>
+                  </div>
+                  <Button variant="outline" className="w-full" onClick={() => { navigate(`/commerce/${selected.id}`); setSelected(null); }}>
+                    <Eye className="h-4 w-4 mr-1" />Voir la page publique
                   </Button>
-                ) : (
-                  <Button className="flex-1 bg-green-600 hover:bg-green-700" disabled={savingId === selected.id} onClick={() => activer(selected)}>
-                    <UserCheck className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Activer"}
-                  </Button>
-                )}
-                {selected.statut === "en_attente" && (
-                  <Button className="flex-1" disabled={savingId === selected.id} onClick={() => activer(selected)}>
-                    <UserCheck className="h-4 w-4 mr-1" />Valider
-                  </Button>
-                )}
-              </div>
+                  <div className="flex gap-2">
+                    {selected.statut !== "suspendu" ? (
+                      <Button variant="destructive" className="flex-1" disabled={savingId === selected.id} onClick={() => bloquer(selected)}>
+                        <Ban className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Bloquer"}
+                      </Button>
+                    ) : (
+                      <Button className="flex-1 bg-green-600 hover:bg-green-700" disabled={savingId === selected.id} onClick={() => activer(selected)}>
+                        <UserCheck className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Activer"}
+                      </Button>
+                    )}
+                    {selected.statut === "en_attente" && (
+                      <Button className="flex-1" disabled={savingId === selected.id} onClick={() => activer(selected)}>
+                        <UserCheck className="h-4 w-4 mr-1" />Valider
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

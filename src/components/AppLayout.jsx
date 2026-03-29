@@ -13,6 +13,7 @@ const NAV_ITEMS = {
     { path: "/commander", icon: Plus, label: "Commander" },
     { path: "/mes-courses", icon: Clock, label: "Courses" },
     { path: "/vitrines", icon: Sparkles, label: "Vitrines" },
+    { path: "/mes-messages", icon: MessageCircle, label: "Messages" },
   ],
   livreur: [
     { path: "/", icon: Home, label: "Accueil" },
@@ -30,10 +31,12 @@ const NAV_ITEMS = {
   ],
   commercial: [
     { path: "/", icon: Home, label: "Accueil" },
+    { path: "/mes-messages", icon: MessageCircle, label: "Messages" },
   ],
   partenaire: [
     { path: "/", icon: Home, label: "Commerce" },
     { path: "/commandes-partenaire", icon: Package, label: "Commandes" },
+    { path: "/mes-messages", icon: MessageCircle, label: "Messages" },
   ],
 };
 

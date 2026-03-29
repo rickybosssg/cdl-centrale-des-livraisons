@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, CheckCircle2, XCircle, Users, Tag, Wallet, Eye } from "lucide-react";
+import ChatAdmin from "@/components/ChatAdmin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -25,6 +26,10 @@ export default function GererCommerciaux() {
   const [formPaiement, setFormPaiement] = useState({ montant: "", mode: "" });
   const [saving, setSaving] = useState(false);
   const [filtre, setFiltre] = useState("tous");
+  const [adminUser, setAdminUser] = useState(null);
+  const [dialogTab, setDialogTab] = useState("profil");
+
+  useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
   const [showCommissionsDues, setShowCommissionsDues] = useState(false);
   const [paiementEnCours, setPaiementEnCours] = useState({});
 
@@ -256,13 +261,27 @@ export default function GererCommerciaux() {
       </div>
 
       {/* Dialog profil */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setDialogTab("profil"); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Profil commercial</DialogTitle>
           </DialogHeader>
           {selected && (
             <div className="space-y-4">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b pb-2">
+                {[{val:"profil",label:"Profil"},{val:"messages",label:"💬 Chat"}].map(t => (
+                  <button key={t.val} onClick={() => setDialogTab(t.val)}
+                    className={`text-sm font-medium px-3 py-1 rounded-full transition-colors ${
+                      dialogTab === t.val ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
+                    }`}>{t.label}</button>
+                ))}
+              </div>
+
+              {dialogTab === "messages" ? (
+                <ChatAdmin userEmail={selected.email} userRole="commercial" currentUser={adminUser} />
+              ) : (
+                <>
               <div className="flex items-center gap-3">
                 <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
                   {selected.full_name?.charAt(0)}
@@ -320,6 +339,8 @@ export default function GererCommerciaux() {
                     </Button>
                   )}
                 </div>
+              )}
+              </>
               )}
             </div>
           )}

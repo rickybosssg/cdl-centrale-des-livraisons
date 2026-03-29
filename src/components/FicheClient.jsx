@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { X, Phone, MapPin, Calendar, Save, Ban, UserCheck, MessageCircle } from "lucide-react";
+import ChatAdmin from "./ChatAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +23,10 @@ const STATUT_COLORS = {
 };
 
 export default function FicheClient({ client, onClose, onUpdated }) {
+  const [adminUser, setAdminUser] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
   const [courses, setCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [form, setForm] = useState({
@@ -103,6 +107,7 @@ export default function FicheClient({ client, onClose, onUpdated }) {
               <TabsTrigger value="info" className="flex-1 text-xs">Infos</TabsTrigger>
               <TabsTrigger value="courses" className="flex-1 text-xs">Courses ({courses.length})</TabsTrigger>
               <TabsTrigger value="relance" className="flex-1 text-xs">Relance</TabsTrigger>
+              <TabsTrigger value="messages" className="flex-1 text-xs">💬 Chat</TabsTrigger>
               <TabsTrigger value="admin" className="flex-1 text-xs">Admin</TabsTrigger>
             </TabsList>
 
@@ -224,6 +229,15 @@ export default function FicheClient({ client, onClose, onUpdated }) {
                   </Button>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Onglet Messages */}
+            <TabsContent value="messages" className="mt-3">
+              {client.email ? (
+                <ChatAdmin userEmail={client.email} userRole="client" currentUser={adminUser} />
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-6">Email client non disponible</p>
+              )}
             </TabsContent>
 
             {/* Onglet Admin */}
