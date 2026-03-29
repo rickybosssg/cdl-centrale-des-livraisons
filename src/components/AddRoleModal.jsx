@@ -22,13 +22,17 @@ const LIVREUR_DOCS = [
 ];
 
 export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) {
+  const isAdmin = user?.email === "weezyh2@gmail.com";
   const [selected, setSelected] = useState(null);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ telephone: user?.telephone || "", quartier: user?.quartier || "", nom_commerce: "" });
   const [docs, setDocs] = useState({ photo_identite_recto: null, photo_identite_verso: null, photo_moyen_deplacement: null });
   const [loading, setLoading] = useState(false);
 
-  const available = ALL_ROLES.filter(r => !existingRoles.includes(r.value));
+  const available = ALL_ROLES.filter(r => {
+    if (r.value === "admin" && !isAdmin) return false;
+    return !existingRoles.includes(r.value);
+  });
 
   const allDocsProvided = docs.photo_identite_recto && docs.photo_identite_verso && docs.photo_moyen_deplacement;
 
