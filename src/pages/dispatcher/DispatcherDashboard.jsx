@@ -258,6 +258,45 @@ export default function DispatcherDashboard() {
         </div>
       )}
 
+      {/* Bases de données */}
+      <div className="space-y-3">
+        <h2 className="font-semibold text-base">📊 Bases de données</h2>
+        <div className="grid grid-cols-4 gap-2">
+          <Link to="/base-clients">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-3 text-center space-y-2">
+                <Database className="h-6 w-6 text-orange-600 mx-auto" />
+                <p className="text-xs font-medium">Clients</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link to="/base-livreurs">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-3 text-center space-y-2">
+                <Truck className="h-6 w-6 text-blue-600 mx-auto" />
+                <p className="text-xs font-medium">Livreurs</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link to="/base-partenaires">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-3 text-center space-y-2">
+                <Store className="h-6 w-6 text-green-600 mx-auto" />
+                <p className="text-xs font-medium">Partenaires</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link to="/base-commerciaux">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-3 text-center space-y-2">
+                <Tag className="h-6 w-6 text-indigo-600 mx-auto" />
+                <p className="text-xs font-medium">Commerciaux</p>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+      </div>
+
       {/* Raccourcis */}
       <h2 className="font-semibold text-sm text-muted-foreground">Accès rapides</h2>
       <div className="grid grid-cols-2 gap-3">
@@ -339,14 +378,6 @@ export default function DispatcherDashboard() {
             <CardContent className="p-4 text-center space-y-2">
               <Tag className="h-8 w-8 text-purple-600 mx-auto" />
               <p className="text-sm font-medium">Gérer les commerciaux</p>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link to="/base-clients">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardContent className="p-4 text-center space-y-2">
-              <Database className="h-8 w-8 text-orange-600 mx-auto" />
-              <p className="text-sm font-medium">Gérer les clients</p>
             </CardContent>
           </Card>
         </Link>
