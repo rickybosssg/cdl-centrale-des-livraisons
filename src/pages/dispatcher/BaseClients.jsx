@@ -63,6 +63,7 @@ export default function BaseClients() {
           total_depense: 0,
           date_inscription: u.created_date,
           date_derniere_course: null,
+          source: "user",
         });
       }
     });
@@ -250,6 +251,7 @@ export default function BaseClients() {
       {selectedClient && (
         <FicheClient
           client={selectedClient}
+          source={selectedClient.source || "client"}
           onClose={() => setSelectedClient(null)}
           onUpdated={(updated) => {
             setClients(prev => prev.map(c => c.id === updated.id ? updated : c));
