@@ -123,17 +123,6 @@ export default function DashboardPartenaire({ user }) {
     <div className="space-y-4">
       <MessageAlert newMsg={newMsg} />
       {newMsg && <div className="h-24" />}
-      {/* Mon compte button */}
-      <button
-        onClick={() => navigate('/parametres')}
-        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-semibold shadow-md"
-      >
-        <div className="flex items-center gap-2">
-          <User className="h-5 w-5" />
-          <span>Mon compte</span>
-        </div>
-        <span className="text-sm opacity-70">→</span>
-      </button>
       {/* Bouton commandes */}
       <button
         onClick={() => navigate('/commandes-partenaire')}

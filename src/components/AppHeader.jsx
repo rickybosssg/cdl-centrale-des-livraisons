@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LogOut, Settings, User } from "lucide-react";
+import { ArrowLeft, LogOut, Settings } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 import { base44 } from "@/api/base44Client";
 import { useMessageCount } from "@/hooks/useMessageCount";
@@ -31,15 +31,6 @@ export default function AppHeader({ userRole, userEmail }) {
         )}
         
         <div className="flex items-center gap-2">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
-            onClick={() => navigate('/parametres')}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary hover:bg-primary/90 text-white text-xs font-semibold transition-colors"
-          >
-            <User className="h-4 w-4" />
-            Mon compte
-          </motion.button>
           <a
             href="https://wa.me/message/EH7SMNHNHL7RN1?text=Bonjour%20CDL%2C%20j%27ai%20besoin%20d%27assistance."
             target="_blank"
