@@ -216,6 +216,12 @@ export default function GererCommerciaux() {
                         Code: {code.statut === "valide" ? "Actif" : code.statut === "refuse" ? "Refusé" : "À valider"}
                       </span>
                     )}
+                    {code && commissionRestante > 0 && (
+                      <div className="text-right mt-1 pt-1 border-t border-border/50">
+                        <p className="text-[11px] font-bold text-amber-600">{commissionRestante.toLocaleString()} F</p>
+                        <p className="text-[10px] text-muted-foreground">À payer</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
