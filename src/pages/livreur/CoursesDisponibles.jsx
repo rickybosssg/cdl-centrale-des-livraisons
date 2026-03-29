@@ -86,10 +86,38 @@ export default function CoursesDisponibles() {
       <p className="text-[11px] text-muted-foreground text-center md:hidden">↓ Tirez vers le bas pour actualiser</p>
 
       {courses.length === 0 ? (
-        <div className="text-center py-16 space-y-3">
-          <Package className="h-12 w-12 text-muted-foreground/30 mx-auto" />
-          <p className="text-muted-foreground text-sm">Aucune course disponible</p>
-          <Button variant="outline" size="sm" onClick={loadData}>Actualiser</Button>
+        <div className="space-y-4 py-6">
+          <div className="text-center space-y-3">
+            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+              <Package className="h-8 w-8 text-primary/50" />
+            </div>
+            <p className="font-semibold text-base">Pas de course pour le moment</p>
+            <p className="text-sm text-muted-foreground">Reste connecté, de nouvelles demandes arrivent en continu !</p>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-100">
+              <span className="text-lg">📍</span>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Rapproche-toi des zones actives</p>
+                <p className="text-xs text-amber-700">Zone du marché, Râan, Gounghin, Cissin sont souvent actives</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50 border border-blue-100">
+              <span className="text-lg">📱</span>
+              <div>
+                <p className="text-sm font-semibold text-blue-800">Vérifie ta localisation</p>
+                <p className="text-xs text-blue-700">Active le GPS pour être détecté par le système de dispatch</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-green-50 border border-green-100">
+              <span className="text-lg">⏰</span>
+              <div>
+                <p className="text-sm font-semibold text-green-800">Heures de pointe</p>
+                <p className="text-xs text-green-700">7h-9h, 12h-14h et 17h-20h sont les moments les plus actifs</p>
+              </div>
+            </div>
+          </div>
+          <Button variant="outline" className="w-full" onClick={loadData}>Actualiser maintenant</Button>
         </div>
       ) : (
         <div className="space-y-3">

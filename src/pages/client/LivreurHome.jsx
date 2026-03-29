@@ -125,7 +125,18 @@ export default function LivreurHome({ user }) {
     if (c.statut !== "livree") return false;
     const today = new Date().toDateString();
     return new Date(c.date_livraison).toDateString() === today;
-  }).length;
+  });
+
+  const gainsJour = completedToday.reduce((sum, c) => sum + (c.gain_livreur || 0), 0);
+  const completedTodayCount = completedToday.length;
+
+  const motivationMsg = !disponible
+    ? "Reste connecté, une course peut arriver à tout moment 💡"
+    : completedTodayCount === 0
+      ? "Tu n'as pas encore eu de course aujourd'hui — reste disponible ! 🕐"
+      : completedTodayCount >= 5
+        ? "🔥 Excellent, tu fais partie des livreurs les plus actifs aujourd'hui !"
+        : `Bravo pour tes ${completedTodayCount} course${completedTodayCount > 1 ? 's' : ''} aujourd'hui — continue ! 💪`;
 
   return (
     <div className="space-y-6">
@@ -167,27 +178,34 @@ export default function LivreurHome({ user }) {
       {/* Bannière publicitaire */}
       <BannierePublicitaire placement="home_livreur" />
 
+      {/* Message motivation */}
+      <div className={`rounded-xl p-3 text-sm font-medium text-center ${
+        disponible ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+      }`}>
+        {motivationMsg}
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-3 text-center">
             <Truck className="h-5 w-5 text-primary mx-auto mb-1" />
-            <p className="text-xl font-bold">{completedToday}</p>
+            <p className="text-xl font-bold">{completedTodayCount}</p>
             <p className="text-[10px] text-muted-foreground">Aujourd'hui</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-green-50 border-green-200">
+          <CardContent className="p-3 text-center">
+            <span className="text-lg">💰</span>
+            <p className="text-xl font-bold text-green-700">{gainsJour.toLocaleString()}</p>
+            <p className="text-[10px] text-green-600">FCFA / jour</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
             <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto mb-1" />
             <p className="text-xl font-bold">{courses.filter(c => c.statut === "livree").length}</p>
-            <p className="text-[10px] text-muted-foreground">Total livrées</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 text-center">
-            <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1" />
-            <p className="text-xl font-bold">{activeCourse ? 1 : 0}</p>
-            <p className="text-[10px] text-muted-foreground">Active</p>
+            <p className="text-[10px] text-muted-foreground">Total</p>
           </CardContent>
         </Card>
       </div>
