@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, MapPin, Phone, Shield, ShieldOff, CheckCircle2, XCircle, CreditCard, History, Lock, Unlock, Eye, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Shield, ShieldOff, CheckCircle2, XCircle, CreditCard, History, Lock, Unlock, Eye, Star, Trash2, MessageCircle } from "lucide-react";
+import ChatLivreur from "@/components/ChatLivreur";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -67,6 +68,7 @@ export default function GererLivreurs() {
   const [filtre, setFiltre] = useState("tous");
   const [coursesLivreur, setCoursesLivreur] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
+  const [activeTab, setActiveTab] = useState("profil");
 
   const loadData = async () => {
     const [livreursPurs, livreursAttente, livreursValides, livreursRefuses, paiementsData, me] = await Promise.all([
@@ -220,6 +222,7 @@ export default function GererLivreurs() {
 
   const ouvrirProfil = async (livreur) => {
     setSelectedLivreur(livreur);
+    setActiveTab("profil");
     setDialogProfil(true);
     setLoadingCourses(true);
     const courses = await base44.entities.Course.filter({ livreur_email: livreur.email }, "-created_date", 100);
@@ -430,11 +433,14 @@ export default function GererLivreurs() {
             <DialogTitle>Dossier livreur</DialogTitle>
           </DialogHeader>
           {selectedLivreur && (
-            <Tabs defaultValue="profil">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="w-full">
-                <TabsTrigger value="profil" className="flex-1">Profil</TabsTrigger>
+                <TabsTrigger value="profil" className="flex-1 text-xs">Profil</TabsTrigger>
+                <TabsTrigger value="messages" className="flex-1 text-xs">
+                  <MessageCircle className="h-3.5 w-3.5 mr-1" />Messages
+                </TabsTrigger>
                 {admin?.role === "admin" && (
-                  <TabsTrigger value="courses" className="flex-1">Courses ({loadingCourses ? "..." : coursesLivreur.length})</TabsTrigger>
+                  <TabsTrigger value="courses" className="flex-1 text-xs">Courses ({loadingCourses ? "..." : coursesLivreur.length})</TabsTrigger>
                 )}
               </TabsList>
 
@@ -524,6 +530,12 @@ export default function GererLivreurs() {
                     <CheckCircle2 className="h-4 w-4 mr-1" />
                     Valider quand même
                   </Button>
+                )}
+              </TabsContent>
+
+              <TabsContent value="messages" className="mt-4">
+                {selectedLivreur && (
+                  <ChatLivreur livreurEmail={selectedLivreur.email} currentUser={admin} />
                 )}
               </TabsContent>
 
