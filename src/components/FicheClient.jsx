@@ -278,26 +278,25 @@ export default function FicheClient({ client, onClose, onUpdated }) {
                     onClick={async () => {
                       setSaving(true);
                       try {
-                        await base44.entities.User.filter({ email: client.email }).then(async (users) => {
-                          if (users.length === 0) {
-                            toast.error("Utilisateur non trouvé en User");
-                            return;
-                          }
-                          const user = users[0];
-                          const newRoles = [opt.role];
-                          await base44.auth.updateMe({
-                            user_type: opt.role,
-                            user_roles: JSON.stringify(newRoles),
-                            statut_validation_livreur: opt.role === "livreur" ? "en_attente" : undefined,
-                            statut_validation_partenaire: opt.role === "partenaire" ? "en_attente" : undefined,
-                            statut_validation_commercial: opt.role === "commercial" ? "en_attente" : undefined,
-                            profil_valide: false,
-                          });
-                          toast.success(`Client converti en ${opt.label} - En attente de validation`);
-                          setActiveTab("admin");
+                        const users = await base44.entities.User.filter({ email: client.email });
+                        if (users.length === 0) {
+                          toast.error("Utilisateur non trouvé");
+                          setSaving(false);
+                          return;
+                        }
+                        const user = users[0];
+                        await base44.asServiceRole.entities.User.update(user.id, {
+                          user_type: opt.role,
+                          user_roles: JSON.stringify([opt.role]),
+                          statut_validation_livreur: opt.role === "livreur" ? "en_attente" : null,
+                          statut_validation_partenaire: opt.role === "partenaire" ? "en_attente" : null,
+                          statut_validation_commercial: opt.role === "commercial" ? "en_attente" : null,
+                          profil_valide: false,
                         });
+                        toast.success(`Client converti en ${opt.label} - En attente de validation`);
+                        setActiveTab("admin");
                       } catch (err) {
-                        toast.error("Erreur lors de la conversion");
+                        toast.error("Erreur: " + err.message);
                       } finally {
                         setSaving(false);
                       }
