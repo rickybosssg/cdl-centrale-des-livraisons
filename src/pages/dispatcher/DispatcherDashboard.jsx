@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +14,15 @@ export default function DispatcherDashboard() {
   const [loading, setLoading] = useState(true);
   const [dispatchMode, setDispatchModeState] = useState(getDispatchMode());
   const [carteVisible, setCarteVisible] = useState(false);
+  const [syncingNotifs, setSyncingNotifs] = useState(false);
+
+  const syncNotifications = async () => {
+    setSyncingNotifs(true);
+    try {
+      await base44.functions.invoke('syncLivreurNotifications', {});
+    } catch (_) {}
+    setSyncingNotifs(false);
+  };
 
   const toggleDispatchMode = () => {
     const newMode = dispatchMode === 'auto' ? 'manuel' : 'auto';
@@ -87,6 +96,22 @@ export default function DispatcherDashboard() {
           {dispatchMode === 'auto' ? '⚡ Mode automatique' : '✋ Mode manuel'}
         </button>
       </div>
+
+      {/* Alerte livreurs en attente */}
+      {livreursEnAttente.length > 0 && (
+        <Link to="/validation-livreurs">
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 border-2 border-amber-300 animate-pulse">
+            <div className="h-10 w-10 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
+              <Bell className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-amber-800 text-sm">⚠️ {livreursEnAttente.length} livreur(s) en attente de validation</p>
+              <p className="text-xs text-amber-600">Cliquez pour examiner les dossiers</p>
+            </div>
+            <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{livreursEnAttente.length}</span>
+          </div>
+        </Link>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
