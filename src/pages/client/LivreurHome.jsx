@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin, MessageCircle } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import CourseCard from "../../components/CourseCard";
 
 export default function LivreurHome({ user }) {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [disponible, setDisponible] = useState(user.disponible !== false);
   const [loading, setLoading] = useState(true);
@@ -142,6 +143,17 @@ export default function LivreurHome({ user }) {
 
   return (
     <div className="space-y-6">
+      {/* Mon compte button */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => navigate('/parametres')}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+        >
+          <User className="h-4 w-4" />
+          Mon compte
+        </button>
+      </div>
+
       {/* Course pendante (dispatch auto) */}
       {coursePendante && (
         <CoursePendante

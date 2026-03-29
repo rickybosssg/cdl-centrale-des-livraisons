@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle } from "lucide-react";
+import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle, User } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
 import { toast } from "sonner";
 
 export default function DashboardCommercial({ user }) {
+  const navigate = useNavigate();
   const [code, setCode] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newCode, setNewCode] = useState("");
@@ -72,6 +74,16 @@ export default function DashboardCommercial({ user }) {
 
   return (
     <div className="space-y-4">
+      {/* Mon compte button */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => navigate('/parametres')}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+        >
+          <User className="h-4 w-4" />
+          Mon compte
+        </button>
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Mon espace commercial</h1>

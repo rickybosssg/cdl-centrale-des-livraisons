@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User } from "lucide-react";
 import EffectuerDeplacement from "./EffectuerDeplacement";
@@ -58,8 +58,21 @@ export default function ClientHome({ user }) {
   const activeCourses = courses.filter(c => !["livree", "annulee"].includes(c.statut));
   const completedCount = courses.filter(c => c.statut === "livree").length;
 
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-6">
+      {/* Mon compte button */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => navigate('/parametres')}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+        >
+          <User className="h-4 w-4" />
+          Mon compte
+        </button>
+      </div>
+
       {/* Welcome */}
       <div className="space-y-1">
         <h1 className="text-2xl font-bold">Bonjour, {user.full_name?.split(" ")[0]} 👋</h1>

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, ShoppingBag, TrendingUp, Plus, ToggleLeft, ToggleRight, Trash2, Upload, Clock, Bell, MessageCircle } from "lucide-react";
+import { Eye, ShoppingBag, TrendingUp, Plus, ToggleLeft, ToggleRight, Trash2, Upload, Clock, Bell, MessageCircle, User } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
 import { toast } from "sonner";
 import { vibrateLight } from "@/lib/vibration";
@@ -123,6 +123,16 @@ export default function DashboardPartenaire({ user }) {
     <div className="space-y-4">
       <MessageAlert newMsg={newMsg} />
       {newMsg && <div className="h-24" />}
+      {/* Mon compte button */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => navigate('/parametres')}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+        >
+          <User className="h-4 w-4" />
+          Mon compte
+        </button>
+      </div>
       {/* Bouton commandes */}
       <button
         onClick={() => navigate('/commandes-partenaire')}
