@@ -14,7 +14,11 @@ export default function AppLayoutWrapper({ user }) {
     const load = async () => {
       try {
         const me = await base44.auth.me();
-        setUserRole(me.user_type || me.role || "client");
+        if (me.email === "weezyh2@gmail.com") {
+          setUserRole("admin");
+        } else {
+          setUserRole(me.user_type || me.role || "client");
+        }
         window.__cdl_user_email = me.email;
         const firstName = me.full_name?.split(" ")[0] || "";
         setPrenom(firstName);
