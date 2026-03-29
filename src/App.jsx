@@ -90,7 +90,7 @@ const AuthenticatedApp = () => {
         <Route path="/commander" element={<CreateCourse />} />
         <Route path="/mes-courses" element={<MesCourses />} />
         <Route path="/course/:id" element={<CourseDetail />} />
-        <Route path="/effectuer-deplacement" element={<EffectuerDeplacement user={user} />} />
+        <Route path="/effectuer-deplacement" element={<EffectuerDeplacement />} />
         <Route path="/courses-disponibles" element={<CoursesDisponibles />} />
         <Route path="/course-livreur/:id" element={<CourseLivreur />} />
         <Route path="/mes-livraisons" element={<MesLivraisons />} />

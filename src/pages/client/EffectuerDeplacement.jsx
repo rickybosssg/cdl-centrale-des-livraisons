@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
-export default function EffectuerDeplacement({ user }) {
+export default function EffectuerDeplacement() {
   const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  
+  useEffect(() => {
+    base44.auth.me().then(setUser);
+  }, []);
   const [step, setStep] = useState(1);
   const [moyenDeplacement, setMoyenDeplacement] = useState(null);
   const [urgence, setUrgence] = useState("normal");
