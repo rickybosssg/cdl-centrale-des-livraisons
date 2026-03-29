@@ -22,7 +22,7 @@ const LIVREUR_DOCS = [
 ];
 
 export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) {
-  const isEric = user?.email === "eric@example.com";
+  const isCompaore = user?.email === "compaore@example.com";
   const [selected, setSelected] = useState(null);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ telephone: user?.telephone || "", quartier: user?.quartier || "", nom_commerce: "" });
@@ -30,7 +30,7 @@ export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) 
   const [loading, setLoading] = useState(false);
 
   const available = ALL_ROLES.filter(r => {
-    if (r.value === "admin" && !isEric) return false;
+    if (r.value === "admin" && !isCompaore) return false;
     return !existingRoles.includes(r.value);
   });
 
