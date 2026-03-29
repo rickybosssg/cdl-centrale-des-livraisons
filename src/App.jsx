@@ -33,6 +33,7 @@ import PagePartenaire from './pages/partenaire/PagePartenaire';
 import CommandesPartenaire from './pages/partenaire/CommandesPartenaire';
 import Vitrines from './pages/client/Vitrines';
 import GererCommerciaux from './pages/dispatcher/GererCommerciaux';
+import InviterAdmin from './pages/dispatcher/InviterAdmin';
 import Settings from './pages/Settings';
 import MesMessages from './pages/MesMessages';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
@@ -91,6 +92,7 @@ const AuthenticatedApp = () => {
           <Route path="/suivi-commissions" element={<SuiviCommissions />} />
           <Route path="/validation-livreurs" element={<ValidationLivreurs />} />
           <Route path="/parametres" element={<Parametres />} />
+          <Route path="/inviter-admin" element={<InviterAdmin />} />
         </Route>
         <Route path="/mes-gains" element={<GainsLivreur />} />
         <Route path="/mes-discussions" element={<MesDiscussions />} />
