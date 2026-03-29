@@ -1,0 +1,84 @@
+{
+  "name": "MessageAdmin",
+  "type": "object",
+  "properties": {
+    "livreur_email": {
+      "type": "string",
+      "title": "Email livreur"
+    },
+    "sender_email": {
+      "type": "string",
+      "title": "Email exp\u00e9diteur"
+    },
+    "sender_role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "livreur"
+      ],
+      "title": "R\u00f4le exp\u00e9diteur"
+    },
+    "contenu": {
+      "type": "string",
+      "title": "Message"
+    },
+    "lu_admin": {
+      "type": "boolean",
+      "title": "Lu par admin",
+      "default": false
+    },
+    "lu_livreur": {
+      "type": "boolean",
+      "title": "Lu par livreur",
+      "default": false
+    }
+  },
+  "required": [
+    "livreur_email",
+    "sender_email",
+    "contenu"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.livreur_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.livreur_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -19,7 +19,7 @@ const PUBLIC_ROLES = [
 const ADMIN_ROLES = [
   { value: "client", label: "Client", icon: User, desc: "Commander des livraisons" },
   { value: "livreur", label: "Livreur", icon: Truck, desc: "Effectuer des livraisons" },
-  { value: "dispatcher", label: "Dispatcher", icon: Radio, desc: "Gérer les courses et livreurs" },
+  { value: "dispatcher", label: "Administrateur", icon: Radio, desc: "Gérer les courses et livreurs" },
 ];
 
 export default function RoleSetup({ onComplete, isAdmin = false }) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, CheckCircle2, XCircle, User, Eye } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, User, Eye, MessageCircle } from "lucide-react";
+import ChatLivreur from "@/components/ChatLivreur";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,6 +18,10 @@ export default function ValidationLivreurs() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [motifRefus, setMotifRefus] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [adminUser, setAdminUser] = useState(null);
+  const [activeTab, setActiveTab] = useState("dossier");
+
+  useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
 
   const loadData = async () => {
     const data = await base44.entities.User.filter({ user_type: "livreur" });
@@ -175,96 +180,125 @@ export default function ValidationLivreurs() {
           </DialogHeader>
           {selectedLivreur && (
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                {selectedLivreur.photo_profil ? (
-                  <img src={selectedLivreur.photo_profil} alt="Photo" className="h-16 w-16 rounded-full object-cover border-2 border-primary" />
-                ) : (
-                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-                    <User className="h-8 w-8 text-primary" />
-                  </div>
-                )}
-                <div>
-                  <p className="font-bold">{selectedLivreur.full_name}</p>
-                  <p className="text-sm text-muted-foreground">{selectedLivreur.telephone}</p>
-                  <p className="text-sm text-muted-foreground">{selectedLivreur.quartier}</p>
-                  <StatutBadge statut={selectedLivreur.statut_validation_livreur} />
-                </div>
+              {/* Tabs: Dossier / Messages */}
+              <div className="flex gap-2 border-b pb-2">
+                <button
+                  onClick={() => setActiveTab("dossier")}
+                  className={`text-sm font-medium px-3 py-1 rounded-full transition-colors ${
+                    activeTab === "dossier" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Dossier
+                </button>
+                <button
+                  onClick={() => setActiveTab("messages")}
+                  className={`flex items-center gap-1 text-sm font-medium px-3 py-1 rounded-full transition-colors ${
+                    activeTab === "messages" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Messages
+                </button>
               </div>
 
-              {/* Documents */}
-              <div className="space-y-2">
-                <p className="text-sm font-semibold">Documents fournis</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: "CNI Recto", url: selectedLivreur.photo_identite_recto },
-                    { label: "CNI Verso", url: selectedLivreur.photo_identite_verso },
-                    { label: "Photo moto", url: selectedLivreur.photo_moto },
-                  ].map(doc => (
-                    <div key={doc.label} className="border rounded-lg overflow-hidden">
-                      {doc.url ? (
-                        <a href={doc.url} target="_blank" rel="noreferrer">
-                          <img src={doc.url} alt={doc.label} className="w-full h-20 object-cover hover:opacity-80 transition-opacity" />
-                        </a>
-                      ) : (
-                        <div className="h-20 bg-muted flex items-center justify-center">
-                          <p className="text-xs text-muted-foreground">Non fourni</p>
-                        </div>
-                      )}
-                      <p className="text-[10px] text-center py-1 text-muted-foreground">{doc.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {(!selectedLivreur.statut_validation_livreur || selectedLivreur.statut_validation_livreur === "en_attente") && (
+              {activeTab === "dossier" && (
                 <>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Motif de refus (optionnel)</p>
-                    <input
-                      className="w-full border rounded-md px-3 py-1.5 text-sm"
-                      placeholder="Ex: Documents illisibles..."
-                      value={motifRefus}
-                      onChange={e => setMotifRefus(e.target.value)}
-                    />
+                  <div className="flex items-center gap-3">
+                    {selectedLivreur.photo_profil ? (
+                      <img src={selectedLivreur.photo_profil} alt="Photo" className="h-16 w-16 rounded-full object-cover border-2 border-primary" />
+                    ) : (
+                      <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                        <User className="h-8 w-8 text-primary" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-bold">{selectedLivreur.full_name}</p>
+                      <p className="text-sm text-muted-foreground">{selectedLivreur.telephone}</p>
+                      <p className="text-sm text-muted-foreground">{selectedLivreur.quartier}</p>
+                      <StatutBadge statut={selectedLivreur.statut_validation_livreur} />
+                    </div>
                   </div>
-                  <div className="flex gap-2">
+
+                  {/* Documents */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold">Documents fournis</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: "CNI Recto", url: selectedLivreur.photo_identite_recto },
+                        { label: "CNI Verso", url: selectedLivreur.photo_identite_verso },
+                        { label: "Photo moto", url: selectedLivreur.photo_moto },
+                      ].map(doc => (
+                        <div key={doc.label} className="border rounded-lg overflow-hidden">
+                          {doc.url ? (
+                            <a href={doc.url} target="_blank" rel="noreferrer">
+                              <img src={doc.url} alt={doc.label} className="w-full h-20 object-cover hover:opacity-80 transition-opacity" />
+                            </a>
+                          ) : (
+                            <div className="h-20 bg-muted flex items-center justify-center">
+                              <p className="text-xs text-muted-foreground">Non fourni</p>
+                            </div>
+                          )}
+                          <p className="text-[10px] text-center py-1 text-muted-foreground">{doc.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {(!selectedLivreur.statut_validation_livreur || selectedLivreur.statut_validation_livreur === "en_attente") && (
+                    <>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Motif de refus (optionnel)</p>
+                        <input
+                          className="w-full border rounded-md px-3 py-1.5 text-sm"
+                          placeholder="Ex: Documents illisibles..."
+                          value={motifRefus}
+                          onChange={e => setMotifRefus(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                          onClick={() => refuser(selectedLivreur)}
+                          disabled={processing}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Refuser
+                        </Button>
+                        <Button
+                          className="flex-1 bg-green-600 hover:bg-green-700"
+                          onClick={() => valider(selectedLivreur)}
+                          disabled={processing}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          Valider
+                        </Button>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedLivreur.statut_validation_livreur === "valide" && (
                     <Button
                       variant="outline"
-                      className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                      className="w-full border-red-300 text-red-600"
                       onClick={() => refuser(selectedLivreur)}
                       disabled={processing}
                     >
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Refuser
+                      Révoquer la validation
                     </Button>
-                    <Button
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                      onClick={() => valider(selectedLivreur)}
-                      disabled={processing}
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                      Valider
-                    </Button>
-                  </div>
+                  )}
+
+                  {selectedLivreur.motif_refus && (
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                      <p className="font-medium">Motif de refus :</p>
+                      <p>{selectedLivreur.motif_refus}</p>
+                    </div>
+                  )}
                 </>
               )}
 
-              {selectedLivreur.statut_validation_livreur === "valide" && (
-                <Button
-                  variant="outline"
-                  className="w-full border-red-300 text-red-600"
-                  onClick={() => refuser(selectedLivreur)}
-                  disabled={processing}
-                >
-                  Révoquer la validation
-                </Button>
-              )}
-
-              {selectedLivreur.motif_refus && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-                  <p className="font-medium">Motif de refus :</p>
-                  <p>{selectedLivreur.motif_refus}</p>
-                </div>
+              {activeTab === "messages" && (
+                <ChatLivreur livreurEmail={selectedLivreur.email} currentUser={adminUser} />
               )}
             </div>
           )}

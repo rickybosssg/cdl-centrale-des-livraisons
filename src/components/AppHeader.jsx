@@ -46,7 +46,7 @@ export default function AppHeader({ userRole, userEmail }) {
           </a>
           <NotificationBell userEmail={userEmail} />
           <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium capitalize hidden sm:inline">
-            {userRole}
+            {userRole === 'dispatcher' ? 'Administrateur' : userRole}
           </span>
           <motion.button
             whileTap={{ scale: 0.9 }}

@@ -9,7 +9,7 @@ const ROLE_CONFIG = {
   livreur:    { label: "Livreur",      icon: Truck,     color: "bg-green-100 text-green-700" },
   partenaire: { label: "Partenaire",   icon: Store,     color: "bg-purple-100 text-purple-700" },
   commercial: { label: "Commercial",   icon: Megaphone, color: "bg-orange-100 text-orange-700" },
-  dispatcher: { label: "Dispatcher",  icon: User,      color: "bg-red-100 text-red-700" },
+  dispatcher: { label: "Administrateur", icon: User, color: "bg-red-100 text-red-700" },
 };
 
 export default function RoleSwitcher({ user, roles, currentRole, onSwitch, onRoleAdded }) {

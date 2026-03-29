@@ -19,6 +19,7 @@ import SuiviCommissions from './pages/dispatcher/SuiviCommissions';
 import ValidationLivreurs from './pages/dispatcher/ValidationLivreurs';
 import Parametres from './pages/dispatcher/Parametres';
 import GainsLivreur from './pages/livreur/GainsLivreur';
+import MesDiscussions from './pages/livreur/MesDiscussions';
 import BaseClients from './pages/dispatcher/BaseClients';
 import GererPartenaires from './pages/dispatcher/GererPartenaires';
 import GererPublicites from './pages/dispatcher/GererPublicites';
@@ -98,6 +99,7 @@ const AuthenticatedApp = () => {
           <Route path="/parametres" element={<Parametres />} />
         </Route>
         <Route path="/mes-gains" element={<GainsLivreur />} />
+        <Route path="/mes-discussions" element={<MesDiscussions />} />
         <Route path="/dashboard-partenaire" element={<DashboardPartenaireWrapper />} />
         <Route path="/base-clients" element={<BaseClients />} />
         <Route path="/gerer-partenaires" element={<GererPartenaires />} />
