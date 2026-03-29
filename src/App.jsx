@@ -74,6 +74,7 @@ const AuthenticatedApp = () => {
 
   return (
     <Routes>
+      <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route element={<AppLayoutWithUser />}>
         <Route path="/" element={<Home />} />
         <Route path="/commander" element={<CreateCourse />} />
@@ -111,7 +112,6 @@ const AuthenticatedApp = () => {
         <Route path="/dispatcher/GererCourses" element={<GererCourses />} />
         <Route path="/dispatcher/GererLivreurs" element={<GererLivreurs />} />
         <Route path="/dispatcher/Statistiques" element={<Statistiques />} />
-        <Route path="/reset-admin" element={<ResetAdmin />} />
         <Route path="/client/ClientHome" element={<Home />} />
         <Route path="/client/CreateCourse" element={<CreateCourse />} />
         <Route path="/client/MesCourses" element={<MesCourses />} />
