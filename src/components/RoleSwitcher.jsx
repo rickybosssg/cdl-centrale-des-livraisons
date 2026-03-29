@@ -76,17 +76,18 @@ export default function RoleSwitcher({ user, roles, currentRole, onSwitch, onRol
                 <p className="font-semibold text-muted-foreground">Ajouter un profil</p>
                 <p className="text-xs text-muted-foreground">Client, Livreur, Partenaire, Commercial</p>
               </div>
-            </button>
-            </div>
-            </SheetContent>
-            </Sheet>
-            {showAdd && (
+              </button>
+              </div>
+              </SheetContent>
+              </Sheet>
+              {showAdd && (
               <AddRoleModal
-                user={user}
-                existingRoles={roles}
-                onClose={() => setShowAdd(false)}
-                onAdded={onRoleAdded}
+              user={user}
+              existingRoles={roles}
+              onClose={() => setShowAdd(false)}
+              onAdded={onRoleAdded}
               />
-            )}
-            );
-}
+              )}
+              </>
+              );
+              }
