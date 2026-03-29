@@ -12,16 +12,22 @@ export default function AppLayoutWrapper({ user }) {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
-      setUserRole(me.user_type || me.role || "client");
-      window.__cdl_user_email = me.email;
-      const firstName = me.full_name?.split(" ")[0] || "";
-      setPrenom(firstName);
-      setUserEmail(me.email);
-      const key = `splash_shown_${me.id}`;
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1');
-        setShowSplash(true);
+      try {
+        const me = await base44.auth.me();
+        setUserRole(me.user_type || me.role || "client");
+        window.__cdl_user_email = me.email;
+        const firstName = me.full_name?.split(" ")[0] || "";
+        setPrenom(firstName);
+        setUserEmail(me.email);
+        const key = `splash_shown_${me.id}`;
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1');
+          setShowSplash(true);
+        }
+      } catch (error) {
+        // Utilisateur non connecté, rediriger vers login
+        await base44.auth.redirectToLogin();
+        return;
       }
       setLoading(false);
     };
