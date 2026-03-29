@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { useMessageCount } from "@/hooks/useMessageCount";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
 import MessageAlert from "@/components/MessageAlert";
-import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck, Trash2 } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
@@ -389,7 +389,15 @@ export default function DispatcherDashboard() {
             </CardContent>
           </Card>
         </Link>
-      </div>
-    </div>
-  );
-}
+        <Link to="/suppression">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
+            <CardContent className="p-4 text-center space-y-2">
+              <Trash2 className="h-8 w-8 text-red-600 mx-auto" />
+              <p className="text-sm font-medium">Suppression</p>
+            </CardContent>
+          </Card>
+        </Link>
+        </div>
+        </div>
+        );
+        }
