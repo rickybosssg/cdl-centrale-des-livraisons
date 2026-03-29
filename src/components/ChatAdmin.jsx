@@ -6,11 +6,17 @@ import { Input } from "@/components/ui/input";
 import moment from "moment";
 
 // Composant de messagerie admin générique (fonctionne avec livreur, client, partenaire, commercial)
-export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser }) {
+export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser: propUser }) {
+  const [currentUser, setCurrentUser] = useState(propUser);
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
+
+  useEffect(() => {
+    if (!propUser) { base44.auth.me().then(setCurrentUser); }
+    else { setCurrentUser(propUser); }
+  }, [propUser]);
 
   const loadMessages = async () => {
     const data = await base44.entities.MessageAdmin.filter({ livreur_email: userEmail }, "created_date", 100);

@@ -5,11 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import moment from "moment";
 
-export default function ChatLivreur({ livreurEmail, currentUser }) {
+export default function ChatLivreur({ livreurEmail, currentUser: propUser }) {
+  const [currentUser, setCurrentUser] = useState(propUser);
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
+
+  useEffect(() => {
+    if (!propUser) { base44.auth.me().then(setCurrentUser); }
+    else { setCurrentUser(propUser); }
+  }, [propUser]);
 
   const loadMessages = async () => {
     const data = await base44.entities.MessageAdmin.filter({ livreur_email: livreurEmail }, "created_date", 100);
