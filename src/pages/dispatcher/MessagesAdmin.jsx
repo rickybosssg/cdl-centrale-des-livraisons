@@ -22,6 +22,7 @@ export default function MessagesAdmin() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [newMsgAlert, setNewMsgAlert] = useState(null);
+  const [newMsgEmail, setNewMsgEmail] = useState(null);
   const alertTimeout = useRef(null);
 
   useEffect(() => {
@@ -74,8 +75,12 @@ export default function MessagesAdmin() {
             role: event.data.sender_role,
             contenu: event.data.contenu,
           });
+          setNewMsgEmail(event.data.livreur_email);
           if (alertTimeout.current) clearTimeout(alertTimeout.current);
-          alertTimeout.current = setTimeout(() => setNewMsgAlert(null), 5000);
+          alertTimeout.current = setTimeout(() => {
+            setNewMsgAlert(null);
+            setNewMsgEmail(null);
+          }, 6000);
         }
         setConversations(prev => {
           const email = event.data.livreur_email;
@@ -107,16 +112,20 @@ export default function MessagesAdmin() {
 
   return (
     <div className="space-y-4">
-      {/* Alerte nouveau message entrant */}
+      {/* Bandeau nouveau message */}
       {newMsgAlert && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-2 duration-300">
-          <div className="flex items-center gap-3 bg-primary text-white px-4 py-3 rounded-2xl shadow-2xl border border-white/20 max-w-xs">
-            <MessageCircle className="h-5 w-5 flex-shrink-0 animate-pulse" />
-            <div className="min-w-0">
-              <p className="text-xs font-bold">{ROLE_LABELS[newMsgAlert.role] || "Utilisateur"}</p>
-              <p className="text-xs opacity-90 truncate">{newMsgAlert.contenu}</p>
-            </div>
+        <div
+          onClick={() => { setSelected({ email: newMsgAlert.email, role: newMsgAlert.role }); setNewMsgAlert(null); setNewMsgEmail(null); }}
+          className="flex items-center gap-3 bg-primary text-white px-4 py-3 rounded-xl shadow-lg cursor-pointer border-2 border-white/30"
+          style={{ animation: "pulse 0.8s ease-in-out 3" }}
+        >
+          <MessageCircle className="h-6 w-6 flex-shrink-0 animate-bounce" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold">📩 Nouveau message !</p>
+            <p className="text-xs opacity-90 font-medium">{ROLE_LABELS[newMsgAlert.role] || "Utilisateur"}</p>
+            <p className="text-xs opacity-80 truncate">{newMsgAlert.contenu}</p>
           </div>
+          <span className="text-xs bg-white/20 px-2 py-1 rounded-lg font-medium">Voir →</span>
         </div>
       )}
 
@@ -157,8 +166,12 @@ export default function MessagesAdmin() {
               {filtered.map(conv => (
                 <button
                   key={conv.email}
-                  onClick={() => setSelected(conv)}
-                  className="w-full text-left p-4 rounded-xl border bg-card hover:shadow-md transition-shadow"
+                  onClick={() => { setSelected(conv); if (newMsgEmail === conv.email) { setNewMsgEmail(null); setNewMsgAlert(null); } }}
+                  className={`w-full text-left p-4 rounded-xl border transition-all ${
+                    newMsgEmail === conv.email
+                      ? "border-primary bg-primary/10 shadow-lg ring-2 ring-primary/40"
+                      : "bg-card hover:shadow-md"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
