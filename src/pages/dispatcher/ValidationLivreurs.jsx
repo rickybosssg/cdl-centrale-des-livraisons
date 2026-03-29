@@ -24,7 +24,14 @@ export default function ValidationLivreurs() {
   useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
 
   const loadData = async () => {
-    const data = await base44.entities.User.filter({ user_type: "livreur" });
+    // Récupère les livreurs purs ET les multi-profils ayant un statut livreur
+    const [livreursPurs, autresLivreurs] = await Promise.all([
+      base44.entities.User.filter({ user_type: "livreur" }),
+      base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
+    ]);
+    const map = new Map();
+    [...livreursPurs, ...autresLivreurs].forEach(u => map.set(u.id, u));
+    const data = Array.from(map.values());
     setLivreurs(data);
     setLoading(false);
   };
@@ -32,7 +39,8 @@ export default function ValidationLivreurs() {
   useEffect(() => {
     loadData();
     const unsub = base44.entities.User.subscribe((event) => {
-      if (event.data?.user_type !== 'livreur') return;
+      const isLivreur = event.data?.user_type === 'livreur' || event.data?.statut_validation_livreur;
+      if (!isLivreur) return;
       if (event.type === 'create') {
         setLivreurs(prev => [...prev, event.data]);
         toast.info('Nouveau livreur en attente de validation !');
