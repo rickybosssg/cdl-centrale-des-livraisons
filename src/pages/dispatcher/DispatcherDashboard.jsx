@@ -51,9 +51,14 @@ export default function DispatcherDashboard() {
       else if (event.type === 'delete') setCourses(prev => prev.filter(c => c.id !== event.id));
     });
     const unsubUser = base44.entities.User.subscribe((event) => {
-      if (event.data?.user_type !== 'livreur') return;
+      const isLivreur = event.data?.user_type === 'livreur' || event.data?.statut_validation_livreur;
+      if (!isLivreur) return;
       if (event.type === 'create') setLivreurs(prev => [...prev, event.data]);
-      else if (event.type === 'update') setLivreurs(prev => prev.map(l => l.id === event.id ? event.data : l));
+      else if (event.type === 'update') setLivreurs(prev => {
+        const exists = prev.find(l => l.id === event.id);
+        if (exists) return prev.map(l => l.id === event.id ? event.data : l);
+        return [...prev, event.data];
+      });
       else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
     });
     return () => { unsubCourse(); unsubUser(); };
