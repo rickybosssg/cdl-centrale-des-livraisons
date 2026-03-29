@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Trash2, Lock, Mail, User } from "lucide-react";
+import { ArrowLeft, Trash2, Lock, Mail, User, Edit2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import QuartierSelect from "@/components/QuartierSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -13,14 +16,45 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({
+    telephone: "",
+    whatsapp: "",
+    quartier: "",
+    adresse_principale: "",
+    point_de_repere: "",
+  });
+  const [saving, setSaving] = useState(false);
 
   const loadUser = async () => {
     const me = await base44.auth.me();
     setUser(me);
+    setEditForm({
+      telephone: me?.telephone || "",
+      whatsapp: me?.whatsapp || "",
+      quartier: me?.quartier || "",
+      adresse_principale: me?.adresse_principale || "",
+      point_de_repere: me?.point_de_repere || "",
+    });
     setLoading(false);
   };
 
-  useState(() => { loadUser(); }, []);
+  const handleSaveProfile = async () => {
+    setSaving(true);
+    try {
+      await base44.auth.updateMe(editForm);
+      setUser({ ...user, ...editForm });
+      setEditMode(false);
+      toast.success("Profil mis à jour");
+    } catch (error) {
+      toast.error("Erreur lors de la mise à jour");
+      console.error(error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => { loadUser(); }, []);
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
@@ -56,33 +90,116 @@ export default function Settings() {
 
       {/* Profil */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <User className="h-4 w-4 text-primary" />
             Mon compte
           </CardTitle>
+          {!editMode && (
+            <button
+              onClick={() => setEditMode(true)}
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              <Edit2 className="h-3 w-3" /> Modifier
+            </button>
+          )}
         </CardHeader>
         <CardContent className="space-y-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Nom complet</p>
-            <p className="font-semibold">{user?.full_name}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Email</p>
-            <p className="font-semibold text-sm">{user?.email}</p>
-          </div>
-          {user?.telephone && (
-            <div>
-              <p className="text-xs text-muted-foreground">Téléphone</p>
-              <p className="font-semibold">{user.telephone}</p>
+          {!editMode ? (
+            <>
+              <div>
+                <p className="text-xs text-muted-foreground">Nom complet</p>
+                <p className="font-semibold">{user?.full_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Email</p>
+                <p className="font-semibold text-sm">{user?.email}</p>
+              </div>
+              {user?.telephone && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Téléphone</p>
+                  <p className="font-semibold">{user.telephone}</p>
+                </div>
+              )}
+              {user?.quartier && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Quartier</p>
+                  <p className="font-semibold">{user.quartier}</p>
+                </div>
+              )}
+              {user?.adresse_principale && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Adresse</p>
+                  <p className="font-semibold text-sm">{user.adresse_principale}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-muted-foreground">Rôle</p>
+                <span className="inline-block mt-1 px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                  {user?.user_type || user?.role || "Client"}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium">Téléphone</label>
+                <Input
+                  placeholder="+226 XX XX XX XX"
+                  value={editForm.telephone}
+                  onChange={(e) => setEditForm({ ...editForm, telephone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium">WhatsApp</label>
+                <Input
+                  placeholder="Même numéro si identique"
+                  value={editForm.whatsapp}
+                  onChange={(e) => setEditForm({ ...editForm, whatsapp: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium">Quartier</label>
+                <QuartierSelect
+                  value={editForm.quartier}
+                  onValueChange={(v) => setEditForm({ ...editForm, quartier: v })}
+                  placeholder="Sélectionnez votre quartier"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium">Adresse principale</label>
+                <Input
+                  placeholder="Votre adresse"
+                  value={editForm.adresse_principale}
+                  onChange={(e) => setEditForm({ ...editForm, adresse_principale: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium">Point de repère</label>
+                <Input
+                  placeholder="Ex: À côté de la pharmacie"
+                  value={editForm.point_de_repere}
+                  onChange={(e) => setEditForm({ ...editForm, point_de_repere: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  onClick={() => setEditMode(false)}
+                  className="flex-1 px-3 py-2 rounded-lg border text-sm font-medium hover:bg-muted"
+                  disabled={saving}
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleSaveProfile}
+                  className="flex-1 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
+                  disabled={saving}
+                >
+                  {saving ? "Enregistrement..." : "Enregistrer"}
+                </button>
+              </div>
             </div>
           )}
-          <div>
-            <p className="text-xs text-muted-foreground">Rôle</p>
-            <span className="inline-block mt-1 px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-              {user?.user_type || user?.role || "Client"}
-            </span>
-          </div>
         </CardContent>
       </Card>
 
