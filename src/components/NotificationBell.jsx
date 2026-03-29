@@ -56,13 +56,17 @@ export default function NotificationBell({ userEmail }) {
     <div className="relative">
       <button
         onClick={() => { setOpen(!open); if (!open && unread > 0) markAllRead(); }}
-        className="relative h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
+        className="relative h-10 w-10 flex items-center justify-center rounded-lg hover:bg-primary/10 transition-colors active:bg-primary/20 press-effect"
       >
-        <Bell className="h-4 w-4" />
+        <Bell className={`h-5 w-5 transition-colors ${unread > 0 ? 'text-red-500' : 'text-foreground'}`} />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+          <motion.span
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 0.6, repeat: Infinity }}
+            className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shadow-lg border border-white"
+          >
             {unread > 9 ? '9+' : unread}
-          </span>
+          </motion.span>
         )}
       </button>
 
