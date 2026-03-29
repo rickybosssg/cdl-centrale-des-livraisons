@@ -65,6 +65,20 @@ export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser
         lue: false,
       });
     }
+    // Notifier les admins si c'est un utilisateur qui envoie
+    if (!isAdmin) {
+      const admins = await base44.entities.User.filter({ role: "admin" });
+      await Promise.all(admins.map(admin =>
+        base44.entities.Notification.create({
+          destinataire_email: admin.email,
+          destinataire_role: "admin",
+          titre: `📩 Message de ${ROLE_LABELS[userRole] || userRole}`,
+          message: `${currentUser?.full_name || userEmail} : ${newMsg.trim()}`,
+          type: "info",
+          lue: false,
+        })
+      ));
+    }
     setNewMsg("");
     setSending(false);
   };
