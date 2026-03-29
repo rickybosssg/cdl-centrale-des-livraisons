@@ -17,6 +17,11 @@ export default function DispatcherDashboard() {
   const [carteVisible, setCarteVisible] = useState(false);
   const [syncingNotifs, setSyncingNotifs] = useState(false);
   const [adminEmail, setAdminEmail] = useState(null);
+  
+  useEffect(() => {
+    base44.auth.me().then(me => setAdminEmail(me?.email));
+  }, []);
+  
   const hasUnreadMessages = useMessageCount(adminEmail, "admin");
 
   const syncNotifications = async () => {
@@ -35,8 +40,6 @@ export default function DispatcherDashboard() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
-      setAdminEmail(me?.email);
       const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses] = await Promise.all([
         base44.entities.Course.list("-created_date", 50),
         base44.entities.User.filter({ user_type: "livreur" }),
