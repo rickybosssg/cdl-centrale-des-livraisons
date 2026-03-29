@@ -44,15 +44,16 @@ export default function DispatcherDashboard() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses] = await Promise.all([
+        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 50),
         base44.entities.User.filter({ user_type: "livreur" }),
         base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
         base44.entities.User.filter({ statut_validation_livreur: "valide" }),
         base44.entities.User.filter({ statut_validation_livreur: "refuse" }),
-      ]);
+      ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
       const map = new Map();
-      [...livreursPurs, ...livreursMultiAttente, ...livreursMultiValides, ...livreursMultiRefuses].forEach(u => map.set(u.id, u));
+      const allLivreurs = [...(livreursPurs || []), ...(livreursMultiAttente || []), ...(livreursMultiValides || []), ...(livreursMultiRefuses || [])];
+      allLivreurs.forEach(u => map.set(u.id, u));
       const tousLivreurs = Array.from(map.values()).filter(u => {
         if (u.user_type === 'livreur') return true;
         if (u.user_roles) { try { return JSON.parse(u.user_roles).includes('livreur'); } catch (_) {} }
