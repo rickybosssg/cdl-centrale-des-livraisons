@@ -163,6 +163,17 @@ export default function DashboardCommercial({ user }) {
             </CardContent>
           </Card>
 
+          {/* Montant dû à vous (CDL) */}
+          {commissionRestante > 0 && (
+            <Card className="border-2 border-amber-200 bg-amber-50">
+              <CardContent className="p-4 text-center">
+                <p className="text-xs text-amber-600 font-medium mb-2">💰 CDL VOUS DOIT</p>
+                <p className="text-4xl font-black text-amber-600">{commissionRestante.toLocaleString()}</p>
+                <p className="text-sm text-amber-700 font-semibold mt-1">FCFA à payer</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3">
             <Card>
