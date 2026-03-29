@@ -61,6 +61,15 @@ export default function ValidationLivreurs() {
       actif: true,
       date_validation: new Date().toISOString(),
     });
+    // Notifier le livreur
+    await base44.entities.Notification.create({
+      destinataire_email: livreur.email,
+      destinataire_role: "livreur",
+      titre: "✅ Profil livreur validé !",
+      message: `Félicitations ${livreur.full_name} ! Votre profil livreur a été validé par l'administration CDL. Vous pouvez maintenant recevoir des courses. Bonne livraison ! 🛵`,
+      type: "success",
+      lue: false,
+    });
     toast.success("Le livreur a été validé avec succès !");
     setDialogOpen(false);
     loadData();
