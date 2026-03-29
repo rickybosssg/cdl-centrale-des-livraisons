@@ -112,22 +112,27 @@ export default function MessagesAdmin() {
 
   return (
     <div className="space-y-4">
-      {/* Bandeau nouveau message */}
+      {/* Bandeau nouveau message - très visible */}
       {newMsgAlert && (
-        <div
-          onClick={() => { setSelected({ email: newMsgAlert.email, role: newMsgAlert.role }); setNewMsgAlert(null); setNewMsgEmail(null); }}
-          className="flex items-center gap-3 bg-primary text-white px-4 py-3 rounded-xl shadow-lg cursor-pointer border-2 border-white/30"
-          style={{ animation: "pulse 0.8s ease-in-out 3" }}
-        >
-          <MessageCircle className="h-6 w-6 flex-shrink-0 animate-bounce" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold">📩 Nouveau message !</p>
-            <p className="text-xs opacity-90 font-medium">{ROLE_LABELS[newMsgAlert.role] || "Utilisateur"}</p>
-            <p className="text-xs opacity-80 truncate">{newMsgAlert.contenu}</p>
+        <div className="fixed top-0 left-0 right-0 z-[9999] bg-gradient-to-r from-red-500 to-red-600 text-white animate-pulse">
+          <div
+            onClick={() => { setSelected({ email: newMsgAlert.email, role: newMsgAlert.role }); setNewMsgAlert(null); setNewMsgEmail(null); }}
+            className="flex items-center justify-between gap-3 px-4 py-4 cursor-pointer"
+          >
+            <div className="flex items-center gap-3 flex-1">
+              <span className="text-2xl animate-bounce">🔔</span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold">NOUVEAU MESSAGE !</p>
+                <p className="text-xs opacity-90">{ROLE_LABELS[newMsgAlert.role] || "Utilisateur"} : {newMsgAlert.contenu}</p>
+              </div>
+            </div>
+            <span className="text-xs bg-white/30 px-3 py-1 rounded-full font-bold whitespace-nowrap">TAP</span>
           </div>
-          <span className="text-xs bg-white/20 px-2 py-1 rounded-lg font-medium">Voir →</span>
         </div>
       )}
+
+      {/* Padding pour bandeau */}
+      {newMsgAlert && <div className="h-24" />}
 
       <div className="flex items-center gap-3">
         <button onClick={() => { if (selected) setSelected(null); else navigate(-1); }} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-muted">
