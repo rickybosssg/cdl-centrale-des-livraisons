@@ -268,7 +268,7 @@ export default function DispatcherDashboard() {
               <p className="text-sm font-medium">Courses Trajets</p>
               <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                 <span>📦 {enAttente.length + enCours.length}</span>
-                <span>🏍️ {deplacementsMoto.length + deplotementsVehicule.length}</span>
+                <span>🏍️ {courses.filter(c => c.moyen_transport).length}</span>
               </div>
             </CardContent>
           </Card>
