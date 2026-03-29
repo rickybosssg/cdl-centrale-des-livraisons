@@ -9,6 +9,7 @@ import Home from './pages/Home';
 import CreateCourse from './pages/client/CreateCourse';
 import MesCourses from './pages/client/MesCourses';
 import CourseDetail from './pages/client/CourseDetail';
+import EffectuerDeplacement from './pages/client/EffectuerDeplacement';
 import CoursesDisponibles from './pages/livreur/CoursesDisponibles';
 import CourseLivreur from './pages/livreur/CourseLivreur';
 import MesLivraisons from './pages/livreur/MesLivraisons';
@@ -89,6 +90,7 @@ const AuthenticatedApp = () => {
         <Route path="/commander" element={<CreateCourse />} />
         <Route path="/mes-courses" element={<MesCourses />} />
         <Route path="/course/:id" element={<CourseDetail />} />
+        <Route path="/effectuer-deplacement" element={<EffectuerDeplacement user={user} />} />
         <Route path="/courses-disponibles" element={<CoursesDisponibles />} />
         <Route path="/course-livreur/:id" element={<CourseLivreur />} />
         <Route path="/mes-livraisons" element={<MesLivraisons />} />

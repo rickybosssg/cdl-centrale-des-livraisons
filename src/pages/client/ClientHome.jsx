@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle } from "lucide-react";
+import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User } from "lucide-react";
+import EffectuerDeplacement from "./EffectuerDeplacement";
 import ChatAdmin from "@/components/ChatAdmin";
 import BannierePublicitaire from "../../components/BannierePublicitaire";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ export default function ClientHome({ user }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showMessages, setShowMessages] = useState(false);
+  const [showDeplacement, setShowDeplacement] = useState(false);
 
   // Demande géolocalisation à la première connexion
   useEffect(() => {
@@ -67,20 +69,31 @@ export default function ClientHome({ user }) {
       {/* Bannière publicitaire */}
       <BannierePublicitaire placement="home_client" />
 
-      {/* Quick action */}
-      <Link to="/commander">
-        <Card className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center">
+      {/* Quick actions */}
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/commander">
+          <Card className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer h-full">
+            <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
               <Plus className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="font-semibold text-lg">Commander une course</p>
-              <p className="text-sm opacity-80">Livraison rapide à Ouagadougou</p>
-            </div>
-          </CardContent>
-        </Card>
-      </Link>
+              <div>
+                <p className="font-semibold text-sm">Commander</p>
+                <p className="text-xs opacity-80">une course</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/effectuer-deplacement">
+          <Card className="bg-accent text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer h-full">
+            <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
+              <User className="h-6 w-6" />
+              <div>
+                <p className="font-semibold text-sm">Effectuer</p>
+                <p className="text-xs opacity-80">un déplacement</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
@@ -143,6 +156,10 @@ export default function ClientHome({ user }) {
             <ChatAdmin userEmail={user.email} userRole="client" currentUser={user} />
           </CardContent>
         </Card>
+      )}
+
+      {showDeplacement && (
+        <EffectuerDeplacement user={user} />
       )}
 
       {courses.length === 0 && !loading && (

@@ -34,6 +34,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [livreursActifs, setLivreursActifs] = useState(null);
+  const [moyenDeplacement, setMoyenDeplacement] = useState([]);
 
   useEffect(() => {
     base44.entities.User.filter({ user_type: 'livreur', disponible: true })
@@ -49,6 +50,10 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
   const handleSubmit = async () => {
     if (selectedRole === "livreur" && (!docs.photo_profil || !docs.photo_identite_recto || !docs.photo_identite_verso || !docs.photo_moyen_deplacement)) {
       toast.error("Veuillez fournir tous les documents demandés");
+      return;
+    }
+    if (selectedRole === "livreur" && moyenDeplacement.length === 0) {
+      toast.error("Veuillez sélectionner au moins un mode de déplacement");
       return;
     }
     setLoading(true);
@@ -95,6 +100,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
       solde_commission_du: 0,
       statut_financier_livreur: "À jour",
       livreur_bloque: false,
+      moyen_deplacement: selectedRole === "livreur" ? JSON.stringify(moyenDeplacement) : undefined,
       code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
       ...docUrls,
     });
@@ -295,8 +301,33 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
                   </Button>
                 </div>
               )}
-            </div>
-          )}
+              </div>
+              )}
+
+              {selectedRole === "livreur" && (
+              <div className="space-y-3">
+              <p className="text-sm font-semibold">🚗 Mode(s) de déplacement *</p>
+              <div className="space-y-2">
+                {[{val: "moto", label: "🛵 Motocyclette"}, {val: "vehicule", label: "🚗 Véhicule"}].map(mode => (
+                  <button
+                    key={mode.val}
+                    onClick={() => setMoyenDeplacement(prev => 
+                      prev.includes(mode.val) 
+                        ? prev.filter(m => m !== mode.val)
+                        : [...prev, mode.val]
+                    )}
+                    className={`w-full p-3 rounded-lg border-2 transition-all font-medium ${
+                      moyenDeplacement.includes(mode.val)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-card hover:border-primary/50"
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+              </div>
+              )}
         </div>
 
         {selectedRole === "livreur" && (
@@ -331,16 +362,41 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
                 </div>
               </div>
             ))}
-          </div>
-        )}
+            </div>
+            )}
 
-        <div className="flex gap-2">
+            {selectedRole === "livreur" && (
+            <div className="space-y-3">
+            <p className="text-sm font-semibold">🛵 Mode(s) de déplacement *</p>
+            <div className="space-y-2">
+             {[{val: "moto", label: "🏍️ Motocyclette"}, {val: "vehicule", label: "🚗 Véhicule"}].map(mode => (
+               <button
+                 key={mode.val}
+                 onClick={() => setMoyenDeplacement(prev => 
+                   prev.includes(mode.val) 
+                     ? prev.filter(m => m !== mode.val)
+                     : [...prev, mode.val]
+                 )}
+                 className={`w-full p-3 rounded-lg border-2 transition-all font-medium ${
+                   moyenDeplacement.includes(mode.val)
+                     ? "border-primary bg-primary/10 text-primary"
+                     : "border-border bg-card hover:border-primary/50"
+                 }`}
+               >
+                 {mode.label}
+               </button>
+             ))}
+            </div>
+            </div>
+            )}
+
+            <div className="flex gap-2">
           <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
             Retour
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!form.telephone || !form.quartier || loading || uploading}
+            disabled={!form.telephone || !form.quartier || loading || uploading || (selectedRole === "livreur" && moyenDeplacement.length === 0)}
             className="flex-1 h-11 font-semibold"
           >
             {uploading ? "Upload..." : loading ? "Enregistrement..." : selectedRole === "livreur" ? "🛵 Commencer maintenant" : "Commencer"}
