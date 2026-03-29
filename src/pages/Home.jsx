@@ -63,6 +63,7 @@ export default function Home() {
     switch (role) {
       case "client":     return <ClientHome user={user} />;
       case "livreur":    return <LivreurHome user={user} />;
+      case "admin":
       case "dispatcher": return <DispatcherDashboard />;
       case "partenaire": return <DashboardPartenaire user={user} />;
       case "commercial": return <DashboardCommercial user={user} />;
