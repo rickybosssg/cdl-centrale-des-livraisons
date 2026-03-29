@@ -121,7 +121,7 @@ export default function AppLayout({ userRole, userEmail }) {
                   >
                     <Icon className="h-5 w-5" />
                   </motion.div>
-                  <span className={`text-[10px] font-semibold transition-all ${
+                  <span className={`text-[10px] font-semibold transition-all text-center leading-tight max-w-[50px] ${
                     active ? "text-primary" : item.label === "Messages" && hasUnread ? "text-red-500 font-black" : ""
                   }`}>{item.label}</span>
                   {active && (
