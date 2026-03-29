@@ -266,7 +266,7 @@ export default function DispatcherDashboard() {
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-3 text-center space-y-2">
                 <Database className="h-6 w-6 text-orange-600 mx-auto" />
-                <p className="text-xs font-medium">Clients</p>
+                <p className="text-xs font-medium truncate">Clients</p>
               </CardContent>
             </Card>
           </Link>
@@ -274,7 +274,7 @@ export default function DispatcherDashboard() {
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-3 text-center space-y-2">
                 <Truck className="h-6 w-6 text-blue-600 mx-auto" />
-                <p className="text-xs font-medium">Livreurs</p>
+                <p className="text-xs font-medium truncate">Livreurs</p>
               </CardContent>
             </Card>
           </Link>
@@ -282,7 +282,7 @@ export default function DispatcherDashboard() {
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-3 text-center space-y-2">
                 <Store className="h-6 w-6 text-green-600 mx-auto" />
-                <p className="text-xs font-medium">Partenaires</p>
+                <p className="text-xs font-medium truncate">Partenaires</p>
               </CardContent>
             </Card>
           </Link>
@@ -290,7 +290,7 @@ export default function DispatcherDashboard() {
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-3 text-center space-y-2">
                 <Tag className="h-6 w-6 text-indigo-600 mx-auto" />
-                <p className="text-xs font-medium">Commerciaux</p>
+                <p className="text-xs font-medium truncate">Commerciaux</p>
               </CardContent>
             </Card>
           </Link>
