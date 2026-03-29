@@ -32,12 +32,15 @@ export default function DispatcherDashboard() {
 
   useEffect(() => {
     const load = async () => {
-      const [coursesData, livreursData] = await Promise.all([
+      const [coursesData, livreursPurs, livreursMulti] = await Promise.all([
         base44.entities.Course.list("-created_date", 50),
         base44.entities.User.filter({ user_type: "livreur" }),
+        base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
       ]);
+      const map = new Map();
+      [...livreursPurs, ...livreursMulti].forEach(u => map.set(u.id, u));
       setCourses(coursesData);
-      setLivreurs(livreursData);
+      setLivreurs(Array.from(map.values()));
       setLoading(false);
     };
     load();
