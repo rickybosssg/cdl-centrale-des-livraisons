@@ -43,7 +43,8 @@ export default function DispatcherDashboard() {
 
   useEffect(() => {
     const load = async () => {
-      const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses] = await Promise.all([
+      try {
+        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses] = await Promise.all([
         base44.entities.Course.list("-created_date", 50),
         base44.entities.User.filter({ user_type: "livreur" }),
         base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
@@ -59,7 +60,13 @@ export default function DispatcherDashboard() {
       });
       setCourses(coursesData);
       setLivreurs(tousLivreurs);
-      setLoading(false);
+      } catch (err) {
+        console.error('Erreur lors du chargement:', err);
+        setCourses([]);
+        setLivreurs([]);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
 
