@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { X, Phone, MapPin, Calendar, Save, Ban, UserCheck, MessageCircle } from "lucide-react";
 import ChatAdmin from "./ChatAdmin";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import StatusBadge from "./StatusBadge";
 import moment from "moment";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ const STATUT_COLORS = {
 
 export default function FicheClient({ client, onClose, onUpdated }) {
   const [adminUser, setAdminUser] = useState(null);
+  const [activeTab, setActiveTab] = useState("info");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
@@ -102,17 +103,33 @@ export default function FicheClient({ client, onClose, onUpdated }) {
         </div>
 
         <div className="p-4 space-y-4">
-          <Tabs defaultValue="info">
-            <TabsList className="w-full overflow-x-auto flex-nowrap justify-start gap-0">
-              <TabsTrigger value="info" className="text-xs px-3 shrink-0">Infos</TabsTrigger>
-              <TabsTrigger value="courses" className="text-xs px-3 shrink-0">Courses ({courses.length})</TabsTrigger>
-              <TabsTrigger value="relance" className="text-xs px-3 shrink-0">Relance</TabsTrigger>
-              <TabsTrigger value="messages" className="text-xs px-3 shrink-0">💬 Chat</TabsTrigger>
-              <TabsTrigger value="admin" className="text-xs px-3 shrink-0">Admin</TabsTrigger>
-            </TabsList>
+          {/* Tabs custom scrollable */}
+          <div className="flex overflow-x-auto border-b gap-0 -mx-4 px-4">
+            {[
+              { val: "info", label: "Infos" },
+              { val: "courses", label: `Courses (${courses.length})` },
+              { val: "relance", label: "Relance" },
+              { val: "messages", label: "💬 Chat" },
+              { val: "admin", label: "Admin" },
+            ].map(t => (
+              <button
+                key={t.val}
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab(t.val); }}
+                className={`shrink-0 px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === t.val
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div>
 
             {/* Onglet Infos */}
-            <TabsContent value="info" className="space-y-3 mt-3">
+            {activeTab === "info" && <div className="space-y-3 mt-3">
               <div className="grid grid-cols-3 gap-2">
                 <Card className="text-center">
                   <CardContent className="p-3">
@@ -157,10 +174,10 @@ export default function FicheClient({ client, onClose, onUpdated }) {
               <Button className="w-full" onClick={sauvegarder} disabled={saving}>
                 <Save className="h-4 w-4 mr-1" />{saving ? "Sauvegarde..." : "Sauvegarder"}
               </Button>
-            </TabsContent>
+            </div>}
 
             {/* Onglet Courses */}
-            <TabsContent value="courses" className="mt-3">
+            {activeTab === "courses" && <div className="mt-3">
               {loadingCourses ? (
                 <div className="flex justify-center py-8">
                   <div className="w-6 h-6 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
@@ -188,10 +205,10 @@ export default function FicheClient({ client, onClose, onUpdated }) {
                   ))}
                 </div>
               )}
-            </TabsContent>
+            </div>}
 
             {/* Onglet Relance WhatsApp */}
-            <TabsContent value="relance" className="space-y-3 mt-3">
+            {activeTab === "relance" && <div className="space-y-3 mt-3">
               <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl">
                 <MessageCircle className="h-5 w-5 text-green-600" />
                 <div>
@@ -229,19 +246,19 @@ export default function FicheClient({ client, onClose, onUpdated }) {
                   </Button>
                 </CardContent>
               </Card>
-            </TabsContent>
+            </div>}
 
             {/* Onglet Messages */}
-            <TabsContent value="messages" className="mt-3">
+            {activeTab === "messages" && <div className="mt-3">
               {client.email ? (
                 <ChatAdmin userEmail={client.email} userRole="client" currentUser={adminUser} />
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-6">Email client non disponible</p>
               )}
-            </TabsContent>
+            </div>}
 
             {/* Onglet Admin */}
-            <TabsContent value="admin" className="space-y-4 mt-3">
+            {activeTab === "admin" && <div className="space-y-4 mt-3">
               <div>
                 <label className="text-xs font-medium mb-1 block">Statut client</label>
                 <div className="flex gap-1.5 flex-wrap">
@@ -292,8 +309,8 @@ export default function FicheClient({ client, onClose, onUpdated }) {
                   <Save className="h-4 w-4 mr-1" />{saving ? "..." : "Sauvegarder"}
                 </Button>
               </div>
-            </TabsContent>
-          </Tabs>
+            </div>}
+          </div>
         </div>
       </div>
     </div>
