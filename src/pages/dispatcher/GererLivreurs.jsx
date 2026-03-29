@@ -96,15 +96,21 @@ export default function GererLivreurs() {
   useEffect(() => {
     loadData();
     const unsubUser = base44.entities.User.subscribe((event) => {
-      const isLivreur = event.data?.user_type === 'livreur' || event.data?.statut_validation_livreur;
-      if (!isLivreur) return;
-      if (event.type === 'create') setLivreurs(prev => [...prev, event.data]);
-      else if (event.type === 'update') setLivreurs(prev => {
-        const exists = prev.find(l => l.id === event.id);
-        if (exists) return prev.map(l => l.id === event.id ? event.data : l);
-        return [...prev, event.data];
-      });
-      else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
+      if (event.type === 'update') {
+        // Toujours mettre à jour si le livreur est déjà dans la liste
+        setLivreurs(prev => {
+          const exists = prev.find(l => l.id === event.id);
+          if (exists) return prev.map(l => l.id === event.id ? event.data : l);
+          // Sinon, ajouter seulement si c'est un livreur
+          const isLivreur = event.data?.user_type === 'livreur' || (event.data?.user_roles && (() => { try { return JSON.parse(event.data.user_roles).includes('livreur'); } catch(_) { return false; } })());
+          return isLivreur ? [...prev, event.data] : prev;
+        });
+      } else if (event.type === 'create') {
+        const isLivreur = event.data?.user_type === 'livreur' || (event.data?.user_roles && (() => { try { return JSON.parse(event.data.user_roles).includes('livreur'); } catch(_) { return false; } })());
+        if (isLivreur) setLivreurs(prev => [...prev, event.data]);
+      } else if (event.type === 'delete') {
+        setLivreurs(prev => prev.filter(l => l.id !== event.id));
+      }
     });
     return unsubUser;
   }, []);
