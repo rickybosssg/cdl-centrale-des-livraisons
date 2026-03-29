@@ -22,7 +22,7 @@ const LIVREUR_DOCS = [
 ];
 
 export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) {
-  const isCompaore = user?.email === "compaore@example.com";
+  const isCompaore = user?.email === "weezyh2@gmail.com";
   const [selected, setSelected] = useState(null);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ telephone: user?.telephone || "", quartier: user?.quartier || "", nom_commerce: "" });
