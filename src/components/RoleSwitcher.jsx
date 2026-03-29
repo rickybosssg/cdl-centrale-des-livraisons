@@ -65,32 +65,19 @@ export default function RoleSwitcher({ user, roles, currentRole, onSwitch, onRol
             })}
 
             {/* Ajouter un profil */}
-            {user?.user_type !== "dispatcher" && (
-              <button
-                onClick={() => { setOpen(false); setShowAdd(true); }}
-                className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-all text-left"
-              >
-                <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-muted">
-                  <Plus className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="font-semibold text-muted-foreground">Ajouter un profil</p>
-                  <p className="text-xs text-muted-foreground">Client, Livreur, Partenaire, Commercial</p>
-                </div>
-              </button>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {showAdd && (
-        <AddRoleModal
-          user={user}
-          existingRoles={roles}
-          onClose={() => setShowAdd(false)}
-          onAdded={(newRole) => { setShowAdd(false); onRoleAdded(newRole); }}
-        />
-      )}
+            <button
+              onClick={() => { setOpen(false); setShowAdd(true); }}
+              className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-all text-left"
+            >
+              <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-muted">
+                <Plus className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-semibold text-muted-foreground">Ajouter un profil</p>
+                <p className="text-xs text-muted-foreground">Client, Livreur, Partenaire, Commercial</p>
+              </div>
+            </button>
+            </div>
     </>
   );
 }
