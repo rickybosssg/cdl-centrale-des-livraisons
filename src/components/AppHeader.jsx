@@ -48,14 +48,7 @@ export default function AppHeader({ userRole, userEmail }) {
           }`}>
             {userRole === 'dispatcher' ? 'Administrateur' : userRole}
           </span>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
-            className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
-            onClick={() => navigate('/parametres')}
-          >
-            <Settings className="h-4 w-4" />
-          </motion.button>
+
           <motion.button
             whileTap={{ scale: 0.9 }}
             transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
