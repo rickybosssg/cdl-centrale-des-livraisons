@@ -103,12 +103,12 @@ export default function FicheClient({ client, onClose, onUpdated }) {
 
         <div className="p-4 space-y-4">
           <Tabs defaultValue="info">
-            <TabsList className="w-full">
-              <TabsTrigger value="info" className="flex-1 text-xs">Infos</TabsTrigger>
-              <TabsTrigger value="courses" className="flex-1 text-xs">Courses ({courses.length})</TabsTrigger>
-              <TabsTrigger value="relance" className="flex-1 text-xs">Relance</TabsTrigger>
-              <TabsTrigger value="messages" className="flex-1 text-xs">💬 Chat</TabsTrigger>
-              <TabsTrigger value="admin" className="flex-1 text-xs">Admin</TabsTrigger>
+            <TabsList className="w-full overflow-x-auto flex-nowrap justify-start gap-0">
+              <TabsTrigger value="info" className="text-xs px-3 shrink-0">Infos</TabsTrigger>
+              <TabsTrigger value="courses" className="text-xs px-3 shrink-0">Courses ({courses.length})</TabsTrigger>
+              <TabsTrigger value="relance" className="text-xs px-3 shrink-0">Relance</TabsTrigger>
+              <TabsTrigger value="messages" className="text-xs px-3 shrink-0">💬 Chat</TabsTrigger>
+              <TabsTrigger value="admin" className="text-xs px-3 shrink-0">Admin</TabsTrigger>
             </TabsList>
 
             {/* Onglet Infos */}
