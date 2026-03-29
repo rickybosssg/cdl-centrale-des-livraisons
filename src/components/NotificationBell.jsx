@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Bell } from "lucide-react";
 import { vibrateNotif, playNotificationSound } from "@/lib/vibration";
+import { requestNotificationPermission, sendPushNotification } from "@/lib/pushNotifications";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function NotificationBell({ userEmail }) {
@@ -16,12 +17,16 @@ export default function NotificationBell({ userEmail }) {
 
   useEffect(() => {
     loadNotifs();
+    // Demander la permission de notifications natives au chargement
+    requestNotificationPermission();
     const unsub = base44.entities.Notification.subscribe((event) => {
       if (event.data?.destinataire_email === userEmail) {
         if (event.type === 'create') {
           setNotifs(prev => [event.data, ...prev]);
           playNotificationSound();
           vibrateNotif();
+          // Notification native du navigateur
+          sendPushNotification(event.data.titre, event.data.message);
         } else if (event.type === 'update') {
           setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
         }

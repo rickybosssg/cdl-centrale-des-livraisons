@@ -174,6 +174,17 @@ Deno.serve(async (req) => {
       derniere_course_attribuee_at: now,
     });
 
+    // Notifier le livreur (déclenche aussi la notification navigateur)
+    await base44.asServiceRole.entities.Notification.create({
+      destinataire_email: best.email,
+      destinataire_role: 'livreur',
+      titre: '🛵 Nouvelle course disponible !',
+      message: `Course de ${course.quartier_depart} → ${course.quartier_arrivee}. Colis: ${course.type_colis}. Ouvrez l'app pour accepter.`,
+      type: 'success',
+      lue: false,
+      course_id: courseId,
+    });
+
     console.log(`[DISPATCH] Course ${courseId} assignée à ${best.full_name} (${best.email}) — score: ${scored[0].score}`);
 
     return Response.json({
