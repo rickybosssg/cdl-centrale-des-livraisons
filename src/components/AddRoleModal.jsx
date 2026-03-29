@@ -1,10 +1,5 @@
 import { useState } from "react";
-import { User, Truck, Store, Megaphone, X, Upload } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { base44 } from "@/api/base44Client";
-import QuartierSelect from "./QuartierSelect";
+import { User, Truck, Store, Megaphone, X, Upload, Shield } from "lucide-react";
 import { toast } from "sonner";
 
 const ALL_ROLES = [
@@ -12,6 +7,7 @@ const ALL_ROLES = [
   { value: "livreur",    label: "Livreur",     icon: Truck,     desc: "Effectuer des livraisons et gagner de l'argent" },
   { value: "partenaire", label: "Partenaire",  icon: Store,     desc: "Vitrine commerce sur CDL" },
   { value: "commercial", label: "Commercial",  icon: Megaphone, desc: "Promouvoir CDL et gagner des commissions" },
+  { value: "admin",      label: "Administrateur", icon: Shield, desc: "Gérer la plateforme" },
 ];
 
 const LIVREUR_DOCS = [
@@ -21,13 +17,17 @@ const LIVREUR_DOCS = [
 ];
 
 export default function AddRoleModal({ user, existingRoles, onClose, onAdded }) {
+  const isEric = user?.email === "eric@example.com";
   const [selected, setSelected] = useState(null);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ telephone: user?.telephone || "", quartier: user?.quartier || "", nom_commerce: "" });
   const [docs, setDocs] = useState({ photo_identite_recto: null, photo_identite_verso: null, photo_moyen_deplacement: null });
   const [loading, setLoading] = useState(false);
 
-  const available = ALL_ROLES.filter(r => !existingRoles.includes(r.value));
+  const available = ALL_ROLES.filter(r => {
+    if (r.value === "admin" && !isEric) return false;
+    return !existingRoles.includes(r.value);
+  });
 
   const allDocsProvided = docs.photo_identite_recto && docs.photo_identite_verso && docs.photo_moyen_deplacement;
 
