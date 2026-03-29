@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useMessageCount } from "@/hooks/useMessageCount";
 import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
@@ -15,6 +16,8 @@ export default function DispatcherDashboard() {
   const [dispatchMode, setDispatchModeState] = useState(getDispatchMode());
   const [carteVisible, setCarteVisible] = useState(false);
   const [syncingNotifs, setSyncingNotifs] = useState(false);
+  const [adminEmail, setAdminEmail] = useState(null);
+  const hasUnreadMessages = useMessageCount(adminEmail, "admin");
 
   const syncNotifications = async () => {
     setSyncingNotifs(true);
@@ -32,6 +35,8 @@ export default function DispatcherDashboard() {
 
   useEffect(() => {
     const load = async () => {
+      const me = await base44.auth.me();
+      setAdminEmail(me?.email);
       const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses] = await Promise.all([
         base44.entities.Course.list("-created_date", 50),
         base44.entities.User.filter({ user_type: "livreur" }),
@@ -114,6 +119,21 @@ export default function DispatcherDashboard() {
           {dispatchMode === 'auto' ? '⚡ Mode automatique' : '✋ Mode manuel'}
         </button>
       </div>
+
+      {/* Alerte messages non lus */}
+      {hasUnreadMessages && (
+        <Link to="/messages-admin">
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border-2 border-red-300 animate-pulse">
+            <div className="h-10 w-10 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+              <Bell className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-red-800 text-sm">📩 Vous avez des messages non lus</p>
+              <p className="text-xs text-red-600">Cliquez pour consulter votre messagerie</p>
+            </div>
+          </div>
+        </Link>
+      )}
 
       {/* Alerte livreurs en attente */}
       {livreursEnAttente.length > 0 && (
