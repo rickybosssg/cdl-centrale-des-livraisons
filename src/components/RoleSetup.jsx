@@ -91,9 +91,10 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
       quartier: form.quartier,
       disponible: false,
       actif: true,
-      profil_valide: selectedRole !== "livreur" && selectedRole !== "commercial",
+      profil_valide: selectedRole === "client",
       statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : undefined,
       statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
+      statut_validation_partenaire: selectedRole === "partenaire" ? "en_attente" : undefined,
       verified: selectedRole === "client",
       total_courses: 0,
       commission_mode: true,
@@ -109,6 +110,17 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
         telephone: form.telephone,
         quartier: form.quartier,
       });
+      // Notifier les admins pour client
+      try {
+        await base44.functions.invoke('notifyAdminNewSignup', {
+          entity_name: 'Client',
+          entity_data: {
+            nom_complet: (await base44.auth.me()).full_name,
+            telephone: form.telephone,
+            quartier: form.quartier,
+          },
+        });
+      } catch (_) {}
     }
     // Notifier les admins pour livreur
     if (selectedRole === "livreur") {
