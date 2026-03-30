@@ -56,7 +56,15 @@ export default function Suppression() {
     if (profile === "livreur" || profile === "partenaire" || profile === "commercial") {
       data = await base44.entities.User.filter({ user_type: profile }, "-created_date", 500);
     } else if (profile === "client") {
-      data = await base44.entities.Client.filter({}, "-created_date", 500);
+      const [clientEntities, clientUsers] = await Promise.all([
+        base44.entities.Client.filter({}, "-created_date", 500),
+        base44.entities.User.filter({ user_type: "client" }, "-created_date", 500),
+      ]);
+      // Fusionner en évitant les doublons par email
+      const map = new Map();
+      clientEntities.forEach(c => { if (c.email || c.numero_telephone) map.set(c.email || c.numero_telephone, c); });
+      clientUsers.forEach(u => { if (!map.has(u.email)) map.set(u.email, u); });
+      data = Array.from(map.values());
     }
     setMembers(data);
     setLoading(false);
