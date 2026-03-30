@@ -148,6 +148,40 @@
     "note_admin": {
       "type": "string",
       "title": "Note admin"
+    },
+    "deleted": {
+      "type": "boolean",
+      "title": "Supprim\u00e9 (soft delete)",
+      "default": false
+    },
+    "deleted_at": {
+      "type": "string",
+      "title": "Date de suppression"
+    },
+    "deleted_by_admin_email": {
+      "type": "string",
+      "title": "Email admin ayant supprim\u00e9"
+    },
+    "delete_reason": {
+      "type": "string",
+      "title": "Raison de suppression"
+    },
+    "suspended": {
+      "type": "boolean",
+      "title": "Suspendu",
+      "default": false
+    },
+    "suspended_at": {
+      "type": "string",
+      "title": "Date de suspension"
+    },
+    "suspended_by_admin_email": {
+      "type": "string",
+      "title": "Email admin ayant suspendu"
+    },
+    "suspension_reason": {
+      "type": "string",
+      "title": "Raison de suspension"
     }
   },
   "required": [

@@ -1,0 +1,62 @@
+{
+  "name": "AdminActionLog",
+  "type": "object",
+  "properties": {
+    "admin_email": {
+      "type": "string",
+      "title": "Email administrateur"
+    },
+    "object_type": {
+      "type": "string",
+      "enum": [
+        "partenaire",
+        "commercial",
+        "publicite"
+      ],
+      "title": "Type d'objet"
+    },
+    "object_id": {
+      "type": "string",
+      "title": "ID de l'objet"
+    },
+    "object_name": {
+      "type": "string",
+      "title": "Nom de l'objet"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "suspend",
+        "unsuspend",
+        "delete",
+        "restore",
+        "modify",
+        "validate",
+        "refuse"
+      ],
+      "title": "Action effectu\u00e9e"
+    },
+    "reason": {
+      "type": "string",
+      "title": "Motif/Raison"
+    },
+    "target_email": {
+      "type": "string",
+      "title": "Email cible (partenaire/commercial)"
+    },
+    "old_data": {
+      "type": "string",
+      "title": "Donn\u00e9es avant (JSON)"
+    },
+    "new_data": {
+      "type": "string",
+      "title": "Donn\u00e9es apr\u00e8s (JSON)"
+    }
+  },
+  "required": [
+    "admin_email",
+    "object_type",
+    "object_id",
+    "action"
+  ]
+}

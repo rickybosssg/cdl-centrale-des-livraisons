@@ -50,6 +50,24 @@
     "nom_annonceur": {
       "type": "string",
       "title": "Nom de l'annonceur"
+    },
+    "deleted": {
+      "type": "boolean",
+      "title": "Supprim\u00e9 (soft delete)",
+      "default": false
+    },
+    "deleted_at": {
+      "type": "string",
+      "title": "Date de suppression"
+    },
+    "suspended": {
+      "type": "boolean",
+      "title": "Suspendu",
+      "default": false
+    },
+    "suspended_at": {
+      "type": "string",
+      "title": "Date de suspension"
     }
   },
   "required": [
