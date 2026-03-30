@@ -18,7 +18,7 @@ const PUBLIC_ROLES = [
 
 export default function RoleSetup({ onComplete }) {
   const pendingRole = localStorage.getItem('cdl_pending_role');
-  const [step, setStep] = useState(pendingRole ? 2 : 1);
+  const [step, setStep] = useState(1);
   const [selectedRole, setSelectedRole] = useState(pendingRole || null);
   const [showPartenaire, setShowPartenaire] = useState(false);
   const ROLES = PUBLIC_ROLES;
