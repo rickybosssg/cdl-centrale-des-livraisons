@@ -47,6 +47,7 @@ export default function PublicHome() {
   };
 
   const handleSignupForm = () => {
+    localStorage.setItem('cdl_pending_role', selectedRole);
     base44.auth.redirectToLogin();
   };
 

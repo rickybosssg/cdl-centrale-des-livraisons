@@ -23,8 +23,9 @@ const ADMIN_ROLES = [
 ];
 
 export default function RoleSetup({ onComplete, isAdmin = false }) {
-  const [step, setStep] = useState(1);
-  const [selectedRole, setSelectedRole] = useState(null);
+  const pendingRole = localStorage.getItem('cdl_pending_role');
+  const [step, setStep] = useState(pendingRole ? 2 : 1);
+  const [selectedRole, setSelectedRole] = useState(pendingRole || null);
   const [showPartenaire, setShowPartenaire] = useState(false);
   const ROLES = isAdmin ? ADMIN_ROLES : PUBLIC_ROLES;
   const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "", code_promo: "" });
@@ -37,6 +38,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
   const [moyenDeplacement, setMoyenDeplacement] = useState([]);
 
   useEffect(() => {
+    if (pendingRole === 'partenaire') setShowPartenaire(true);
     base44.entities.User.filter({ user_type: 'livreur', disponible: true })
       .then(res => setLivreursActifs(res.length))
       .catch(() => {});
@@ -136,6 +138,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
       } catch (_) {}
     }
     setLoading(false);
+    localStorage.removeItem('cdl_pending_role');
     onComplete();
   };
 
