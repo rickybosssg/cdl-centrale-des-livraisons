@@ -62,8 +62,20 @@ export default function GererCommerciaux() {
     loadData();
   };
 
+  const notifierCommercial = async (commercial, titre, message) => {
+    try {
+      await base44.entities.Notification.create({
+        destinataire_email: commercial.email,
+        destinataire_role: 'commercial',
+        titre, message, type: 'info', lue: false,
+      });
+    } catch (_) {}
+  };
+
   const validerCode = async (code) => {
-    await base44.entities.CodePromo.update(code.id, { statut: "valide", actif: true, motif_refus: "" });
+    await base44.entities.CodePromo.update(code.id, { statut: "valide", actif: true, motif_refus: "", date_validation: new Date().toISOString() });
+    const commercial = commerciaux.find(c => c.email === code.commercial_email);
+    if (commercial) notifierCommercial(commercial, '✅ Code promo validé', `Votre code "${code.code}" a été validé et est maintenant actif.`);
     toast.success("Code promo validé !");
     setDialogOpen(false);
     loadData();
@@ -72,7 +84,20 @@ export default function GererCommerciaux() {
   const refuserCode = async (code) => {
     if (!motifRefus.trim()) { toast.error("Veuillez indiquer un motif"); return; }
     await base44.entities.CodePromo.update(code.id, { statut: "refuse", actif: false, motif_refus: motifRefus });
+    const commercial = commerciaux.find(c => c.email === code.commercial_email);
+    if (commercial) notifierCommercial(commercial, '❌ Code promo refusé', `Votre code "${code.code}" a été refusé. Motif : ${motifRefus}`);
     toast.success("Code refusé");
+    setMotifRefus("");
+    setDialogOpen(false);
+    loadData();
+  };
+
+  const demanderModifCode = async (code) => {
+    if (!motifRefus.trim()) { toast.error("Veuillez indiquer un commentaire"); return; }
+    await base44.entities.CodePromo.update(code.id, { statut: "a_modifier", actif: false, motif_refus: motifRefus });
+    const commercial = commerciaux.find(c => c.email === code.commercial_email);
+    if (commercial) notifierCommercial(commercial, '✏️ Modification demandée', `Votre code "${code.code}" doit être modifié. Message admin : ${motifRefus}`);
+    toast.success("Modification demandée au commercial");
     setMotifRefus("");
     setDialogOpen(false);
     loadData();
@@ -328,19 +353,24 @@ export default function GererCommerciaux() {
                     <div><p className="font-bold">{selectedCode.nombre_utilisations || 0}</p><p className="text-muted-foreground">Utilisations</p></div>
                     <div><p className="font-bold text-amber-600">{(selectedCode.commission_due || 0) - (selectedCode.commission_payee || 0)} F</p><p className="text-muted-foreground">Dû</p></div>
                   </div>
-                  {selectedCode.statut === "en_attente" && (
+                  {(selectedCode.statut === "en_attente" || selectedCode.statut === "a_modifier") && (
                     <>
                       <div className="space-y-1">
-                        <Label>Motif de refus (si refus)</Label>
-                        <Input placeholder="Ex: Code inapproprié..." value={motifRefus} onChange={e => setMotifRefus(e.target.value)} />
+                        <Label>Commentaire admin (motif refus / modification)</Label>
+                        <Input placeholder="Ex: Code trop générique, proposez un code personnalisé..." value={motifRefus} onChange={e => setMotifRefus(e.target.value)} />
                       </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" className="flex-1 border-red-300 text-red-600" onClick={() => refuserCode(selectedCode)}>
-                          <XCircle className="h-4 w-4 mr-1" /> Refuser code
+                      <div className="flex flex-col gap-2">
+                        <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => validerCode(selectedCode)}>
+                          <CheckCircle2 className="h-4 w-4 mr-1" /> Valider le code
                         </Button>
-                        <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => validerCode(selectedCode)}>
-                          <CheckCircle2 className="h-4 w-4 mr-1" /> Valider code
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1 border-orange-300 text-orange-600" onClick={() => demanderModifCode(selectedCode)}>
+                            ✏️ Demander modif
+                          </Button>
+                          <Button variant="outline" className="flex-1 border-red-300 text-red-600" onClick={() => refuserCode(selectedCode)}>
+                            <XCircle className="h-4 w-4 mr-1" /> Refuser
+                          </Button>
+                        </div>
                       </div>
                     </>
                   )}

@@ -318,7 +318,7 @@ export default function RoleSetup({ onComplete }) {
               <Label>Code promotionnel (optionnel)</Label>
               {codePromoApplique ? (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-                  <span className="text-green-700 text-sm font-bold flex-1">✅ {codePromoApplique.code} — -20% sur votre 1ère course !</span>
+                  <span className="text-green-700 text-sm font-bold flex-1">✅ {codePromoApplique.code} — -15% sur votre 1ère course !</span>
                   <button onClick={() => { setCodePromoApplique(null); setForm(f => ({ ...f, code_promo: "" })); }} className="text-xs text-red-500">Retirer</button>
                 </div>
               ) : (
@@ -337,7 +337,7 @@ export default function RoleSetup({ onComplete }) {
                       setCheckingCode(true);
                       const codes = await base44.entities.CodePromo.filter({ code: form.code_promo, statut: "valide", actif: true });
                       if (codes.length === 0) { toast.error("Code promo invalide ou non activé"); }
-                      else { setCodePromoApplique(codes[0]); toast.success(`Code ${form.code_promo} appliqué ! -20% 🎉`); }
+                      else { setCodePromoApplique(codes[0]); toast.success(`Code ${form.code_promo} appliqué ! -15% sur votre 1ère course 🎉`); }
                       setCheckingCode(false);
                     }}
                   >
