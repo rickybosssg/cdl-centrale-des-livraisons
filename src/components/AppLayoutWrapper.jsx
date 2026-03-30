@@ -29,8 +29,8 @@ export default function AppLayoutWrapper({ user }) {
           setShowSplash(true);
         }
       } catch (error) {
-        // Utilisateur non connecté, rediriger vers login
-        await base44.auth.redirectToLogin();
+        // Utilisateur non connecté, afficher la page publique CDL
+        window.location.href = '/';
         return;
       }
       setLoading(false);
