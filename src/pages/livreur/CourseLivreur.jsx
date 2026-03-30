@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Phone, Package, MapPin, CheckCircle2, Navigation, TrendingUp } from "lucide-react";
+import { ArrowLeft, Phone, Package, MapPin, CheckCircle2, Navigation, TrendingUp, Zap } from "lucide-react";
 import MiniChat from "../../components/MiniChat";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -224,17 +224,52 @@ export default function CourseLivreur() {
         </CardContent>
       </Card>
 
+      {/* Urgence badge */}
+      {course.urgence && course.urgence !== 'normal' && (
+        <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border font-semibold text-sm ${
+          course.urgence === 'tres_urgent'
+            ? 'bg-red-50 border-red-300 text-red-700'
+            : 'bg-orange-50 border-orange-300 text-orange-700'
+        }`}>
+          <Zap className="h-4 w-4" />
+          {course.urgence === 'tres_urgent' ? '🚨 Livraison très urgente (- 20 min)' : '🔔 Livraison urgente (- 30 min)'}
+        </div>
+      )}
+
       {/* Colis info */}
       <Card>
-        <CardContent className="p-4 flex items-center gap-3">
-          <Package className="h-5 w-5 text-accent" />
-          <div>
-            <p className="font-medium">{course.type_colis}</p>
-            {course.description && (
-              <p className="text-xs text-muted-foreground">{course.description}</p>
-            )}
+        <CardContent className="p-4 space-y-2">
+          <div className="flex items-center gap-3">
+            <Package className="h-5 w-5 text-accent" />
+            <div className="flex-1">
+              <p className="font-medium">{course.type_colis}</p>
+              {course.description && (
+                <p className="text-xs text-muted-foreground">{course.description}</p>
+              )}
+            </div>
           </div>
-          <span className="ml-auto font-bold text-primary">{course.prix} FCFA</span>
+          {course.supplement_urgence > 0 ? (
+            <div className="bg-muted/50 rounded-lg p-2 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Montant de base</span>
+                <span>{(course.prix - (course.supplement_urgence || 0)).toLocaleString()} FCFA</span>
+              </div>
+              <div className={`flex justify-between font-medium ${
+                course.urgence === 'tres_urgent' ? 'text-red-600' : 'text-orange-600'
+              }`}>
+                <span>Supplément urgence</span>
+                <span>+{course.supplement_urgence} FCFA</span>
+              </div>
+              <div className="flex justify-between font-bold border-t pt-1">
+                <span>Total</span>
+                <span className="text-primary">{course.prix?.toLocaleString()} FCFA</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <span className="font-bold text-primary">{course.prix} FCFA</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

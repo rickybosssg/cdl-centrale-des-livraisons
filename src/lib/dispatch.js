@@ -84,8 +84,11 @@ export async function lancerDispatch(course, excludeEmails = []) {
       return null;
     }
 
+    // Bonus urgence sur le score global (priorise les courses urgentes dans le scoring)
+    const urgenceBonus = course.urgence === 'tres_urgent' ? 200 : course.urgence === 'urgent' ? 100 : 0;
+
     const scored = eligibles
-      .map(d => ({ driver: d, score: scoreDriver(d, course) }))
+      .map(d => ({ driver: d, score: scoreDriver(d, course) + urgenceBonus }))
       .sort((a, b) => b.score - a.score);
 
     const best = scored[0].driver;
