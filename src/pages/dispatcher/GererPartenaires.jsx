@@ -6,7 +6,8 @@ import MessageAlert from "@/components/MessageAlert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, RefreshCw, Eye, ShoppingBag, TrendingUp, Ban, UserCheck, Store, MessageCircle } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Search, RefreshCw, Eye, ShoppingBag, TrendingUp, Ban, UserCheck, Store, MessageCircle, Plus, CheckCircle2, XCircle } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
 import { useState as useAdminState } from "react";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ export default function GererPartenaires() {
   const [savingId, setSavingId] = useState(null);
   const [adminUser, setAdminUser] = useState(null);
   const [ficheTab, setFicheTab] = useState("infos");
+  const [motifRefus, setMotifRefus] = useState("");
   const newMsg = useMessageNotification(selected?.user_email);
 
   useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
@@ -54,16 +56,40 @@ export default function GererPartenaires() {
     setSavingId(null);
   };
 
-  const activer = async (p) => {
+  const valider = async (p) => {
     setSavingId(p.id);
     const expiration = new Date();
     expiration.setMonth(expiration.getMonth() + 1);
-    await base44.entities.Partenaire.update(p.id, { statut: "actif", statut_abonnement: "Actif", date_expiration_abonnement: expiration.toISOString() });
+    await base44.entities.Partenaire.update(p.id, { statut: "actif", statut_abonnement: "Actif", date_expiration_abonnement: expiration.toISOString(), motif_refus: "" });
+    // Valider aussi le User
+    try {
+      const users = await base44.entities.User.filter({ email: p.user_email });
+      if (users.length > 0) await base44.entities.User.update(users[0].id, { profil_valide: true, statut_validation_partenaire: "valide" });
+    } catch (_) {}
     setPartenaires(prev => prev.map(x => x.id === p.id ? { ...x, statut: "actif", statut_abonnement: "Actif" } : x));
     if (selected?.id === p.id) setSelected(s => ({ ...s, statut: "actif", statut_abonnement: "Actif" }));
-    toast.success("Partenaire activé");
+    toast.success("Partenaire validé et activé !");
     setSavingId(null);
   };
+
+  const activer = async (p) => valider(p);
+
+  const refuserPartenaire = async (p) => {
+    if (!motifRefus.trim()) { toast.error("Veuillez indiquer un motif de refus"); return; }
+    setSavingId(p.id);
+    await base44.entities.Partenaire.update(p.id, { statut: "refuse", motif_refus: motifRefus });
+    try {
+      const users = await base44.entities.User.filter({ email: p.user_email });
+      if (users.length > 0) await base44.entities.User.update(users[0].id, { statut_validation_partenaire: "refuse" });
+    } catch (_) {}
+    setPartenaires(prev => prev.map(x => x.id === p.id ? { ...x, statut: "refuse" } : x));
+    if (selected?.id === p.id) setSelected(s => ({ ...s, statut: "refuse", motif_refus: motifRefus }));
+    toast.success("Demande refusée");
+    setMotifRefus("");
+    setSavingId(null);
+  };
+
+
 
   const filtered = partenaires.filter(p => {
     const q = search.toLowerCase();
@@ -89,6 +115,7 @@ export default function GererPartenaires() {
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="text-xl font-bold flex-1">Partenaires</h1>
+        <Button size="sm" onClick={() => navigate('/creer-boutique')}><Plus className="h-4 w-4 mr-1" />Créer</Button>
         <Button variant="outline" size="icon" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
       </div>
 
@@ -215,6 +242,23 @@ export default function GererPartenaires() {
                   <Button variant="outline" className="w-full" onClick={() => { navigate(`/commerce/${selected.id}`); setSelected(null); }}>
                     <Eye className="h-4 w-4 mr-1" />Voir la page publique
                   </Button>
+                  {selected.statut === "en_attente" && (
+                    <div className="space-y-2 border border-amber-200 rounded-xl p-3 bg-amber-50">
+                      <p className="text-sm font-semibold text-amber-700">⏳ Demande en attente de validation</p>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Motif de refus (si refus)</Label>
+                        <Input placeholder="Ex: Photos manquantes, infos incomplètes..." value={motifRefus} onChange={e => setMotifRefus(e.target.value)} />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1 border-red-300 text-red-600" disabled={savingId === selected.id} onClick={() => refuserPartenaire(selected)}>
+                          <XCircle className="h-4 w-4 mr-1" />Refuser
+                        </Button>
+                        <Button className="flex-1 bg-green-600 hover:bg-green-700" disabled={savingId === selected.id} onClick={() => valider(selected)}>
+                          <CheckCircle2 className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Valider"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     {selected.statut !== "suspendu" ? (
                       <Button variant="destructive" className="flex-1" disabled={savingId === selected.id} onClick={() => bloquer(selected)}>
@@ -222,12 +266,7 @@ export default function GererPartenaires() {
                       </Button>
                     ) : (
                       <Button className="flex-1 bg-green-600 hover:bg-green-700" disabled={savingId === selected.id} onClick={() => activer(selected)}>
-                        <UserCheck className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Activer"}
-                      </Button>
-                    )}
-                    {selected.statut === "en_attente" && (
-                      <Button className="flex-1" disabled={savingId === selected.id} onClick={() => activer(selected)}>
-                        <UserCheck className="h-4 w-4 mr-1" />Valider
+                        <UserCheck className="h-4 w-4 mr-1" />{savingId === selected.id ? "..." : "Réactiver"}
                       </Button>
                     )}
                   </div>

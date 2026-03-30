@@ -32,8 +32,7 @@
     },
     "type_activite": {
       "type": "string",
-      "title": "Type d'activit\u00e9 (pour Vitrine)",
-      "description": "Ex: Commerce, Service, Freelance, Artisan, etc."
+      "title": "Type d'activit\u00e9 (pour Vitrine)"
     },
     "quartier": {
       "type": "string",
@@ -47,9 +46,21 @@
       "type": "string",
       "title": "Description"
     },
+    "logo": {
+      "type": "string",
+      "title": "Logo URL"
+    },
     "photo_principale": {
       "type": "string",
-      "title": "Photo principale"
+      "title": "Photo principale (couverture)"
+    },
+    "photo_couverture": {
+      "type": "string",
+      "title": "Photo de couverture"
+    },
+    "galerie_photos": {
+      "type": "string",
+      "title": "Galerie photos (JSON array URLs)"
     },
     "photos": {
       "type": "string",
@@ -59,9 +70,17 @@
       "type": "string",
       "title": "Vid\u00e9os (JSON URLs)"
     },
+    "video_presentation": {
+      "type": "string",
+      "title": "Vid\u00e9o de pr\u00e9sentation URL"
+    },
     "catalogue_url": {
       "type": "string",
       "title": "URL Catalogue (PDF/image)"
+    },
+    "menu_images": {
+      "type": "string",
+      "title": "Images du menu (JSON array)"
     },
     "ouvert": {
       "type": "boolean",
@@ -71,14 +90,23 @@
       "type": "string",
       "title": "Horaires d'ouverture"
     },
+    "whatsapp": {
+      "type": "string",
+      "title": "WhatsApp"
+    },
     "statut": {
       "type": "string",
       "enum": [
         "en_attente",
         "actif",
+        "refuse",
         "suspendu"
       ],
       "title": "Statut"
+    },
+    "motif_refus": {
+      "type": "string",
+      "title": "Motif de refus"
     },
     "statut_abonnement": {
       "type": "string",
@@ -112,6 +140,10 @@
     "nombre_commandes": {
       "type": "number",
       "title": "Nombre commandes"
+    },
+    "chiffre_affaires": {
+      "type": "number",
+      "title": "Chiffre d'affaires total (FCFA)"
     },
     "note_admin": {
       "type": "string",

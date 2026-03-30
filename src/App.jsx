@@ -39,6 +39,7 @@ import GererPublicites from './pages/dispatcher/GererPublicites';
 import GererCommerciaux from './pages/dispatcher/GererCommerciaux';
 import Suppression from './pages/dispatcher/Suppression';
 import AuditUtilisateurs from './pages/dispatcher/AuditUtilisateurs';
+import CreerBoutiqueAdmin from './pages/dispatcher/CreerBoutiqueAdmin';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
 import DashboardPartenaire from './pages/partenaire/DashboardPartenaire';
 import PagePartenaire from './pages/partenaire/PagePartenaire';
@@ -164,6 +165,7 @@ const AuthenticatedApp = () => {
           <Route path="/gerer-commerciaux" element={<GererCommerciaux />} />
           <Route path="/suppression" element={<Suppression />} />
           <Route path="/audit-utilisateurs" element={<AuditUtilisateurs />} />
+          <Route path="/creer-boutique" element={<CreerBoutiqueAdmin />} />
           <Route path="/messages-admin" element={<MessagesAdmin />} />
         </Route>
       </Route>

@@ -30,9 +30,39 @@
       "type": "string",
       "title": "Quartier de livraison"
     },
+    "adresse_livraison": {
+      "type": "string",
+      "title": "Adresse pr\u00e9cise de livraison"
+    },
     "note_client": {
       "type": "string",
       "title": "Note du client"
+    },
+    "items_json": {
+      "type": "string",
+      "title": "Articles command\u00e9s (JSON)"
+    },
+    "total_produits": {
+      "type": "number",
+      "title": "Total produits (FCFA)"
+    },
+    "frais_livraison": {
+      "type": "number",
+      "title": "Frais de livraison (FCFA)"
+    },
+    "total_commande": {
+      "type": "number",
+      "title": "Total commande (FCFA)"
+    },
+    "mode_paiement": {
+      "type": "string",
+      "enum": [
+        "Paiement \u00e0 la livraison",
+        "Orange Money",
+        "Moov Money",
+        "Telecel Money"
+      ],
+      "title": "Mode de paiement"
     },
     "statut": {
       "type": "string",
@@ -43,7 +73,8 @@
         "en_preparation",
         "prete",
         "en_livraison",
-        "livree"
+        "livree",
+        "annulee"
       ],
       "title": "Statut"
     },
