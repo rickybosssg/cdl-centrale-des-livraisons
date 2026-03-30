@@ -7,8 +7,9 @@ export default function DispatcherGuard() {
 
   useEffect(() => {
     base44.auth.me().then(user => {
+      const ADMIN_EMAILS = ['weezyh2@gmail.com'];
       setAllowed(
-        user?.user_type === 'dispatcher' && user?.role === 'admin'
+        user?.role === 'admin' || ADMIN_EMAILS.includes(user?.email)
       );
     });
   }, []);

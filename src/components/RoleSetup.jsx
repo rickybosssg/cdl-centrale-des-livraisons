@@ -16,18 +16,12 @@ const PUBLIC_ROLES = [
   { value: "commercial", label: "Commercial", icon: Megaphone, desc: "Promouvoir CDL et gagner des commissions" },
 ];
 
-const ADMIN_ROLES = [
-  { value: "client", label: "Client", icon: User, desc: "Commander des livraisons" },
-  { value: "livreur", label: "Livreur", icon: Truck, desc: "Effectuer des livraisons" },
-  { value: "dispatcher", label: "Administrateur", icon: Radio, desc: "Gérer les courses et livreurs" },
-];
-
-export default function RoleSetup({ onComplete, isAdmin = false }) {
+export default function RoleSetup({ onComplete }) {
   const pendingRole = localStorage.getItem('cdl_pending_role');
   const [step, setStep] = useState(pendingRole ? 2 : 1);
   const [selectedRole, setSelectedRole] = useState(pendingRole || null);
   const [showPartenaire, setShowPartenaire] = useState(false);
-  const ROLES = isAdmin ? ADMIN_ROLES : PUBLIC_ROLES;
+  const ROLES = PUBLIC_ROLES;
   const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "", code_promo: "" });
   const [checkingCode, setCheckingCode] = useState(false);
   const [codePromoApplique, setCodePromoApplique] = useState(null);
@@ -88,11 +82,7 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
     await base44.auth.updateMe({
       user_type: selectedRole,
       user_roles: JSON.stringify([selectedRole]),
-      telephone: form.telephone,
-      whatsapp: form.whatsapp || form.telephone,
-      quartier: form.quartier,
-      disponible: false,
-      actif: true,
+      statut_compte: selectedRole === 'client' ? 'actif' : 'en_attente',
       profil_valide: selectedRole === "client",
       statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : undefined,
       statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
@@ -284,6 +274,31 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
             />
           </div>
 
+          {selectedRole === "livreur" && (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">🚗 Mode(s) de déplacement *</p>
+              <div className="space-y-2">
+                {[{val: "moto", label: "🛵 Motocyclette"}, {val: "vehicule", label: "🚗 Véhicule"}].map(mode => (
+                  <button
+                    key={mode.val}
+                    onClick={() => setMoyenDeplacement(prev =>
+                      prev.includes(mode.val)
+                        ? prev.filter(m => m !== mode.val)
+                        : [...prev, mode.val]
+                    )}
+                    className={`w-full p-3 rounded-lg border-2 transition-all font-medium ${
+                      moyenDeplacement.includes(mode.val)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-card hover:border-primary/50"
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {selectedRole === "client" && (
             <div className="space-y-2">
               <Label>Code promotionnel (optionnel)</Label>
@@ -316,8 +331,8 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
                   </Button>
                 </div>
               )}
-              </div>
-              )}
+            </div>
+          )}
 
         </div>
 

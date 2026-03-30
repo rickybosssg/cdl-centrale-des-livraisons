@@ -9,44 +9,22 @@ import LivreurHome from "./client/LivreurHome";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
 import DashboardPartenaire from "./partenaire/DashboardPartenaire";
 import DashboardCommercial from "./commercial/DashboardCommercial";
-import RoleSwitcher from "../components/RoleSwitcher";
+import AttentePage from "./AttentePage";
+
+const ADMIN_EMAILS = ["weezyh2@gmail.com"];
 
 export default function Home() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeRole, setActiveRole] = useState(null);
-
-  const getRoles = (u) => {
-    if (!u) return [];
-    if (u.user_roles) {
-      try { return JSON.parse(u.user_roles); } catch (_) {}
-    }
-    return u.user_type ? [u.user_type] : [];
-  };
 
   const loadUser = async () => {
     const me = await base44.auth.me();
     setUser(me);
-    const roles = getRoles(me);
-    // Force admin pour weezyh2@gmail.com
-    if (me.email === "weezyh2@gmail.com" && !roles.includes("admin")) {
-      roles.unshift("admin");
-    }
-    // Initialise le rôle actif seulement si pas encore défini ou invalide
-    setActiveRole(prev => (prev && roles.includes(prev)) ? prev : roles[0] || null);
     setLoading(false);
   };
 
-  const handleRoleAdded = async (newRole) => {
-    const me = await base44.auth.me();
-    setUser(me);
-    setActiveRole(newRole);
-  };
-
-  useEffect(() => {
-    loadUser();
-  }, []);
+  useEffect(() => { loadUser(); }, []);
 
   if (loading) {
     return (
@@ -56,21 +34,50 @@ export default function Home() {
     );
   }
 
-  if (!user?.user_type) {
-    return <RoleSetup onComplete={loadUser} isAdmin={user?.role === 'admin'} />;
+  // 1. Admin → dashboard admin directement
+  const isAdmin = user?.role === 'admin' || ADMIN_EMAILS.includes(user?.email);
+  if (isAdmin) {
+    return (
+      <div className="space-y-0">
+        <div className="flex justify-end items-center pb-3 px-4 pt-4">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/parametres')}>
+            <User className="h-4 w-4" /> Mon compte
+          </Button>
+        </div>
+        <DispatcherDashboard />
+      </div>
+    );
   }
 
-  const roles = getRoles(user);
-  const role = activeRole || roles[0] || user.user_type;
+  // 2. Pas encore de profil → inscription
+  if (!user?.user_type) {
+    return <RoleSetup onComplete={loadUser} />;
+  }
 
+  // 3. Compte bloqué
+  if (user.livreur_bloque || user.statut_compte === 'bloque') {
+    return <AttentePage profile={user.user_type} isBlocked={true} blockReason={user.motif_blocage || ''} />;
+  }
+
+  // 4. En attente de validation (livreur, partenaire, commercial)
+  const needsValidation = ['livreur', 'partenaire', 'commercial'].includes(user.user_type);
+  const isValidated =
+    user.profil_valide ||
+    user.statut_validation_livreur === 'valide' ||
+    user.statut_validation_commercial === 'valide' ||
+    user.statut_validation_partenaire === 'valide';
+
+  if (needsValidation && !isValidated) {
+    return <AttentePage profile={user.user_type} />;
+  }
+
+  // 5. Dashboard selon le profil
   const renderDashboard = () => {
-    switch (role) {
-      case "client":     return <ClientHome user={user} />;
-      case "livreur":    return <LivreurHome user={user} />;
-      case "admin":
-      case "dispatcher": return <DispatcherDashboard />;
-      case "partenaire": return <DashboardPartenaire user={user} />;
-      case "commercial": return <DashboardCommercial user={user} />;
+    switch (user.user_type) {
+      case 'client':     return <ClientHome user={user} />;
+      case 'livreur':    return <LivreurHome user={user} />;
+      case 'partenaire': return <DashboardPartenaire user={user} />;
+      case 'commercial': return <DashboardCommercial user={user} />;
       default:           return <ClientHome user={user} />;
     }
   };
@@ -78,22 +85,9 @@ export default function Home() {
   return (
     <div className="space-y-0">
       <div className="flex justify-between items-center pb-3 px-4 pt-4">
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => navigate('/parametres')}
-        >
-          <User className="h-4 w-4" />
-          Mon compte
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/parametres')}>
+          <User className="h-4 w-4" /> Mon compte
         </Button>
-        <RoleSwitcher
-          user={user}
-          roles={roles}
-          currentRole={role}
-          onSwitch={setActiveRole}
-          onRoleAdded={handleRoleAdded}
-        />
       </div>
       {renderDashboard()}
     </div>

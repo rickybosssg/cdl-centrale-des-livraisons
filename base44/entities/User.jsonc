@@ -15,11 +15,20 @@
       "enum": [
         "client",
         "livreur",
-        "dispatcher",
         "partenaire",
         "commercial"
       ],
-      "title": "Type d'utilisateur"
+      "title": "Profil utilisateur"
+    },
+    "statut_compte": {
+      "type": "string",
+      "enum": [
+        "actif",
+        "en_attente",
+        "bloque"
+      ],
+      "title": "Statut du compte",
+      "default": "en_attente"
     },
     "telephone": {
       "type": "string",
@@ -54,9 +63,31 @@
       ],
       "title": "Statut de validation livreur"
     },
+    "statut_validation_commercial": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "valide",
+        "refuse"
+      ],
+      "title": "Statut de validation commercial"
+    },
+    "statut_validation_partenaire": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "valide",
+        "refuse"
+      ],
+      "title": "Statut de validation partenaire"
+    },
     "motif_refus": {
       "type": "string",
       "title": "Motif de refus"
+    },
+    "motif_blocage": {
+      "type": "string",
+      "title": "Motif de blocage"
     },
     "date_validation": {
       "type": "string",
@@ -65,10 +96,6 @@
     "livreur_bloque": {
       "type": "boolean",
       "title": "Livreur bloqu\u00e9"
-    },
-    "motif_blocage": {
-      "type": "string",
-      "title": "Motif de blocage"
     },
     "statut_financier_livreur": {
       "type": "string",
@@ -127,9 +154,13 @@
       "type": "string",
       "title": "CNI verso"
     },
-    "photo_moto": {
+    "photo_moyen_deplacement": {
       "type": "string",
-      "title": "Photo de la moto"
+      "title": "Photo du moyen de d\u00e9placement"
+    },
+    "moyen_deplacement": {
+      "type": "string",
+      "title": "Mode(s) de d\u00e9placement (JSON)"
     },
     "commission_mode": {
       "type": "boolean",
@@ -154,6 +185,10 @@
     "alerte_qualite_envoyee": {
       "type": "string",
       "title": "Date derni\u00e8re alerte qualit\u00e9 envoy\u00e9e"
+    },
+    "user_roles": {
+      "type": "string",
+      "title": "R\u00f4les JSON (interne)"
     }
   },
   "required": [
