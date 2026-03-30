@@ -117,7 +117,15 @@ export default function GererCourses() {
     loadData();
   };
 
-  const enAttente = courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport);
+  const URGENCE_SCORE = { tres_urgent: 3, urgent: 2, normal: 1 };
+  const sortByUrgence = (list) => [...list].sort((a, b) => {
+    const ua = URGENCE_SCORE[a.urgence] || 1;
+    const ub = URGENCE_SCORE[b.urgence] || 1;
+    if (ub !== ua) return ub - ua;
+    return new Date(a.created_date) - new Date(b.created_date);
+  });
+
+  const enAttente = sortByUrgence(courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport));
   const assignees = courses.filter(c => c.statut === "assignee_attente" && !c.moyen_transport);
   const enCours = courses.filter(c => ["acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport);
   const terminees = courses.filter(c => ["livree", "annulee"].includes(c.statut) && !c.moyen_transport);
@@ -133,14 +141,31 @@ export default function GererCourses() {
     );
   }
 
+  const UrgenceBadge = ({ urgence }) => {
+    if (!urgence || urgence === 'normal') return null;
+    return urgence === 'tres_urgent' ? (
+      <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold animate-pulse">
+        🚨 TRÈS URGENT
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-bold">
+        🔔 URGENT
+      </span>
+    );
+  };
+
   const CourseRow = ({ course, actions }) => (
-    <Card className="border-l-4 border-l-primary">
+    <Card className={`border-l-4 ${
+      course.urgence === 'tres_urgent' ? 'border-l-red-500' :
+      course.urgence === 'urgent' ? 'border-l-orange-500' : 'border-l-primary'
+    }`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-mono text-muted-foreground">#{course.id?.slice(0, 8)}</span>
               <StatusBadge statut={course.statut} />
+              <UrgenceBadge urgence={course.urgence} />
               {course.mode_assignation === 'auto' && (
                 <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
                   <Zap className="h-2.5 w-2.5" />Auto
@@ -217,6 +242,11 @@ export default function GererCourses() {
             </TabsList>
 
             <TabsContent value="attente" className="space-y-3 mt-3">
+              {enAttente.filter(c => c.urgence === 'tres_urgent' && c.statut !== 'aucun_livreur').length > 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border-2 border-red-300 animate-pulse text-sm font-bold text-red-700">
+                  🚨 {enAttente.filter(c => c.urgence === 'tres_urgent').length} course(s) TRÈS URGENTE(S) en attente !
+                </div>
+              )}
               {enAttente.map((course) => (
                 <CourseRow
                   key={course.id}

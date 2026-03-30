@@ -17,6 +17,9 @@ export default function CoursesDisponibles() {
     const me = await base44.auth.me();
     setUser(me);
     const data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 15);
+    // Trier : tres_urgent en premier, puis urgent, puis normal
+    const URGENCE_SCORE = { tres_urgent: 3, urgent: 2, normal: 1 };
+    data.sort((a, b) => (URGENCE_SCORE[b.urgence] || 1) - (URGENCE_SCORE[a.urgence] || 1));
     setCourses(data);
     setLoading(false);
   }, []);

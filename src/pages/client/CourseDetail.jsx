@@ -97,6 +97,8 @@ export default function CourseDetail() {
           <h1 className="text-lg font-bold">Suivi de la course</h1>
           <p className="text-xs text-muted-foreground">#{course.id?.slice(0, 8)}</p>
         </div>
+        {course.urgence === 'tres_urgent' && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">🚨 TRÈS URGENT</span>}
+        {course.urgence === 'urgent' && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">🔔 URGENT</span>}
         <StatusBadge statut={course.statut} />
       </div>
 
@@ -287,6 +289,7 @@ export default function CourseDetail() {
           <CardContent className="p-4 space-y-3">
             <p className="text-sm font-bold text-amber-800">😔 Aucun livreur disponible pour le moment</p>
             <p className="text-xs text-amber-700">Essayez d'augmenter le montant de la course pour attirer un livreur plus rapidement.</p>
+            {course.prix && <p className="text-xs text-amber-600 font-semibold">💡 Prix suggéré : {Math.round(course.prix * 1.3).toLocaleString()} FCFA (+30%)</p>}
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input
