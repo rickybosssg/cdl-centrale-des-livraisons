@@ -42,6 +42,8 @@ import AuditUtilisateurs from './pages/dispatcher/AuditUtilisateurs';
 import CreerBoutiqueAdmin from './pages/dispatcher/CreerBoutiqueAdmin';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
 import DashboardPartenaire from './pages/partenaire/DashboardPartenaire';
+import MesCommandesMarketplace from './pages/client/MesCommandesMarketplace';
+import CommandeMarketplaceDetail from './pages/client/CommandeMarketplaceDetail';
 import PagePartenaire from './pages/partenaire/PagePartenaire';
 import CommandesPartenaire from './pages/partenaire/CommandesPartenaire';
 import MesMessages from './pages/MesMessages';
@@ -128,6 +130,10 @@ const AuthenticatedApp = () => {
         <Route path="/course/:id" element={<CourseDetail />} />
         <Route path="/effectuer-deplacement" element={<EffectuerDeplacement />} />
         <Route path="/vitrines" element={<Vitrines />} />
+        <Route path="/mes-commandes-marketplace" element={<MesCommandesMarketplace />} />
+        <Route path="/commande-marketplace/:id" element={<CommandeMarketplaceDetail />} />
+        <Route path="/mes-commandes-marketplace" element={<MesCommandesMarketplace />} />
+        <Route path="/commande-marketplace/:id" element={<CommandeMarketplaceDetail />} />
         <Route path="/commerce/:id" element={<PagePartenaire />} />
 
         {/* Livreur */}

@@ -67,12 +67,26 @@ export default function CommandesPartenaire({ user }) {
     return unsub;
   }, [partenaire]);
 
+  const notifierClient = async (cmd, titre, message) => {
+    try {
+      await base44.entities.Notification.create({
+        destinataire_email: cmd.client_email,
+        destinataire_role: 'client',
+        titre,
+        message,
+        type: 'info',
+        lue: false,
+      });
+    } catch (_) {}
+  };
+
   const accepter = async (cmd) => {
     setProcessing(cmd.id);
     await base44.entities.CommandePartenaire.update(cmd.id, {
       statut: "en_preparation",
       date_acceptation: new Date().toISOString(),
     });
+    notifierClient(cmd, '✅ Commande acceptée', `${cmd.partenaire_nom} a accepté votre commande et la prépare.`);
     // Créer la course CDL
     const courseData = await base44.entities.Course.create({
       quartier_depart: partenaire.quartier,
@@ -107,6 +121,7 @@ export default function CommandesPartenaire({ user }) {
       statut: "refusee",
       date_refus: new Date().toISOString(),
     });
+    notifierClient(cmd, '❌ Commande refusée', `${cmd.partenaire_nom} n'a pas pu accepter votre commande.`);
     vibrateLight();
     toast.success("Commande refusée");
     setProcessing(null);
@@ -115,6 +130,7 @@ export default function CommandesPartenaire({ user }) {
   const marquerPrete = async (cmd) => {
     setProcessing(cmd.id);
     await base44.entities.CommandePartenaire.update(cmd.id, { statut: "prete" });
+    notifierClient(cmd, '📦 Commande prête', `Votre commande chez ${cmd.partenaire_nom} est prête. Le livreur arrive bientôt.`);
     toast.success("Commande marquée comme prête !");
     setProcessing(null);
   };

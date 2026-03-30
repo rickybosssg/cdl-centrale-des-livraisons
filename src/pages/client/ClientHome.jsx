@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User } from "lucide-react";
+import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User, ShoppingBag } from "lucide-react";
 import EffectuerDeplacement from "./EffectuerDeplacement";
 import ChatAdmin from "@/components/ChatAdmin";
 import BannierePublicitaire from "../../components/BannierePublicitaire";
@@ -91,6 +91,28 @@ export default function ClientHome({ user }) {
               <div>
                 <p className="font-semibold text-sm">Effectuer</p>
                 <p className="text-xs opacity-80">un déplacement</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/vitrines">
+          <Card className="hover:opacity-90 transition-opacity cursor-pointer h-full border-primary/30">
+            <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
+              <Store className="h-6 w-6 text-primary" />
+              <div>
+                <p className="font-semibold text-sm">Boutiques</p>
+                <p className="text-xs text-muted-foreground">Commander en ligne</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/mes-commandes-marketplace">
+          <Card className="hover:opacity-90 transition-opacity cursor-pointer h-full">
+            <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
+              <ShoppingBag className="h-6 w-6 text-accent" />
+              <div>
+                <p className="font-semibold text-sm">Commandes</p>
+                <p className="text-xs text-muted-foreground">Mes achats</p>
               </div>
             </CardContent>
           </Card>
