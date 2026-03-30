@@ -33,7 +33,7 @@ export default function AttentePage({ profile, isBlocked = false, blockReason = 
             <p className="font-medium">Besoin d'aide ?</p>
             <p>Contactez-nous via WhatsApp :</p>
             <a
-              href="https://wa.me/22600000000"
+              href="https://wa.me/message/EH7SMNHNHL7RN1?text=Bonjour%20CDL%2C%20mon%20compte%20a%20%C3%A9t%C3%A9%20bloqu%C3%A9."
               target="_blank"
               rel="noopener noreferrer"
               className="text-green-600 font-semibold underline"
@@ -78,7 +78,7 @@ export default function AttentePage({ profile, isBlocked = false, blockReason = 
         <div className="p-4 rounded-xl bg-gray-50 border text-sm text-muted-foreground space-y-1">
           <p className="font-medium">Une question ?</p>
           <a
-            href="https://wa.me/22600000000"
+            href="https://wa.me/message/EH7SMNHNHL7RN1?text=Bonjour%20CDL%2C%20ma%20demande%20est%20en%20attente%20de%20validation."
             target="_blank"
             rel="noopener noreferrer"
             className="text-green-600 font-semibold underline text-sm"

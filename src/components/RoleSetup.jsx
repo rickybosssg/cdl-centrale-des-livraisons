@@ -141,6 +141,34 @@ export default function RoleSetup({ onComplete }) {
         });
       } catch (_) {}
     }
+    // Notifier les admins pour partenaire
+    if (selectedRole === "partenaire") {
+      try {
+        const meData = await base44.auth.me();
+        await base44.functions.invoke('notifyAdminNewSignup', {
+          entity_name: 'Partenaire',
+          entity_data: {
+            full_name: meData.full_name,
+            telephone: form.telephone,
+            quartier: form.quartier,
+          },
+        });
+      } catch (_) {}
+    }
+    // Notifier les admins pour commercial
+    if (selectedRole === "commercial") {
+      try {
+        const meData = await base44.auth.me();
+        await base44.functions.invoke('notifyAdminNewSignup', {
+          entity_name: 'CodePromo',
+          entity_data: {
+            full_name: meData.full_name,
+            telephone: form.telephone,
+            quartier: form.quartier,
+          },
+        });
+      } catch (_) {}
+    }
     setLoading(false);
     localStorage.removeItem('cdl_pending_role');
     onComplete();

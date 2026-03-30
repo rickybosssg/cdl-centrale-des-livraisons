@@ -33,10 +33,10 @@ Deno.serve(async (req) => {
       message = `Nom: ${name} | Téléphone: ${phone} | Zone: ${zone} | Statut: en attente de validation`;
       notificationType = 'info';
     } else if (entity_name === 'Partenaire') {
-      const commerce = entity_data.nom_commerce || 'Commerce';
+      const commerce = entity_data.nom_commerce || entity_data.full_name || 'Commerce';
       const type = entity_data.type_commerce || 'N/A';
       const phone = entity_data.telephone || 'N/A';
-      const zone = entity_data.quartier || entity_data.adresse || 'N/A';
+      const zone = entity_data.quartier || entity_data.quartier || 'N/A';
       
       if (!commerce || phone === 'N/A') return Response.json({ skipped: true });
       
@@ -44,14 +44,15 @@ Deno.serve(async (req) => {
       message = `Commerce: ${commerce} | Catégorie: ${type} | Téléphone: ${phone} | Zone: ${zone}`;
       notificationType = 'info';
     } else if (entity_name === 'CodePromo') {
-      const code = entity_data.code || 'N/A';
-      const commercial = entity_data.commercial_name || 'N/A';
+      const name = entity_data.full_name || 'Commercial';
+      const phone = entity_data.telephone || 'N/A';
+      const zone = entity_data.quartier || 'N/A';
       
-      if (!code || code === 'N/A') return Response.json({ skipped: true });
+      if (!name || phone === 'N/A') return Response.json({ skipped: true });
       
-      titre = '📣 Nouveau code promo';
-      message = `Code: ${code} | Commercial: ${commercial}`;
-      notificationType = 'success';
+      titre = '📣 Nouveau commercial inscrit';
+      message = `Nom: ${name} | Téléphone: ${phone} | Zone: ${zone}`;
+      notificationType = 'info';
     } else {
       return Response.json({ skipped: true });
     }

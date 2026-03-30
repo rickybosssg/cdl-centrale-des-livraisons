@@ -314,9 +314,9 @@ export default function DispatcherDashboard() {
               <Package className="h-8 w-8 text-primary mx-auto" />
               <p className="text-sm font-medium">Courses Trajets</p>
               <div className="space-y-1 text-xs">
-                <div className="text-muted-foreground">Total course: <span className="font-bold text-foreground">0</span></div>
-                <div className="text-muted-foreground">Total trajet: <span className="font-bold text-foreground">{courses.filter(c => c.moyen_transport).length}</span></div>
-              </div>
+                    <div className="text-muted-foreground">Courses: <span className="font-bold text-foreground">{courses.filter(c => !c.moyen_transport).length}</span></div>
+                    <div className="text-muted-foreground">Trajets: <span className="font-bold text-foreground">{courses.filter(c => c.moyen_transport).length}</span></div>
+                  </div>
             </CardContent>
           </Card>
         </Link>

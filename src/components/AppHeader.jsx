@@ -6,7 +6,7 @@ import { useMessageCount } from "@/hooks/useMessageCount";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
-const ROOT_PATHS = ['/', '/courses-disponibles', '/mes-livraisons', '/vitrines', '/dashboard-partenaire', '/gerer-courses', '/gerer-livreurs', '/statistiques', '/suivi-commissions', '/validation-livreurs', '/parametres', '/mes-gains', '/mes-messages', '/messages-admin', '/base-clients', '/gerer-partenaires', '/gerer-publicites', '/gerer-commerciaux', '/commandes-partenaire'];
+const ROOT_PATHS = ['/', '/courses-disponibles', '/mes-livraisons', '/vitrines', '/dashboard-partenaire', '/gerer-courses', '/gerer-livreurs', '/statistiques', '/suivi-commissions', '/validation-livreurs', '/parametres', '/mes-gains', '/mes-messages', '/messages-admin', '/base-clients', '/gerer-partenaires', '/gerer-publicites', '/gerer-commerciaux', '/commandes-partenaire', '/settings'];
 
 export default function AppHeader({ userRole, userEmail }) {
   const navigate = useNavigate();
@@ -49,6 +49,15 @@ export default function AppHeader({ userRole, userEmail }) {
             {userRole === 'dispatcher' ? 'Administrateur' : userRole}
           </span>
 
+          <Link to="/settings">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
+              className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
+            >
+              <Settings className="h-4 w-4" />
+            </motion.button>
+          </Link>
           <motion.button
             whileTap={{ scale: 0.9 }}
             transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}

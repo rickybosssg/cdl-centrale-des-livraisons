@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { User } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
 import RoleSetup from "../components/RoleSetup";
 import ClientHome from "./client/ClientHome";
@@ -11,10 +11,11 @@ import DashboardPartenaire from "./partenaire/DashboardPartenaire";
 import DashboardCommercial from "./commercial/DashboardCommercial";
 import AttentePage from "./AttentePage";
 
-const ADMIN_EMAILS = ["weezyh2@gmail.com"];
+const ADMIN_EMAILS = ["weezyh2@gmail.com", "admin@cdl.local"];
 
 export default function Home() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -24,7 +25,10 @@ export default function Home() {
     setLoading(false);
   };
 
-  useEffect(() => { loadUser(); }, []);
+  useEffect(() => { 
+    if (isAuthenticated) loadUser();
+    else { navigate('/'); setLoading(false); }
+  }, [isAuthenticated, navigate]);
 
   if (loading) {
     return (
@@ -35,7 +39,7 @@ export default function Home() {
   }
 
   // 1. Admin → dashboard admin directement
-  const isAdmin = user?.role === 'admin' || ADMIN_EMAILS.includes(user?.email);
+  const isAdmin = user?.role === 'admin' || user?.user_type === 'admin' || ADMIN_EMAILS.includes(user?.email);
   if (isAdmin) {
     return (
       <div className="space-y-0">
@@ -73,6 +77,7 @@ export default function Home() {
 
   // 5. Dashboard selon le profil
   const renderDashboard = () => {
+    if (!user) return null;
     switch (user.user_type) {
       case 'client':     return <ClientHome user={user} />;
       case 'livreur':    return <LivreurHome user={user} />;

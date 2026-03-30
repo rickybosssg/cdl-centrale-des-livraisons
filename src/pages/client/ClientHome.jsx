@@ -182,9 +182,7 @@ export default function ClientHome({ user }) {
         </Card>
       )}
 
-      {showDeplacement && (
-        <EffectuerDeplacement user={user} />
-      )}
+
 
       {courses.length === 0 && !loading && (
         <div className="text-center py-8 space-y-2">
