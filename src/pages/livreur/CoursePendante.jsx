@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { reassignerCourse } from "@/lib/dispatch";
 
 export default function CoursePendante({ course, onRespond }) {
-  const TIMER = 45;
+  const TIMER = 60;
   const [remaining, setRemaining] = useState(TIMER);
   const [responding, setResponding] = useState(false);
 
@@ -73,7 +73,15 @@ export default function CoursePendante({ course, onRespond }) {
       <Card className="w-full max-w-sm animate-in slide-in-from-bottom duration-300 shadow-2xl">
         <CardContent className="p-5 space-y-4">
           <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
             <h2 className="font-bold text-lg">🛵 Nouvelle course !</h2>
+            {(course.urgence === 'tres_urgent' || course.niveau_urgence === 'tres_urgent') && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 animate-pulse">🚨 TRÈS URGENT</span>
+            )}
+            {(course.urgence === 'urgent' || course.niveau_urgence === 'urgent') && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">🔔 URGENT</span>
+            )}
+          </div>
             <div className={`flex items-center gap-1.5 ${urgent ? "text-red-500 animate-pulse" : "text-amber-500"}`}>
               <Clock className="h-4 w-4" />
               <span className="text-2xl font-bold tabular-nums">{remaining}s</span>

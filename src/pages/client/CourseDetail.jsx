@@ -19,6 +19,9 @@ export default function CourseDetail() {
   const [loading, setLoading] = useState(true);
   const [nouveauPrix, setNouveauPrix] = useState("");
   const [relancant, setRelancant] = useState(false);
+  const [relancantSeul, setRelancantSeul] = useState(false);
+  const [showPrixForm, setShowPrixForm] = useState(false);
+  const [prixErreur, setPrixErreur] = useState("");
 
   useEffect(() => {
     if (!id || id === ':id') {
@@ -40,22 +43,32 @@ export default function CourseDetail() {
     return unsub;
   }, [id]);
 
+  const relancerSeul = async () => {
+    setRelancantSeul(true);
+    await base44.entities.Course.update(course.id, { statut: 'en_attente', nombre_tentatives: 0 });
+    try { await base44.functions.invoke('autoDispatch', { course_id: course.id }); } catch (_) {}
+    setCourse(prev => ({ ...prev, statut: 'en_attente' }));
+    setRelancantSeul(false);
+  };
+
   const relancerAvecNouveauPrix = async () => {
     const px = parseInt(nouveauPrix, 10);
-    if (!px || px <= 0) return;
+    if (!px || px <= 0) { setPrixErreur("Prix invalide"); return; }
+    if (px <= (course.prix || 0)) { setPrixErreur(`Le nouveau prix doit être supérieur à ${course.prix} FCFA`); return; }
+    setPrixErreur("");
     setRelancant(true);
     await base44.entities.Course.update(course.id, {
       prix: px,
+      montant_total: px,
       commission_cdl: Math.round(px * 0.2),
       gain_livreur: Math.round(px * 0.8),
       statut: "en_attente",
       nombre_tentatives: 0,
     });
-    try {
-      await base44.functions.invoke('autoDispatch', { course_id: course.id });
-    } catch (_) {}
+    try { await base44.functions.invoke('autoDispatch', { course_id: course.id }); } catch (_) {}
     setCourse(prev => ({ ...prev, prix: px, statut: "en_attente" }));
     setNouveauPrix("");
+    setShowPrixForm(false);
     setRelancant(false);
   };
 
@@ -285,30 +298,66 @@ export default function CourseDetail() {
 
       {/* Suggestion augmenter le prix si aucun livreur */}
       {course.statut === "aucun_livreur" && (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="p-4 space-y-3">
-            <p className="text-sm font-bold text-amber-800">😔 Aucun livreur disponible pour le moment</p>
-            <p className="text-xs text-amber-700">Essayez d'augmenter le montant de la course pour attirer un livreur plus rapidement.</p>
-            {course.prix && <p className="text-xs text-amber-600 font-semibold">💡 Prix suggéré : {Math.round(course.prix * 1.3).toLocaleString()} FCFA (+30%)</p>}
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  type="number"
-                  placeholder={`Nouveau prix (actuel: ${course.prix} FCFA)`}
-                  value={nouveauPrix}
-                  onChange={e => setNouveauPrix(e.target.value)}
-                  className="pr-14"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">FCFA</span>
-              </div>
-              <Button
-                onClick={relancerAvecNouveauPrix}
-                disabled={relancant || !nouveauPrix || parseInt(nouveauPrix) <= 0}
-                className="bg-amber-600 hover:bg-amber-700"
-              >
-                {relancant ? "..." : "Relancer"}
-              </Button>
+        <Card className="border-red-300 bg-red-50">
+          <CardContent className="p-5 space-y-4">
+            <div className="text-center space-y-1">
+              <p className="text-base font-bold text-red-800">😔 Aucun livreur disponible</p>
+              <p className="text-xs text-red-700">Aucun livreur n'est disponible pour le moment.</p>
+              {course.nombre_tentatives > 0 && (
+                <p className="text-xs text-red-600">{course.nombre_tentatives} tentative(s) effectuée(s)</p>
+              )}
             </div>
+
+            <div className="p-3 rounded-lg bg-white/70 border border-red-200 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Prix actuel proposé</span>
+              <span className="font-bold text-primary text-lg">{course.prix?.toLocaleString()} FCFA</span>
+            </div>
+
+            {!showPrixForm ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-100 text-xs h-11"
+                  onClick={relancerSeul}
+                  disabled={relancantSeul}
+                >
+                  {relancantSeul ? "⏳ Relance..." : "🔄 Relancer la recherche"}
+                </Button>
+                <Button
+                  className="bg-amber-600 hover:bg-amber-700 text-xs h-11"
+                  onClick={() => { setShowPrixForm(true); setNouveauPrix(String(Math.round((course.prix || 0) * 1.3))); }}
+                >
+                  💰 Augmenter le prix
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-amber-800 font-semibold">
+                  💡 Prix suggéré : {Math.round((course.prix || 0) * 1.3).toLocaleString()} FCFA (+30%)
+                </p>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    placeholder={`Nouveau prix (min: ${(course.prix || 0) + 1} FCFA)`}
+                    value={nouveauPrix}
+                    onChange={e => { setNouveauPrix(e.target.value); setPrixErreur(""); }}
+                    className="pr-14"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">FCFA</span>
+                </div>
+                {prixErreur && <p className="text-xs text-red-600">{prixErreur}</p>}
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowPrixForm(false); setPrixErreur(""); }}>Annuler</Button>
+                  <Button
+                    className="flex-1 bg-amber-600 hover:bg-amber-700"
+                    onClick={relancerAvecNouveauPrix}
+                    disabled={relancant || !nouveauPrix}
+                  >
+                    {relancant ? "⏳..." : "✅ Confirmer et relancer"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

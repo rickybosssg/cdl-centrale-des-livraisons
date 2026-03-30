@@ -59,6 +59,11 @@ function scoreDriver(driver, course) {
   // Note moyenne
   if (driver.note_moyenne) score += (driver.note_moyenne - 3) * 10;
 
+  // Bonus urgence : les courses urgentes favorisent les livreurs les mieux placés
+  const urgence = course.urgence || course.niveau_urgence;
+  if (urgence === 'tres_urgent') score += 200;
+  else if (urgence === 'urgent') score += 100;
+
   // Attend depuis longtemps = priorité
   if (driver.derniere_course_attribuee_at) {
     const heuresAttente = (Date.now() - new Date(driver.derniere_course_attribuee_at).getTime()) / 3600000;
@@ -135,6 +140,20 @@ Deno.serve(async (req) => {
         nombre_tentatives: (course.nombre_tentatives || 0) + 1,
         historique_assignation: JSON.stringify(historique),
       });
+      // Notifier le client
+      if (course.client_email) {
+        try {
+          await base44.asServiceRole.entities.Notification.create({
+            destinataire_email: course.client_email,
+            destinataire_role: 'client',
+            titre: '😔 Aucun livreur disponible',
+            message: 'Aucun livreur n\'est disponible pour le moment. Réessayez plus tard ou augmentez le prix de la livraison.',
+            type: 'warning',
+            lue: false,
+            course_id: courseId,
+          });
+        } catch (_) {}
+      }
       console.log(`[DISPATCH] Aucun livreur disponible pour la course ${courseId}`);
       return Response.json({ success: false, message: 'Aucun livreur disponible' });
     }
@@ -146,10 +165,12 @@ Deno.serve(async (req) => {
 
     const best = scored[0].driver;
 
+    const expireAt = new Date(Date.now() + 60000).toISOString();
     historique.push({
       livreur_email: best.email,
       livreur_nom: best.full_name,
       heure: now,
+      heure_expiration: expireAt,
       statut: 'proposee',
     });
 
