@@ -1,73 +1,95 @@
-import { useState } from "react";
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Trash2, Lock, Mail, User, Edit2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import QuartierSelect from "@/components/QuartierSelect";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Plus, Trash2, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+
+const PROFILES = [
+  { type: 'client', label: 'Client', emoji: '👤', color: 'text-blue-600' },
+  { type: 'livreur', label: 'Livreur', emoji: '🛵', color: 'text-orange-600' },
+  { type: 'partenaire', label: 'Partenaire', emoji: '🏪', color: 'text-green-600' },
+  { type: 'commercial', label: 'Commercial', emoji: '📣', color: 'text-purple-600' },
+];
+
+const PROFILE_FIELDS = {
+  client: { telephone: 'Téléphone', quartier: 'Quartier' },
+  livreur: { telephone: 'Téléphone', quartier: 'Zone de travail', moyen_deplacement: 'Moyen de transport' },
+  partenaire: { nom_commerce: 'Nom de la boutique', type_commerce: 'Type', telephone: 'Téléphone', adresse: 'Adresse' },
+  commercial: { telephone: 'Téléphone', quartier: 'Zone' },
+};
 
 export default function Settings() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [editForm, setEditForm] = useState({
-    telephone: "",
-    whatsapp: "",
-    quartier: "",
-    adresse_principale: "",
-    point_de_repere: "",
-  });
-  const [saving, setSaving] = useState(false);
+  const [dialogAdd, setDialogAdd] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [formData, setFormData] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const loadUser = async () => {
-    const me = await base44.auth.me();
-    setUser(me);
-    setEditForm({
-      telephone: me?.telephone || "",
-      whatsapp: me?.whatsapp || "",
-      quartier: me?.quartier || "",
-      adresse_principale: me?.adresse_principale || "",
-      point_de_repere: me?.point_de_repere || "",
-    });
-    setLoading(false);
-  };
+  useEffect(() => {
+    const load = async () => {
+      const me = await base44.auth.me();
+      setUser(me);
+      const userProfiles = await base44.entities.UserProfile.filter({
+        user_email: me.email,
+        deleted: false,
+      });
+      setProfiles(userProfiles);
+      setLoading(false);
+    };
+    load();
+  }, []);
 
-  const handleSaveProfile = async () => {
-    setSaving(true);
+  const handleAddProfile = async () => {
+    if (!selectedProfile || Object.keys(formData).length === 0) {
+      toast.error('Veuillez remplir tous les champs');
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      await base44.auth.updateMe(editForm);
-      setUser({ ...user, ...editForm });
-      setEditMode(false);
-      toast.success("Profil mis à jour");
-    } catch (error) {
-      toast.error("Erreur lors de la mise à jour");
-      console.error(error);
+      const result = await base44.functions.invoke('addProfileToUser', {
+        profile_type: selectedProfile,
+        data: {
+          ...formData,
+          email: user.email,
+          full_name: user.full_name,
+        },
+      });
+
+      toast.success(result.status === 'actif' ? 'Profil activé !' : 'Demande envoyée à validation');
+      setProfiles([...profiles, result.profile]);
+      setDialogAdd(false);
+      setSelectedProfile(null);
+      setFormData({});
+
+      // Refresh user
+      const me = await base44.auth.me();
+      setUser(me);
+    } catch (err) {
+      toast.error('Erreur : ' + err.message);
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
-  useEffect(() => { loadUser(); }, []);
-
-  const handleDeleteAccount = async () => {
-    setDeleting(true);
+  const handleSwitchProfile = async (profileType) => {
     try {
-      await base44.asServiceRole.entities.User.delete(user.id);
-      toast.success("Compte supprimé avec succès");
-      await base44.auth.logout();
-      navigate("/");
-    } catch (error) {
-      toast.error("Erreur lors de la suppression");
-      console.error(error);
-    } finally {
-      setDeleting(false);
+      await base44.functions.invoke('switchActiveProfile', { profile_type: profileType });
+      const me = await base44.auth.me();
+      setUser(me);
+      toast.success('Profil changé avec succès');
+    } catch (err) {
+      toast.error('Erreur : ' + err.message);
     }
   };
 
@@ -85,187 +107,135 @@ export default function Settings() {
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-xl font-bold">Paramètres</h1>
+        <h1 className="text-xl font-bold flex-1">Paramètres du compte</h1>
       </div>
 
-      {/* Profil */}
-      <Card>
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <User className="h-4 w-4 text-primary" />
-            Mon compte
-          </CardTitle>
-          {!editMode && (
-            <button
-              onClick={() => setEditMode(true)}
-              className="text-xs text-primary hover:underline flex items-center gap-1"
-            >
-              <Edit2 className="h-3 w-3" /> Modifier
-            </button>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!editMode ? (
-            <>
+      {/* Profil actif */}
+      {user && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Profil actif</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{PROFILES.find(p => p.type === user.active_profile_type)?.emoji}</span>
               <div>
-                <p className="text-xs text-muted-foreground">Nom complet</p>
-                <p className="font-semibold">{user?.full_name}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Email</p>
-                <p className="font-semibold text-sm">{user?.email}</p>
-              </div>
-              {user?.telephone && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Téléphone</p>
-                  <p className="font-semibold">{user.telephone}</p>
-                </div>
-              )}
-              {user?.quartier && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Quartier</p>
-                  <p className="font-semibold">{user.quartier}</p>
-                </div>
-              )}
-              {user?.adresse_principale && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Adresse</p>
-                  <p className="font-semibold text-sm">{user.adresse_principale}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-muted-foreground">Rôle</p>
-                <span className="inline-block mt-1 px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                  {user?.user_type || user?.role || "Client"}
-                </span>
-              </div>
-            </>
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium">Téléphone</label>
-                <Input
-                  placeholder="+226 XX XX XX XX"
-                  value={editForm.telephone}
-                  onChange={(e) => setEditForm({ ...editForm, telephone: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium">WhatsApp</label>
-                <Input
-                  placeholder="Même numéro si identique"
-                  value={editForm.whatsapp}
-                  onChange={(e) => setEditForm({ ...editForm, whatsapp: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium">Quartier</label>
-                <QuartierSelect
-                  value={editForm.quartier}
-                  onValueChange={(v) => setEditForm({ ...editForm, quartier: v })}
-                  placeholder="Sélectionnez votre quartier"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium">Adresse principale</label>
-                <Input
-                  placeholder="Votre adresse"
-                  value={editForm.adresse_principale}
-                  onChange={(e) => setEditForm({ ...editForm, adresse_principale: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium">Point de repère</label>
-                <Input
-                  placeholder="Ex: À côté de la pharmacie"
-                  value={editForm.point_de_repere}
-                  onChange={(e) => setEditForm({ ...editForm, point_de_repere: e.target.value })}
-                />
-              </div>
-              <div className="flex gap-2 pt-3">
-                <button
-                  onClick={() => setEditMode(false)}
-                  className="flex-1 px-3 py-2 rounded-lg border text-sm font-medium hover:bg-muted"
-                  disabled={saving}
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={handleSaveProfile}
-                  className="flex-1 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
-                  disabled={saving}
-                >
-                  {saving ? "Enregistrement..." : "Enregistrer"}
-                </button>
+                <p className="font-bold text-lg">{PROFILES.find(p => p.type === user.active_profile_type)?.label}</p>
+                <p className="text-xs text-muted-foreground">{user.email}</p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tous les profils */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center justify-between">
+            Mes profils
+            <Button size="sm" onClick={() => setDialogAdd(true)}>
+              <Plus className="h-4 w-4 mr-1" />Ajouter
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {profiles.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Aucun profil</p>
+          ) : (
+            profiles.map(profile => {
+              const config = PROFILES.find(p => p.type === profile.profile_type);
+              const isActive = user?.active_profile_type === profile.profile_type;
+              return (
+                <div key={profile.id} className={`flex items-center justify-between p-3 rounded-lg border ${isActive ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{config?.emoji}</span>
+                    <div>
+                      <p className="font-semibold text-sm">{config?.label}</p>
+                      <div className="flex items-center gap-1">
+                        {profile.status === 'actif' && <CheckCircle2 className="h-3 w-3 text-green-600" />}
+                        {profile.status === 'en_attente' && <span className="text-xs text-amber-600">⏳ En attente</span>}
+                        {profile.status === 'refuse' && <XCircle className="h-3 w-3 text-red-600" />}
+                        <span className="text-xs text-muted-foreground">{profile.status}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {profile.status === 'actif' && (
+                    <div className="flex gap-1">
+                      {!isActive && (
+                        <Button size="sm" variant="outline" onClick={() => handleSwitchProfile(profile.profile_type)}>
+                          Utiliser
+                        </Button>
+                      )}
+                      {isActive && <span className="text-xs font-bold text-primary px-3 py-1 rounded-full bg-primary/10">Actif</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </CardContent>
       </Card>
 
-      {/* Sécurité */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Lock className="h-4 w-4 text-primary" />
-            Sécurité
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>Authentification gérée par Base44. Pour changer votre mot de passe, contactez l'administrateur.</p>
-        </CardContent>
-      </Card>
-
-      {/* Supprimer le compte */}
-      <Card className="border-red-200 bg-red-50">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2 text-red-700">
-            <Trash2 className="h-4 w-4" />
-            Supprimer mon compte
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-red-600">
-            ⚠️ Cette action est irréversible. Toutes vos données seront supprimées.
-          </p>
-          <Button
-            variant="destructive"
-            className="w-full"
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Supprimer définitivement mon compte
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Dialog confirmation */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
+      {/* Dialog ajouter profil */}
+      <Dialog open={dialogAdd} onOpenChange={setDialogAdd}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-red-600">Supprimer votre compte</DialogTitle>
-            <DialogDescription>
-              ⚠️ Vous êtes sur le point de supprimer votre compte de manière irréversible. Toutes vos données, historiques et préférences seront perdus.
-            </DialogDescription>
+            <DialogTitle>Ajouter un profil</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm font-semibold">Êtes-vous absolument certain ?</p>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs">Choisir un profil *</Label>
+              <Select value={selectedProfile || ''} onValueChange={setSelectedProfile}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionner un profil" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROFILES.filter(p => !profiles.find(up => up.profile_type === p.type)).map(p => (
+                    <SelectItem key={p.type} value={p.type}>
+                      {p.emoji} {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedProfile && (
+              <div className="space-y-3 p-3 rounded-lg bg-muted">
+                {Object.entries(PROFILE_FIELDS[selectedProfile] || {}).map(([key, label]) => (
+                  <div key={key}>
+                    <Label className="text-xs">{label} *</Label>
+                    {key === 'moyen_deplacement' ? (
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        {['moto', 'vehicule'].map(m => (
+                          <button
+                            key={m}
+                            onClick={() => setFormData({ ...formData, [key]: m })}
+                            className={`p-2 rounded-lg border text-xs font-medium ${
+                              formData[key] === m ? 'border-primary bg-primary/10' : 'border-border'
+                            }`}
+                          >
+                            {m === 'moto' ? '🛵' : '🚗'} {m}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <Input
+                        placeholder={`Entrez ${label.toLowerCase()}`}
+                        value={formData[key] || ''}
+                        onChange={e => setFormData({ ...formData, [key]: e.target.value })}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setDeleteDialogOpen(false)}
-                disabled={deleting}
-              >
+              <Button variant="outline" className="flex-1" onClick={() => setDialogAdd(false)}>
                 Annuler
               </Button>
-              <Button
-                variant="destructive"
-                className="flex-1"
-                onClick={handleDeleteAccount}
-                disabled={deleting}
-              >
-                {deleting ? "Suppression..." : "Supprimer"}
+              <Button className="flex-1" onClick={handleAddProfile} disabled={submitting}>
+                {submitting ? 'Envoi...' : 'Ajouter le profil'}
               </Button>
             </div>
           </div>

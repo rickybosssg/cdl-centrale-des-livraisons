@@ -1,0 +1,70 @@
+{
+  "name": "UserProfile",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "profile_type": {
+      "type": "string",
+      "enum": [
+        "client",
+        "livreur",
+        "partenaire",
+        "commercial"
+      ],
+      "title": "Type de profil"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "actif",
+        "en_attente",
+        "refuse",
+        "suspendu"
+      ],
+      "title": "Statut du profil",
+      "default": "en_attente"
+    },
+    "is_active_profile": {
+      "type": "boolean",
+      "title": "Profil actuellement actif",
+      "default": false
+    },
+    "validated_at": {
+      "type": "string",
+      "title": "Date de validation"
+    },
+    "validated_by": {
+      "type": "string",
+      "title": "Email du validateur (admin)"
+    },
+    "suspended_at": {
+      "type": "string",
+      "title": "Date de suspension"
+    },
+    "deleted_at": {
+      "type": "string",
+      "title": "Date de suppression"
+    },
+    "deleted": {
+      "type": "boolean",
+      "title": "Profil supprim\u00e9 (soft delete)",
+      "default": false
+    },
+    "refusal_reason": {
+      "type": "string",
+      "title": "Motif de refus"
+    },
+    "data_json": {
+      "type": "string",
+      "title": "Donn\u00e9es sp\u00e9cifiques au profil (JSON)"
+    }
+  },
+  "required": [
+    "user_email",
+    "profile_type",
+    "status"
+  ]
+}
