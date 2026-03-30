@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Trash2, AlertTriangle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -153,6 +153,16 @@ export default function Parametres() {
         <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
           <p>Ces paramètres sont stockés localement sur cet appareil.</p>
           <p>Version CDL Pro – Centrale des Livraisons Ouagadougou</p>
+        </CardContent>
+      </Card>
+
+      {/* Audit utilisateurs */}
+      <Card className="border-blue-200 bg-blue-50/50">
+        <CardContent className="p-4">
+          <Button variant="outline" className="w-full border-blue-300 text-blue-700" onClick={() => navigate('/audit-utilisateurs')}>
+            <ShieldAlert className="h-4 w-4 mr-2" /> Audit utilisateurs
+          </Button>
+          <p className="text-xs text-blue-600 mt-2 text-center">Détecter et réparer les comptes sans profil</p>
         </CardContent>
       </Card>
 

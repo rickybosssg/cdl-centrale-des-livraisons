@@ -81,6 +81,7 @@ export default function RoleSetup({ onComplete }) {
     const me = await base44.auth.me();
     await base44.auth.updateMe({
       user_type: selectedRole,
+      onboarding_completed: true,
       user_roles: JSON.stringify([selectedRole]),
       statut_compte: selectedRole === 'client' ? 'actif' : 'en_attente',
       profil_valide: selectedRole === "client",
@@ -97,6 +98,11 @@ export default function RoleSetup({ onComplete }) {
       code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
       ...docUrls,
     });
+
+    // Créer la fiche métier via le backend
+    try {
+      await base44.functions.invoke('ensureUserProfile', {});
+    } catch (_) {}
     if (selectedRole === "client") {
       await base44.functions.invoke('createClientOnSignup', {
         telephone: form.telephone,

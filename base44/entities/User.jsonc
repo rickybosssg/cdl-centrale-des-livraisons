@@ -20,6 +20,11 @@
       ],
       "title": "Profil utilisateur"
     },
+    "onboarding_completed": {
+      "type": "boolean",
+      "title": "Onboarding termin\u00e9",
+      "default": false
+    },
     "statut_compte": {
       "type": "string",
       "enum": [
@@ -189,9 +194,15 @@
     "user_roles": {
       "type": "string",
       "title": "R\u00f4les JSON (interne)"
+    },
+    "code_promo_utilise": {
+      "type": "string",
+      "title": "Code promo utilis\u00e9"
+    },
+    "total_courses": {
+      "type": "number",
+      "title": "Total courses"
     }
   },
-  "required": [
-    "user_type"
-  ]
+  "required": []
 }

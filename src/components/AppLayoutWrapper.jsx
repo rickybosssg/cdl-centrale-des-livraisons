@@ -16,11 +16,19 @@ export default function AppLayoutWrapper({ user }) {
     const load = async () => {
       try {
         const me = await base44.auth.me();
-        // Forcer la sélection de profil si aucun n'est défini
-        if (!me.user_type && me.role !== 'admin' && me.email !== "weezyh2@gmail.com") {
+        const ADMIN_EMAILS = ['weezyh2@gmail.com'];
+        const isAdmin = me.role === 'admin' || ADMIN_EMAILS.includes(me.email);
+
+        // Forcer l'onboarding si pas de user_type ou onboarding non complet (sauf admin)
+        if (!isAdmin && (!me.user_type || !me.onboarding_completed)) {
           setNeedsRole(true);
           setLoading(false);
           return;
+        }
+
+        // Auto-réparation : vérifier/créer la fiche métier si manquante
+        if (!isAdmin) {
+          try { await base44.functions.invoke('ensureUserProfile', {}); } catch (_) {}
         }
         if (me.email === "weezyh2@gmail.com" || me.role === 'admin') {
           setUserRole("admin");
