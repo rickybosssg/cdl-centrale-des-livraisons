@@ -78,7 +78,7 @@ const AuthenticatedApp = () => {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
         <div className="text-center space-y-4 text-white">
-          <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/bd383f6ca_generated_image.png" alt="CDL" className="h-20 w-20 mx-auto" />
+          <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
           <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
         </div>
       </div>
@@ -94,7 +94,7 @@ const AuthenticatedApp = () => {
       return (
         <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
           <div className="text-center space-y-4 text-white">
-            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/bd383f6ca_generated_image.png" alt="CDL" className="h-20 w-20 mx-auto" />
+            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
             <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
           </div>
         </div>
@@ -108,7 +108,7 @@ const AuthenticatedApp = () => {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
         <div className="text-center space-y-4 text-white">
-          <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/bd383f6ca_generated_image.png" alt="CDL" className="h-20 w-20 mx-auto" />
+          <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
           <p className="font-semibold text-lg">CDL APP</p>
           <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
         </div>

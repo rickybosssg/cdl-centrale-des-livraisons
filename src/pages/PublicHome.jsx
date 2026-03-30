@@ -57,9 +57,7 @@ export default function PublicHome() {
       <div className="min-h-screen bg-gradient-to-br from-primary to-blue-700 flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-sm space-y-8 text-white">
           <div className="text-center space-y-3">
-            <div className="h-16 w-16 rounded-2xl bg-white flex items-center justify-center text-primary font-bold text-2xl mx-auto">
-              CDL
-            </div>
+            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 rounded-3xl mx-auto object-cover shadow-xl" />
             <h1 className="text-3xl font-bold">CDL APP</h1>
             <p className="text-sm opacity-90">Centrale des Livraisons — Ouagadougou</p>
           </div>

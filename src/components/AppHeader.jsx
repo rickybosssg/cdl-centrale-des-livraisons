@@ -25,7 +25,7 @@ export default function AppHeader({ userRole, userEmail }) {
           </Button>
         ) : (
           <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-sm">CDL</div>
+            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-10 w-10 rounded-2xl object-cover" />
             <span className="font-bold text-lg">CDL APP</span>
           </Link>
         )}

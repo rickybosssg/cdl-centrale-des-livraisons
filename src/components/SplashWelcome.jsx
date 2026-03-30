@@ -29,9 +29,9 @@ export default function SplashWelcome({ prenom, onDone }) {
             className="mb-6"
           >
             <img
-              src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg"
+              src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg"
               alt="CDL"
-              className="h-24 w-24 rounded-2xl object-cover shadow-2xl border-4 border-white/30"
+              className="h-28 w-28 rounded-3xl object-cover shadow-2xl border-4 border-white/30"
             />
           </motion.div>
 
