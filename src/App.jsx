@@ -83,9 +83,17 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
-      navigateToLogin();
-      return null;
+    } else {
+      // auth_required ou autre → rediriger vers le login
+      b44.auth.redirectToLogin();
+      return (
+        <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
+          <div className="text-center space-y-4 text-white">
+            <div className="h-16 w-16 rounded-2xl bg-white flex items-center justify-center text-primary font-bold text-2xl mx-auto">CDL</div>
+            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+          </div>
+        </div>
+      );
     }
   }
 
