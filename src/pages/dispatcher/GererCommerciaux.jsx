@@ -175,7 +175,7 @@ export default function GererCommerciaux() {
           <p className="text-muted-foreground">Total</p>
         </div>
         <div className="p-3 rounded-xl bg-card border">
-          <p className="font-bold text-lg text-green-600">{codes.filter(c => c.statut === "valide").length}</p>
+          <p className="font-bold text-lg text-green-600">{codes.filter(c => c.statut === "valide" && c.actif).length}</p>
           <p className="text-muted-foreground">Codes actifs</p>
         </div>
         <div className="p-3 rounded-xl bg-card border">
