@@ -56,7 +56,8 @@ export default function NotificationBell({ userEmail }) {
     <div className="relative">
       <button
         onClick={() => { setOpen(!open); if (!open && unread > 0) markAllRead(); }}
-        className="relative h-10 w-10 flex items-center justify-center rounded-lg hover:bg-primary/10 transition-colors active:bg-primary/20 press-effect"
+        className="relative p-3 -m-3 flex items-center justify-center rounded-lg hover:bg-primary/10 transition-colors active:bg-primary/20 press-effect touch-target"
+        style={{ minWidth: '44px', minHeight: '44px' }}
       >
         <Bell className={`h-5 w-5 transition-colors ${unread > 0 ? 'text-red-500' : 'text-foreground'}`} />
         {unread > 0 && (
@@ -79,7 +80,7 @@ export default function NotificationBell({ userEmail }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="absolute right-0 top-10 z-50 w-80 max-h-96 overflow-y-auto rounded-xl border bg-card shadow-xl"
+              className="absolute right-0 top-12 z-50 w-80 max-h-[70vh] overflow-y-auto rounded-xl border bg-card shadow-xl"
             >
               <div className="sticky top-0 bg-card border-b px-4 py-3 flex items-center justify-between">
                 <p className="font-semibold text-sm">Notifications</p>
@@ -90,22 +91,30 @@ export default function NotificationBell({ userEmail }) {
                 )}
               </div>
               {notifs.length === 0 ? (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  Aucune notification
+                <div className="py-8 text-center space-y-2">
+                  <p className="text-sm font-semibold text-foreground">Aucune notification</p>
+                  <p className="text-xs text-muted-foreground">Vous n'avez aucune nouvelle notification pour le moment.</p>
                 </div>
               ) : (
                 <div className="divide-y">
                   {notifs.map(n => (
-                    <div
+                    <button
                       key={n.id}
-                      className={`px-4 py-3 border-l-4 ${TYPE_COLORS[n.type] || 'border-l-muted bg-background'} ${!n.lue ? 'font-medium' : 'opacity-70'}`}
+                      onClick={async () => {
+                        if (!n.lue) {
+                          await base44.entities.Notification.update(n.id, { lue: true });
+                          setNotifs(prev => prev.map(notif => notif.id === n.id ? { ...notif, lue: true } : notif));
+                        }
+                        setOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-3 border-l-4 transition-colors hover:opacity-100 ${TYPE_COLORS[n.type] || 'border-l-muted bg-background'} ${!n.lue ? 'font-medium' : 'opacity-70'}`}
                     >
                       <p className="text-xs font-semibold">{n.titre}</p>
                       <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{n.message}</p>
                       <p className="text-[10px] text-muted-foreground mt-1">
-                        {new Date(n.created_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        {new Date(n.created_date).toLocaleDateString('fr-FR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </p>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}

@@ -108,28 +108,41 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Notifier l'utilisateur
+    // Notifier l'utilisateur avec données réelles
+    const roleEmojis = { client: '👤', livreur: '🛵', partenaire: '🏪', commercial: '📣' };
+    const roleNames = { client: 'Client', livreur: 'Livreur', partenaire: 'Partenaire', commercial: 'Commercial' };
+    
     await base44.entities.Notification.create({
       destinataire_email: user.email,
       destinataire_role: profile_type,
-      titre: status === 'actif' ? `✅ Profil ${profile_type} activé` : `⏳ Demande de profil ${profile_type} en attente`,
+      titre: status === 'actif' 
+        ? `✅ ${roleEmojis[profile_type] || ''} ${roleNames[profile_type] || profile_type} activé`
+        : `⏳ ${roleEmojis[profile_type] || ''} Demande en attente de validation`,
       message: status === 'actif'
-        ? `Votre profil ${profile_type} CDL a été activé avec succès.`
-        : `Votre demande de profil ${profile_type} CDL est en attente de validation admin.`,
-      type: status === 'actif' ? 'success' : 'info',
+        ? `Votre profil ${roleNames[profile_type] || profile_type} CDL a été activé avec succès. Bienvenue!`
+        : `Votre demande de profil ${roleNames[profile_type] || profile_type} CDL est en attente de validation par l'équipe CDL.`,
+      type: status === 'actif' ? 'success' : 'warning',
       lue: false,
     });
 
-    // Notifier les admins si validation requise
+    // Notifier les admins si validation requise avec données détaillées
     if (requirements.needsAdminValidation) {
       const admins = await base44.entities.User.filter({ role: 'admin' });
+      let adminMessage = `Nom: ${user.full_name} | Email: ${user.email} | Téléphone: ${data.telephone || 'N/A'}`;
+      
+      if (profile_type === 'partenaire') {
+        adminMessage = `Commerce: ${data.nom_commerce || 'N/A'} | Catégorie: ${data.type_commerce || 'N/A'} | Tél: ${data.telephone || 'N/A'} | Adresse: ${data.adresse || 'N/A'}`;
+      } else if (profile_type === 'livreur') {
+        adminMessage = `Nom: ${user.full_name} | Tél: ${data.telephone || 'N/A'} | Zone: ${data.quartier || 'N/A'} | Transport: ${data.moyen_deplacement || 'N/A'}`;
+      }
+      
       await Promise.all(
         admins.map(admin =>
           base44.entities.Notification.create({
             destinataire_email: admin.email,
             destinataire_role: 'admin',
             titre: `📋 Nouvelle demande de profil ${profile_type}`,
-            message: `${user.full_name} demande l'activation du profil ${profile_type}.`,
+            message: adminMessage,
             type: 'info',
             lue: false,
           })

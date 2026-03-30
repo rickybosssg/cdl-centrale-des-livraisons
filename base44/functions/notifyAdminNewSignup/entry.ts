@@ -7,36 +7,70 @@ Deno.serve(async (req) => {
     const entity_name = body.entity_name || '';
     const entity_data = body.entity_data || {};
 
-    let titre = 'Nouvelle inscription';
-    let message = JSON.stringify(entity_data);
+    let titre = '';
+    let message = '';
+    let notificationType = 'info';
 
     if (entity_name === 'Client') {
-      titre = '🎯 Nouveau client inscrit';
-      message = `${entity_data.nom_complet || 'Client'} s'est inscrit\n📱 ${entity_data.telephone || entity_data.numero_telephone || 'N/A'}\n📍 ${entity_data.quartier || entity_data.quartier_principal || 'N/A'}`;
+      const name = entity_data.nom_complet || entity_data.full_name || 'Client';
+      const phone = entity_data.telephone || entity_data.numero_telephone || 'N/A';
+      const zone = entity_data.quartier || entity_data.quartier_principal || 'N/A';
+      
+      // Only create if we have at least name and phone
+      if (!name || phone === 'N/A') return Response.json({ skipped: true });
+      
+      titre = '👤 Nouveau client inscrit';
+      message = `Nom: ${name} | Téléphone: ${phone} | Zone: ${zone}`;
+      notificationType = 'info';
     } else if (entity_name === 'Livreur') {
-      titre = '🛵 Nouveau livreur en attente de validation';
-      message = `${entity_data.nom_complet || entity_data.full_name || 'Livreur'} a soumis son dossier.\n📱 ${entity_data.telephone || 'N/A'}\n📍 ${entity_data.quartier || 'N/A'}\n👉 Rendez-vous dans Validation Livreurs.`;
+      const name = entity_data.nom_complet || entity_data.full_name || 'Livreur';
+      const phone = entity_data.telephone || 'N/A';
+      const zone = entity_data.quartier || 'N/A';
+      
+      if (!name || phone === 'N/A') return Response.json({ skipped: true });
+      
+      titre = '🛵 Nouveau livreur inscrit';
+      message = `Nom: ${name} | Téléphone: ${phone} | Zone: ${zone} | Statut: en attente de validation`;
+      notificationType = 'info';
     } else if (entity_name === 'Partenaire') {
-      titre = '🏪 Nouveau partenaire';
-      message = `${entity_data.nom_commerce || 'Commerce'} s'est inscrit\n📞 ${entity_data.telephone || 'N/A'}\n🏷️ ${entity_data.type_commerce || 'N/A'}`;
+      const commerce = entity_data.nom_commerce || 'Commerce';
+      const type = entity_data.type_commerce || 'N/A';
+      const phone = entity_data.telephone || 'N/A';
+      const zone = entity_data.quartier || entity_data.adresse || 'N/A';
+      
+      if (!commerce || phone === 'N/A') return Response.json({ skipped: true });
+      
+      titre = '🏪 Nouveau partenaire inscrit';
+      message = `Commerce: ${commerce} | Catégorie: ${type} | Téléphone: ${phone} | Zone: ${zone}`;
+      notificationType = 'info';
     } else if (entity_name === 'CodePromo') {
-      titre = '🎟️ Nouveau code promo créé';
-      message = `Code: ${entity_data.code || 'N/A'}\nCommercial: ${entity_data.commercial_name || 'N/A'}`;
+      const code = entity_data.code || 'N/A';
+      const commercial = entity_data.commercial_name || 'N/A';
+      
+      if (!code || code === 'N/A') return Response.json({ skipped: true });
+      
+      titre = '📣 Nouveau code promo';
+      message = `Code: ${code} | Commercial: ${commercial}`;
+      notificationType = 'success';
+    } else {
+      return Response.json({ skipped: true });
     }
 
     // Récupérer tous les admins
     const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
 
-    // Créer une notification pour chaque admin
-    for (const admin of admins) {
-      await base44.asServiceRole.entities.Notification.create({
-        destinataire_email: admin.email,
-        destinataire_role: 'admin',
-        titre: titre,
-        message: message,
-        type: 'success',
-        lue: false,
-      });
+    // Créer une notification pour chaque admin (only if we have valid data)
+    if (titre && message) {
+      for (const admin of admins) {
+        await base44.asServiceRole.entities.Notification.create({
+          destinataire_email: admin.email,
+          destinataire_role: 'admin',
+          titre: titre,
+          message: message,
+          type: notificationType,
+          lue: false,
+        });
+      }
     }
 
     return Response.json({ success: true, notified: admins.length });
