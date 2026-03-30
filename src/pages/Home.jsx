@@ -40,7 +40,7 @@ export default function Home() {
     return (
       <div className="space-y-0">
         <div className="flex justify-end items-center pb-3 px-4 pt-4">
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/parametres')}>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/settings')}>
             <User className="h-4 w-4" /> Mon compte
           </Button>
         </div>
@@ -85,7 +85,7 @@ export default function Home() {
   return (
     <div className="space-y-0">
       <div className="flex justify-between items-center pb-3 px-4 pt-4">
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/parametres')}>
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/settings')}>
           <User className="h-4 w-4" /> Mon compte
         </Button>
       </div>
