@@ -23,16 +23,41 @@ export default function Suppression() {
   const [deleting, setDeleting] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  // Abonnements temps réel
+  useEffect(() => {
+    if (!selectedProfile) return;
+
+    const handleEvent = (event) => {
+      if (event.type === 'create') {
+        setMembers(prev => [event.data, ...prev]);
+      } else if (event.type === 'update') {
+        setMembers(prev => prev.map(m => m.id === event.id ? event.data : m));
+      } else if (event.type === 'delete') {
+        setMembers(prev => prev.filter(m => m.id !== event.id));
+      }
+    };
+
+    let unsub;
+    if (selectedProfile === 'client') {
+      unsub = base44.entities.Client.subscribe(handleEvent);
+    } else {
+      unsub = base44.entities.User.subscribe((event) => {
+        const role = event.data?.user_type;
+        if (role === selectedProfile) handleEvent(event);
+        else if (event.type === 'delete') handleEvent(event);
+      });
+    }
+    return () => unsub && unsub();
+  }, [selectedProfile]);
+
   const loadMembers = async (profile) => {
     setLoading(true);
     let data = [];
-    
     if (profile === "livreur" || profile === "partenaire" || profile === "commercial") {
       data = await base44.entities.User.filter({ user_type: profile }, "-created_date", 500);
     } else if (profile === "client") {
       data = await base44.entities.Client.filter({}, "-created_date", 500);
     }
-    
     setMembers(data);
     setLoading(false);
   };
