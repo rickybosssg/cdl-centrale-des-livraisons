@@ -29,8 +29,8 @@ export default function AppLayoutWrapper({ user }) {
           setShowSplash(true);
         }
       } catch (error) {
-        // Utilisateur non connecté, afficher la page publique CDL
-        window.location.href = '/';
+        // Utilisateur non connecté — laisser App.jsx gérer
+        setLoading(false);
         return;
       }
       setLoading(false);
