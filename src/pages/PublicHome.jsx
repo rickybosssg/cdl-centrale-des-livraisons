@@ -13,19 +13,22 @@ const ROLES = [
 ];
 
 export default function PublicHome() {
-  const [step, setStep] = useState("choice"); // "choice", "login", "signup_role", "signup_form"
+  const [step, setStep] = useState("choice");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const [selectedRole, setSelectedRole] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [signupForm, setSignupForm] = useState({ nom_complet: "", email: "", password: "", telephone: "" });
   const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState("");
 
   const handleLogin = async () => {
+    setLoginError("");
     if (!loginEmail.trim() || !loginPassword.trim()) {
-      toast.error("Veuillez entrer votre email et mot de passe");
+      setLoginError("Veuillez entrer votre email et mot de passe");
       return;
     }
     setLoginLoading(true);
@@ -33,7 +36,7 @@ export default function PublicHome() {
       await base44.auth.login({ email: loginEmail, password: loginPassword });
       window.location.reload();
     } catch (err) {
-      toast.error("Email ou mot de passe incorrect");
+      setLoginError("Email ou mot de passe incorrect");
       setLoginLoading(false);
     }
   };
@@ -44,8 +47,9 @@ export default function PublicHome() {
   };
 
   const handleSignupForm = async () => {
+    setSignupError("");
     if (!signupForm.nom_complet.trim() || !signupForm.email.trim() || !signupForm.password.trim() || !signupForm.telephone.trim()) {
-      toast.error("Veuillez remplir tous les champs");
+      setSignupError("Veuillez remplir tous les champs");
       return;
     }
     setSignupLoading(true);
@@ -59,14 +63,13 @@ export default function PublicHome() {
         user_roles: JSON.stringify([selectedRole]),
         profil_valide: false,
       });
-      toast.success("Compte créé ! Vérifiez votre email puis connectez-vous.");
       setSignupForm({ nom_complet: "", email: "", password: "", telephone: "" });
       setSelectedRole(null);
       setShowPassword(false);
-      setStep("login");
+      setStep("login_after_signup");
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || "Erreur lors de la création du compte";
-      toast.error(msg);
+      setSignupError(msg);
     } finally {
       setSignupLoading(false);
     }
@@ -77,7 +80,6 @@ export default function PublicHome() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary to-blue-700 flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-sm space-y-8 text-white">
-          {/* Logo */}
           <div className="text-center space-y-3">
             <div className="h-16 w-16 rounded-2xl bg-white flex items-center justify-center text-primary font-bold text-2xl mx-auto">
               CDL
@@ -85,18 +87,13 @@ export default function PublicHome() {
             <h1 className="text-3xl font-bold">CDL APP</h1>
             <p className="text-sm opacity-90">Centrale des Livraisons — Ouagadougou</p>
           </div>
-
-          {/* Description */}
           <div className="text-center space-y-2">
             <p className="text-lg font-semibold">Bienvenue sur CDL</p>
             <p className="text-sm opacity-80">Connectez-vous ou créez un compte pour commencer</p>
           </div>
-
-          {/* Boutons */}
           <div className="space-y-3">
             <Button
               size="lg"
-              variant="default"
               className="w-full h-12 text-base font-semibold bg-white text-primary hover:bg-gray-100"
               onClick={() => setStep("login")}
             >
@@ -112,8 +109,6 @@ export default function PublicHome() {
               Nouvel utilisateur
             </Button>
           </div>
-
-          {/* Info */}
           <div className="text-xs text-center opacity-70 space-y-1">
             <p>Déjà inscrit ? Cliquez sur "Se connecter"</p>
             <p>Première fois ? Cliquez sur "Nouvel utilisateur"</p>
@@ -128,18 +123,13 @@ export default function PublicHome() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-sm space-y-6">
-          <button
-            onClick={() => setStep("choice")}
-            className="text-sm text-primary hover:underline flex items-center gap-1"
-          >
+          <button onClick={() => setStep("choice")} className="text-sm text-primary hover:underline flex items-center gap-1">
             ← Retour
           </button>
-
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold">Se connecter</h2>
             <p className="text-sm text-muted-foreground">Accédez à votre compte CDL</p>
           </div>
-
           <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Email</label>
@@ -150,7 +140,6 @@ export default function PublicHome() {
                 onChange={(e) => setLoginEmail(e.target.value)}
               />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Mot de passe</label>
               <div className="relative">
@@ -170,20 +159,39 @@ export default function PublicHome() {
                 </button>
               </div>
             </div>
-
-            <Button
-              className="w-full h-11 text-base font-semibold"
-              onClick={handleLogin}
-              disabled={loginLoading}
-            >
+            {loginError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                <p className="text-sm text-red-700">{loginError}</p>
+              </div>
+            )}
+            <Button className="w-full h-11 text-base font-semibold" onClick={handleLogin} disabled={loginLoading}>
               {loginLoading ? "Connexion..." : "Se connecter"}
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </div>
-
           <div className="text-center text-xs text-muted-foreground">
             <p>Pas encore de compte ? Cliquez sur "Nouvel utilisateur"</p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Succès inscription
+  if (step === "login_after_signup") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+            <span className="text-3xl">✅</span>
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-green-700">Compte créé !</h2>
+            <p className="text-sm text-muted-foreground mt-2">Vérifiez votre email pour confirmer votre compte, puis connectez-vous.</p>
+          </div>
+          <Button className="w-full h-11" onClick={() => setStep("login")}>
+            Se connecter
+          </Button>
         </div>
       </div>
     );
@@ -194,18 +202,13 @@ export default function PublicHome() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary to-blue-700 flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-sm space-y-6 text-white">
-          <button
-            onClick={() => setStep("choice")}
-            className="text-sm opacity-80 hover:opacity-100 flex items-center gap-1"
-          >
+          <button onClick={() => setStep("choice")} className="text-sm opacity-80 hover:opacity-100 flex items-center gap-1">
             ← Retour
           </button>
-
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold">Choisir votre profil</h2>
             <p className="text-sm opacity-80">Sélectionnez le profil qui vous correspond *</p>
           </div>
-
           <div className="space-y-3">
             {ROLES.map(role => {
               const Icon = role.icon;
@@ -231,23 +234,18 @@ export default function PublicHome() {
     );
   }
 
-  // Inscription - Étape 2 : Email et mot de passe
+  // Inscription - Étape 2 : Formulaire
   if (step === "signup_form") {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-sm space-y-6">
-          <button
-            onClick={() => setStep("signup_role")}
-            className="text-sm text-primary hover:underline flex items-center gap-1"
-          >
+          <button onClick={() => setStep("signup_role")} className="text-sm text-primary hover:underline flex items-center gap-1">
             ← Retour
           </button>
-
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold">Créer un compte</h2>
-            <p className="text-sm text-muted-foreground">Étape 2 : Vos identifiants</p>
+            <p className="text-sm text-muted-foreground">Rôle : <strong>{selectedRole}</strong></p>
           </div>
-
           <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Nom complet *</label>
@@ -257,7 +255,6 @@ export default function PublicHome() {
                 onChange={(e) => setSignupForm({ ...signupForm, nom_complet: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Email *</label>
               <Input
@@ -267,7 +264,6 @@ export default function PublicHome() {
                 onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Mot de passe *</label>
               <div className="relative">
@@ -286,7 +282,6 @@ export default function PublicHome() {
                 </button>
               </div>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Téléphone *</label>
               <Input
@@ -295,16 +290,20 @@ export default function PublicHome() {
                 onChange={(e) => setSignupForm({ ...signupForm, telephone: e.target.value })}
               />
             </div>
-
+            {signupError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                <p className="text-sm text-red-700">{signupError}</p>
+              </div>
+            )}
             <Button
               className="w-full h-11 text-base font-semibold"
               onClick={handleSignupForm}
               disabled={signupLoading}
+              type="button"
             >
-              {signupLoading ? "Création..." : "Créer mon compte"}
+              {signupLoading ? "Création en cours..." : "Créer mon compte"}
             </Button>
           </div>
-
           <div className="text-xs text-center text-muted-foreground">
             <p>Un email de confirmation vous sera envoyé</p>
           </div>
@@ -312,4 +311,6 @@ export default function PublicHome() {
       </div>
     );
   }
+
+  return null;
 }
