@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, Trash2, ToggleLeft, ToggleRight, Eye, MousePointer, Upload } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ArrowLeft, Plus, Trash2, ToggleLeft, ToggleRight, Eye, MousePointer, Upload, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 const PLACEMENTS = [
@@ -22,6 +23,8 @@ export default function GererPublicites() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [photoFile, setPhotoFile] = useState(null);
+  const [dialogDelete, setDialogDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     titre: "", description: "", lien_url: "", placement: "home_client",
     date_debut: "", date_fin: "", nom_annonceur: "", image_url: "",
@@ -29,7 +32,7 @@ export default function GererPublicites() {
 
   const load = async () => {
     const data = await base44.entities.Publicite.list("-created_date", 100);
-    setPubs(data);
+    setPubs(data.filter(p => !p.deleted));
     setLoading(false);
   };
 
@@ -66,10 +69,22 @@ export default function GererPublicites() {
     setPubs(prev => prev.map(p => p.id === pub.id ? { ...p, active: !p.active } : p));
   };
 
-  const deletePub = async (id) => {
-    await base44.entities.Publicite.delete(id);
-    setPubs(prev => prev.filter(p => p.id !== id));
-    toast.success("Publicité supprimée");
+  const supprimerPub = async (pub) => {
+    setDeleting(true);
+    try {
+      await base44.entities.Publicite.update(pub.id, {
+        deleted: true,
+        deleted_at: new Date().toISOString(),
+        active: false,
+      });
+      setPubs(prev => prev.filter(p => p.id !== pub.id));
+      toast.success("Publicité supprimée");
+      setDialogDelete(null);
+    } catch (err) {
+      toast.error("Erreur : " + err.message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>;
@@ -158,7 +173,7 @@ export default function GererPublicites() {
                       ? <ToggleRight className="h-5 w-5 text-green-500" />
                       : <ToggleLeft className="h-5 w-5 text-muted-foreground" />}
                   </button>
-                  <button onClick={() => deletePub(pub.id)} className="text-red-400 hover:text-red-600">
+                  <button onClick={() => setDialogDelete(pub)} className="text-red-400 hover:text-red-600">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -167,6 +182,32 @@ export default function GererPublicites() {
           </Card>
         ))}
       </div>
+
+      {/* Dialog suppression */}
+      <Dialog open={!!dialogDelete} onOpenChange={(v) => { if (!v) setDialogDelete(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" /> Supprimer la publicité
+            </DialogTitle>
+          </DialogHeader>
+          {dialogDelete && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                <p className="font-semibold text-sm">{dialogDelete.titre}</p>
+                <p className="text-xs text-muted-foreground">{dialogDelete.nom_annonceur}</p>
+              </div>
+              <p className="text-sm text-red-700 font-semibold">⚠️ Cette action désactivera la publicité.</p>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setDialogDelete(null)}>Annuler</Button>
+                <Button variant="destructive" className="flex-1" onClick={() => supprimerPub(dialogDelete)} disabled={deleting}>
+                  {deleting ? "Suppression..." : "✓ Confirmer"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
