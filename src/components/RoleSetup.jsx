@@ -99,9 +99,13 @@ export default function RoleSetup({ onComplete }) {
       ...docUrls,
     });
 
-    // Créer la fiche métier via le backend
+    // Créer la fiche métier — passer user_type explicitement pour éviter le problème de cache session
     try {
-      await base44.functions.invoke('ensureUserProfile', {});
+      await base44.functions.invoke('ensureUserProfile', {
+        user_type: selectedRole,
+        onboarding_completed: true,
+        context: 'after_role_setup',
+      });
     } catch (_) {}
     if (selectedRole === "client") {
       await base44.functions.invoke('createClientOnSignup', {

@@ -28,7 +28,7 @@ export default function AppLayoutWrapper({ user }) {
 
         // Auto-réparation : vérifier/créer la fiche métier si manquante
         if (!isAdmin) {
-          try { await base44.functions.invoke('ensureUserProfile', {}); } catch (_) {}
+          try { await base44.functions.invoke('ensureUserProfile', { user_type: me.user_type, onboarding_completed: me.onboarding_completed, context: 'login' }); } catch (_) {}
         }
         if (me.email === "weezyh2@gmail.com" || me.role === 'admin') {
           setUserRole("admin");

@@ -9,32 +9,39 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Accepter un user_type passé en paramètre (appelé juste après updateMe)
+    // pour éviter le problème de cache de session
+    let body = {};
+    try { body = await req.json(); } catch (_) {}
+    const userType = body.user_type || user.user_type;
+
     const ADMIN_EMAILS = ['weezyh2@gmail.com'];
     const isAdmin = user.role === 'admin' || ADMIN_EMAILS.includes(user.email);
+    const callContext = body.context || 'login';
 
-    console.log(`[ensureUserProfile] userId=${user.id} email=${user.email} user_type=${user.user_type} onboarding_completed=${user.onboarding_completed} isAdmin=${isAdmin}`);
+    console.log(`[ensureUserProfile][${callContext}] userId=${user.id} email=${user.email} user_type(param)=${body.user_type} user_type(session)=${user.user_type} onboarding_completed=${user.onboarding_completed}`);
 
     if (isAdmin) {
-      console.log(`[ensureUserProfile] Admin → skip onboarding check`);
+      console.log(`[ensureUserProfile] Admin → skip`);
       return Response.json({ status: 'admin', needs_onboarding: false });
     }
 
-    // Vérification critique : user_type obligatoire
-    if (!user.user_type) {
-      console.log(`[ensureUserProfile] ROLE MANQUANT pour userId=${user.id}`);
-      return Response.json({ status: 'needs_onboarding', needs_onboarding: true, reason: 'ROLE MANQUANT' });
+    // Vérification critique : si user_type absent des deux sources → appelé trop tôt
+    if (!userType) {
+      console.log(`[ensureUserProfile] ⛔ ERREUR : ensureUserProfile appelé trop tôt — user_type non défini pour userId=${user.id}`);
+      return Response.json({ status: 'needs_onboarding', needs_onboarding: true, reason: 'ROLE MANQUANT — appelé trop tôt' });
     }
 
-    if (!user.onboarding_completed) {
+    const onboardingOk = user.onboarding_completed || body.onboarding_completed;
+    if (!onboardingOk) {
       console.log(`[ensureUserProfile] onboarding_completed=false pour userId=${user.id}`);
       return Response.json({ status: 'needs_onboarding', needs_onboarding: true, reason: 'ONBOARDING NON TERMINE' });
     }
 
     const now = new Date().toISOString();
     let created = false;
-    let skipped = false;
 
-    if (user.user_type === 'client') {
+    if (userType === 'client') {
       const existing = await base44.asServiceRole.entities.Client.filter({ email: user.email });
       if (existing.length === 0) {
         await base44.asServiceRole.entities.Client.create({
@@ -50,14 +57,11 @@ Deno.serve(async (req) => {
         created = true;
         console.log(`[ensureUserProfile] ✅ Fiche Client créée pour userId=${user.id}`);
       } else {
-        skipped = true;
         console.log(`[ensureUserProfile] ⏭️ Fiche Client déjà existante pour userId=${user.id}`);
       }
-    } else if (user.user_type === 'livreur') {
-      // Livreurs = table Users uniquement, pas de table séparée
+    } else if (userType === 'livreur') {
       console.log(`[ensureUserProfile] ⏭️ Livreur = pas de table séparée, userId=${user.id}`);
-      skipped = true;
-    } else if (user.user_type === 'partenaire') {
+    } else if (userType === 'partenaire') {
       const existing = await base44.asServiceRole.entities.Partenaire.filter({ user_email: user.email });
       if (existing.length === 0) {
         await base44.asServiceRole.entities.Partenaire.create({
@@ -71,10 +75,9 @@ Deno.serve(async (req) => {
         created = true;
         console.log(`[ensureUserProfile] ✅ Fiche Partenaire créée pour userId=${user.id}`);
       } else {
-        skipped = true;
         console.log(`[ensureUserProfile] ⏭️ Fiche Partenaire déjà existante pour userId=${user.id}`);
       }
-    } else if (user.user_type === 'commercial') {
+    } else if (userType === 'commercial') {
       const existing = await base44.asServiceRole.entities.CodePromo.filter({ commercial_email: user.email });
       if (existing.length === 0) {
         await base44.asServiceRole.entities.CodePromo.create({
@@ -91,20 +94,13 @@ Deno.serve(async (req) => {
         created = true;
         console.log(`[ensureUserProfile] ✅ Fiche Commercial créée pour userId=${user.id}`);
       } else {
-        skipped = true;
         console.log(`[ensureUserProfile] ⏭️ Fiche Commercial déjà existante pour userId=${user.id}`);
       }
     } else {
-      console.log(`[ensureUserProfile] ⚠️ user_type inconnu: ${user.user_type} pour userId=${user.id}`);
+      console.log(`[ensureUserProfile] ⚠️ user_type inconnu: ${userType} pour userId=${user.id}`);
     }
 
-    return Response.json({
-      status: 'ok',
-      needs_onboarding: false,
-      user_type: user.user_type,
-      fiche_created: created,
-      fiche_skipped: skipped,
-    });
+    return Response.json({ status: 'ok', needs_onboarding: false, user_type: userType, fiche_created: created });
   } catch (error) {
     console.error(`[ensureUserProfile] ERREUR:`, error.message);
     return Response.json({ error: error.message }, { status: 500 });
