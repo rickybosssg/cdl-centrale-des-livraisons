@@ -15,6 +15,8 @@ const ROLES = [
 export default function PublicHome() {
   const [step, setStep] = useState("choice"); // "choice", "login", "signup_role", "signup_form"
   const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -22,15 +24,16 @@ export default function PublicHome() {
   const [signupLoading, setSignupLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!loginEmail.trim()) {
-      toast.error("Veuillez entrer votre email");
+    if (!loginEmail.trim() || !loginPassword.trim()) {
+      toast.error("Veuillez entrer votre email et mot de passe");
       return;
     }
     setLoginLoading(true);
     try {
-      await base44.auth.redirectToLogin();
+      await base44.auth.login({ email: loginEmail, password: loginPassword });
+      window.location.reload();
     } catch (err) {
-      toast.error("Erreur lors de la connexion");
+      toast.error("Email ou mot de passe incorrect");
       setLoginLoading(false);
     }
   };
@@ -147,6 +150,26 @@ export default function PublicHome() {
               />
             </div>
 
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Mot de passe</label>
+              <div className="relative">
+                <Input
+                  type={showLoginPassword ? "text" : "password"}
+                  placeholder="Votre mot de passe"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
             <Button
               className="w-full h-11 text-base font-semibold"
               onClick={handleLogin}
@@ -158,7 +181,7 @@ export default function PublicHome() {
           </div>
 
           <div className="text-center text-xs text-muted-foreground">
-            <p>Vous serez redirigé vers la page de connexion CDL</p>
+            <p>Pas encore de compte ? Cliquez sur "Nouvel utilisateur"</p>
           </div>
         </div>
       </div>
