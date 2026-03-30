@@ -69,9 +69,18 @@ import DispatcherGuard from './components/DispatcherGuard';
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
 
-  // Si pas authentifié, afficher la page publique
+  // Si pas authentifié, rediriger vers le login Base44 (Google ou email)
   if (!isAuthenticated && !isLoadingAuth) {
-    return <PublicHome />;
+    base44.auth.redirectToLogin();
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
+        <div className="text-center space-y-4 text-white">
+          <div className="h-16 w-16 rounded-2xl bg-white flex items-center justify-center text-primary font-bold text-2xl mx-auto">CDL</div>
+          <p className="font-semibold text-lg">CDL APP</p>
+          <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+        </div>
+      </div>
+    );
   }
 
   return (
