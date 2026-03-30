@@ -78,7 +78,7 @@ export default function RoleSetup({ onComplete }) {
         statut_paiement: "Doit",
       });
     }
-    const me = await base44.auth.me();
+    // ÉTAPE 1 : Sauvegarder le rôle (await obligatoire)
     await base44.auth.updateMe({
       user_type: selectedRole,
       onboarding_completed: true,
@@ -99,7 +99,11 @@ export default function RoleSetup({ onComplete }) {
       ...docUrls,
     });
 
-    // Créer la fiche métier — passer user_type explicitement pour éviter le problème de cache session
+    // ÉTAPE 2 : Forcer le refresh de session pour vider le cache
+    const me = await base44.auth.me();
+    console.log(`[RoleSetup] user_type après refresh session: ${me.user_type} (attendu: ${selectedRole})`);
+
+    // ÉTAPE 3 : Appeler ensureUserProfile avec user_type explicite
     try {
       await base44.functions.invoke('ensureUserProfile', {
         user_type: selectedRole,
