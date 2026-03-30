@@ -19,17 +19,37 @@ export default function AppLayoutWrapper({ user }) {
         const ADMIN_EMAILS = ['weezyh2@gmail.com'];
         const isAdmin = me.role === 'admin' || ADMIN_EMAILS.includes(me.email);
 
-        // Forcer l'onboarding si pas de user_type ou onboarding non complet (sauf admin)
-        if (!isAdmin && (!me.user_type || !me.onboarding_completed)) {
-          setNeedsRole(true);
-          setLoading(false);
-          return;
+        if (!isAdmin) {
+          // CAS 1 : pas de rôle → forcer le choix du profil
+          if (!me.user_type) {
+            setNeedsRole(true);
+            setLoading(false);
+            return;
+          }
+
+          // CAS 2 : rôle présent mais onboarding non terminé OU fiche métier potentiellement absente
+          // → appeler ensureUserProfile qui créera la fiche si elle manque
+          // Forcer onboarding_completed=true pour réparer les anciens comptes sans bloquer
+          try {
+            const result = await base44.functions.invoke('ensureUserProfile', {
+              user_type: me.user_type,
+              onboarding_completed: true,
+              context: 'login',
+            });
+            // Si le serveur répond needs_onboarding ET qu'il n'y a vraiment pas de user_type → bloquer
+            if (result?.data?.needs_onboarding && !me.user_type) {
+              setNeedsRole(true);
+              setLoading(false);
+              return;
+            }
+          } catch (_) {}
+
+          // Marquer onboarding terminé si nécessaire (réparation silencieuse)
+          if (!me.onboarding_completed) {
+            try { await base44.entities.User.update(me.id, { onboarding_completed: true }); } catch (_) {}
+          }
         }
 
-        // Auto-réparation : vérifier/créer la fiche métier si manquante
-        if (!isAdmin) {
-          try { await base44.functions.invoke('ensureUserProfile', { user_type: me.user_type, onboarding_completed: me.onboarding_completed, context: 'login' }); } catch (_) {}
-        }
         if (me.email === "weezyh2@gmail.com" || me.role === 'admin') {
           setUserRole("admin");
         } else {
