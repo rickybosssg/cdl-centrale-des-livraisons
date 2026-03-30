@@ -46,33 +46,8 @@ export default function PublicHome() {
     setStep("signup_form");
   };
 
-  const handleSignupForm = async () => {
-    setSignupError("");
-    if (!signupForm.nom_complet.trim() || !signupForm.email.trim() || !signupForm.password.trim() || !signupForm.telephone.trim()) {
-      setSignupError("Veuillez remplir tous les champs");
-      return;
-    }
-    setSignupLoading(true);
-    try {
-      await base44.auth.signup({
-        email: signupForm.email,
-        password: signupForm.password,
-        full_name: signupForm.nom_complet,
-        telephone: signupForm.telephone,
-        user_type: selectedRole,
-        user_roles: JSON.stringify([selectedRole]),
-        profil_valide: false,
-      });
-      setSignupForm({ nom_complet: "", email: "", password: "", telephone: "" });
-      setSelectedRole(null);
-      setShowPassword(false);
-      setStep("login_after_signup");
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Erreur lors de la création du compte";
-      setSignupError(msg);
-    } finally {
-      setSignupLoading(false);
-    }
+  const handleSignupForm = () => {
+    base44.auth.redirectToLogin();
   };
 
   // Choix initial
