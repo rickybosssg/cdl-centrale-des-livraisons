@@ -380,30 +380,6 @@ export default function RoleSetup({ onComplete, isAdmin = false }) {
             </div>
             )}
 
-            {selectedRole === "livreur" && (
-            <div className="space-y-3">
-            <p className="text-sm font-semibold">🛵 Mode(s) de déplacement *</p>
-            <div className="space-y-2">
-             {[{val: "moto", label: "🏍️ Motocyclette"}, {val: "vehicule", label: "🚗 Véhicule"}].map(mode => (
-               <button
-                 key={mode.val}
-                 onClick={() => setMoyenDeplacement(prev => 
-                   prev.includes(mode.val) 
-                     ? prev.filter(m => m !== mode.val)
-                     : [...prev, mode.val]
-                 )}
-                 className={`w-full p-3 rounded-lg border-2 transition-all font-medium ${
-                   moyenDeplacement.includes(mode.val)
-                     ? "border-primary bg-primary/10 text-primary"
-                     : "border-border bg-card hover:border-primary/50"
-                 }`}
-               >
-                 {mode.label}
-               </button>
-             ))}
-            </div>
-            </div>
-            )}
 
             <div className="flex gap-2">
           <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
