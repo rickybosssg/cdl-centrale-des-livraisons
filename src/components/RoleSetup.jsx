@@ -139,15 +139,15 @@ export default function RoleSetup({ onComplete }) {
   // ─── ÉTAPE 1 : Choix du profil ───
   if (step === 1) {
     return (
-      <div className="min-h-screen flex flex-col p-4 bg-background">
+      <div className="min-h-screen flex flex-col p-4 bg-gradient-to-br from-primary to-blue-700">
         <div className="w-full max-w-sm mx-auto space-y-5 pt-6 pb-10">
 
           {/* Logo */}
           <div className="flex items-center gap-3">
             <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg" alt="CDL" className="h-12 w-12 rounded-xl object-cover" />
             <div>
-              <h1 className="text-xl font-bold">CDL APP</h1>
-              <p className="text-xs text-muted-foreground">Centrale des Livraisons — Ouagadougou</p>
+              <h1 className="text-xl font-bold text-white">CDL APP</h1>
+              <p className="text-xs text-white/70">Centrale des Livraisons — Ouagadougou</p>
             </div>
           </div>
 
@@ -171,7 +171,7 @@ export default function RoleSetup({ onComplete }) {
 
           {/* Choix profil */}
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-center">Choisissez votre profil</p>
+            <p className="text-sm font-semibold text-center text-white">Choisissez votre profil</p>
             {ROLES.map((role) => {
               const Icon = role.icon;
               const isLivreur = role.value === 'livreur';
@@ -180,10 +180,10 @@ export default function RoleSetup({ onComplete }) {
                   key={role.value}
                   className={`cursor-pointer transition-all press-effect ${
                     selectedRole === role.value
-                      ? 'ring-2 ring-primary border-primary shadow-md'
+                      ? 'ring-2 ring-white border-white shadow-md bg-white/20'
                       : isLivreur
-                        ? 'border-2 border-primary/50 bg-primary/5 hover:shadow-md'
-                        : 'hover:shadow-sm'
+                        ? 'border-2 border-white/70 bg-white/15 hover:bg-white/25'
+                        : 'bg-white/10 border-white/20 hover:bg-white/20'
                   }`}
                   onClick={() => setSelectedRole(role.value)}
                 >
@@ -194,8 +194,8 @@ export default function RoleSetup({ onComplete }) {
                       <Icon className={`h-6 w-6 ${isLivreur ? 'text-white' : 'text-primary'}`} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`font-semibold ${isLivreur ? 'text-primary' : ''}`}>{role.label}</p>
-                      <p className="text-xs text-muted-foreground">{role.desc}</p>
+                      <p className={`font-semibold text-white`}>{role.label}</p>
+                      <p className="text-xs text-white/70">{role.desc}</p>
                     </div>
                     {isLivreur && (
                       <span className="text-[10px] bg-primary text-white rounded-full px-2 py-0.5 font-bold flex-shrink-0">
@@ -209,7 +209,7 @@ export default function RoleSetup({ onComplete }) {
           </div>
 
           <Button
-            className="w-full h-12 text-base font-semibold"
+            className="w-full h-12 text-base font-semibold bg-white text-primary hover:bg-white/90"
             disabled={!selectedRole}
             onClick={() => {
               if (selectedRole === 'partenaire') setShowPartenaire(true);
