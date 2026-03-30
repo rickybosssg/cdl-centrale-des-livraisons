@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
     let created = false;
+    const logsToWrite = [];
 
     if (userType === 'client') {
       const existing = await base44.asServiceRole.entities.Client.filter({ email: user.email });
@@ -55,6 +56,7 @@ Deno.serve(async (req) => {
           total_depense: 0,
         });
         created = true;
+        logsToWrite.push({ correction: 'fiche_creee', detail: 'Fiche Client créée automatiquement' });
         console.log(`[ensureUserProfile] ✅ Fiche Client créée pour userId=${user.id}`);
       } else {
         console.log(`[ensureUserProfile] ⏭️ Fiche Client déjà existante pour userId=${user.id}`);
@@ -73,6 +75,7 @@ Deno.serve(async (req) => {
           statut: 'en_attente',
         });
         created = true;
+        logsToWrite.push({ correction: 'fiche_creee', detail: 'Fiche Partenaire créée automatiquement' });
         console.log(`[ensureUserProfile] ✅ Fiche Partenaire créée pour userId=${user.id}`);
       } else {
         console.log(`[ensureUserProfile] ⏭️ Fiche Partenaire déjà existante pour userId=${user.id}`);
@@ -92,12 +95,27 @@ Deno.serve(async (req) => {
           statut_paiement: 'À jour',
         });
         created = true;
+        logsToWrite.push({ correction: 'fiche_creee', detail: 'Fiche Commercial créée automatiquement' });
         console.log(`[ensureUserProfile] ✅ Fiche Commercial créée pour userId=${user.id}`);
       } else {
         console.log(`[ensureUserProfile] ⏭️ Fiche Commercial déjà existante pour userId=${user.id}`);
       }
     } else {
       console.log(`[ensureUserProfile] ⚠️ user_type inconnu: ${userType} pour userId=${user.id}`);
+    }
+
+    // Écrire les logs de réparation si nécessaire
+    for (const log of logsToWrite) {
+      try {
+        await base44.asServiceRole.entities.RepairLog.create({
+          user_id: user.id,
+          user_email: user.email,
+          user_type: userType,
+          correction: log.correction,
+          detail: log.detail,
+          contexte: callContext,
+        });
+      } catch (_) {}
     }
 
     return Response.json({ status: 'ok', needs_onboarding: false, user_type: userType, fiche_created: created });

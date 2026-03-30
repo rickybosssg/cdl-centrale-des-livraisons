@@ -1,0 +1,41 @@
+{
+  "name": "RepairLog",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "ID utilisateur"
+    },
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "user_type": {
+      "type": "string",
+      "title": "R\u00f4le"
+    },
+    "correction": {
+      "type": "string",
+      "enum": [
+        "fiche_creee",
+        "onboarding_complete",
+        "role_assigne",
+        "audit_manuel"
+      ],
+      "title": "Type de correction"
+    },
+    "detail": {
+      "type": "string",
+      "title": "D\u00e9tail"
+    },
+    "contexte": {
+      "type": "string",
+      "title": "Contexte (login, audit, etc.)"
+    }
+  },
+  "required": [
+    "user_id",
+    "user_email",
+    "correction"
+  ]
+}

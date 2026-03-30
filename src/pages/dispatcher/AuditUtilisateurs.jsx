@@ -98,6 +98,7 @@ export default function AuditUtilisateurs() {
   const [clients, setClients] = useState([]);
   const [partenaires, setPartenaires] = useState([]);
   const [codes, setCodes] = useState([]);
+  const [repairLogs, setRepairLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [repairing, setRepairing] = useState({});
   const [repairingAll, setRepairingAll] = useState(false);
@@ -109,16 +110,18 @@ export default function AuditUtilisateurs() {
 
   const loadData = async () => {
     setLoading(true);
-    const [usersData, clientsData, partenairesData, codesData] = await Promise.all([
+    const [usersData, clientsData, partenairesData, codesData, logsData] = await Promise.all([
       base44.entities.User.list("-created_date", 500),
       base44.entities.Client.list("-created_date", 500),
       base44.entities.Partenaire.list("-created_date", 500),
       base44.entities.CodePromo.list("-created_date", 500),
+      base44.entities.RepairLog.list("-created_date", 500),
     ]);
     setUsers(usersData);
     setClients(clientsData);
     setPartenaires(partenairesData);
     setCodes(codesData);
+    setRepairLogs(logsData);
     setLoading(false);
   };
 
@@ -151,6 +154,8 @@ export default function AuditUtilisateurs() {
     setRepairing(prev => ({ ...prev, [user.id]: true }));
     try {
       await repairOne(user);
+      // Log audit manuel
+      try { await base44.entities.RepairLog.create({ user_id: user.id, user_email: user.email, user_type: user.user_type || '', correction: 'audit_manuel', detail: 'Réparation manuelle depuis l’audit admin', contexte: 'audit' }); } catch (_) {}
       toast.success(`${user.full_name || user.email} réparé`);
       await loadData();
     } catch (err) {
@@ -210,6 +215,18 @@ export default function AuditUtilisateurs() {
         </div>
         <Button variant="outline" size="icon" onClick={loadData}><RefreshCw className="h-4 w-4" /></Button>
       </div>
+
+      {/* Compteur réparations */}
+      {repairLogs.length > 0 && (
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm">
+          <Wrench className="h-4 w-4 text-blue-600 flex-shrink-0" />
+          <div>
+            <span className="font-bold text-blue-700">{repairLogs.length}</span>
+            <span className="text-blue-600"> réparation(s) automatique(s) enregistrée(s)</span>
+            <span className="text-xs text-blue-500 ml-1">({[...new Set(repairLogs.map(l => l.user_email))].length} utilisateur(s) uniques)</span>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 text-center text-xs">
