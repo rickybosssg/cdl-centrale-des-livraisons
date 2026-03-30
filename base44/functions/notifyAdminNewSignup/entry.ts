@@ -3,32 +3,26 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const { entity_name, entity_data } = await req.json();
+    const body = await req.json();
+    const entity_name = body.entity_name || '';
+    const entity_data = body.entity_data || {};
 
-    // Mapper les informations par type
-    const getTitle = () => {
-      if (entity_name === 'Client') return '🎯 Nouveau client inscrit';
-      if (entity_name === 'Livreur') return '🛵 Nouveau livreur en attente de validation';
-      if (entity_name === 'Partenaire') return '🏪 Nouveau partenaire';
-      if (entity_name === 'CodePromo') return '🎟️ Nouveau code promo créé';
-      return 'Nouvelle inscription';
-    };
+    let titre = 'Nouvelle inscription';
+    let message = JSON.stringify(entity_data);
 
-    const getMessage = () => {
-      if (entity_name === 'Client') {
-        return `${entity_data.nom_complet || 'Client'} s'est inscrit\n📱 ${entity_data.numero_telephone || entity_data.telephone}\n📍 ${entity_data.quartier_principal || entity_data.quartier || 'N/A'}`;
-      }
-      if (entity_name === 'Livreur') {
-        return `${entity_data.nom_complet || entity_data.full_name || 'Livreur'} a soumis son dossier livreur.\n📱 ${entity_data.telephone || 'N/A'}\n📍 ${entity_data.quartier || 'N/A'}\n✉️ ${entity_data.email || 'N/A'}\n👉 Rendez-vous dans Validation Livreurs pour examiner le dossier.`;
-      }
-      if (entity_name === 'Partenaire') {
-        return `${entity_data.nom_commerce || 'Commerce'} s'est inscrit\n📞 ${entity_data.telephone}\n🏷️ ${entity_data.type_commerce}`;
-      }
-      if (entity_name === 'CodePromo') {
-        return `Code: ${entity_data.code}\nCommercial: ${entity_data.commercial_name || 'N/A'}`;
-      }
-      return JSON.stringify(entity_data);
-    };
+    if (entity_name === 'Client') {
+      titre = '🎯 Nouveau client inscrit';
+      message = `${entity_data.nom_complet || 'Client'} s'est inscrit\n📱 ${entity_data.telephone || entity_data.numero_telephone || 'N/A'}\n📍 ${entity_data.quartier || entity_data.quartier_principal || 'N/A'}`;
+    } else if (entity_name === 'Livreur') {
+      titre = '🛵 Nouveau livreur en attente de validation';
+      message = `${entity_data.nom_complet || entity_data.full_name || 'Livreur'} a soumis son dossier.\n📱 ${entity_data.telephone || 'N/A'}\n📍 ${entity_data.quartier || 'N/A'}\n👉 Rendez-vous dans Validation Livreurs.`;
+    } else if (entity_name === 'Partenaire') {
+      titre = '🏪 Nouveau partenaire';
+      message = `${entity_data.nom_commerce || 'Commerce'} s'est inscrit\n📞 ${entity_data.telephone || 'N/A'}\n🏷️ ${entity_data.type_commerce || 'N/A'}`;
+    } else if (entity_name === 'CodePromo') {
+      titre = '🎟️ Nouveau code promo créé';
+      message = `Code: ${entity_data.code || 'N/A'}\nCommercial: ${entity_data.commercial_name || 'N/A'}`;
+    }
 
     // Récupérer tous les admins
     const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
@@ -38,8 +32,8 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: admin.email,
         destinataire_role: 'admin',
-        titre: getTitle(),
-        message: getMessage(),
+        titre: titre,
+        message: message,
         type: 'success',
         lue: false,
       });
