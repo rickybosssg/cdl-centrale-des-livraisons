@@ -59,14 +59,15 @@ export default function PublicHome() {
         user_roles: JSON.stringify([selectedRole]),
         profil_valide: false,
       });
-      toast.success("Compte créé! Vérifiez votre email et connectez-vous.");
-      // Reset form but DO NOT navigate — user doit rester bloqué ici
+      toast.success("Compte créé ! Vérifiez votre email puis connectez-vous.");
       setSignupForm({ nom_complet: "", email: "", password: "", telephone: "" });
       setSelectedRole(null);
       setShowPassword(false);
-      // Bloquer l'accès à l'appli jusqu'à la confirmation email
+      setStep("login");
     } catch (err) {
-      toast.error("Erreur: " + (err.message || err));
+      const msg = err?.response?.data?.message || err?.message || "Erreur lors de la création du compte";
+      toast.error(msg);
+    } finally {
       setSignupLoading(false);
     }
   };
