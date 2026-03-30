@@ -46,8 +46,21 @@ export default function PublicHome() {
     setStep("signup_form");
   };
 
-  const handleSignupForm = () => {
-    base44.auth.redirectToLogin();
+  const handleSignupForm = async () => {
+    setSignupError("");
+    if (!signupForm.nom_complet.trim() || !signupForm.email.trim() || !signupForm.password.trim() || !signupForm.telephone.trim()) {
+      setSignupError("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
+    setSignupLoading(true);
+    try {
+      await base44.users.inviteUser(signupForm.email, "user");
+      setStep("login_after_signup");
+    } catch (err) {
+      setSignupError(err.message || "Une erreur est survenue. Vérifiez l'email saisi.");
+    } finally {
+      setSignupLoading(false);
+    }
   };
 
   // Choix initial
