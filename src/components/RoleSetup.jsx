@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Package, Truck, User, Radio, Upload, Store, Megaphone } from "lucide-react";
+import { Truck, User, Store, Megaphone } from "lucide-react";
 import InscriptionPartenaire from "./InscriptionPartenaire";
 import { base44 } from "@/api/base44Client";
 import QuartierSelect from "./QuartierSelect";
@@ -25,9 +25,6 @@ export default function RoleSetup({ onComplete }) {
   const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "", code_promo: "" });
   const [checkingCode, setCheckingCode] = useState(false);
   const [codePromoApplique, setCodePromoApplique] = useState(null);
-  const [docs, setDocs] = useState({ photo_profil: null, photo_identite_recto: null, photo_identite_verso: null, photo_moyen_deplacement: null });
-  const [uploading, setUploading] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [livreursActifs, setLivreursActifs] = useState(null);
   const [moyenDeplacement, setMoyenDeplacement] = useState([]);
 
@@ -44,32 +41,12 @@ export default function RoleSetup({ onComplete }) {
   };
 
   const handleSubmit = async () => {
-    if (selectedRole === "livreur" && (!docs.photo_profil || !docs.photo_identite_recto || !docs.photo_identite_verso || !docs.photo_moyen_deplacement)) {
-      toast.error("Veuillez fournir tous les documents demandés");
-      return;
-    }
     if (selectedRole === "livreur" && moyenDeplacement.length === 0) {
       toast.error("Veuillez sélectionner au moins un mode de déplacement");
       return;
     }
     setLoading(true);
     let docUrls = {};
-    if (selectedRole === "livreur") {
-      setUploading(true);
-      const uploads = await Promise.all([
-        uploadFile(docs.photo_profil),
-        uploadFile(docs.photo_identite_recto),
-        uploadFile(docs.photo_identite_verso),
-        uploadFile(docs.photo_moyen_deplacement),
-      ]);
-      docUrls = {
-        photo_profil: uploads[0],
-        photo_identite_recto: uploads[1],
-        photo_identite_verso: uploads[2],
-        photo_moyen_deplacement: uploads[3],
-      };
-      setUploading(false);
-    }
     if (selectedRole === "client" && form.code_promo.trim() && codePromoApplique) {
       const nouvNb = (codePromoApplique.nombre_utilisations || 0) + 1;
       await base44.entities.CodePromo.update(codePromoApplique.id, {
@@ -85,6 +62,7 @@ export default function RoleSetup({ onComplete }) {
       user_roles: JSON.stringify([selectedRole]),
       statut_compte: selectedRole === 'client' ? 'actif' : 'en_attente',
       profil_valide: selectedRole === "client",
+      docs_envoyes: selectedRole !== 'livreur', // livreur doit envoyer docs séparément
       statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : undefined,
       statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
       statut_validation_partenaire: selectedRole === "partenaire" ? "en_attente" : undefined,
@@ -96,7 +74,6 @@ export default function RoleSetup({ onComplete }) {
       livreur_bloque: false,
       moyen_deplacement: selectedRole === "livreur" ? JSON.stringify(moyenDeplacement) : undefined,
       code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
-      ...docUrls,
     });
 
     // ÉTAPE 2 : Forcer le refresh de session pour vider le cache
@@ -379,39 +356,11 @@ export default function RoleSetup({ onComplete }) {
         </div>
 
         {selectedRole === "livreur" && (
-          <div className="space-y-3">
-            <p className="text-sm font-semibold">📷 Documents obligatoires</p>
-            {[
-              { key: "photo_profil", label: "Photo de profil (selfie)" },
-              { key: "photo_identite_recto", label: "CNI / Pièce d'identité (recto)" },
-              { key: "photo_identite_verso", label: "CNI / Pièce d'identité (verso)" },
-              { key: "photo_moyen_deplacement", label: "Photo de votre moyen de déplacement" },
-            ].map(doc => (
-              <div key={doc.key} className="space-y-1">
-                <Label>{doc.label} *</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    id={doc.key}
-                    onChange={e => setDocs(d => ({ ...d, [doc.key]: e.target.files[0] }))}
-                  />
-                  <label
-                    htmlFor={doc.key}
-                    className={`flex-1 flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-sm transition-colors ${
-                      docs[doc.key] ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted"
-                    }`}
-                  >
-                    <Upload className="h-4 w-4" />
-                    {docs[doc.key] ? docs[doc.key].name : "Choisir une photo"}
-                  </label>
-                </div>
-              </div>
-            ))}
-            </div>
-            )}
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+            <p className="text-sm font-semibold text-amber-800">📋 Étape suivante</p>
+            <p className="text-xs text-amber-700 mt-1">Après inscription, vous devrez envoyer vos documents (selfie, CNI, photo du véhicule) pour activer votre compte.</p>
+          </div>
+        )}
 
 
             <div className="flex gap-2">
@@ -420,10 +369,10 @@ export default function RoleSetup({ onComplete }) {
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!form.telephone || !form.quartier || loading || uploading || (selectedRole === "livreur" && moyenDeplacement.length === 0)}
+            disabled={!form.telephone || !form.quartier || loading || (selectedRole === "livreur" && moyenDeplacement.length === 0)}
             className="flex-1 h-11 font-semibold"
           >
-            {uploading ? "Upload..." : loading ? "Enregistrement..." : selectedRole === "livreur" ? "🛵 Commencer maintenant" : "Commencer"}
+            {loading ? "Enregistrement..." : selectedRole === "livreur" ? "🛵 Créer mon compte →" : "Commencer"}
           </Button>
         </div>
       </div>

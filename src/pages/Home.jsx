@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import RoleSetup from "../components/RoleSetup";
+import LivreurDocuments from "../components/LivreurDocuments";
 import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
@@ -59,12 +60,17 @@ export default function Home() {
     return <RoleSetup onComplete={loadUser} />;
   }
 
-  // 3. Compte bloqué
+  // 3. Livreur inscrit mais n'a pas encore envoyé ses documents
+  if (user.user_type === 'livreur' && !user.docs_envoyes) {
+    return <LivreurDocuments onComplete={loadUser} />;
+  }
+
+  // 4. Compte bloqué
   if (user.livreur_bloque || user.statut_compte === 'bloque') {
     return <AttentePage profile={user.user_type} isBlocked={true} blockReason={user.motif_blocage || ''} />;
   }
 
-  // 4. En attente de validation (livreur, partenaire, commercial)
+  // 5. En attente de validation (livreur, partenaire, commercial)
   const needsValidation = ['livreur', 'partenaire', 'commercial'].includes(user.user_type);
   const isValidated =
     user.profil_valide ||
@@ -73,7 +79,7 @@ export default function Home() {
     user.statut_validation_partenaire === 'valide';
 
   if (needsValidation && !isValidated) {
-    return <AttentePage profile={user.user_type} />;
+    return <AttentePage profile={user.user_type} docsEnvoyes={user.docs_envoyes} motifRefus={user.motif_refus} />;
   }
 
   // 5. Dashboard selon le profil

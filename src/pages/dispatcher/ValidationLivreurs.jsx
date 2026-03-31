@@ -78,12 +78,30 @@ export default function ValidationLivreurs() {
 
   const refuser = async (livreur) => {
     setProcessing(true);
+    const motif = motifRefus || "Documents insuffisants ou illisibles";
     await base44.entities.User.update(livreur.id, {
       statut_validation_livreur: "refuse",
       profil_valide: false,
-      motif_refus: motifRefus || "Documents insuffisants",
+      motif_refus: motif,
     });
-    toast.success("Le livreur a été refusé");
+    // Notifier le livreur avec le motif
+    await base44.entities.Notification.create({
+      destinataire_email: livreur.email,
+      destinataire_role: "livreur",
+      titre: "❌ Dossier refusé",
+      message: `Votre dossier livreur a été refusé. Motif : ${motif}. Contactez-nous via WhatsApp pour corriger votre dossier.`,
+      type: "danger",
+      lue: false,
+    });
+    // Envoyer aussi via FCM si possible
+    try {
+      await base44.functions.invoke('sendFcmNotification', {
+        user_email: livreur.email,
+        title: "❌ Dossier livreur refusé",
+        body: `Motif : ${motif}. Contactez CDL pour corriger.`,
+      });
+    } catch (_) {}
+    toast.success("Le livreur a été refusé et notifié");
     setDialogOpen(false);
     setMotifRefus("");
     loadData();
