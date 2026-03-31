@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Bell } from "lucide-react";
 import { vibrateNotif, playNotificationSound } from "@/lib/vibration";
-import { requestNotificationPermission, sendPushNotification } from "@/lib/pushNotifications";
+import { requestNotificationPermission, registerFcmToken, onForegroundMessage } from "@/lib/pushNotifications";
 import { motion } from "framer-motion";
 import NotificationPanel from "./NotificationPanel";
 
@@ -16,16 +16,31 @@ export default function NotificationBell({ userEmail }) {
     setNotifs(data);
   };
 
+  const initFcm = async () => {
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+    const token = await registerFcmToken();
+    if (token) {
+      await base44.functions.invoke('saveFcmToken', { token });
+      // Écouter les messages FCM en premier plan
+      onForegroundMessage((payload) => {
+        if (payload.notification) {
+          vibrateNotif();
+          playNotificationSound();
+        }
+      });
+    }
+  };
+
   useEffect(() => {
     loadNotifs();
-    requestNotificationPermission();
+    initFcm();
     const unsub = base44.entities.Notification.subscribe((event) => {
       if (event.data?.destinataire_email === userEmail) {
         if (event.type === 'create') {
           setNotifs(prev => [event.data, ...prev]);
-          playNotificationSound();
           vibrateNotif();
-          sendPushNotification(event.data.titre, event.data.message);
+          playNotificationSound();
         } else if (event.type === 'update') {
           setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
         }

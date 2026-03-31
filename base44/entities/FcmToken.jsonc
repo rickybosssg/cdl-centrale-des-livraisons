@@ -1,0 +1,26 @@
+{
+  "name": "FcmToken",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "token": {
+      "type": "string",
+      "title": "Token FCM"
+    },
+    "user_role": {
+      "type": "string",
+      "title": "R\u00f4le utilisateur"
+    },
+    "last_seen": {
+      "type": "string",
+      "title": "Derni\u00e8re activit\u00e9"
+    }
+  },
+  "required": [
+    "user_email",
+    "token"
+  ]
+}
