@@ -44,13 +44,17 @@ export function isNotificationGranted() {
 export async function registerFcmToken() {
   if (!isNotificationGranted()) return null;
   try {
-    const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    await navigator.serviceWorker.ready;
-    // Envoyer la config au service worker pour qu'il initialise Firebase
-    reg.active?.postMessage({
-      type: 'FIREBASE_CONFIG',
-      config: FIREBASE_CONFIG,
+    // Passer la config Firebase via query params au service worker
+    const params = new URLSearchParams({
+      apiKey: FIREBASE_CONFIG.apiKey,
+      authDomain: FIREBASE_CONFIG.authDomain,
+      projectId: FIREBASE_CONFIG.projectId,
+      storageBucket: FIREBASE_CONFIG.storageBucket,
+      messagingSenderId: FIREBASE_CONFIG.messagingSenderId,
+      appId: FIREBASE_CONFIG.appId,
     });
+    const reg = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${params}`);
+    await navigator.serviceWorker.ready;
     const token = await getToken(getFirebaseMessaging(), {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: reg,
