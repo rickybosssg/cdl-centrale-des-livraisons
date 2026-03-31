@@ -1,7 +1,7 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
-const FIREBASE_CONFIG = {
+export const FIREBASE_CONFIG = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "cdl-app-4743c.firebaseapp.com",
   projectId: "cdl-app-4743c",
@@ -10,14 +10,27 @@ const FIREBASE_CONFIG = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+export const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+
+// Vérifier que toutes les variables sont définies
+const missingVars = Object.entries(FIREBASE_CONFIG)
+  .filter(([, v]) => !v || v === 'undefined')
+  .map(([k]) => k);
+if (missingVars.length > 0) {
+  console.warn('[FCM] Variables VITE_ manquantes:', missingVars);
+} else {
+  console.log('[FCM] Config Firebase chargée - projectId:', FIREBASE_CONFIG.projectId);
+}
 
 let _app = null;
 let _messaging = null;
 
 function getFirebaseApp() {
   if (!_app) {
-    _app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
+    // Réutiliser l'app existante ou en créer une nouvelle
+    const apps = getApps();
+    _app = apps.length === 0 ? initializeApp(FIREBASE_CONFIG) : apps[0];
+    console.log('[FCM] Firebase app initialisée:', _app.name);
   }
   return _app;
 }
@@ -43,25 +56,31 @@ export function isNotificationGranted() {
 
 export async function registerFcmToken() {
   if (!isNotificationGranted()) return null;
+  if (!VAPID_KEY || VAPID_KEY === 'undefined') {
+    console.error('[FCM] VITE_FIREBASE_VAPID_KEY manquant');
+    return null;
+  }
   try {
-    // Passer la config Firebase via query params au service worker
     const params = new URLSearchParams({
-      apiKey: FIREBASE_CONFIG.apiKey,
+      apiKey: FIREBASE_CONFIG.apiKey || '',
       authDomain: FIREBASE_CONFIG.authDomain,
       projectId: FIREBASE_CONFIG.projectId,
       storageBucket: FIREBASE_CONFIG.storageBucket,
-      messagingSenderId: FIREBASE_CONFIG.messagingSenderId,
-      appId: FIREBASE_CONFIG.appId,
+      messagingSenderId: FIREBASE_CONFIG.messagingSenderId || '',
+      appId: FIREBASE_CONFIG.appId || '',
     });
     const reg = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${params}`);
     await navigator.serviceWorker.ready;
+    console.log('[FCM] Service Worker actif, génération du token...');
     const token = await getToken(getFirebaseMessaging(), {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: reg,
     });
+    if (token) console.log('[FCM] Token obtenu:', token.substring(0, 20) + '...');
+    else console.warn('[FCM] Aucun token retourné');
     return token || null;
   } catch (err) {
-    console.warn('FCM token error:', err);
+    console.warn('[FCM] Erreur token:', err);
     return null;
   }
 }
