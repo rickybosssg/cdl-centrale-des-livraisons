@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2, CheckCircle2, XCircle } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
+import { ArrowLeft, Plus, Trash2, CheckCircle2, XCircle, Shield, FileText, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -173,6 +173,34 @@ export default function Settings() {
               );
             })
           )}
+        </CardContent>
+      </Card>
+
+      {/* Conformité & Légal */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Légal & Conformité</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Link to="/politique-confidentialite" className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors">
+            <Shield className="h-5 w-5 text-primary" />
+            <span className="text-sm font-medium">Politique de confidentialité</span>
+          </Link>
+          <Link to="/cgu" className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors">
+            <FileText className="h-5 w-5 text-primary" />
+            <span className="text-sm font-medium">Conditions Générales d'Utilisation</span>
+          </Link>
+          <Link to="/supprimer-compte" className="flex items-center gap-3 p-3 rounded-lg border border-red-200 hover:bg-red-50 transition-colors">
+            <Trash2 className="h-5 w-5 text-red-500" />
+            <span className="text-sm font-medium text-red-600">Supprimer mon compte</span>
+          </Link>
+          <button
+            onClick={() => base44.auth.logout()}
+            className="flex items-center gap-3 p-3 rounded-lg border w-full hover:bg-muted transition-colors"
+          >
+            <LogOut className="h-5 w-5 text-muted-foreground" />
+            <span className="text-sm font-medium">Se déconnecter</span>
+          </button>
         </CardContent>
       </Card>
 
