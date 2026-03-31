@@ -91,10 +91,23 @@ export default function LivreurHome({ user }) {
     return unsub;
   }, [user.email]);
 
+  const [toggleLoading, setToggleLoading] = useState(false);
+
   const toggleDisponible = async () => {
+    if (!disponible && gpsBloque) {
+      toast.error('Vous devez activer votre localisation pour passer en ligne');
+      return;
+    }
+    if (!disponible && user.statut_validation_livreur !== 'valide') {
+      toast.error('Votre compte doit être validé avant de pouvoir passer en ligne');
+      return;
+    }
     const newVal = !disponible;
+    setToggleLoading(true);
     setDisponible(newVal);
     await base44.auth.updateMe({ disponible: newVal });
+    setToggleLoading(false);
+    toast.success(newVal ? '🟢 Vous êtes maintenant en ligne' : '🔴 Vous êtes maintenant hors ligne');
   };
 
   const activeCourse = courses.find(c => ["acceptee", "en_cours"].includes(c.statut));
@@ -191,41 +204,60 @@ export default function LivreurHome({ user }) {
         : `Bravo pour tes ${completedTodayCount} course${completedTodayCount > 1 ? 's' : ''} aujourd'hui — continue ! 💪`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Course pendante (dispatch auto) */}
       {coursePendante && (
-        <CoursePendante
-          course={coursePendante}
-          onRespond={reloadCourses}
-        />
+        <CoursePendante course={coursePendante} onRespond={reloadCourses} />
       )}
-
-      {/* Solde */}
-      <SoldeBlock user={user} />
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Salut, {user.full_name?.split(" ")[0]} 🛵</h1>
-          <p className="text-sm text-muted-foreground">Prêt à livrer ?</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {disponible ? "En ligne" : "Hors ligne"}
-          </span>
-          <Switch checked={disponible} onCheckedChange={toggleDisponible} />
+          <h1 className="text-xl font-bold">Salut, {user.full_name?.split(" ")[0]} 🛵</h1>
+          <p className="text-xs text-muted-foreground">Prêt à livrer ?</p>
         </div>
       </div>
 
-      {/* Status Card */}
-      <Card className={disponible ? "bg-green-50 border-green-200" : "bg-muted"}>
-        <CardContent className="p-4 flex items-center gap-3">
-          <div className={`h-3 w-3 rounded-full ${disponible ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
-          <p className="text-sm font-medium">
-            {disponible ? "Vous êtes disponible pour les courses" : "Vous êtes hors ligne"}
-          </p>
-        </CardContent>
-      </Card>
+      {/* BOUTON PRINCIPAL EN LIGNE / HORS LIGNE */}
+      <button
+        onClick={toggleDisponible}
+        disabled={toggleLoading}
+        className={`w-full rounded-2xl p-5 flex items-center justify-between shadow-lg transition-all active:scale-[0.98] border-2 ${
+          disponible
+            ? 'bg-green-500 border-green-600 text-white'
+            : 'bg-gray-100 border-gray-300 text-gray-800'
+        }`}
+      >
+        <div className="flex items-center gap-4">
+          <div className={`h-14 w-14 rounded-full flex items-center justify-center shadow-inner ${
+            disponible ? 'bg-white/20' : 'bg-white'
+          }`}>
+            {toggleLoading ? (
+              <span className="h-7 w-7 border-4 border-current/40 border-t-current rounded-full animate-spin inline-block" />
+            ) : (
+              <span className="text-3xl">{disponible ? '🟢' : '🔴'}</span>
+            )}
+          </div>
+          <div className="text-left">
+            <p className="text-2xl font-extrabold tracking-tight">
+              {disponible ? 'EN LIGNE' : 'HORS LIGNE'}
+            </p>
+            <p className={`text-sm font-medium ${
+              disponible ? 'text-white/80' : 'text-gray-500'
+            }`}>
+              {disponible ? 'Vous recevez des courses' : 'Vous ne recevez pas de courses'}
+            </p>
+          </div>
+        </div>
+        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+          disponible ? 'bg-white/20' : 'bg-gray-200'
+        }`}>
+          <span className="text-2xl">{disponible ? '✓' : '↻'}</span>
+        </div>
+      </button>
+
+      {/* Solde */}
+      <SoldeBlock user={user} />
 
       {/* Bannière publicitaire */}
       <BannierePublicitaire placement="home_livreur" />
