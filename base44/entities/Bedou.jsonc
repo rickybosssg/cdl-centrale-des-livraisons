@@ -1,0 +1,75 @@
+{
+  "name": "Bedou",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "ID utilisateur"
+    },
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "user_nom": {
+      "type": "string",
+      "title": "Nom utilisateur"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "client",
+        "livreur",
+        "partenaire",
+        "commercial"
+      ],
+      "title": "R\u00f4le"
+    },
+    "solde": {
+      "type": "number",
+      "title": "Solde total (F CFA)",
+      "default": 0
+    },
+    "solde_disponible": {
+      "type": "number",
+      "title": "Solde disponible (F CFA)",
+      "default": 0
+    },
+    "solde_bloque": {
+      "type": "number",
+      "title": "Solde bloqu\u00e9 (F CFA)",
+      "default": 0
+    },
+    "bonus": {
+      "type": "number",
+      "title": "Bonus cumul\u00e9 (F CFA)",
+      "default": 0
+    },
+    "gains_totaux": {
+      "type": "number",
+      "title": "Gains totaux (F CFA)",
+      "default": 0
+    },
+    "depenses_totales": {
+      "type": "number",
+      "title": "D\u00e9penses totales (F CFA)",
+      "default": 0
+    },
+    "statut_bedou": {
+      "type": "string",
+      "enum": [
+        "actif",
+        "suspendu"
+      ],
+      "title": "Statut Bedou",
+      "default": "actif"
+    },
+    "date_creation": {
+      "type": "string",
+      "title": "Date de cr\u00e9ation"
+    }
+  },
+  "required": [
+    "user_email",
+    "role"
+  ]
+}

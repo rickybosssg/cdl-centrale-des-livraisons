@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User, ShoppingBag } from "lucide-react";
+import BedouWidget from "../../components/BedouWidget";
 import EffectuerDeplacement from "./EffectuerDeplacement";
 import ChatAdmin from "@/components/ChatAdmin";
 import BannierePublicitaire from "../../components/BannierePublicitaire";
@@ -67,6 +68,9 @@ export default function ClientHome({ user }) {
         <h1 className="text-2xl font-bold">Bonjour, {user.full_name?.split(" ")[0]} 👋</h1>
         <p className="text-sm text-muted-foreground">Bienvenue sur CDL - Centrale des Livraisons</p>
       </div>
+
+      {/* Bedou */}
+      <BedouWidget user={user} />
 
       {/* Bannière publicitaire */}
       <BannierePublicitaire placement="home_client" />

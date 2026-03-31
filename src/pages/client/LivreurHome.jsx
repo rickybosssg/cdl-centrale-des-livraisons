@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin, MessageCircle } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
 import BannierePublicitaire from "../../components/BannierePublicitaire";
+import BedouWidget from "../../components/BedouWidget";
 import { toast } from "sonner";
 import SoldeBlock from "../../components/SoldeBlock";
 import CoursePendante from "../livreur/CoursePendante";
@@ -256,7 +257,10 @@ export default function LivreurHome({ user }) {
         </div>
       </button>
 
-      {/* Solde */}
+      {/* Bedou */}
+      <BedouWidget user={user} />
+
+      {/* Solde commission */}
       <SoldeBlock user={user} />
 
       {/* Bannière publicitaire */}

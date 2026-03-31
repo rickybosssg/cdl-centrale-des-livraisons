@@ -1,0 +1,76 @@
+{
+  "name": "DemandeRecharge",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "ID utilisateur"
+    },
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "user_nom": {
+      "type": "string",
+      "title": "Nom utilisateur"
+    },
+    "role": {
+      "type": "string",
+      "title": "R\u00f4le"
+    },
+    "montant": {
+      "type": "number",
+      "title": "Montant demand\u00e9 (F CFA)"
+    },
+    "methode": {
+      "type": "string",
+      "enum": [
+        "orange_money",
+        "moov_money",
+        "telecel_money",
+        "cash"
+      ],
+      "title": "M\u00e9thode de paiement"
+    },
+    "numero_transaction": {
+      "type": "string",
+      "title": "Num\u00e9ro de transaction"
+    },
+    "preuve_paiement": {
+      "type": "string",
+      "title": "Preuve de paiement (URL)"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "valide",
+        "refuse"
+      ],
+      "title": "Statut",
+      "default": "en_attente"
+    },
+    "date_validation": {
+      "type": "string",
+      "title": "Date de validation"
+    },
+    "valide_par": {
+      "type": "string",
+      "title": "Valid\u00e9 par (email admin)"
+    },
+    "motif_refus": {
+      "type": "string",
+      "title": "Motif de refus"
+    },
+    "bonus_applique": {
+      "type": "number",
+      "title": "Bonus appliqu\u00e9 (F CFA)",
+      "default": 0
+    }
+  },
+  "required": [
+    "user_email",
+    "montant",
+    "methode"
+  ]
+}

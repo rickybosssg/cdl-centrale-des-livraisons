@@ -53,6 +53,8 @@ import FcmDiagnostic from './pages/FcmDiagnostic';
 import PolitiqueConfidentialite from './pages/PolitiqueConfidentialite';
 import CGU from './pages/CGU';
 import SupprimerCompte from './pages/SupprimerCompte';
+import MonBedou from './pages/MonBedou';
+import GestionTransactions from './pages/dispatcher/GestionTransactions';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -161,6 +163,7 @@ const AuthenticatedApp = () => {
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />
         <Route path="/supprimer-compte" element={<SupprimerCompte />} />
+        <Route path="/mon-bedou" element={<MonBedou />} />
 
         {/* Admin uniquement */}
         <Route element={<DispatcherGuard />}>
@@ -183,6 +186,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin-trash" element={<AdminTrash />} />
           <Route path="/creer-boutique" element={<CreerBoutiqueAdmin />} />
           <Route path="/messages-admin" element={<MessagesAdmin />} />
+          <Route path="/gestion-transactions" element={<GestionTransactions />} />
         </Route>
       </Route>
 

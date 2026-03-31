@@ -1,0 +1,114 @@
+{
+  "name": "Transaction",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "ID utilisateur"
+    },
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "user_nom": {
+      "type": "string",
+      "title": "Nom utilisateur"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "client",
+        "livreur",
+        "partenaire",
+        "commercial"
+      ],
+      "title": "R\u00f4le"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "recharge",
+        "paiement",
+        "commission",
+        "gain",
+        "bonus",
+        "retrait",
+        "ajustement"
+      ],
+      "title": "Type"
+    },
+    "sens": {
+      "type": "string",
+      "enum": [
+        "credit",
+        "debit"
+      ],
+      "title": "Sens"
+    },
+    "montant": {
+      "type": "number",
+      "title": "Montant (F CFA)"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "course",
+        "commande",
+        "promo",
+        "bedou",
+        "manuel",
+        "publicite"
+      ],
+      "title": "Source"
+    },
+    "methode": {
+      "type": "string",
+      "enum": [
+        "orange_money",
+        "moov_money",
+        "telecel_money",
+        "cash",
+        "interne"
+      ],
+      "title": "M\u00e9thode"
+    },
+    "reference_id": {
+      "type": "string",
+      "title": "R\u00e9f\u00e9rence li\u00e9e (ID course/commande)"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "en_attente",
+        "valide",
+        "refuse",
+        "paye"
+      ],
+      "title": "Statut",
+      "default": "en_attente"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description"
+    },
+    "date_validation": {
+      "type": "string",
+      "title": "Date de validation"
+    },
+    "valide_par": {
+      "type": "string",
+      "title": "Valid\u00e9 par (email admin)"
+    },
+    "motif_refus": {
+      "type": "string",
+      "title": "Motif de refus"
+    }
+  },
+  "required": [
+    "user_email",
+    "role",
+    "type",
+    "montant",
+    "sens"
+  ]
+}
