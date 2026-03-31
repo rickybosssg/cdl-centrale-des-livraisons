@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Truck, User, Store, Megaphone } from "lucide-react";
 import InscriptionPartenaire from "./InscriptionPartenaire";
+import LivreurBienvenue from "./LivreurBienvenue";
 import { base44 } from "@/api/base44Client";
 import QuartierSelect from "./QuartierSelect";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ export default function RoleSetup({ onComplete }) {
   const [livreursActifs, setLivreursActifs] = useState(null);
   const [moyenDeplacement, setMoyenDeplacement] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showLivreurBienvenue, setShowLivreurBienvenue] = useState(false);
 
   useEffect(() => {
     if (pendingRole === 'partenaire') setShowPartenaire(true);
@@ -149,8 +151,17 @@ export default function RoleSetup({ onComplete }) {
     }
     setLoading(false);
     localStorage.removeItem('cdl_pending_role');
-    onComplete();
+    // Livreur → afficher écran bienvenue avant LivreurDocuments
+    if (selectedRole === 'livreur') {
+      setShowLivreurBienvenue(true);
+    } else {
+      onComplete();
+    }
   };
+
+  if (showLivreurBienvenue) {
+    return <LivreurBienvenue onContinuer={() => { setShowLivreurBienvenue(false); onComplete(); }} />;
+  }
 
   if (showPartenaire) {
     return <InscriptionPartenaire onBack={() => setShowPartenaire(false)} onComplete={onComplete} />;

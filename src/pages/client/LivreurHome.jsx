@@ -25,17 +25,27 @@ export default function LivreurHome({ user }) {
     setLoading(false);
   };
   const [gpsBloque, setGpsBloque] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsErrorMsg, setGpsErrorMsg] = useState('');
+  const [gpsUnsupported, setGpsUnsupported] = useState(false);
 
-  // Demande GPS obligatoire
-  useEffect(() => {
-    if (!navigator.geolocation) return;
+  const activerGPS = () => {
+    if (!navigator.geolocation) {
+      setGpsUnsupported(true);
+      setGpsBloque(true);
+      return;
+    }
+    setGpsLoading(true);
+    setGpsErrorMsg('');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        setGpsLoading(false);
         setGpsBloque(false);
         base44.auth.updateMe({
           gps_latitude: pos.coords.latitude,
           gps_longitude: pos.coords.longitude,
           gps_enabled: true,
+          disponible: true,
         });
         // Mise à jour GPS toutes les 15s
         const interval = setInterval(() => {
@@ -44,17 +54,28 @@ export default function LivreurHome({ user }) {
               gps_latitude: p.coords.latitude,
               gps_longitude: p.coords.longitude,
             });
-          });
+          }, () => {});
         }, 15000);
         return () => clearInterval(interval);
       },
-      () => {
+      (err) => {
+        setGpsLoading(false);
         setGpsBloque(true);
         base44.auth.updateMe({ gps_enabled: false });
+        if (err.code === 1) {
+          setGpsErrorMsg('Veuillez autoriser la localisation pour recevoir des courses.');
+        } else if (err.code === 2) {
+          setGpsErrorMsg('Impossible d’obtenir votre position. Vérifiez que le GPS de votre téléphone est activé.');
+        } else {
+          setGpsErrorMsg('La géolocalisation a échoué. Veuillez réessayer.');
+        }
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
-  }, []);
+  };
+
+  // Demande GPS automatique au chargement
+  useEffect(() => { activerGPS(); }, []);
 
   useEffect(() => {
     reloadCourses();
@@ -91,12 +112,40 @@ export default function LivreurHome({ user }) {
           <p className="text-sm text-muted-foreground">
             CDL a besoin de votre position GPS pour vous attribuer des courses et permettre le suivi en temps réel.
           </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm"
-          >
-            Activer la localisation
-          </button>
+
+          {gpsUnsupported ? (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+              📱 Ouvrez CDL dans <strong>Google Chrome</strong> et activez le GPS de votre téléphone.
+            </div>
+          ) : (
+            <>
+              {gpsErrorMsg && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+                  {gpsErrorMsg}
+                </div>
+              )}
+
+              <button
+                onClick={activerGPS}
+                disabled={gpsLoading}
+                className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm disabled:opacity-70 flex items-center justify-center gap-2"
+              >
+                {gpsLoading ? (
+                  <><span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" /> Demande de localisation en cours...</>
+                ) : 'Activer la localisation'}
+              </button>
+
+              {gpsErrorMsg && (
+                <a
+                  href="app-settings:location"
+                  onClick={(e) => { e.preventDefault(); }}
+                  className="text-xs text-primary underline"
+                >
+                  Ouvrir les paramètres de localisation
+                </a>
+              )}
+            </>
+          )}
         </div>
       </div>
     );
