@@ -49,6 +49,7 @@ import PagePartenaire from './pages/partenaire/PagePartenaire';
 import CommandesPartenaire from './pages/partenaire/CommandesPartenaire';
 import MesMessages from './pages/MesMessages';
 import Settings from './pages/Settings';
+import FcmDiagnostic from './pages/FcmDiagnostic';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -153,6 +154,7 @@ const AuthenticatedApp = () => {
 
         {/* Paramètres utilisateur */}
         <Route path="/settings" element={<Settings />} />
+        <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
 
         {/* Admin uniquement */}
         <Route element={<DispatcherGuard />}>
