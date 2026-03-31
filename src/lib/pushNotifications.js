@@ -1,7 +1,9 @@
 /**
  * Firebase Cloud Messaging (FCM) v1 - Web Push
- * Utilise Firebase via CDN (pas de dépendance npm)
  */
+
+import { initializeApp, getApps } from 'firebase/app';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 const FIREBASE_CONFIG = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,18 +15,13 @@ const FIREBASE_CONFIG = {
 };
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-const CDN = "https://www.gstatic.com/firebasejs/10.7.1";
 
 let _messaging = null;
 
-async function getMessaging() {
+function getMsg() {
   if (_messaging) return _messaging;
-
-  const { initializeApp, getApps } = await import(`${CDN}/firebase-app.js`);
-  const { getMessaging: _getMsg } = await import(`${CDN}/firebase-messaging.js`);
-
   const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
-  _messaging = _getMsg(app);
+  _messaging = getMessaging(app);
   return _messaging;
 }
 
@@ -47,9 +44,7 @@ export async function registerFcmToken() {
   if (!isNotificationGranted()) return null;
   try {
     const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    const { getToken } = await import(`${CDN}/firebase-messaging.js`);
-    const msg = await getMessaging();
-    const token = await getToken(msg, {
+    const token = await getToken(getMsg(), {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: reg,
     });
@@ -63,11 +58,9 @@ export async function registerFcmToken() {
 /**
  * Écoute les messages FCM quand l'app est au premier plan.
  */
-export async function onForegroundMessage(callback) {
+export function onForegroundMessage(callback) {
   try {
-    const { onMessage } = await import(`${CDN}/firebase-messaging.js`);
-    const msg = await getMessaging();
-    return onMessage(msg, callback);
+    return onMessage(getMsg(), callback);
   } catch (err) {
     console.warn('FCM foreground listener error:', err);
     return () => {};
@@ -82,7 +75,6 @@ export function sendPushNotification(title, body, options = {}) {
   const notif = new Notification(title, {
     body,
     icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-    badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
     ...options,
   });
   setTimeout(() => notif.close(), 6000);
