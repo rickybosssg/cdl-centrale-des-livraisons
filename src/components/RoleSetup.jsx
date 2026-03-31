@@ -27,6 +27,7 @@ export default function RoleSetup({ onComplete }) {
   const [codePromoApplique, setCodePromoApplique] = useState(null);
   const [livreursActifs, setLivreursActifs] = useState(null);
   const [moyenDeplacement, setMoyenDeplacement] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (pendingRole === 'partenaire') setShowPartenaire(true);
