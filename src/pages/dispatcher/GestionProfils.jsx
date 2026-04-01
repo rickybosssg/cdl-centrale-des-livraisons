@@ -51,25 +51,30 @@ export default function GestionProfils() {
     load();
   }, []);
 
-  // Charger automatiquement les utilisateurs au mount UNE SEULE FOIS
+  // Charger automatiquement les utilisateurs et leurs profils au mount UNE SEULE FOIS
   useEffect(() => {
-    const loadUsers = async () => {
-      console.log('[GestionProfils] Chargement automatique des utilisateurs...');
+    const loadData = async () => {
+      console.log('[GestionProfils] Chargement des utilisateurs et profils...');
       setLoading(true);
       try {
-        const all = await base44.entities.User.list("-created_date", 500);
-        console.log('[GestionProfils] Utilisateurs chargés:', all?.length || 0);
-        setUsers(all || []);
+        const [users, profiles] = await Promise.all([
+          base44.entities.User.list("-created_date", 500),
+          base44.entities.UserProfile.list("-created_date", 1000),
+        ]);
+        console.log('[GestionProfils] Utilisateurs chargés:', users?.length || 0);
+        console.log('[GestionProfils] Profils chargés:', profiles?.length || 0);
+        setUsers(users || []);
+        setUserProfiles(profiles || []);
       } catch (err) {
-        console.error('[GestionProfils] Erreur chargement initial:', err);
-        toast.error('Erreur lors du chargement des utilisateurs');
+        console.error('[GestionProfils] Erreur chargement:', err);
+        toast.error('Erreur lors du chargement');
         setUsers([]);
+        setUserProfiles([]);
       } finally {
         setLoading(false);
       }
     };
-    loadUsers();
-    // ⚠️ NE PAS ajouter de subscription ici pour éviter les boucles infinies
+    loadData();
   }, []);
 
   const canDo = (permission) => {

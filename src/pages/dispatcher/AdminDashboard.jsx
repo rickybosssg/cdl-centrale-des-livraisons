@@ -43,9 +43,10 @@ export default function AdminDashboard() {
         .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
       const livreursOnline = (livreurs || []).length;
       const newUsersData = (users || []).filter(u => new Date(u.created_date).toDateString() === today);
-      const pendingCount = ((profiles || []).length || 0) + ((partenaires || []).length || 0);
+      const pendingCount = (profiles || []).length; // Uniquement UserProfile en_attente
       const totalCourses = coursesData.length;
       console.log(`[AdminDashboard] Courses totales en base: ${totalCourses}`);
+      console.log(`[AdminDashboard] Demandes profils en attente (UserProfile): ${(profiles || []).length}`);
 
       setKpis({
         coursesToday,
