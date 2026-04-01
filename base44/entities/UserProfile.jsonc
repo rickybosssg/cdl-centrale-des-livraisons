@@ -19,18 +19,40 @@
     "status": {
       "type": "string",
       "enum": [
-        "actif",
+        "draft",
         "en_attente",
+        "actif",
         "refuse",
         "suspendu"
       ],
       "title": "Statut du profil",
-      "default": "en_attente"
+      "default": "draft"
     },
     "is_active_profile": {
       "type": "boolean",
       "title": "Profil actuellement actif",
       "default": false
+    },
+    "completion_percentage": {
+      "type": "number",
+      "title": "Pourcentage de compl\u00e9tude (0-100)",
+      "default": 0
+    },
+    "missing_fields": {
+      "type": "string",
+      "title": "Champs manquants (JSON array)"
+    },
+    "missing_documents": {
+      "type": "string",
+      "title": "Documents manquants (JSON array)"
+    },
+    "documents_json": {
+      "type": "string",
+      "title": "Documents fournis (JSON)"
+    },
+    "data_json": {
+      "type": "string",
+      "title": "Donn\u00e9es sp\u00e9cifiques au profil (JSON)"
     },
     "validated_at": {
       "type": "string",
@@ -56,10 +78,6 @@
     "refusal_reason": {
       "type": "string",
       "title": "Motif de refus"
-    },
-    "data_json": {
-      "type": "string",
-      "title": "Donn\u00e9es sp\u00e9cifiques au profil (JSON)"
     }
   },
   "required": [

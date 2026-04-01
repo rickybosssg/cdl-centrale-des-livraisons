@@ -3,24 +3,26 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 const PROFILE_REQUIREMENTS = {
   client: {
     immediate: true,
-    fields: ['email', 'full_name', 'telephone'],
+    fields: ['telephone', 'quartier'],
+    documents: [],
     needsAdminValidation: false,
   },
   livreur: {
     immediate: false,
     fields: ['telephone', 'quartier', 'moyen_deplacement'],
-    needsAdminValidation: true,
     documents: ['photo_profil', 'photo_identite_recto', 'photo_identite_verso', 'photo_moyen_deplacement'],
+    needsAdminValidation: true,
   },
   partenaire: {
     immediate: false,
     fields: ['nom_commerce', 'type_commerce', 'telephone', 'adresse'],
-    needsAdminValidation: true,
     documents: ['logo', 'photo_principale'],
+    needsAdminValidation: true,
   },
   commercial: {
     immediate: false,
     fields: ['telephone', 'quartier'],
+    documents: [],
     needsAdminValidation: true,
   },
 };
@@ -58,12 +60,22 @@ Deno.serve(async (req) => {
 
     const requirements = PROFILE_REQUIREMENTS[profile_type];
 
-    // Vérifier les champs requis
+    // VALIDATION STRICTE: Vérifier les champs requis
     const missingFields = requirements.fields.filter(f => !data[f]);
-    if (missingFields.length > 0) {
+    console.log('[addProfileToUser] Champs manquants:', missingFields);
+
+    // VALIDATION STRICTE: Vérifier les documents requis
+    const missingDocuments = requirements.documents.filter(docKey => !data[docKey]);
+    console.log('[addProfileToUser] Documents manquants:', missingDocuments);
+
+    // ❌ Refuser si données ou documents obligatoires manquent
+    if (missingFields.length > 0 || missingDocuments.length > 0) {
       return Response.json({
-        error: 'Missing required fields',
+        error: 'Incomplete profile: missing fields and/or documents',
         missingFields,
+        missingDocuments,
+        requiredFields: requirements.fields,
+        requiredDocuments: requirements.documents,
       }, { status: 400 });
     }
 
@@ -83,12 +95,7 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    // FIX 1: Vérifier documents obligatoires AVANT création du profil
-    if (profile_type === 'livreur' && !data.photo_profil) {
-      return Response.json({ error: 'Documents requis: au moins photo_profil manquante' }, { status: 400 });
-    }
-
-    // Créer le profil : TOUJOURS en_attente sauf si client
+    // ✅ À ce stade: tous les champs et documents obligatoires sont fournis
     const status = profile_type === 'client' ? 'actif' : 'en_attente';
     console.log('[addProfileToUser] Statut du nouveau profil:', status);
     const userProfiles = user.profiles_list ? JSON.parse(user.profiles_list) : [];
@@ -101,21 +108,23 @@ Deno.serve(async (req) => {
     const isActiveProfile = profile_type === 'client' && !user.active_profile_type;
 
     console.log('[addProfileToUser] Création UserProfile...');
-    // Extraire les URLs des documents si c'est un livreur
+    // Extraire les URLs des documents pour tous les profils
     const docUrls = {};
-    if (profile_type === 'livreur') {
-      docUrls.photo_profil = data.photo_profil || null;
-      docUrls.photo_identite_recto = data.photo_identite_recto || null;
-      docUrls.photo_identite_verso = data.photo_identite_verso || null;
-      docUrls.photo_moyen_deplacement = data.photo_moyen_deplacement || null;
-    }
+    requirements.documents.forEach(docKey => {
+      docUrls[docKey] = data[docKey] || null;
+    });
+
+    // Préparer les champs manquants et les documents manquants (à ce stade: vides)
     const createdProfile = await base44.entities.UserProfile.create({
       user_email: user.email,
       profile_type,
       status,
       is_active_profile: isActiveProfile,
       data_json: JSON.stringify(data),
-      documents_json: profile_type === 'livreur' ? JSON.stringify(docUrls) : null,
+      documents_json: Object.keys(docUrls).length > 0 ? JSON.stringify(docUrls) : null,
+      completion_percentage: 100,
+      missing_fields: JSON.stringify([]),
+      missing_documents: JSON.stringify([]),
       validated_at: requirements.immediate ? new Date().toISOString() : null,
     });
     console.log('[addProfileToUser] UserProfile créé:', createdProfile.id);
