@@ -5,15 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 export default function EffectuerDeplacement() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [soldeBedou, setSoldeBedou] = useState(null);
   
   useEffect(() => {
     base44.auth.me().then(setUser);
+    base44.functions.invoke('bedouEngine', { action: 'get_bedou' }).then(res => {
+      setSoldeBedou(res.data.bedou?.solde_disponible || 0);
+    });
   }, []);
   const [step, setStep] = useState(1);
   const [moyenDeplacement, setMoyenDeplacement] = useState(null);
@@ -62,13 +66,29 @@ export default function EffectuerDeplacement() {
     return livreur;
   };
 
+  const soldeInsuffisant = soldeBedou !== null && prixTotal > 0 && soldeBedou < prixTotal;
+
   const handleSubmit = async () => {
     if (!moyenDeplacement || !prixBaseNum || !quartier_depart || !quartier_arrivee) {
       toast.error("Veuillez remplir tous les champs");
       return;
     }
 
+    if (soldeInsuffisant) {
+      toast.error("Solde Bedou insuffisant. Rechargez votre Bedou.");
+      return;
+    }
     setLoading(true);
+
+    // Débiter Bedou avant assignation
+    const courseRef = `tmp_deplacement_${user.email}_${Date.now()}`;
+    const payRes = await base44.functions.invoke('bedouEngine', { action: 'payer_course', montant: prixTotal, course_ref: courseRef });
+    if (!payRes.data.success) {
+      toast.error(payRes.data.error || "Erreur de paiement Bedou");
+      setLoading(false);
+      return;
+    }
+    setSoldeBedou(payRes.data.nouveau_solde);
 
     try {
       const livreur = await searchAndAssignLivreur();
@@ -90,8 +110,8 @@ export default function EffectuerDeplacement() {
         type_colis: "Personne",
         description: notes,
         statut: "assignee_attente",
-        mode_paiement: "Paiement à la livraison",
-        statut_paiement: "paiement_livraison",
+        mode_paiement: "Bedou",
+        statut_paiement: "paye",
         client_email: user.email,
         client_name: user.full_name,
         livreur_email: livreur.email,
@@ -265,16 +285,40 @@ export default function EffectuerDeplacement() {
             />
           </div>
 
+          {/* Bloc paiement Bedou */}
+          <Card className={`border-2 ${soldeInsuffisant ? 'border-red-300 bg-red-50' : prixTotal > 0 ? 'border-green-300 bg-green-50' : 'border-border'}`}>
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet className="h-4 w-4 text-primary" />
+                <p className="text-sm font-semibold">Paiement via Bedou</p>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Mon solde</span>
+                <span className="font-bold">{soldeBedou !== null ? `${soldeBedou.toLocaleString()} F CFA` : '...'}</span>
+              </div>
+              {prixTotal > 0 && (
+                <div className={`flex items-center gap-2 p-2 rounded-lg text-sm font-semibold ${soldeInsuffisant ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                  {soldeInsuffisant ? '❌ Solde insuffisant' : `✅ Total : ${prixTotal} FCFA`}
+                </div>
+              )}
+              {soldeInsuffisant && (
+                <Button size="sm" className="w-full" variant="outline" onClick={() => navigate('/mon-bedou')}>
+                  🔄 Recharger mon Bedou
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
               Retour
             </Button>
-            <Button 
+            <Button
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || soldeInsuffisant || !prixBaseNum}
               className="flex-1"
             >
-              {loading ? "Recherche du livreur..." : "Créer la course"}
+              {loading ? "Paiement & recherche..." : "Payer et créer"}
             </Button>
           </div>
         </div>

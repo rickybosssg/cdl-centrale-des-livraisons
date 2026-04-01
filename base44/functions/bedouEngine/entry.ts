@@ -380,6 +380,42 @@ Deno.serve(async (req) => {
     return Response.json({ success: true, bonus: BONUS_COMMERCIAL });
   }
 
+  // ── ACTION: payer_course (client) ─────────────────────────────
+  if (action === 'payer_course') {
+    const { montant, course_ref } = body;
+    if (!montant || montant <= 0) return Response.json({ error: 'Montant invalide' }, { status: 400 });
+    const bedou = await getBedou(user.email);
+    if (!bedou) return Response.json({ error: 'Bedou introuvable. Rechargez votre Bedou.' }, { status: 404 });
+    if (bedou.statut_bedou === 'suspendu') return Response.json({ error: 'Bedou suspendu' }, { status: 403 });
+    // Anti double-débit
+    if (course_ref) {
+      const existing = await base44.asServiceRole.entities.Transaction.filter({ reference_id: course_ref, user_email: user.email });
+      if (existing.length > 0) return Response.json({ error: 'Paiement déjà effectué pour cette commande' }, { status: 400 });
+    }
+    if ((bedou.solde_disponible || 0) < montant) {
+      return Response.json({ success: false, insuffisant: true, solde: bedou.solde_disponible || 0, manquant: montant - (bedou.solde_disponible || 0) }, { status: 200 });
+    }
+    await updateBedou(bedou.id, {
+      solde: Math.max(0, (bedou.solde || 0) - montant),
+      solde_disponible: Math.max(0, (bedou.solde_disponible || 0) - montant),
+      depenses_totales: (bedou.depenses_totales || 0) + montant,
+    });
+    await createTransaction({
+      user_email: user.email,
+      user_nom: user.full_name,
+      role: user.user_type || 'client',
+      type: 'paiement',
+      sens: 'debit',
+      montant,
+      source: 'course',
+      methode: 'interne',
+      reference_id: course_ref || '',
+      description: `Paiement course via Bedou — ${montant} F CFA`,
+      statut: 'valide',
+    });
+    return Response.json({ success: true, nouveau_solde: Math.max(0, (bedou.solde_disponible || 0) - montant) });
+  }
+
   // ── ACTION: ajuster_solde (admin) ────────────────────────────
   if (action === 'ajuster_solde') {
     if (user.role !== 'admin') return Response.json({ error: 'Interdit' }, { status: 403 });
