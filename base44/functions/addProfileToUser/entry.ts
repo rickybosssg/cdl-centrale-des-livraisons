@@ -86,7 +86,8 @@ Deno.serve(async (req) => {
     // Créer le profil
     const status = requirements.immediate ? 'actif' : 'en_attente';
     console.log('[addProfileToUser] Statut du nouveau profil:', status);
-    console.log('[addProfileToUser] ← DEBUG: Validation requise pour ce type:', requirements.needsAdminValidation);
+    console.log('[addProfileToUser] needsAdminValidation:', requirements.needsAdminValidation);
+    console.log('[addProfileToUser] immediate:', requirements.immediate);
     const userProfiles = user.profiles_list ? JSON.parse(user.profiles_list) : [];
 
     if (!userProfiles.includes(profile_type)) {

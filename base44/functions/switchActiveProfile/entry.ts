@@ -21,9 +21,19 @@ Deno.serve(async (req) => {
     });
 
     if (profile.length === 0) {
-      return Response.json({
-        error: 'Profile not found or not active',
-      }, { status: 404 });
+      // Permettre aussi les profils en_attente ou refusés si demande
+      const anyProfile = await base44.entities.UserProfile.filter({
+        user_email: user.email,
+        profile_type,
+        deleted: false,
+      });
+      if (anyProfile.length === 0 || !['actif', 'en_attente', 'refuse'].includes(anyProfile[0].status)) {
+        return Response.json({ error: 'Profile not available for switching' }, { status: 404 });
+      }
+      // Sinon continuer avec le profil trouvé
+      profile[0] = anyProfile[0];
+    } else {
+      profile[0] = profile[0];
     }
 
     // Désactiver l'ancien profil actif
