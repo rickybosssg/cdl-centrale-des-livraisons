@@ -31,7 +31,7 @@ export default function Home() {
     // Charger tous les profils actifs pour le switcher
     try {
       const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
-      setAllProfiles(profs.filter(p => p.status === 'actif'));
+      setAllProfiles(profs); // tous les profils, pas seulement actifs
     } catch (_) {}
     setLoading(false);
   };
@@ -128,8 +128,8 @@ export default function Home() {
   return (
     <div className="space-y-0">
       <div className="flex justify-between items-center pb-3 px-4 pt-4">
-        {/* Badge profil actif + switch rapide */}
-        {allProfiles.length > 1 && activeProfile && PROFILE_CFG[activeProfile] && (
+        {/* Badge profil actif + switch rapide — toujours visible */}
+        {activeProfile && PROFILE_CFG[activeProfile] && (
           <button
             onClick={() => setShowSwitch(true)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-full border-2 text-sm font-bold transition-all active:scale-95"
@@ -150,9 +150,12 @@ export default function Home() {
       {/* Modal switch profil */}
       <Dialog open={showSwitch} onOpenChange={setShowSwitch}>
         <DialogContent className="max-w-xs">
-          <p className="font-bold text-base mb-3">Changer de profil</p>
+          <p className="font-bold text-base mb-1">Mes profils</p>
+          <p className="text-xs text-muted-foreground mb-3">Profil actuel : <strong>{PROFILE_CFG[activeProfile]?.label}</strong></p>
+
+          {/* Profils actifs — interchangeables */}
           <div className="space-y-2">
-            {allProfiles.map(p => {
+            {allProfiles.filter(p => p.status === 'actif').map(p => {
               const cfg = PROFILE_CFG[p.profile_type];
               if (!cfg) return null;
               const isActive = p.profile_type === activeProfile;
@@ -161,22 +164,56 @@ export default function Home() {
                   key={p.id}
                   disabled={isActive || !!switching}
                   onClick={() => handleSwitch(p.profile_type)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all active:scale-95 disabled:opacity-60"
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all active:scale-95"
                   style={{ borderColor: isActive ? cfg.color : '#e5e7eb', background: isActive ? cfg.color + '15' : 'white' }}
                 >
                   <span className="text-2xl">{cfg.emoji}</span>
                   <div className="flex-1 text-left">
                     <p className="font-semibold text-sm" style={{ color: cfg.color }}>{cfg.label}</p>
-                    {isActive && <p className="text-xs text-muted-foreground">Profil actuel</p>}
+                    <p className="text-xs" style={{ color: isActive ? cfg.color : '#6b7280' }}>{isActive ? '✓ Profil actuel' : 'Basculer vers ce profil'}</p>
                   </div>
                   {switching === p.profile_type && (
-                    <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                    <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin flex-shrink-0" />
                   )}
-                  {isActive && <span className="text-xs font-bold" style={{ color: cfg.color }}>✓</span>}
                 </button>
               );
             })}
           </div>
+
+          {/* Profils non actifs — informatifs */}
+          {allProfiles.filter(p => p.status !== 'actif').length > 0 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Autres profils</p>
+              {allProfiles.filter(p => p.status !== 'actif').map(p => {
+                const cfg = PROFILE_CFG[p.profile_type];
+                if (!cfg) return null;
+                const statusCfg = {
+                  en_attente: { label: '⏳ En attente', bg: '#fef3c7', color: '#92400e' },
+                  refuse:     { label: '❌ Refusé',     bg: '#fee2e2', color: '#991b1b' },
+                  suspendu:   { label: '🔒 Suspendu',   bg: '#f3f4f6', color: '#374151' },
+                }[p.status] || { label: p.status, bg: '#f3f4f6', color: '#374151' };
+                return (
+                  <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl border border-dashed" style={{ borderColor: '#d1d5db' }}>
+                    <span className="text-xl">{cfg.emoji}</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-600">{cfg.label}</p>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: statusCfg.bg, color: statusCfg.color }}>
+                      {statusCfg.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Créer un nouveau profil */}
+          <button
+            className="mt-4 w-full py-2.5 rounded-xl border-2 border-dashed border-primary/40 text-primary text-sm font-semibold hover:bg-primary/5 transition-colors"
+            onClick={() => { setShowSwitch(false); navigate('/settings'); }}
+          >
+            + Créer un nouveau profil
+          </button>
         </DialogContent>
       </Dialog>
     </div>
