@@ -46,10 +46,22 @@ export default function DebugAdmin() {
       console.log('[DebugAdmin] forceAdminRole result:', res.data);
 
       if (res.data?.success) {
-        toast.success('✅ Rôle admin forcé! Recharger la page maintenant.');
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        console.log('[DebugAdmin] ✅ Rôle admin forcé avec succès');
+        toast.success('✅ Rôle admin forcé! Rechargement complet...');
+        // Vider TOUT le localStorage/sessionStorage pour forcer un refetch complet
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+          // Attendre que le cache soit clair, puis reload
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 1000);
+        } catch (e) {
+          // Si clear échoue, juste reload
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 500);
+        }
       } else {
         toast.error(res.data?.error || 'Erreur');
       }

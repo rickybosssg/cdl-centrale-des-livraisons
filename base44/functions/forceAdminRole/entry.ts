@@ -31,14 +31,30 @@ Deno.serve(async (req) => {
       role: 'admin',
       user_type: 'admin',
       active_profile_type: 'admin',
-      is_admin: true,
-      admin_status: 'active',
-      profiles_list: JSON.stringify(['admin']),
+      statut_compte: 'actif',
+      profil_valide: true,
     };
 
     console.log('[forceAdminRole] Updating user with:', JSON.stringify(updateData));
-
     await base44.asServiceRole.entities.User.update(user.id, updateData);
+    
+    // Forcer un délai pour s'assurer que la base de données a écrit
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Relire immédiatement pour vérifier
+    const verifyUsers = await base44.asServiceRole.entities.User.filter({ email: target_email });
+    const verifyUser = verifyUsers[0];
+    console.log('[forceAdminRole] Verification after update:', {
+      role: verifyUser?.role,
+      user_type: verifyUser?.user_type,
+      active_profile_type: verifyUser?.active_profile_type,
+    });
+    
+    if (verifyUser?.role !== 'admin') {
+      console.error('[forceAdminRole] ⚠️ Role NOT persisted! Retrying...');
+      await base44.asServiceRole.entities.User.update(user.id, { role: 'admin', user_type: 'admin', active_profile_type: 'admin' });
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
 
     // Vérifier que c'est bien mis à jour
     const updatedUsers = await base44.asServiceRole.entities.User.filter({ email: target_email });

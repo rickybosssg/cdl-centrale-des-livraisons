@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -28,6 +29,7 @@ const isUserAdmin = (user) => {
 
 export default function Home() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,18 @@ export default function Home() {
 
   const loadUser = async () => {
     console.log('[Home] Chargement utilisateur et profils...');
+    // Invalider le cache pour forcer un refetch
+    queryClient.invalidateQueries({ queryKey: ['auth'] });
+    queryClient.invalidateQueries({ queryKey: ['user'] });
+    
+    // Forcer refetch via base44.auth.me()
     const me = await base44.auth.me();
+    console.log('[Home.loadUser] User fetched fresh:', {
+      email: me?.email,
+      role: me?.role,
+      user_type: me?.user_type,
+      active_profile_type: me?.active_profile_type,
+    });
     setUser(me);
     // Charger tous les profils pour le switcher
     try {
@@ -68,9 +81,18 @@ export default function Home() {
   };
 
   useEffect(() => { 
-    if (isAuthenticated) loadUser();
-    else { navigate('/'); setLoading(false); }
-  }, [isAuthenticated, navigate]);
+    if (isAuthenticated) {
+      // Vider TOUT le cache React Query au démarrage
+      // Cela force un refetch complet depuis le serveur
+      console.log('[Home.useEffect] Clearing React Query cache on mount...');
+      queryClient.clear();
+      // Attendre un tick, puis charger
+      setTimeout(() => loadUser(), 100);
+    } else { 
+      navigate('/'); 
+      setLoading(false); 
+    }
+  }, [isAuthenticated, navigate, queryClient]);
 
   // Subscription aux changements de profil utilisateur
   useEffect(() => {
@@ -96,7 +118,14 @@ export default function Home() {
 
   // 1. Admin → dashboard admin directement
   const isAdmin = isUserAdmin(user);
-  console.log('[Home] Admin check:', { email: user?.email, role: user?.role, user_type: user?.user_type, isAdmin });
+  console.log('[Home] ════════════════════════════════════════');
+  console.log('[Home] ADMIN CHECK:');
+  console.log('[Home]   user.email =', user?.email);
+  console.log('[Home]   user.role =', user?.role);
+  console.log('[Home]   user.user_type =', user?.user_type);
+  console.log('[Home]   isUserAdmin() returned =', isAdmin);
+  console.log('[Home] ════════════════════════════════════════');
+  
   if (isAdmin) {
     return (
       <div className="space-y-0">
@@ -110,13 +139,10 @@ export default function Home() {
     );
   }
 
-  // Déterminer le profil actif — ADMIN PRIORITAIRE
-  let activeProfile = null;
-  if (isAdmin) {
-    activeProfile = 'admin';
-  } else {
-    activeProfile = user?.active_profile_type || user?.user_type;
-  }
+  // CODE UNREACHABLE - Si isAdmin, on retourne plus haut
+  // Mais juste au cas où...
+  let activeProfile = user?.active_profile_type || user?.user_type;
+  console.log('[Home] [UNREACHABLE] activeProfile:', activeProfile);
 
   // 2. Pas encore de profil → inscription
   if (!activeProfile) {
