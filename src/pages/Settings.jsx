@@ -65,26 +65,37 @@ export default function Settings() {
   const [deplError, setDeplError] = useState(false);
 
   const load = async () => {
+    console.log('[Settings] Chargement utilisateur et profils...');
     const me = await base44.auth.me();
+    console.log('[Settings] User:', me.email, '| active_profile_type:', me.active_profile_type);
     setUser(me);
     const userProfiles = await base44.entities.UserProfile.filter({
       user_email: me.email,
       deleted: false,
     });
+    console.log('[Settings] Profils chargés:', userProfiles.length);
+    userProfiles.forEach(p => {
+      console.log(`  - ${p.profile_type} (${p.status}) - actif: ${p.is_active_profile}`);
+    });
     setProfiles(userProfiles);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    console.log('[Settings] Component monté');
+    load();
+  }, []);
 
   const activeProfileType = user?.active_profile_type || user?.user_type;
 
   const handleAddProfile = async () => {
+    console.log('[Settings.handleAddProfile] Début création profil:', selectedProfile);
     if (!selectedProfile) return toast.error('Choisissez un profil');
     const cfg = PROFILES.find(p => p.type === selectedProfile);
     const missing = Object.keys(cfg.fields).filter(k => !formData[k]);
     if (missing.length > 0) return toast.error('Veuillez remplir tous les champs obligatoires : ' + missing.join(', '));
     if (selectedProfile === 'livreur' && moyenDeplacement.length === 0) {
+      console.log('[Settings.handleAddProfile] moyen_deplacement vide');
       return toast.error('Veuillez sélectionner au moins un mode de déplacement');
     }
 
@@ -109,21 +120,25 @@ export default function Settings() {
     console.log('[AddProfile] payload complet:', JSON.stringify(payload));
     setSubmitting(true);
     try {
+      console.log('[Settings.handleAddProfile] Appel addProfileToUser...');
       const result = await base44.functions.invoke('addProfileToUser', {
         profile_type: selectedProfile,
         data: payload,
       });
-      console.log('[AddProfile] Réponse:', result.data);
+      console.log('[Settings.handleAddProfile] Réponse API:', result.data);
       setSubmitting(false);
       if (result.data?.success) {
+        console.log('[Settings.handleAddProfile] SUCCÈS');
         toast.success(result.data.status === 'actif' ? '✅ Profil activé !' : '⏳ Demande envoyée à l\'admin');
         setDialogAdd(false);
         setSelectedProfile(null);
         setFormData({});
         setMoyenDeplacement([]);
+        console.log('[Settings.handleAddProfile] Rechargement des données...');
         await load();
       } else {
         const msg = result.data?.error || 'Erreur lors de la création';
+        console.log('[Settings.handleAddProfile] ERROR:', msg);
         if (msg.includes('already has this profile')) {
           toast.error('Vous avez déjà ce profil');
         } else {
@@ -131,23 +146,36 @@ export default function Settings() {
         }
       }
     } catch (err) {
-      console.error('[AddProfile] Exception:', err);
+      console.error('[Settings.handleAddProfile] Exception:', err);
       setSubmitting(false);
       toast.error('Erreur réseau ou serveur : ' + err.message);
     }
   };
 
   const handleSwitchProfile = async (profileType) => {
-    if (profileType === activeProfileType) return;
+    console.log('[Settings.handleSwitchProfile] Basculement vers:', profileType);
+    if (profileType === activeProfileType) {
+      console.log('[Settings.handleSwitchProfile] Déjà actif');
+      return;
+    }
     setSwitching(profileType);
-    const result = await base44.functions.invoke('switchActiveProfile', { profile_type: profileType });
-    setSwitching(null);
-    if (result.data?.success) {
-      toast.success(`🔄 Profil basculé : ${PROFILES.find(p => p.type === profileType)?.label}`);
-      // Hard reload pour forcer le rechargement complet de l'UI (APK + navigateur)
-      setTimeout(() => { window.location.href = '/'; }, 500);
-    } else {
-      toast.error(result.data?.error || 'Erreur');
+    try {
+      const result = await base44.functions.invoke('switchActiveProfile', { profile_type: profileType });
+      console.log('[Settings.handleSwitchProfile] Réponse:', result.data);
+      setSwitching(null);
+      if (result.data?.success) {
+        console.log('[Settings.handleSwitchProfile] SUCCÈS, rechargement...');
+        toast.success(`🔄 Profil basculé : ${PROFILES.find(p => p.type === profileType)?.label}`);
+        // Hard reload pour forcer le rechargement complet de l'UI (APK + navigateur)
+        setTimeout(() => { window.location.href = '/'; }, 500);
+      } else {
+        console.log('[Settings.handleSwitchProfile] ERROR:', result.data?.error);
+        toast.error(result.data?.error || 'Erreur');
+      }
+    } catch (err) {
+      console.error('[Settings.handleSwitchProfile] Exception:', err);
+      setSwitching(null);
+      toast.error('Erreur lors du changement de profil');
     }
   };
 
@@ -300,10 +328,12 @@ export default function Settings() {
       <Dialog open={dialogAdd} onOpenChange={v => {
         setDialogAdd(v);
         if (!v) {
+          console.log('[Settings] Fermeture dialog');
           setSelectedProfile(null);
           setFormData({});
           setMoyenDeplacement([]);
           setSubmitting(false);
+          setDeplError(false);
         }
       }}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
@@ -344,7 +374,13 @@ export default function Settings() {
               <div className="space-y-4">
                 <button
                   type="button"
-                  onClick={() => { setSelectedProfile(null); setFormData({}); setMoyenDeplacement([]); }}
+                  onClick={() => { 
+                    console.log('[Settings] Retour à la sélection de profil');
+                    setSelectedProfile(null);
+                    setFormData({});
+                    setMoyenDeplacement([]);
+                    setDeplError(false);
+                  }}
                   className="flex items-center gap-1 text-xs text-primary hover:underline"
                 >
                   ← Changer de profil

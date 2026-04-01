@@ -27,15 +27,20 @@ const PROFILE_REQUIREMENTS = {
 
 Deno.serve(async (req) => {
   try {
+    console.log('[addProfileToUser] ====== DÉBUT CRÉATION PROFIL ======');
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
     if (!user) {
+      console.log('[addProfileToUser] ERROR: User not authenticated');
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    console.log('[addProfileToUser] User:', user.email);
 
     const payload = await req.json();
     const { profile_type, data } = payload;
+    console.log('[addProfileToUser] profile_type:', profile_type);
+    console.log('[addProfileToUser] data:', data);
 
     // SÉCURITÉ ABSOLUE : interdire la création d'un profil admin
     if (['admin', 'dispatcher', 'administrator'].includes(profile_type)) {
@@ -69,7 +74,10 @@ Deno.serve(async (req) => {
       deleted: false,
     });
 
+    console.log('[addProfileToUser] Profils existants du type', profile_type, ':', existingProfile.length);
+
     if (existingProfile.length > 0) {
+      console.log('[addProfileToUser] ERROR: Profil', profile_type, 'déjà existant');
       return Response.json({
         error: 'User already has this profile type',
       }, { status: 400 });
@@ -77,6 +85,7 @@ Deno.serve(async (req) => {
 
     // Créer le profil
     const status = requirements.immediate ? 'actif' : 'en_attente';
+    console.log('[addProfileToUser] Statut du nouveau profil:', status);
     const userProfiles = user.profiles_list ? JSON.parse(user.profiles_list) : [];
 
     if (!userProfiles.includes(profile_type)) {
@@ -86,6 +95,7 @@ Deno.serve(async (req) => {
     // Si c'est le premier profil ou si immediate, le rendre actif
     const isActiveProfile = !user.active_profile_type || requirements.immediate;
 
+    console.log('[addProfileToUser] Création UserProfile...');
     const createdProfile = await base44.entities.UserProfile.create({
       user_email: user.email,
       profile_type,
@@ -94,12 +104,17 @@ Deno.serve(async (req) => {
       data_json: JSON.stringify(data),
       validated_at: requirements.immediate ? new Date().toISOString() : null,
     });
+    console.log('[addProfileToUser] UserProfile créé:', createdProfile.id);
 
-    // Mettre à jour User
+    // Mettre à jour User (NE PAS écraser les autres profils)
+    console.log('[addProfileToUser] Mise à jour User.profiles_list...');
+    console.log('[addProfileToUser] Ancienne liste:', user.profiles_list);
+    console.log('[addProfileToUser] Nouvelle liste:', JSON.stringify(userProfiles));
     await base44.auth.updateMe({
       profiles_list: JSON.stringify(userProfiles),
       active_profile_type: isActiveProfile ? profile_type : user.active_profile_type,
     });
+    console.log('[addProfileToUser] User mis à jour');
 
     // Créer/mettre à jour l'entité associée si nécessaire
     if (profile_type === 'client') {
@@ -119,6 +134,7 @@ Deno.serve(async (req) => {
     }
 
     // Notifier l'utilisateur avec données réelles
+    console.log('[addProfileToUser] Notification utilisateur...');
     const roleEmojis = { client: '👤', livreur: '🛵', partenaire: '🏪', commercial: '📣' };
     const roleNames = { client: 'Client', livreur: 'Livreur', partenaire: 'Partenaire', commercial: 'Commercial' };
     
@@ -134,10 +150,13 @@ Deno.serve(async (req) => {
       type: status === 'actif' ? 'success' : 'warning',
       lue: false,
     });
+    console.log('[addProfileToUser] Notification créée');
 
     // Notifier les admins si validation requise avec données détaillées
     if (requirements.needsAdminValidation) {
+      console.log('[addProfileToUser] Notification admin...');
       const admins = await base44.entities.User.filter({ role: 'admin' });
+      console.log('[addProfileToUser] Nombre admins notifiés:', admins.length);
       let adminMessage = `Nom: ${user.full_name} | Email: ${user.email} | Téléphone: ${data.telephone || 'N/A'}`;
       
       if (profile_type === 'partenaire') {
@@ -162,9 +181,14 @@ Deno.serve(async (req) => {
 
     // Déclencher le recalcul des compteurs en tâche de fond (non bloquant)
     try {
+      console.log('[addProfileToUser] Recalcul des compteurs...');
       await base44.asServiceRole.functions.invoke('recalculateProfileCounters', {});
-    } catch (_) {}
+      console.log('[addProfileToUser] Compteurs recalculés');
+    } catch (err) {
+      console.warn('[addProfileToUser] Erreur recalcul compteurs (non bloquant):', err.message);
+    }
 
+    console.log('[addProfileToUser] ====== SUCCÈS CRÉATION PROFIL ======');
     return Response.json({
       success: true,
       profile: createdProfile,
@@ -172,6 +196,8 @@ Deno.serve(async (req) => {
       message: status === 'actif' ? 'Profile activated' : 'Profile pending admin validation',
     });
   } catch (error) {
+    console.error('[addProfileToUser] ERROR:', error.message);
+    console.error('[addProfileToUser] Stack:', error.stack);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
