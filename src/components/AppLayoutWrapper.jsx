@@ -53,7 +53,8 @@ export default function AppLayoutWrapper({ user }) {
         if (me.email === "weezyh2@gmail.com" || me.role === 'admin') {
           setUserRole("admin");
         } else {
-          setUserRole(me.user_type || "client");
+          // Utiliser le profil actif du système multi-profils, sinon fallback sur user_type
+          setUserRole(me.active_profile_type || me.user_type || "client");
         }
         window.__cdl_user_email = me.email;
         const firstName = me.full_name?.split(" ")[0] || "";

@@ -55,23 +55,26 @@ export default function Home() {
     );
   }
 
+  // Profil actif = active_profile_type (multi-profils) ou fallback user_type
+  const activeProfile = user?.active_profile_type || user?.user_type;
+
   // 2. Pas encore de profil → inscription
-  if (!user?.user_type) {
+  if (!activeProfile) {
     return <RoleSetup onComplete={loadUser} />;
   }
 
   // 3. Livreur inscrit mais n'a pas encore envoyé ses documents
-  if (user.user_type === 'livreur' && !user.docs_envoyes) {
+  if (activeProfile === 'livreur' && !user.docs_envoyes) {
     return <LivreurDocuments onComplete={loadUser} />;
   }
 
   // 4. Compte bloqué
   if (user.livreur_bloque || user.statut_compte === 'bloque') {
-    return <AttentePage profile={user.user_type} isBlocked={true} blockReason={user.motif_blocage || ''} />;
+    return <AttentePage profile={activeProfile} isBlocked={true} blockReason={user.motif_blocage || ''} />;
   }
 
-  // 5. En attente de validation (livreur, partenaire, commercial)
-  const needsValidation = ['livreur', 'partenaire', 'commercial'].includes(user.user_type);
+  // 5. En attente de validation du profil actif
+  const needsValidation = ['livreur', 'partenaire', 'commercial'].includes(activeProfile);
   const isValidated =
     user.profil_valide ||
     user.statut_validation_livreur === 'valide' ||
@@ -79,13 +82,13 @@ export default function Home() {
     user.statut_validation_partenaire === 'valide';
 
   if (needsValidation && !isValidated) {
-    return <AttentePage profile={user.user_type} docsEnvoyes={user.docs_envoyes} motifRefus={user.motif_refus} />;
+    return <AttentePage profile={activeProfile} docsEnvoyes={user.docs_envoyes} motifRefus={user.motif_refus} />;
   }
 
-  // 5. Dashboard selon le profil
+  // 6. Dashboard selon le profil actif
   const renderDashboard = () => {
     if (!user) return null;
-    switch (user.user_type) {
+    switch (activeProfile) {
       case 'client':     return <ClientHome user={user} />;
       case 'livreur':    return <LivreurHome user={user} />;
       case 'partenaire': return <DashboardPartenaire user={user} />;

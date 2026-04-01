@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import AddRoleModal from "./AddRoleModal";
 
+// SÉCURITÉ : admin/dispatcher jamais proposé comme profil switchable
 const ROLE_CONFIG = {
   client:     { label: "Client",       icon: User,      color: "bg-blue-100 text-blue-700" },
   livreur:    { label: "Livreur",      icon: Truck,     color: "bg-green-100 text-green-700" },
   partenaire: { label: "Partenaire",   icon: Store,     color: "bg-purple-100 text-purple-700" },
   commercial: { label: "Commercial",   icon: Megaphone, color: "bg-orange-100 text-orange-700" },
-  dispatcher: { label: "Administrateur", icon: User, color: "bg-red-100 text-red-700" },
 };
+
+// Filtrer les rôles interdits au switch
+const FORBIDDEN_ROLES = ['admin', 'dispatcher', 'administrator'];
 
 export default function RoleSwitcher({ user, roles, currentRole, onSwitch, onRoleAdded }) {
   const [open, setOpen] = useState(false);
@@ -20,6 +23,8 @@ export default function RoleSwitcher({ user, roles, currentRole, onSwitch, onRol
   const Icon = config.icon;
 
   const handleSwitch = (role) => {
+    // Sécurité : bloquer le switch vers admin même si passé en param
+    if (FORBIDDEN_ROLES.includes(role)) return;
     onSwitch(role);
     setOpen(false);
   };
@@ -40,7 +45,7 @@ export default function RoleSwitcher({ user, roles, currentRole, onSwitch, onRol
             <SheetDescription>Basculez entre vos profils ou ajoutez-en un nouveau.</SheetDescription>
           </SheetHeader>
           <div className="space-y-2">
-            {roles.map((role) => {
+            {roles.filter(r => !FORBIDDEN_ROLES.includes(r)).map((role) => {
               const rc = ROLE_CONFIG[role];
               if (!rc) return null;
               const RIcon = rc.icon;

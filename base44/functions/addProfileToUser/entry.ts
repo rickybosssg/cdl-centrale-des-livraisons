@@ -37,6 +37,16 @@ Deno.serve(async (req) => {
     const payload = await req.json();
     const { profile_type, data } = payload;
 
+    // SÉCURITÉ ABSOLUE : interdire la création d'un profil admin
+    if (['admin', 'dispatcher', 'administrator'].includes(profile_type)) {
+      return Response.json({ error: 'Forbidden: cannot create admin profile via this endpoint' }, { status: 403 });
+    }
+
+    // Vérifier aussi que l'appelant n'essaie pas de devenir admin via data
+    if (data?.role === 'admin' || data?.user_type === 'admin') {
+      return Response.json({ error: 'Forbidden: cannot set admin role' }, { status: 403 });
+    }
+
     if (!profile_type || !PROFILE_REQUIREMENTS[profile_type]) {
       return Response.json({ error: 'Invalid profile_type' }, { status: 400 });
     }
@@ -149,6 +159,11 @@ Deno.serve(async (req) => {
         )
       );
     }
+
+    // Déclencher le recalcul des compteurs en tâche de fond (non bloquant)
+    try {
+      await base44.asServiceRole.functions.invoke('recalculateProfileCounters', {});
+    } catch (_) {}
 
     return Response.json({
       success: true,
