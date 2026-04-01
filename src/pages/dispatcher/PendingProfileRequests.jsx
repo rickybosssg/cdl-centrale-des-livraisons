@@ -41,20 +41,39 @@ export default function PendingProfileRequests() {
 
   const loadPendingProfiles = async () => {
     console.log("[PendingProfileRequests] Chargement des demandes en attente...");
+    setLoading(true);
     try {
+      // Charger les UserProfile en attente
       const profiles = await base44.entities.UserProfile.filter({
         status: "en_attente",
         deleted: false,
       });
       console.log(`[PendingProfileRequests] Récupéré ${profiles.length} demandes en attente`);
-      profiles.forEach(p => {
-        console.log(`  - ${p.user_email} | ${p.profile_type} | créé ${moment(p.created_date).fromNow()}`);
-      });
-      setPendingProfiles(profiles);
-      applyFilters(profiles, searchQuery, filterProfileType, sortOrder);
+      
+      // Enrichir avec les infos utilisateur
+      const enriched = await Promise.all(profiles.map(async (profile) => {
+        try {
+          const user = await base44.entities.User.filter({ email: profile.user_email });
+          const userData = user?.[0] || {};
+          console.log(`  ✓ ${profile.user_email} | ${profile.profile_type} | créé ${moment(profile.created_date).fromNow()}`);
+          return {
+            ...profile,
+            user_name: userData.full_name || '',
+            user_phone: userData.telephone || '',
+            created_date_display: moment(profile.created_date),
+          };
+        } catch (e) {
+          console.warn(`[PendingProfileRequests] Impossible enrichir ${profile.user_email}:`, e.message);
+          return { ...profile, user_name: '', user_phone: '', created_date_display: moment(profile.created_date) };
+        }
+      }));
+      
+      setPendingProfiles(enriched);
+      applyFilters(enriched, searchQuery, filterProfileType, sortOrder);
     } catch (err) {
       console.error("[PendingProfileRequests] Erreur chargement:", err);
       toast.error("Erreur lors du chargement des demandes");
+      setPendingProfiles([]);
     }
     setLoading(false);
   };
@@ -85,9 +104,13 @@ export default function PendingProfileRequests() {
   };
 
   useEffect(() => {
+    console.log('[PendingProfileRequests] Component monté, chargement des données');
     loadPendingProfiles();
     const unsubscribe = base44.entities.UserProfile.subscribe((event) => {
-      if (event.data?.status === "en_attente" && !event.data?.deleted) {
+      if ((event.type === 'create' && event.data?.status === "en_attente" && !event.data?.deleted) ||
+          (event.type === 'update' && event.data?.status === "en_attente") ||
+          (event.type === 'delete')) {
+        console.log('[PendingProfileRequests] Changement détecté, rechargement...');
         loadPendingProfiles();
       }
     });
@@ -278,7 +301,10 @@ export default function PendingProfileRequests() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <div className="text-center space-y-2">
+          <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-muted-foreground">Chargement des demandes...</p>
+        </div>
       </div>
     );
   }
@@ -433,6 +459,8 @@ export default function PendingProfileRequests() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm">{PROFILE_TYPES[profile.profile_type]?.label}</p>
                     <p className="text-xs text-muted-foreground truncate">{profile.user_email}</p>
+                    {profile.user_name && <p className="text-xs text-foreground font-medium">{profile.user_name}</p>}
+                    {profile.user_phone && <p className="text-xs text-muted-foreground">{profile.user_phone}</p>}
                     <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
                       <Clock className="h-3 w-3" />
                       <span>
