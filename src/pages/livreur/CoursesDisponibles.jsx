@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { RefreshCw, Package } from "lucide-react";
+import { RefreshCw, Package, Send, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CourseCard from "../../components/CourseCard";
 import usePullToRefresh from "../../hooks/usePullToRefresh";
@@ -126,6 +126,34 @@ export default function CoursesDisponibles() {
         <div className="space-y-3">
           {courses.map((course) => (
             <CourseCard key={course.id} course={course}>
+              {/* Détail mission côté livreur */}
+              {course.type_mission && (
+                <div className="space-y-2 text-xs">
+                  <div className={`flex items-center gap-2 font-bold px-2 py-1 rounded-lg w-fit ${
+                    course.type_mission === 'envoyer' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
+                  }`}>
+                    {course.type_mission === 'envoyer' ? <Send className="h-3 w-3" /> : <RefreshCw className="h-3 w-3" />}
+                    {course.type_mission === 'envoyer' ? 'Étape 1 → Aller chez l\'expéditeur · Étape 2 → Livrer au destinataire' : 'Étape 1 → Aller récupérer le colis · Étape 2 → Livrer au client'}
+                  </div>
+                  {course.telephone_expediteur && (
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <Phone className="h-3 w-3" />
+                      <span>{course.type_mission === 'envoyer' ? 'Expéditeur' : 'Lieu récup.'} : {course.telephone_expediteur}</span>
+                    </div>
+                  )}
+                  {course.telephone_destinataire && (
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <Phone className="h-3 w-3" />
+                      <span>{course.type_mission === 'envoyer' ? 'Destinataire' : 'Client'} : {course.telephone_destinataire}</span>
+                    </div>
+                  )}
+                  {course.instructions_speciales && (
+                    <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+                      ⚠️ {course.instructions_speciales}
+                    </div>
+                  )}
+                </div>
+              )}
               <Button
                 className="w-full"
                 size="sm"

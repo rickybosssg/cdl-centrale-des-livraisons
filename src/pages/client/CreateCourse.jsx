@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Phone, Package, ArrowLeft, AlertTriangle } from "lucide-react";
+import { MapPin, Phone, Package, ArrowLeft, AlertTriangle, Send, RefreshCw } from "lucide-react";
 import QuartierSelect from "../../components/QuartierSelect";
 import { lancerDispatch } from "@/lib/dispatch";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ export default function CreateCourse() {
   const [user, setUser] = useState(null);
   const [urgent, setUrgent] = useState(false);
   const [tresUrgent, setTresUrgent] = useState(false);
+  const [typeMission, setTypeMission] = useState(null); // 'envoyer' | 'recuperer'
   const [form, setForm] = useState({
     quartier_depart: "",
     quartier_arrivee: "",
@@ -31,6 +32,7 @@ export default function CreateCourse() {
     description: "",
     mode_paiement: "",
     prix_base: "",
+    instructions_speciales: "",
   });
 
   useEffect(() => {
@@ -93,6 +95,8 @@ export default function CreateCourse() {
       telephone_destinataire: form.telephone_destinataire,
       type_colis: form.type_colis,
       description: form.description,
+      instructions_speciales: form.instructions_speciales,
+      type_mission: typeMission,
       mode_paiement: form.mode_paiement,
       statut: "en_attente",
       statut_paiement,
@@ -117,13 +121,61 @@ export default function CreateCourse() {
     navigate("/mes-courses");
   };
 
+  // Étape 0 : choix du type de mission
+  if (!typeMission) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-xl font-bold">Commander une course</h1>
+        </div>
+        <p className="text-sm text-muted-foreground text-center px-4">Que souhaitez-vous faire ?</p>
+        <div className="grid gap-4 px-2">
+          <button onClick={() => setTypeMission('envoyer')}
+            className="flex items-center gap-5 p-6 rounded-2xl border-2 border-primary bg-primary/5 hover:bg-primary/10 transition-all active:scale-[0.98] text-left">
+            <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center flex-shrink-0">
+              <Send className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-primary">📦 Envoyer un colis</p>
+              <p className="text-sm text-muted-foreground mt-1">J'ai un colis à envoyer à quelqu'un.<br/>Le livreur vient le récupérer chez moi.</p>
+            </div>
+          </button>
+          <button onClick={() => setTypeMission('recuperer')}
+            className="flex items-center gap-5 p-6 rounded-2xl border-2 border-accent bg-accent/5 hover:bg-accent/10 transition-all active:scale-[0.98] text-left">
+            <div className="h-16 w-16 rounded-2xl bg-accent flex items-center justify-center flex-shrink-0">
+              <RefreshCw className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-accent">🔁 Récupérer un colis</p>
+              <p className="text-sm text-muted-foreground mt-1">Je veux qu'on aille chercher quelque chose<br/>pour me le livrer.</p>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+        <Button variant="ghost" size="icon" onClick={() => setTypeMission(null)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-xl font-bold">Commander une course</h1>
+        <div>
+          <h1 className="text-xl font-bold">Commander une course</h1>
+          <p className="text-xs text-muted-foreground">{typeMission === 'envoyer' ? '📦 Envoyer un colis' : '🔁 Récupérer un colis'}</p>
+        </div>
+      </div>
+
+      {/* Badge type mission */}
+      <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold w-fit ${
+        typeMission === 'envoyer' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
+      }`}>
+        {typeMission === 'envoyer' ? <Send className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
+        {typeMission === 'envoyer' ? 'Mission : Envoyer un colis' : 'Mission : Récupérer un colis'}
       </div>
 
       {/* Itinéraire */}
@@ -135,12 +187,12 @@ export default function CreateCourse() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-2">
-            <Label>Quartier de départ *</Label>
-            <QuartierSelect value={form.quartier_depart} onValueChange={(v) => setForm({ ...form, quartier_depart: v })} placeholder="D'où part le colis ?" />
+            <Label>{typeMission === 'envoyer' ? 'Quartier de départ (chez vous) *' : 'Quartier de récupération (lieu du colis) *'}</Label>
+            <QuartierSelect value={form.quartier_depart} onValueChange={(v) => setForm({ ...form, quartier_depart: v })} placeholder={typeMission === 'envoyer' ? 'D\'où part le colis ?' : 'Où aller chercher ?'} />
           </div>
           <div className="space-y-2">
-            <Label>Quartier d'arrivée *</Label>
-            <QuartierSelect value={form.quartier_arrivee} onValueChange={(v) => setForm({ ...form, quartier_arrivee: v })} placeholder="Où livrer le colis ?" />
+            <Label>{typeMission === 'envoyer' ? 'Quartier d\'arrivée (destinataire) *' : 'Quartier de livraison (chez vous) *'}</Label>
+            <QuartierSelect value={form.quartier_arrivee} onValueChange={(v) => setForm({ ...form, quartier_arrivee: v })} placeholder={typeMission === 'envoyer' ? 'Où livrer ?' : 'Où vous livrer ?'} />
           </div>
         </CardContent>
       </Card>
@@ -154,11 +206,12 @@ export default function CreateCourse() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-2">
-            <Label>Téléphone expéditeur *</Label>
+            <Label>{typeMission === 'envoyer' ? 'Téléphone expéditeur *' : 'Téléphone du lieu de récupération *'}</Label>
             <Input placeholder="+226 XX XX XX XX" value={form.telephone_expediteur} onChange={(e) => setForm({ ...form, telephone_expediteur: e.target.value })} />
+            {typeMission === 'recuperer' && <p className="text-xs text-muted-foreground">Numéro de la boutique ou de la personne chez qui récupérer</p>}
           </div>
           <div className="space-y-2">
-            <Label>Téléphone destinataire *</Label>
+            <Label>{typeMission === 'envoyer' ? 'Téléphone destinataire *' : 'Votre numéro de téléphone *'}</Label>
             <Input placeholder="+226 XX XX XX XX" value={form.telephone_destinataire} onChange={(e) => setForm({ ...form, telephone_destinataire: e.target.value })} />
           </div>
         </CardContent>
@@ -182,9 +235,15 @@ export default function CreateCourse() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Description (optionnel)</Label>
-            <Textarea placeholder="Détails sur le colis..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
+            <Label>Description du colis {typeMission === 'recuperer' ? '/ article à récupérer' : ''} (optionnel)</Label>
+            <Textarea placeholder={typeMission === 'recuperer' ? 'Ex: un sac rouge, une commande de médicaments...' : 'Détails sur le colis...'} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
           </div>
+          {typeMission === 'recuperer' && (
+            <div className="space-y-2">
+              <Label>Instructions spéciales (optionnel)</Label>
+              <Textarea placeholder="Ex: payer 500 FCFA sur place, dire le code 1234, sonner 2 fois..." value={form.instructions_speciales} onChange={(e) => setForm({ ...form, instructions_speciales: e.target.value })} rows={2} />
+            </div>
+          )}
         </CardContent>
       </Card>
 

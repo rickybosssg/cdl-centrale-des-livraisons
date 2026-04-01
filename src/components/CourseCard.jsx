@@ -1,4 +1,4 @@
-import { MapPin, Phone, Package, Clock, User, Zap } from "lucide-react";
+import { MapPin, Phone, Package, Clock, User, Zap, Send, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "./StatusBadge";
@@ -20,21 +20,19 @@ export default function CourseCard({ course, onClick, children }) {
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {course.type_mission === 'envoyer' && (
+              <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                <Send className="h-2.5 w-2.5" />ENVOYER
+              </span>
+            )}
+            {course.type_mission === 'recuperer' && (
+              <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">
+                <RefreshCw className="h-2.5 w-2.5" />RÉCUPÉRER
+              </span>
+            )}
             <Package className="h-4 w-4 text-accent" />
             <span className="text-sm font-medium">{course.type_colis}</span>
-            {course.urgence === 'tres_urgent' && (
-              <span className="flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
-                <Zap className="h-2.5 w-2.5" />TRÈS URGENT
-              </span>
-            )}
-            {course.urgence === 'urgent' && (
-              <span className="flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600">
-                <Zap className="h-2.5 w-2.5" />URGENT
-              </span>
-            )}
-          </div>
-          <StatusBadge statut={course.statut} />
         </div>
 
         <div className="space-y-2">
