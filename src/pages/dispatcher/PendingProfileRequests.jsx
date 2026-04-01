@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Search, Filter } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Search, Filter, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import moment from "moment";
 
@@ -37,6 +37,7 @@ export default function PendingProfileRequests() {
   const [showFilters, setShowFilters] = useState(false);
   const [validatingAll, setValidatingAll] = useState(false);
   const [rejectingAll, setRejectingAll] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const loadPendingProfiles = async () => {
     console.log("[PendingProfileRequests] Chargement des demandes en attente...");
@@ -206,6 +207,35 @@ export default function PendingProfileRequests() {
     }, 600);
     toast.success(`✅ ${validated} profil(s) validé(s)`);
     setValidatingAll(false);
+  };
+
+  const handleDelete = async (profile) => {
+    const confirmed = window.confirm(`Êtes-vous sûr de vouloir supprimer la demande de ${profile.user_email} ?\n\nCette action est définitive.`);
+    if (!confirmed) return;
+
+    setDeletingId(profile.id);
+    try {
+      // Soft-delete le profil
+      await base44.entities.UserProfile.update(profile.id, { deleted: true, deleted_at: new Date().toISOString() });
+      console.log(`[PendingProfileRequests] Demande supprimée: ${profile.user_email} | ${profile.profile_type}`);
+
+      // Animation de disparition
+      setRemoving(prev => new Set(prev).add(profile.id));
+      setTimeout(() => {
+        setPendingProfiles(prev => prev.filter(p => p.id !== profile.id));
+        setRemoving(prev => {
+          const next = new Set(prev);
+          next.delete(profile.id);
+          return next;
+        });
+      }, 600);
+
+      toast.success(`Demande de ${profile.user_email} supprimée`);
+    } catch (err) {
+      console.error("[PendingProfileRequests] Erreur suppression:", err);
+      toast.error("Erreur lors de la suppression");
+    }
+    setDeletingId(null);
   };
 
   const handleRejectAll = async () => {
@@ -440,6 +470,19 @@ export default function PendingProfileRequests() {
                   >
                     <XCircle className="h-3 w-3 mr-1" />
                     Refuser
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs h-9 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                    onClick={() => handleDelete(profile)}
+                    disabled={deletingId === profile.id}
+                  >
+                    {deletingId === profile.id ? (
+                      <span className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3 w-3" />
+                    )}
                   </Button>
                 </div>
               </CardContent>
