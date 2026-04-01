@@ -3,6 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 const COMMISSION_LIVREUR = 0.20; // 20% CDL
 const COMMISSION_PARTENAIRE = 0.05; // 5% CDL
 const BONUS_COMMERCIAL = 50; // 50 F CFA fixe
+const CDL_EMAIL = 'weezyh2@gmail.com'; // Compte Bedou CDL
 
 const BONUS_RECHARGE = [
   { seuil: 5000, bonus: 500 },
@@ -433,6 +434,26 @@ Deno.serve(async (req) => {
       methode: 'interne',
       reference_id: course_id,
       description: `Gain course #${course_id} (80% de ${montant} FCFA)`,
+      statut: 'valide',
+    });
+    // Créditer Bedou CDL (20%)
+    const bedouCdl = await ensureBedou(CDL_EMAIL, 'admin', 'CDL');
+    await updateBedou(bedouCdl.id, {
+      solde: (bedouCdl.solde || 0) + commissionCdl,
+      solde_disponible: (bedouCdl.solde_disponible || 0) + commissionCdl,
+      gains_totaux: (bedouCdl.gains_totaux || 0) + commissionCdl,
+    });
+    await createTransaction({
+      user_email: CDL_EMAIL,
+      user_nom: 'CDL',
+      role: 'admin',
+      type: 'commission',
+      sens: 'credit',
+      montant: commissionCdl,
+      source: 'course',
+      methode: 'interne',
+      reference_id: course_id,
+      description: `Commission CDL 20% course #${course_id}`,
       statut: 'valide',
     });
     return Response.json({ success: true, gainLivreur, commissionCdl });

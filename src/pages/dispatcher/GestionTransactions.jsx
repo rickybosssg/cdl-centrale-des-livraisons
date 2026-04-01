@@ -22,6 +22,7 @@ export default function GestionTransactions() {
   const [retraits, setRetraits] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [bedouCdl, setBedouCdl] = useState(null);
   const [processing, setProcessing] = useState(null);
   const [motifDialog, setMotifDialog] = useState(null); // { type, id }
   const [motif, setMotif] = useState("");
@@ -29,14 +30,16 @@ export default function GestionTransactions() {
   const [ajust, setAjust] = useState({ email: "", montant: "", sens: "credit", desc: "" });
 
   const load = async () => {
-    const [r, w, tx] = await Promise.all([
+    const [r, w, tx, cdlBedouList] = await Promise.all([
       base44.entities.DemandeRecharge.list('-created_date', 100),
       base44.entities.DemandeRetrait.list('-created_date', 100),
       base44.entities.Transaction.list('-created_date', 200),
+      base44.entities.Bedou.filter({ user_email: 'weezyh2@gmail.com' }),
     ]);
     setRecharges(r);
     setRetraits(w);
     setTransactions(tx);
+    if (cdlBedouList.length > 0) setBedouCdl(cdlBedouList[0]);
     setLoading(false);
   };
 
@@ -117,6 +120,22 @@ export default function GestionTransactions() {
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Bedou CDL */}
+      {bedouCdl && (
+        <Card className="bg-primary/5 border-primary/30">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-primary uppercase tracking-wide">💼 Bedou CDL (commissions)</p>
+                <p className="text-2xl font-black text-primary mt-1">{(bedouCdl.solde_disponible || 0).toLocaleString()} F CFA</p>
+                <p className="text-xs text-muted-foreground">Total encaissé : {(bedouCdl.gains_totaux || 0).toLocaleString()} F CFA</p>
+              </div>
+              <Wallet className="h-10 w-10 text-primary/30" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
