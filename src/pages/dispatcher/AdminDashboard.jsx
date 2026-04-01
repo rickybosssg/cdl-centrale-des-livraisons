@@ -201,16 +201,10 @@ export default function AdminDashboard() {
             👤 Gestion des profils
           </Button>
         </Link>
-        <Link to="/gestion-profils?tab=pending">
+        <Link to="/pending-profiles">
           <Button className="w-full justify-start gap-2" variant="outline" className="border-amber-300 hover:bg-amber-50">
             <AlertCircle className="h-4 w-4" />
-            ⏳ Demandes de profils en attente ({kpis.pendingRequests})
-          </Button>
-        </Link>
-        <Link to="/pending-profiles">
-          <Button className="w-full justify-start gap-2" variant="outline">
-            <AlertCircle className="h-4 w-4" />
-            📋 Profils en attente de validation ({kpis.pendingRequests})
+            📋 Demandes de profils ({kpis.pendingRequests})
           </Button>
         </Link>
         <Link to="/gerer-courses">

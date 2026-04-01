@@ -124,7 +124,16 @@ export default function PendingProfileRequests() {
   const handleApprove = async (profile) => {
     setActionLoading(true);
     try {
-      await base44.entities.UserProfile.update(profile.id, { status: "actif" });
+      // FIX 3: Vérifier documents obligatoires avant validation
+      if (profile.profile_type === 'livreur') {
+        const docData = profile.documents_json ? JSON.parse(profile.documents_json) : {};
+        if (!docData.photo_profil || !docData.photo_identite_recto || !docData.photo_identite_verso || !docData.photo_moyen_deplacement) {
+          toast.error('Documents incomplets pour ce livreur');
+          setActionLoading(false);
+          return;
+        }
+      }
+      await base44.entities.UserProfile.update(profile.id, { status: "actif", validated_at: new Date().toISOString() });
       console.log(`[PendingProfileRequests] Profil ${profile.profile_type} approuvé pour ${profile.user_email}`);
       
       await base44.entities.Notification.create({
@@ -210,7 +219,15 @@ export default function PendingProfileRequests() {
     let validated = 0;
     for (const profile of filteredProfiles) {
       try {
-        await base44.entities.UserProfile.update(profile.id, { status: "actif" });
+        // FIX 4: Vérifier docs pour chaque profil
+        if (profile.profile_type === 'livreur') {
+          const docData = profile.documents_json ? JSON.parse(profile.documents_json) : {};
+          if (!docData.photo_profil || !docData.photo_identite_recto || !docData.photo_identite_verso || !docData.photo_moyen_deplacement) {
+            console.warn(`[PendingProfileRequests] Documents incomplets pour ${profile.user_email}`);
+            continue;
+          }
+        }
+        await base44.entities.UserProfile.update(profile.id, { status: "actif", validated_at: new Date().toISOString() });
         await base44.entities.Notification.create({
           destinataire_email: profile.user_email,
           destinataire_role: profile.profile_type,

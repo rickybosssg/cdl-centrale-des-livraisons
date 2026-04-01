@@ -83,19 +83,22 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    // Créer le profil
-    const status = requirements.immediate ? 'actif' : 'en_attente';
+    // FIX 1: Vérifier documents obligatoires AVANT création du profil
+    if (profile_type === 'livreur' && !data.photo_profil) {
+      return Response.json({ error: 'Documents requis: au moins photo_profil manquante' }, { status: 400 });
+    }
+
+    // Créer le profil : TOUJOURS en_attente sauf si client
+    const status = profile_type === 'client' ? 'actif' : 'en_attente';
     console.log('[addProfileToUser] Statut du nouveau profil:', status);
-    console.log('[addProfileToUser] needsAdminValidation:', requirements.needsAdminValidation);
-    console.log('[addProfileToUser] immediate:', requirements.immediate);
     const userProfiles = user.profiles_list ? JSON.parse(user.profiles_list) : [];
 
     if (!userProfiles.includes(profile_type)) {
       userProfiles.push(profile_type);
     }
 
-    // Si c'est le premier profil ou si immediate, le rendre actif
-    const isActiveProfile = !user.active_profile_type || requirements.immediate;
+    // FIX 2: Seul client peut être actif immédiatement. Autres = toujours en_attente
+    const isActiveProfile = profile_type === 'client' && !user.active_profile_type;
 
     console.log('[addProfileToUser] Création UserProfile...');
     // Extraire les URLs des documents si c'est un livreur
