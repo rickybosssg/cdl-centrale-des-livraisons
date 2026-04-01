@@ -21,11 +21,12 @@ const PROFILES = [
     fields: { telephone: 'Téléphone', quartier: 'Quartier' },
   },
   {
-    type: 'livreur', label: 'Livreur', emoji: '🛵',
+    type: 'livreur', label: 'Livreur', emoji: '\uD83D\uDEF5',
     icon: Truck, color: 'bg-green-100 text-green-700',
     desc: 'Effectuez des livraisons — soumis à validation',
     immediate: false,
     fields: { telephone: 'Téléphone', quartier: 'Zone de travail' },
+    extra: 'moyen_deplacement', // champ spécial géré séparément
   },
   {
     type: 'partenaire', label: 'Partenaire', emoji: '🏪',
@@ -58,6 +59,7 @@ export default function Settings() {
   const [dialogAdd, setDialogAdd] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [formData, setFormData] = useState({});
+  const [moyenDeplacement, setMoyenDeplacement] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [switching, setSwitching] = useState(null);
 
@@ -80,23 +82,42 @@ export default function Settings() {
     if (!selectedProfile) return toast.error('Choisissez un profil');
     const cfg = PROFILES.find(p => p.type === selectedProfile);
     const missing = Object.keys(cfg.fields).filter(k => !formData[k]);
-    if (missing.length > 0) return toast.error('Veuillez remplir tous les champs obligatoires');
+    if (missing.length > 0) return toast.error('Veuillez remplir tous les champs obligatoires : ' + missing.join(', '));
+    if (selectedProfile === 'livreur' && moyenDeplacement.length === 0) {
+      return toast.error('Veuillez sélectionner au moins un mode de déplacement');
+    }
 
+    const payload = { ...formData, email: user.email, full_name: user.full_name };
+    if (selectedProfile === 'livreur') payload.moyen_deplacement = JSON.stringify(moyenDeplacement);
+
+    console.log('[AddProfile] Envoi:', selectedProfile, payload);
     setSubmitting(true);
-    const result = await base44.functions.invoke('addProfileToUser', {
-      profile_type: selectedProfile,
-      data: { ...formData, email: user.email, full_name: user.full_name },
-    });
-    setSubmitting(false);
-
-    if (result.data?.success) {
-      toast.success(result.data.status === 'actif' ? '✅ Profil activé !' : '⏳ Demande envoyée à l\'admin');
-      setDialogAdd(false);
-      setSelectedProfile(null);
-      setFormData({});
-      await load();
-    } else {
-      toast.error(result.data?.error || 'Erreur lors de la création');
+    try {
+      const result = await base44.functions.invoke('addProfileToUser', {
+        profile_type: selectedProfile,
+        data: payload,
+      });
+      console.log('[AddProfile] Réponse:', result.data);
+      setSubmitting(false);
+      if (result.data?.success) {
+        toast.success(result.data.status === 'actif' ? '✅ Profil activé !' : '⏳ Demande envoyée à l\'admin');
+        setDialogAdd(false);
+        setSelectedProfile(null);
+        setFormData({});
+        setMoyenDeplacement([]);
+        await load();
+      } else {
+        const msg = result.data?.error || 'Erreur lors de la création';
+        if (msg.includes('already has this profile')) {
+          toast.error('Vous avez déjà ce profil');
+        } else {
+          toast.error(msg);
+        }
+      }
+    } catch (err) {
+      console.error('[AddProfile] Exception:', err);
+      setSubmitting(false);
+      toast.error('Erreur réseau ou serveur : ' + err.message);
     }
   };
 
@@ -326,6 +347,26 @@ export default function Settings() {
                       />
                     </div>
                   ))}
+                  {selectedProfile === 'livreur' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Mode de déplacement *</Label>
+                      {[{val:'moto',label:'🛵 Motocyclette'},{val:'vehicule',label:'🚗 Véhicule'}].map(m => (
+                        <label key={m.val} className={`flex items-center gap-3 p-2.5 rounded-lg border-2 cursor-pointer transition-all ${
+                          moyenDeplacement.includes(m.val) ? 'border-primary bg-primary/5' : 'border-border'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={moyenDeplacement.includes(m.val)}
+                            onChange={() => setMoyenDeplacement(prev =>
+                              prev.includes(m.val) ? prev.filter(x => x !== m.val) : [...prev, m.val]
+                            )}
+                            className="h-4 w-4 accent-primary"
+                          />
+                          <span className="text-sm font-medium">{m.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {!PROFILES.find(p => p.type === selectedProfile)?.immediate && (
                   <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
