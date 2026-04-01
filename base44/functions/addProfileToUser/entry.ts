@@ -98,12 +98,21 @@ Deno.serve(async (req) => {
     const isActiveProfile = !user.active_profile_type || requirements.immediate;
 
     console.log('[addProfileToUser] Création UserProfile...');
+    // Extraire les URLs des documents si c'est un livreur
+    const docUrls = {};
+    if (profile_type === 'livreur') {
+      docUrls.photo_profil = data.photo_profil || null;
+      docUrls.photo_identite_recto = data.photo_identite_recto || null;
+      docUrls.photo_identite_verso = data.photo_identite_verso || null;
+      docUrls.photo_moyen_deplacement = data.photo_moyen_deplacement || null;
+    }
     const createdProfile = await base44.entities.UserProfile.create({
       user_email: user.email,
       profile_type,
       status,
       is_active_profile: isActiveProfile,
       data_json: JSON.stringify(data),
+      documents_json: profile_type === 'livreur' ? JSON.stringify(docUrls) : null,
       validated_at: requirements.immediate ? new Date().toISOString() : null,
     });
     console.log('[addProfileToUser] UserProfile créé:', createdProfile.id);

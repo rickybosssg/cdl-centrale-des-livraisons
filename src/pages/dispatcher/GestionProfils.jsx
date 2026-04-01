@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Search, UserPlus, User, Shield, RefreshCw, CheckCircle2, XCircle, Eye, Plus } from "lucide-react";
+import DocumentViewer from "@/components/DocumentViewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -213,6 +214,43 @@ export default function GestionProfils() {
     setAssignDialog(false);
     setAssignProfile(null);
     await openUser(selectedUser);
+    setProcessing(false);
+  };
+
+  const handleValidateProfile = async (profile) => {
+    if (!canDo("modifier_profils")) return toast.error("Permission insuffisante");
+    setProcessing(true);
+    try {
+      const res = await base44.functions.invoke('validateLivreurProfile', {
+        profile_id: profile.id,
+        action: 'approve',
+      });
+      if (res.data?.success) {
+        toast.success(`✅ Profil ${profile.profile_type} validé`);
+        await openUser(selectedUser);
+      }
+    } catch (err) {
+      toast.error('Erreur validation: ' + err.message);
+    }
+    setProcessing(false);
+  };
+
+  const handleRejectProfile = async (profile, reason) => {
+    if (!canDo("modifier_profils")) return toast.error("Permission insuffisante");
+    setProcessing(true);
+    try {
+      const res = await base44.functions.invoke('validateLivreurProfile', {
+        profile_id: profile.id,
+        action: 'reject',
+        refusal_reason: reason || 'Documents insuffisants',
+      });
+      if (res.data?.success) {
+        toast.success(`❌ Profil ${profile.profile_type} refusé`);
+        await openUser(selectedUser);
+      }
+    } catch (err) {
+      toast.error('Erreur refus: ' + err.message);
+    }
     setProcessing(false);
   };
 
@@ -500,25 +538,40 @@ export default function GestionProfils() {
                       <div className="flex-1">
                         <p className="text-sm font-medium">{badge?.label || profile.profile_type}</p>
                         <p className="text-[10px] text-muted-foreground">
-                          {profile.status === "actif" ? "✅ Actif" : "⏸ Suspendu"}
-                          {profile.validated_at && ` · Attribué ${moment(profile.validated_at).format("DD/MM/YY")}`}
+                          {profile.status === 'en_attente' ? '⏳ En attente' : profile.status === 'actif' ? '✅ Actif' : '❌ Refusé'}
+                          {profile.validated_at && ` · Validé ${moment(profile.validated_at).format("DD/MM/YY")}`}
                         </p>
                       </div>
                       <div className="flex gap-1">
-                        <Button
-                          size="sm" variant="outline" className="h-7 text-xs px-2"
-                          onClick={() => handleToggleProfile(profile)}
-                          disabled={processing}
-                        >
-                          {profile.status === "actif" ? "⏸" : "▶"}
-                        </Button>
-                        <Button
-                          size="sm" variant="outline" className="h-7 text-xs px-2 border-red-300 text-red-600"
-                          onClick={() => handleRemoveProfile(profile)}
-                          disabled={processing}
-                        >
-                          <XCircle className="h-3 w-3" />
-                        </Button>
+                        {profile.status === 'en_attente' && (
+                          <>
+                            <Button
+                              size="sm" variant="outline" className="h-7 text-xs px-1.5 border-green-300 text-green-600 hover:bg-green-50"
+                              onClick={() => handleValidateProfile(profile)}
+                              disabled={processing}
+                              title="Valider ce profil"
+                            >
+                              ✓
+                            </Button>
+                            <Button
+                              size="sm" variant="outline" className="h-7 text-xs px-1.5 border-red-300 text-red-600 hover:bg-red-50"
+                              onClick={() => handleRejectProfile(profile, 'Documents insuffisants')}
+                              disabled={processing}
+                              title="Refuser ce profil"
+                            >
+                              ✕
+                            </Button>
+                          </>
+                        )}
+                        {profile.status === 'actif' && (
+                          <Button
+                            size="sm" variant="outline" className="h-7 text-xs px-2"
+                            onClick={() => handleToggleProfile(profile)}
+                            disabled={processing}
+                          >
+                            ⏸
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -530,6 +583,14 @@ export default function GestionProfils() {
                 <Button className="w-full" onClick={() => setAssignDialog(true)}>
                   <Plus className="h-4 w-4 mr-2" /> Attribuer un profil
                 </Button>
+              )}
+
+              {/* Documents si livreur */}
+              {selectedUser && selectedProfile && selectedProfile.profile_type === 'livreur' && (
+                <DocumentViewer
+                  profileData={selectedProfile.documents_json}
+                  profileType={selectedProfile.profile_type}
+                />
               )}
 
               {/* Historique */}
