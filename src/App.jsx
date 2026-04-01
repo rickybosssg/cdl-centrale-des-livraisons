@@ -40,6 +40,7 @@ import GererCommerciaux from './pages/dispatcher/GererCommerciaux';
 import Suppression from './pages/dispatcher/Suppression';
 import AuditUtilisateurs from './pages/dispatcher/AuditUtilisateurs';
 import AdminDashboard from './pages/dispatcher/AdminDashboard';
+import AdminRoleCorrection from './pages/AdminRoleCorrection';
 import CreerBoutiqueAdmin from './pages/dispatcher/CreerBoutiqueAdmin';
 import AdminTrash from './pages/dispatcher/AdminTrash';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
@@ -127,10 +128,26 @@ const AuthenticatedApp = () => {
     );
   }
 
+  // Redirection automatique admin vers dashboard
+  if (isAuthenticated) {
+    // Vérifier si c'est un admin et rediriger
+    const checkAdmin = async () => {
+      try {
+        const me = await b44.auth.me();
+        if (me?.role === 'admin' || me?.user_type === 'admin') {
+          // Rediriger vers admin dashboard
+          // Note: sera géré par Home.jsx
+        }
+      } catch (_) {}
+    };
+    checkAdmin();
+  }
+
   return (
     <Routes>
-      {/* Route publique sans layout */}
+      {/* Routes publiques sans layout */}
       <Route path="/reset-admin" element={<ResetAdmin />} />
+      <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
 
       {/* Toutes les routes avec layout */}
       <Route element={<AppLayoutWithUser />}>

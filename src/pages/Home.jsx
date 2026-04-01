@@ -17,6 +17,15 @@ import AttentePage from "./AttentePage";
 
 const ADMIN_EMAILS = ["weezyh2@gmail.com", "admin@cdl.local"];
 
+const isUserAdmin = (user) => {
+  if (!user) return false;
+  // Vérifier rôle: role='admin' ou user_type='admin'
+  if (user.role === 'admin' || user.user_type === 'admin') return true;
+  // Fallback: vérifier email
+  if (ADMIN_EMAILS.includes(user.email)) return true;
+  return false;
+};
+
 export default function Home() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
@@ -86,7 +95,8 @@ export default function Home() {
   }
 
   // 1. Admin → dashboard admin directement
-  const isAdmin = user?.role === 'admin' || user?.user_type === 'admin' || ADMIN_EMAILS.includes(user?.email);
+  const isAdmin = isUserAdmin(user);
+  console.log('[Home] Admin check:', { email: user?.email, role: user?.role, user_type: user?.user_type, isAdmin });
   if (isAdmin) {
     return (
       <div className="space-y-0">
