@@ -586,12 +586,15 @@ export default function GestionProfils() {
               )}
 
               {/* Documents si livreur */}
-              {selectedUser && selectedProfile && selectedProfile.profile_type === 'livreur' && (
-                <DocumentViewer
-                  profileData={selectedProfile.documents_json}
-                  profileType={selectedProfile.profile_type}
-                />
-              )}
+              {selectedUser && userProfiles.length > 0 && (() => {
+                const livreurProfile = userProfiles.find(p => p.profile_type === 'livreur');
+                return livreurProfile ? (
+                  <DocumentViewer
+                    profileData={livreurProfile.documents_json}
+                    profileType={livreurProfile.profile_type}
+                  />
+                ) : null;
+              })()}
 
               {/* Historique */}
               {logs.length > 0 && (
