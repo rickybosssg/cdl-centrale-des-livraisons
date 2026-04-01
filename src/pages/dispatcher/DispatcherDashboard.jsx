@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { useMessageCount } from "@/hooks/useMessageCount";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
 import MessageAlert from "@/components/MessageAlert";
-import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck, Trash2, Wallet } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck, Trash2, Wallet, Radio } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
@@ -394,6 +394,14 @@ export default function DispatcherDashboard() {
             <CardContent className="p-4 text-center space-y-2">
               <Wallet className="h-8 w-8 text-green-600 mx-auto" />
               <p className="text-sm font-medium text-green-700">Bedou & Transactions</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/diffusion-globale">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-accent bg-accent/5">
+            <CardContent className="p-4 text-center space-y-2">
+              <Radio className="h-8 w-8 text-accent mx-auto" />
+              <p className="text-sm font-medium text-accent">Diffusion globale</p>
             </CardContent>
           </Card>
         </Link>

@@ -1,0 +1,54 @@
+{
+  "name": "Diffusion",
+  "type": "object",
+  "properties": {
+    "titre": {
+      "type": "string",
+      "title": "Titre"
+    },
+    "message": {
+      "type": "string",
+      "title": "Message"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "info",
+        "alerte",
+        "promo",
+        "systeme"
+      ],
+      "title": "Type"
+    },
+    "destinataires": {
+      "type": "string",
+      "title": "Destinataires (JSON array: client|livreur|partenaire|commercial|tous)"
+    },
+    "nb_destinataires": {
+      "type": "number",
+      "title": "Nombre de destinataires"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "envoye",
+        "echec",
+        "en_cours"
+      ],
+      "title": "Statut"
+    },
+    "envoy\u00e9_par": {
+      "type": "string",
+      "title": "Email admin exp\u00e9diteur"
+    },
+    "date_envoi": {
+      "type": "string",
+      "title": "Date d'envoi"
+    }
+  },
+  "required": [
+    "titre",
+    "message",
+    "type"
+  ]
+}
