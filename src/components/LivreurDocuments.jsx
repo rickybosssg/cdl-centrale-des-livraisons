@@ -11,61 +11,6 @@ const DOCS = [
   { key: "photo_moyen_deplacement", label: "Moyen de déplacement", desc: "Photo de votre moto ou véhicule",           emoji: "🛵" },
 ];
 
-// Bouton upload fiable Android : label enveloppe input, input opacity:0 en overlay sur tout le bouton
-// AUCUN JS .click() — c'est le touch direct sur l'input (via label) qui déclenche le picker
-function UploadBtn({ docKey, capture, label, emoji, onFile }) {
-  const handleChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) onFile(file);
-    e.target.value = "";
-  };
-
-  return (
-    <label
-      style={{
-        position: "relative",
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 4,
-        padding: "12px 4px",
-        borderRadius: 8,
-        border: capture ? "1.5px solid #3b82f6" : "1.5px solid #6b7280",
-        background: capture ? "#eff6ff" : "#f9fafb",
-        color: capture ? "#1d4ed8" : "#374151",
-        fontSize: 12,
-        fontWeight: 700,
-        cursor: "pointer",
-        overflow: "visible",
-        WebkitTapHighlightColor: "transparent",
-        userSelect: "none",
-        // pas de overflow:hidden !
-      }}
-    >
-      <span style={{ fontSize: 22, pointerEvents: "none" }}>{emoji}</span>
-      <span style={{ pointerEvents: "none" }}>{label}</span>
-      {/* Input en overlay transparent sur tout le label — touch direct sans JS */}
-      <input
-        type="file"
-        accept="image/*"
-        {...(capture ? { capture: "environment" } : {})}
-        onChange={handleChange}
-        style={{
-          position: "absolute",
-          top: 0, left: 0, right: 0, bottom: 0,
-          width: "100%",
-          height: "100%",
-          opacity: 0,
-          cursor: "pointer",
-          fontSize: 16, // empêche zoom iOS
-        }}
-      />
-    </label>
-  );
-}
-
 export default function LivreurDocuments({ onComplete }) {
   const [files, setFiles]         = useState({});
   const [previews, setPreviews]   = useState({});
@@ -73,7 +18,9 @@ export default function LivreurDocuments({ onComplete }) {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
 
-  const handleFile = (key, file) => {
+  const handleFile = (key, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     setFiles(prev    => ({ ...prev, [key]: file }));
     setPreviews(prev => ({ ...prev, [key]: URL.createObjectURL(file) }));
   };
@@ -116,7 +63,6 @@ export default function LivreurDocuments({ onComplete }) {
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-sm mx-auto w-full space-y-5 py-6">
 
-        {/* Header */}
         <div className="text-center space-y-2">
           <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center mx-auto">
             <Camera className="h-8 w-8 text-white" />
@@ -125,7 +71,6 @@ export default function LivreurDocuments({ onComplete }) {
           <p className="text-sm text-muted-foreground">Envoyez vos documents pour activer votre compte livreur</p>
         </div>
 
-        {/* Progression */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Progression</span>
@@ -136,69 +81,78 @@ export default function LivreurDocuments({ onComplete }) {
           </div>
         </div>
 
-        {/* Documents */}
         <div className="space-y-3">
           {DOCS.map(doc => {
             const hasFile = !!files[doc.key];
-            const file    = files[doc.key];
             return (
-              <div
-                key={doc.key}
-                style={{
-                  border: `2px solid ${hasFile ? '#3b82f6' : '#e5e7eb'}`,
-                  borderRadius: 12,
-                  background: "white",
-                }}
-              >
-                {/* Titre */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 12px 4px" }}>
-                  <span style={{ fontSize: 24, flexShrink: 0 }}>{doc.emoji}</span>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{doc.label}</p>
-                    <p style={{ fontSize: 11, color: "#6b7280", margin: 0 }}>{doc.desc}</p>
+              <div key={doc.key} className={`rounded-xl border-2 bg-white ${hasFile ? 'border-primary' : 'border-border'}`}>
+
+                {/* En-tête */}
+                <div className="flex items-center gap-3 p-3">
+                  <span className="text-2xl flex-shrink-0">{doc.emoji}</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">{doc.label}</p>
+                    <p className="text-xs text-muted-foreground">{doc.desc}</p>
                   </div>
-                  {hasFile && <CheckCircle2 style={{ width: 20, height: 20, color: "#3b82f6", flexShrink: 0 }} />}
+                  {hasFile && <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />}
                 </div>
 
                 {/* Aperçu */}
                 {previews[doc.key] && (
-                  <img
-                    src={previews[doc.key]}
-                    alt="aperçu"
-                    style={{ width: "100%", height: 100, objectFit: "cover" }}
-                  />
+                  <img src={previews[doc.key]} alt="aperçu" className="w-full h-28 object-cover" />
                 )}
 
-                {/* Boutons */}
-                <div style={{ display: "flex", gap: 8, padding: "8px 12px 12px" }}>
-                  <UploadBtn
-                    docKey={doc.key}
-                    capture={true}
-                    label="Caméra"
-                    emoji="📷"
-                    onFile={(f) => handleFile(doc.key, f)}
-                  />
-                  <UploadBtn
-                    docKey={doc.key}
-                    capture={false}
-                    label="Galerie"
-                    emoji="🖼️"
-                    onFile={(f) => handleFile(doc.key, f)}
-                  />
+                {/* ── UPLOAD ZONE ──────────────────────────────────────────
+                    Les inputs sont VISIBLES et stylisés directement.
+                    Aucun overlay, aucun label wrapper, aucun JS .click().
+                    L'utilisateur tape directement sur l'input natif.
+                    C'est la méthode la plus compatible Android/WebView.
+                ─────────────────────────────────────────────────────────── */}
+                <div className="flex gap-2 p-3">
+
+                  {/* Caméra — input visible stylisé */}
+                  <div className="flex-1 relative">
+                    <div className="flex flex-col items-center gap-1 py-2.5 rounded-lg bg-blue-50 border border-blue-300 pointer-events-none select-none">
+                      <span className="text-xl">📷</span>
+                      <span className="text-xs font-bold text-blue-700">Caméra</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => handleFile(doc.key, e)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                  </div>
+
+                  {/* Galerie — input visible stylisé */}
+                  <div className="flex-1 relative">
+                    <div className="flex flex-col items-center gap-1 py-2.5 rounded-lg bg-gray-50 border border-gray-300 pointer-events-none select-none">
+                      <span className="text-xl">🖼️</span>
+                      <span className="text-xs font-bold text-gray-700">Galerie</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFile(doc.key, e)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                  </div>
+
                 </div>
 
-                {/* Confirmation fichier */}
-                {file && (
-                  <p style={{ fontSize: 10, color: "#15803d", textAlign: "center", padding: "0 12px 10px", fontWeight: 600 }}>
-                    ✅ {file.name}
+                {/* Nom du fichier */}
+                {files[doc.key] && (
+                  <p className="text-[10px] text-primary text-center font-semibold pb-3">
+                    ✅ {files[doc.key].name}
                   </p>
                 )}
+
               </div>
             );
           })}
         </div>
 
-        {/* Submit */}
         <Button
           className="w-full h-12 text-base font-semibold"
           disabled={!allDone || !termsAccepted || uploading}
@@ -212,11 +166,7 @@ export default function LivreurDocuments({ onComplete }) {
 
         {/* Conditions */}
         <div className="rounded-xl border-2 border-amber-300 bg-amber-50">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between p-4 text-left"
-            onClick={() => setShowTerms(!showTerms)}
-          >
+          <button type="button" className="w-full flex items-center justify-between p-4 text-left" onClick={() => setShowTerms(!showTerms)}>
             <div className="flex items-center gap-3">
               <ShieldCheck className="h-5 w-5 text-amber-600 flex-shrink-0" />
               <div>
@@ -224,11 +174,11 @@ export default function LivreurDocuments({ onComplete }) {
                 <p className="text-xs text-amber-700">Lecture obligatoire avant validation</p>
               </div>
             </div>
-            <span className="text-amber-600 text-lg">{showTerms ? '▲' : '▼'}</span>
+            <span className="text-amber-600">{showTerms ? '▲' : '▼'}</span>
           </button>
 
           {showTerms && (
-            <div className="px-4 pb-4 text-xs text-amber-900 border-t border-amber-200 pt-3 space-y-2">
+            <div className="px-4 pb-4 text-xs text-amber-900 border-t border-amber-200 pt-3">
               <ol className="space-y-1.5 list-decimal list-inside">
                 <li>Je m'engage à assurer la livraison des colis avec sérieux et professionnalisme.</li>
                 <li>Je suis entièrement responsable de tout dommage, perte ou vol survenant lors du transport.</li>
@@ -256,11 +206,7 @@ export default function LivreurDocuments({ onComplete }) {
           🔒 Vos documents sont sécurisés et utilisés uniquement pour la vérification de votre identité
         </p>
 
-        <button
-          type="button"
-          className="w-full text-xs text-muted-foreground underline text-center"
-          onClick={() => base44.auth.logout()}
-        >
+        <button type="button" className="w-full text-xs text-muted-foreground underline text-center" onClick={() => base44.auth.logout()}>
           Se déconnecter
         </button>
       </div>
