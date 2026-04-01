@@ -7,6 +7,7 @@ import { User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import RoleSetup from "../components/RoleSetup";
 import LivreurDocuments from "../components/LivreurDocuments";
+import PendingProfiles from "../components/PendingProfiles";
 import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
@@ -24,15 +25,24 @@ export default function Home() {
   const [allProfiles, setAllProfiles] = useState([]);
   const [showSwitch, setShowSwitch] = useState(false);
   const [switching, setSwitching] = useState(null);
+  const [pendingProfiles, setPendingProfiles] = useState([]);
 
   const loadUser = async () => {
+    console.log('[Home] Chargement utilisateur et profils...');
     const me = await base44.auth.me();
     setUser(me);
-    // Charger tous les profils actifs pour le switcher
+    // Charger tous les profils pour le switcher
     try {
       const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
-      setAllProfiles(profs); // tous les profils, pas seulement actifs
-    } catch (_) {}
+      console.log('[Home] Profils chargés:', profs.length);
+      setAllProfiles(profs);
+      // Extraire les profils en attente
+      const pending = profs.filter(p => p.status === 'en_attente');
+      console.log('[Home] Profils en attente:', pending.length);
+      setPendingProfiles(pending);
+    } catch (err) {
+      console.error('[Home] Erreur chargement profils:', err);
+    }
     setLoading(false);
   };
 
@@ -127,6 +137,13 @@ export default function Home() {
 
   return (
     <div className="space-y-0">
+      {/* Afficher les profils en attente en haut */}
+      {pendingProfiles.length > 0 && (
+        <div className="px-4 pt-4 pb-2">
+          <PendingProfiles pendingProfiles={pendingProfiles} onProfileChange={loadUser} />
+        </div>
+      )}
+
       <div className="flex justify-between items-center pb-3 px-4 pt-4">
         {/* Badge profil actif + switch rapide — toujours visible */}
         {activeProfile && PROFILE_CFG[activeProfile] && (
@@ -156,6 +173,7 @@ export default function Home() {
           {/* Profils actifs — interchangeables */}
           <div className="space-y-2">
             {allProfiles.filter(p => p.status === 'actif').map(p => {
+              console.log('[Home.Modal] Profil actif:', p.profile_type);
               const cfg = PROFILE_CFG[p.profile_type];
               if (!cfg) return null;
               const isActive = p.profile_type === activeProfile;
@@ -185,6 +203,7 @@ export default function Home() {
             <div className="mt-3 space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Autres profils</p>
               {allProfiles.filter(p => p.status !== 'actif').map(p => {
+                console.log('[Home.Modal] Profil non actif:', p.profile_type, '-', p.status);
                 const cfg = PROFILE_CFG[p.profile_type];
                 if (!cfg) return null;
                 const statusCfg = {
