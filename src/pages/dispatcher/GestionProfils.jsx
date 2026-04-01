@@ -59,26 +59,62 @@ export default function GestionProfils() {
   };
 
   const searchUsers = async () => {
-    if (!search.trim()) return;
+    if (!search.trim()) {
+      console.log('[GestionProfils] Recherche vide, aucune action');
+      return;
+    }
+    
+    console.log('[GestionProfils] Recherche lancée pour:', search);
     setLoading(true);
-    const all = await base44.entities.User.list("-created_date", 500);
-    const q = search.toLowerCase();
-    const found = all.filter(u =>
-      u.full_name?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q) ||
-      u.telephone?.includes(q) ||
-      u.id?.includes(q)
-    );
-    setUsers(found);
-    setLoading(false);
+    try {
+      const all = await base44.entities.User.list("-created_date", 500);
+      console.log('[GestionProfils] Nombres d\'utilisateurs en base:', all?.length || 0);
+      
+      if (!all || all.length === 0) {
+        console.warn('[GestionProfils] Aucun utilisateur trouvé en base');
+        setUsers([]);
+        setLoading(false);
+        return;
+      }
+      
+      const q = search.toLowerCase();
+      const found = all.filter(u =>
+        u.full_name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.telephone?.includes(q) ||
+        u.id?.includes(q)
+      );
+      
+      console.log('[GestionProfils] Résultats trouvés:', found.length);
+      found.forEach(u => console.log(`  - ${u.full_name} (${u.email}) role=${u.role} type=${u.user_type}`));
+      
+      setUsers(found);
+    } catch (err) {
+      console.error('[GestionProfils] Erreur recherche:', err);
+      toast.error('Erreur lors de la recherche: ' + err.message);
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openUser = async (user) => {
+    console.log('[GestionProfils] Ouverture fiche utilisateur:', user.email);
     setSelectedUser(user);
-    const profiles = await base44.entities.UserProfile.filter({ user_email: user.email });
-    setUserProfiles(profiles);
-    const history = await base44.entities.AdminActionLog.filter({ target_email: user.email }, "-created_date", 20);
-    setLogs(history);
+    try {
+      const profiles = await base44.entities.UserProfile.filter({ user_email: user.email });
+      console.log('[GestionProfils] Profils trouvés:', profiles?.length || 0);
+      setUserProfiles(profiles || []);
+      
+      const history = await base44.entities.AdminActionLog.filter({ target_email: user.email }, "-created_date", 20);
+      console.log('[GestionProfils] Historique chargé:', history?.length || 0);
+      setLogs(history || []);
+    } catch (err) {
+      console.error('[GestionProfils] Erreur chargement fiche:', err);
+      toast.error('Erreur chargement fiche: ' + err.message);
+      setUserProfiles([]);
+      setLogs([]);
+    }
     setDialogOpen(true);
   };
 
@@ -237,6 +273,14 @@ export default function GestionProfils() {
           {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
         </Button>
       </div>
+
+      {/* Info aide initiale */}
+      {users.length === 0 && !search && !loading && (
+        <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700">
+          <p className="font-medium">💡 Commencez une recherche</p>
+          <p className="text-xs mt-1">Entrez un nom, email, téléphone ou ID pour chercher un utilisateur et gérer ses profils.</p>
+        </div>
+      )}
 
       {/* Résultats */}
       {users.length > 0 && (
