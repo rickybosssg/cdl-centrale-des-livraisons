@@ -51,7 +51,7 @@ export default function GestionProfils() {
     load();
   }, []);
 
-  // Charger automatiquement les utilisateurs au mount
+  // Charger automatiquement les utilisateurs au mount UNE SEULE FOIS
   useEffect(() => {
     const loadUsers = async () => {
       console.log('[GestionProfils] Chargement automatique des utilisateurs...');
@@ -69,6 +69,7 @@ export default function GestionProfils() {
       }
     };
     loadUsers();
+    // ⚠️ NE PAS ajouter de subscription ici pour éviter les boucles infinies
   }, []);
 
   const canDo = (permission) => {

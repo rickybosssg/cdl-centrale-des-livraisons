@@ -94,15 +94,22 @@ export default function Home() {
     }
   }, [isAuthenticated, navigate, queryClient]);
 
-  // Subscription aux changements de profil utilisateur
+  // Subscription aux changements de profil utilisateur SANS relancer loadUser (éviter boucle)
   useEffect(() => {
     if (!user) return;
     console.log('[Home] Setup subscription UserProfile pour:', user.email);
     const unsubscribe = base44.entities.UserProfile.subscribe((event) => {
       console.log('[Home] Event UserProfile:', event.type, '- profile_type:', event.data?.profile_type, '- status:', event.data?.status);
       if (event.data?.user_email === user.email && !event.data?.deleted) {
-        console.log('[Home] Mise à jour locale de pendingProfiles');
-        loadUser();
+        // ⚠️ Mettre à jour localement SANS relancer loadUser() pour éviter boucle infinie
+        if (event.type === 'create' || event.type === 'update') {
+          setPendingProfiles(prev => {
+            const exists = prev.find(p => p.id === event.id);
+            if (exists) return prev.map(p => p.id === event.id ? event.data : p);
+            if (event.data.status === 'en_attente') return [event.data, ...prev];
+            return prev.filter(p => p.id !== event.id);
+          });
+        }
       }
     });
     return unsubscribe;
