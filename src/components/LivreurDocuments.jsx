@@ -1,42 +1,35 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Camera, CheckCircle2, Upload, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const DOCS = [
-  { key: "photo_profil", label: "Photo de profil", desc: "Selfie clair, visage visible", emoji: "🤳" },
-  { key: "photo_identite_recto", label: "CNI – Recto", desc: "Face avant de votre carte d'identité", emoji: "🪪" },
-  { key: "photo_identite_verso", label: "CNI – Verso", desc: "Face arrière de votre carte d'identité", emoji: "🪪" },
-  { key: "photo_moyen_deplacement", label: "Moyen de déplacement", desc: "Photo de votre moto ou véhicule", emoji: "🛵" },
+  { key: "photo_profil",            label: "Photo de profil",      desc: "Selfie clair, visage visible",              emoji: "🤳" },
+  { key: "photo_identite_recto",    label: "CNI – Recto",          desc: "Face avant de votre carte d'identité",      emoji: "🪪" },
+  { key: "photo_identite_verso",    label: "CNI – Verso",          desc: "Face arrière de votre carte d'identité",    emoji: "🪪" },
+  { key: "photo_moyen_deplacement", label: "Moyen de déplacement", desc: "Photo de votre moto ou véhicule",           emoji: "🛵" },
 ];
 
 export default function LivreurDocuments({ onComplete }) {
-  const [files, setFiles] = useState({});
-  const [previews, setPreviews] = useState({});
-  const [uploading, setUploading] = useState(false);
+  const [files, setFiles]             = useState({});
+  const [previews, setPreviews]       = useState({});
+  const [uploading, setUploading]     = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
+  const [showTerms, setShowTerms]     = useState(false);
 
   const handleFile = (key, file) => {
     if (!file) return;
-    setFiles(prev => ({ ...prev, [key]: file }));
-    const url = URL.createObjectURL(file);
-    setPreviews(prev => ({ ...prev, [key]: url }));
+    setFiles(prev    => ({ ...prev, [key]: file }));
+    setPreviews(prev => ({ ...prev, [key]: URL.createObjectURL(file) }));
   };
 
   const completed = DOCS.filter(d => files[d.key]).length;
-  const allDone = completed === DOCS.length;
+  const allDone   = completed === DOCS.length;
 
   const handleSubmit = async () => {
-    if (!termsAccepted) {
-      toast.error("Veuillez accepter les conditions d'engagement");
-      return;
-    }
-    if (!allDone) {
-      toast.error("Veuillez fournir tous les documents");
-      return;
-    }
+    if (!termsAccepted) { toast.error("Veuillez accepter les conditions d'engagement"); return; }
+    if (!allDone)       { toast.error("Veuillez fournir tous les documents"); return; }
     setUploading(true);
     try {
       const uploads = await Promise.all(
@@ -50,7 +43,6 @@ export default function LivreurDocuments({ onComplete }) {
         terms_accepted: true,
         terms_accepted_at: new Date().toISOString(),
       });
-      // Notifier les admins
       try {
         const me = await base44.auth.me();
         await base44.functions.invoke('notifyAdminNewSignup', {
@@ -76,18 +68,16 @@ export default function LivreurDocuments({ onComplete }) {
             <Camera className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-xl font-bold">Complétez votre dossier</h1>
-          <p className="text-sm text-muted-foreground">
-            Envoyez vos documents pour activer votre compte livreur
-          </p>
+          <p className="text-sm text-muted-foreground">Envoyez vos documents pour activer votre compte livreur</p>
         </div>
 
-        {/* Barre de progression */}
+        {/* Progression */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Progression</span>
             <span className="font-semibold text-primary">{completed}/{DOCS.length} documents</span>
           </div>
-          <div className="h-2 rounded-full bg-muted overflow-hidden">
+          <div className="h-2 rounded-full bg-muted">
             <div
               className="h-full bg-primary rounded-full transition-all duration-500"
               style={{ width: `${(completed / DOCS.length) * 100}%` }}
@@ -100,10 +90,13 @@ export default function LivreurDocuments({ onComplete }) {
           {DOCS.map(doc => {
             const hasFile = !!files[doc.key];
             const preview = previews[doc.key];
+            const inputId = `file_input_${doc.key}`;
             return (
-              <div key={doc.key} className={`rounded-xl border-2 overflow-hidden transition-all ${
-                hasFile ? "border-primary" : "border-border"
-              }`}>
+              <div
+                key={doc.key}
+                style={{ border: `2px solid ${hasFile ? 'hsl(var(--primary))' : 'hsl(var(--border))'}`, borderRadius: '12px' }}
+              >
+                {/* Infos doc */}
                 <div className="p-3 flex items-center gap-3">
                   <span className="text-2xl flex-shrink-0">{doc.emoji}</span>
                   <div className="flex-1 min-w-0">
@@ -115,40 +108,63 @@ export default function LivreurDocuments({ onComplete }) {
 
                 {/* Aperçu */}
                 {preview && (
-                  <div className="relative">
-                    <img src={preview} alt={doc.label} className="w-full h-32 object-cover" />
-                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                      <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded">Remplacer</span>
-                    </div>
-                  </div>
+                  <img src={preview} alt={doc.label} className="w-full h-32 object-cover" />
                 )}
 
-                {/* Bouton upload — input overlay (compatible Android/WebView) */}
+                {/* Zone upload — label enveloppe l'input, PAS d'overflow:hidden */}
                 <div className="px-3 pb-3">
-                  <div className={`relative h-11 rounded-lg overflow-hidden border ${
-                    hasFile ? "bg-primary/10 border-primary/30" : "bg-muted border-border"
-                  }`}>
-                    <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
-                      <Camera className={`h-4 w-4 ${hasFile ? 'text-primary' : 'text-foreground'}`} />
-                      <span className={`text-sm font-medium ${hasFile ? 'text-primary' : 'text-foreground'}`}>
-                        {hasFile ? '📷 Remplacer la photo' : '📷 Prendre ou choisir une photo'}
-                      </span>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={e => handleFile(doc.key, e.target.files[0])}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      style={{ fontSize: '16px' }}
-                    />
-                  </div>
+                  <label
+                    htmlFor={inputId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      width: '100%',
+                      padding: '10px 0',
+                      borderRadius: '8px',
+                      border: '1px solid',
+                      borderColor: hasFile ? 'hsl(var(--primary) / 0.4)' : 'hsl(var(--border))',
+                      background: hasFile ? 'hsl(var(--primary) / 0.08)' : 'hsl(var(--muted))',
+                      color: hasFile ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      WebkitTapHighlightColor: 'transparent',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <Camera style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                    {hasFile ? '📷 Remplacer la photo' : '📷 Prendre ou choisir une photo'}
+                  </label>
+                  {/* Input complètement séparé du label mais lié par htmlFor */}
+                  <input
+                    id={inputId}
+                    type="file"
+                    accept="image/*"
+                    onChange={e => handleFile(doc.key, e.target.files?.[0])}
+                    style={{
+                      position: 'absolute',
+                      width: '1px',
+                      height: '1px',
+                      opacity: 0,
+                      overflow: 'hidden',
+                      clip: 'rect(0,0,0,0)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  />
+                  {hasFile && files[doc.key] && (
+                    <p className="text-[10px] text-primary mt-1 text-center font-medium">
+                      ✅ {files[doc.key].name}
+                    </p>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Bouton envoi */}
+        {/* Bouton soumettre */}
         <Button
           className="w-full h-12 text-base font-semibold"
           disabled={!allDone || !termsAccepted || uploading}
@@ -157,15 +173,12 @@ export default function LivreurDocuments({ onComplete }) {
           {uploading ? (
             <><Loader2 className="h-5 w-5 animate-spin mr-2" />Upload en cours…</>
           ) : (
-            <>
-              <Upload className="h-5 w-5 mr-2" />
-              Envoyer mon dossier ({completed}/{DOCS.length})
-            </>
+            <><Upload className="h-5 w-5 mr-2" />Envoyer mon dossier ({completed}/{DOCS.length})</>
           )}
         </Button>
 
-        {/* Conditions d'engagement */}
-        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 overflow-hidden">
+        {/* Conditions */}
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50">
           <button
             className="w-full flex items-center justify-between p-4 text-left"
             onClick={() => setShowTerms(!showTerms)}
@@ -184,27 +197,26 @@ export default function LivreurDocuments({ onComplete }) {
             <div className="px-4 pb-4 space-y-3 text-xs text-amber-900 border-t border-amber-200 pt-3">
               <p className="font-semibold">📄 Engagement et responsabilité du livreur – CDL</p>
               <ol className="space-y-2 list-decimal list-inside">
-                <li>Je m'engage à assurer la livraison des colis qui me sont confiés avec sérieux, diligence et professionnalisme.</li>
-                <li>Je reconnais être entièrement responsable de tout dommage, perte, détérioration ou vol survenant lors du transport ou de la livraison d'un colis qui m'a été confié.</li>
-                <li>Je comprends que la plateforme CDL (Centrale Des Livraisons) agit uniquement comme intermédiaire de mise en relation entre clients et livreurs.</li>
-                <li>En conséquence, j'accepte que CDL ne puisse être tenue responsable, directement ou indirectement, en cas de : perte de colis, vol, détérioration, retard ou incident lié à la livraison.</li>
-                <li>Je m'engage à indemniser le client en cas de faute ou de négligence de ma part ayant entraîné un préjudice.</li>
-                <li>Je certifie que les informations fournies ainsi que les documents transmis sont exacts et authentiques.</li>
-                <li>Je comprends que toute fausse déclaration ou comportement frauduleux peut entraîner la suspension ou la suppression définitive de mon compte.</li>
+                <li>Je m'engage à assurer la livraison des colis avec sérieux et professionnalisme.</li>
+                <li>Je suis entièrement responsable de tout dommage, perte ou vol survenant lors du transport.</li>
+                <li>CDL agit uniquement comme intermédiaire de mise en relation.</li>
+                <li>J'accepte que CDL ne puisse être tenue responsable en cas d'incident lié à la livraison.</li>
+                <li>Je m'engage à indemniser le client en cas de faute de ma part.</li>
+                <li>Je certifie que les informations et documents fournis sont exacts et authentiques.</li>
+                <li>Toute fausse déclaration peut entraîner la suspension définitive de mon compte.</li>
               </ol>
             </div>
           )}
 
-          {/* Case à cocher */}
           <label className="flex items-start gap-3 px-4 pb-4 cursor-pointer">
             <input
               type="checkbox"
               checked={termsAccepted}
               onChange={e => setTermsAccepted(e.target.checked)}
-              className="mt-0.5 h-5 w-5 rounded accent-amber-600 cursor-pointer flex-shrink-0"
+              className="mt-0.5 h-5 w-5 accent-amber-600 cursor-pointer flex-shrink-0"
             />
             <span className="text-xs text-amber-900 font-medium leading-relaxed">
-              ☑️ Je reconnais avoir lu et accepté les conditions ci-dessus et j'accepte pleinement ma responsabilité en tant que livreur.
+              ☑️ Je reconnais avoir lu et accepté les conditions ci-dessus.
             </span>
           </label>
         </div>

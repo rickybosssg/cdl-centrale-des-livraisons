@@ -3,61 +3,62 @@ import { useState } from "react";
 export default function TestUpload() {
   const [preview, setPreview] = useState(null);
   const [fileName, setFileName] = useState(null);
-  const [log, setLog] = useState([]);
-
-  const addLog = (msg) => setLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 9)]);
+  const [status, setStatus] = useState("En attente du clic...");
 
   const handleChange = (e) => {
-    addLog("onChange déclenché");
     const file = e.target.files?.[0];
-    if (!file) { addLog("❌ Aucun fichier sélectionné"); return; }
-    addLog(`✅ Fichier sélectionné: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+    if (!file) { setStatus("❌ Aucun fichier sélectionné"); return; }
+    setStatus(`✅ Fichier: ${file.name} — ${(file.size/1024).toFixed(1)} KB`);
     setFileName(file.name);
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    addLog("✅ Aperçu généré");
+    setPreview(URL.createObjectURL(file));
   };
 
   return (
-    <div className="p-4 space-y-4 max-w-sm mx-auto">
-      <h1 className="text-xl font-bold">🧪 Test Upload Image</h1>
-      <p className="text-sm text-muted-foreground">Page de diagnostic – cliquez le bouton pour choisir une image</p>
+    <div style={{ padding: '16px', maxWidth: '360px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+      <h1 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>🧪 Test Upload</h1>
 
-      {/* Zone upload - input overlay sur le bouton */}
-      <div className="relative h-14 rounded-xl overflow-hidden border-2 border-primary bg-primary/10">
-        <div className="absolute inset-0 flex items-center justify-center gap-2 text-primary font-semibold text-sm pointer-events-none">
-          📷 Choisir une image
-        </div>
+      {/* Zone cliquable — label enveloppe l'input */}
+      <label style={{
+        display: 'block',
+        textAlign: 'center',
+        padding: '20px',
+        background: '#3b82f6',
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '16px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        marginBottom: '16px',
+        WebkitTapHighlightColor: 'transparent',
+      }}>
+        📷 Choisir une photo
         <input
           type="file"
           accept="image/*"
           onChange={handleChange}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          style={{ fontSize: '16px' }}
+          style={{
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            opacity: 0,
+            overflow: 'hidden',
+            clip: 'rect(0,0,0,0)',
+          }}
         />
+      </label>
+
+      {/* Statut */}
+      <div style={{ background: '#f1f5f9', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '13px', color: '#334155' }}>
+        {status}
       </div>
 
       {/* Aperçu */}
       {preview && (
-        <div className="space-y-2">
-          <img src={preview} alt="aperçu" className="w-full rounded-xl border object-cover max-h-48" />
-          <p className="text-xs text-green-700 font-semibold bg-green-50 p-2 rounded-lg">✅ {fileName}</p>
+        <div>
+          <img src={preview} alt="aperçu" style={{ width: '100%', borderRadius: '10px', marginBottom: '8px' }} />
+          <p style={{ fontSize: '12px', color: '#16a34a', fontWeight: '600' }}>✅ {fileName}</p>
         </div>
       )}
-
-      {/* Logs */}
-      <div className="bg-black rounded-xl p-3 space-y-1 min-h-[80px]">
-        <p className="text-xs text-green-400 font-mono font-bold mb-2">Console debug :</p>
-        {log.length === 0 && <p className="text-xs text-gray-500 font-mono">En attente du clic...</p>}
-        {log.map((l, i) => (
-          <p key={i} className="text-xs text-green-300 font-mono">{l}</p>
-        ))}
-      </div>
-
-      <p className="text-xs text-center text-muted-foreground">
-        Si aucune action après clic → problème WebView/navigateur.<br />
-        Si aperçu visible → upload fonctionne.
-      </p>
     </div>
   );
 }
