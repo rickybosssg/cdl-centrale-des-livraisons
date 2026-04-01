@@ -17,12 +17,21 @@ export default function EffectuerDeplacement() {
   }, []);
   const [step, setStep] = useState(1);
   const [moyenDeplacement, setMoyenDeplacement] = useState(null);
-  const [urgence, setUrgence] = useState("normal");
-  const [prix, setPrix] = useState("");
+  const [urgent, setUrgent] = useState(false);
+  const [tresUrgent, setTresUrgent] = useState(false);
+  const [prixBase, setPrixBase] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [quartier_depart, setQuartierDepart] = useState("");
   const [quartier_arrivee, setQuartierArrivee] = useState("");
+
+  const prixBaseNum = parseInt(prixBase, 10) || 0;
+  const supplement = tresUrgent ? 1000 : urgent ? 500 : 0;
+  const prixTotal = prixBaseNum + supplement;
+  const niveauUrgence = tresUrgent ? "tres_urgent" : urgent ? "urgent" : "normal";
+
+  const handleUrgent = (val) => { setUrgent(val); if (val) setTresUrgent(false); };
+  const handleTresUrgent = (val) => { setTresUrgent(val); if (val) setUrgent(false); };
 
   const searchAndAssignLivreur = async (courseData) => {
     // Chercher un livreur disponible avec le mode de transport sélectionné
@@ -54,7 +63,7 @@ export default function EffectuerDeplacement() {
   };
 
   const handleSubmit = async () => {
-    if (!moyenDeplacement || !prix || !quartier_depart || !quartier_arrivee) {
+    if (!moyenDeplacement || !prixBaseNum || !quartier_depart || !quartier_arrivee) {
       toast.error("Veuillez remplir tous les champs");
       return;
     }
@@ -70,8 +79,8 @@ export default function EffectuerDeplacement() {
       }
 
       // Créer la course
-      const commission_cdl = Math.round((parseFloat(prix) * 0.2) * 100) / 100;
-      const gain_livreur = Math.round((parseFloat(prix) - commission_cdl) * 100) / 100;
+      const commission_cdl = Math.round(prixTotal * 0.2 * 100) / 100;
+      const gain_livreur = Math.round((prixTotal - commission_cdl) * 100) / 100;
 
       const course = await base44.entities.Course.create({
         quartier_depart,
@@ -88,7 +97,9 @@ export default function EffectuerDeplacement() {
         livreur_email: livreur.email,
         livreur_name: livreur.full_name,
         telephone_livreur: livreur.telephone,
-        prix: parseFloat(prix),
+        prix: prixTotal,
+        montant_base: prixBaseNum,
+        supplement_urgence: supplement,
         commission: commission_cdl,
         commission_active: true,
         commission_cdl: commission_cdl,
@@ -98,7 +109,8 @@ export default function EffectuerDeplacement() {
         heure_assignation: new Date().toISOString(),
         nombre_tentatives: 1,
         moyen_transport: moyenDeplacement,
-        niveau_urgence: urgence,
+        urgence: tresUrgent ? "tres_urgent" : urgent ? "urgent" : null,
+        niveau_urgence: niveauUrgence,
       });
 
       // Notifier le livreur
@@ -189,41 +201,60 @@ export default function EffectuerDeplacement() {
 
           <div className="space-y-2">
             <Label>Prix du déplacement (FCFA) *</Label>
-            <Input 
-              type="number" 
-              placeholder="2000" 
-              value={prix}
-              onChange={e => setPrix(e.target.value)}
-            />
-            {prix && (
-              <p className="text-xs text-muted-foreground">
-                Commission CDL (20%): {Math.round(parseFloat(prix) * 0.2)} FCFA
-              </p>
-            )}
+            <div className="relative">
+              <Input
+                type="number"
+                min="0"
+                placeholder="Ex: 2000"
+                value={prixBase}
+                onChange={e => setPrixBase(e.target.value)}
+                className="pr-16"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">FCFA</span>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Niveau d'urgence</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { val: "normal", label: "Normal" },
-                { val: "urgent", label: "⚡ Urgent" },
-                { val: "tres_urgent", label: "🔥 Très urgent" },
-              ].map(opt => (
-                <button
-                  key={opt.val}
-                  onClick={() => setUrgence(opt.val)}
-                  className={`p-2 rounded-lg border text-sm font-medium transition-all ${
-                    urgence === opt.val
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            <Label>Niveau d'urgence (optionnel)</Label>
+            <div className="space-y-2">
+              <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${urgent ? 'border-amber-400 bg-amber-50' : 'border-border'}`}>
+                <input type="checkbox" checked={urgent} onChange={e => handleUrgent(e.target.checked)} className="h-4 w-4 accent-amber-500" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-700">🔔 Urgent <span className="text-amber-600 font-bold">+500 FCFA</span></p>
+                  <p className="text-xs text-muted-foreground">(moins de 30 min)</p>
+                </div>
+              </label>
+              <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${tresUrgent ? 'border-red-400 bg-red-50' : 'border-border'}`}>
+                <input type="checkbox" checked={tresUrgent} onChange={e => handleTresUrgent(e.target.checked)} className="h-4 w-4 accent-red-500" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-700">🚨 Très urgent <span className="text-red-600 font-bold">+1000 FCFA</span></p>
+                  <p className="text-xs text-muted-foreground">(moins de 20 min)</p>
+                </div>
+              </label>
             </div>
           </div>
+
+          {prixBaseNum > 0 && (
+            <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+              <p className="text-sm font-semibold">📋 Récapitulatif</p>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Prix de base</span>
+                  <span>{prixBaseNum} FCFA</span>
+                </div>
+                {supplement > 0 && (
+                  <div className="flex justify-between text-amber-700">
+                    <span>{tresUrgent ? '🚨 Très urgent' : '🔔 Urgent'}</span>
+                    <span>+{supplement} FCFA</span>
+                  </div>
+                )}
+                <div className="border-t pt-2 flex justify-between font-bold text-base">
+                  <span>Total</span>
+                  <span className="text-primary text-xl">{prixTotal} FCFA</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Notes supplémentaires</Label>
