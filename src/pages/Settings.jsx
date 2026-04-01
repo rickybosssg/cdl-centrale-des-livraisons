@@ -62,6 +62,7 @@ export default function Settings() {
   const [moyenDeplacement, setMoyenDeplacement] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [switching, setSwitching] = useState(null);
+  const [deplError, setDeplError] = useState(false);
 
   const load = async () => {
     const me = await base44.auth.me();
@@ -87,10 +88,25 @@ export default function Settings() {
       return toast.error('Veuillez sélectionner au moins un mode de déplacement');
     }
 
-    const payload = { ...formData, email: user.email, full_name: user.full_name };
-    if (selectedProfile === 'livreur') payload.moyen_deplacement = JSON.stringify(moyenDeplacement);
+    // Validation finale moyen_deplacement
+    if (selectedProfile === 'livreur' && moyenDeplacement.length === 0) {
+      setDeplError(true);
+      return toast.error('Veuillez choisir un moyen de déplacement');
+    }
+    setDeplError(false);
 
-    console.log('[AddProfile] Envoi:', selectedProfile, payload);
+    const payload = { ...formData, email: user.email, full_name: user.full_name };
+    if (selectedProfile === 'livreur') {
+      // Format exact attendu par le backend : JSON string de ["moto"] ou ["vehicule"] ou ["moto","vehicule"]
+      payload.moyen_deplacement = JSON.stringify(moyenDeplacement);
+    }
+
+    console.log('[AddProfile] ====== PAYLOAD ENVOYÉ ======');
+    console.log('[AddProfile] profile_type:', selectedProfile);
+    console.log('[AddProfile] telephone:', payload.telephone);
+    console.log('[AddProfile] quartier:', payload.quartier);
+    console.log('[AddProfile] moyen_deplacement:', payload.moyen_deplacement);
+    console.log('[AddProfile] payload complet:', JSON.stringify(payload));
     setSubmitting(true);
     try {
       const result = await base44.functions.invoke('addProfileToUser', {
@@ -367,6 +383,7 @@ export default function Settings() {
                               key={m.val}
                               type="button"
                               onClick={() => {
+                                setDeplError(false);
                                 setMoyenDeplacement(prev =>
                                   prev.includes(m.val) ? prev.filter(x => x !== m.val) : [...prev, m.val]
                                 );
@@ -385,6 +402,9 @@ export default function Settings() {
                       </div>
                       {moyenDeplacement.length > 0 && (
                         <p className="text-xs text-green-700 font-medium">✅ Sélectionné : {moyenDeplacement.join(', ')}</p>
+                      )}
+                      {deplError && moyenDeplacement.length === 0 && (
+                        <p className="text-xs text-red-600 font-semibold">⚠️ Veuillez choisir un moyen de déplacement</p>
                       )}
                     </div>
                   )}
