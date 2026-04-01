@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AdminNotificationSystem from "@/components/AdminNotificationSystem";
@@ -15,58 +16,86 @@ export default function AdminDashboard() {
     livreursOnline: 0,
     newUsers: 0,
     pendingRequests: 0,
+    totalCourses: 0,
   });
+  const [resetting, setResetting] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const loadData = async () => {
+    try {
+      const today = new Date().toDateString();
+      
+      // Charger les données en parallèle
+      const [courses, livreurs, users, partenaires, profiles] = await Promise.allSettled([
+        base44.entities.Course.list("-created_date", 100),
+        base44.entities.User.filter({ user_type: "livreur", disponible: true }),
+        base44.entities.User.list("-created_date", 100),
+        base44.entities.Partenaire.filter({ statut: "en_attente" }),
+        base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),
+      ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
+
+      // Calculer les KPIs
+      const coursesData = courses || [];
+      const coursesToday = coursesData.filter(c => new Date(c.created_date).toDateString() === today).length;
+      const revenueToday = coursesData
+        .filter(c => new Date(c.created_date).toDateString() === today && c.statut === "livree")
+        .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
+      const livreursOnline = (livreurs || []).length;
+      const newUsersData = (users || []).filter(u => new Date(u.created_date).toDateString() === today);
+      const pendingCount = ((profiles || []).length || 0) + ((partenaires || []).length || 0);
+      const totalCourses = coursesData.length;
+      console.log(`[AdminDashboard] Courses totales en base: ${totalCourses}`);
+
+      setKpis({
+        coursesToday,
+        revenueToday: Math.round(revenueToday),
+        livreursOnline,
+        newUsers: newUsersData.length,
+        pendingRequests: pendingCount,
+        totalCourses,
+      });
+
+      // Alertes
+      const alertList = [];
+      if (pendingCount > 0) alertList.push({ type: 'pending', count: pendingCount });
+      if ((livreurs || []).filter(l => l.livreur_bloque).length > 0) alertList.push({ type: 'blocked' });
+      if (coursesToday > 20) alertList.push({ type: 'high_activity' });
+      
+      setAlerts(alertList);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const today = new Date().toDateString();
-        
-        // Charger les données en parallèle
-        const [courses, livreurs, users, partenaires, profiles] = await Promise.allSettled([
-          base44.entities.Course.list("-created_date", 100),
-          base44.entities.User.filter({ user_type: "livreur", disponible: true }),
-          base44.entities.User.list("-created_date", 100),
-          base44.entities.Partenaire.filter({ statut: "en_attente" }),
-          base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),
-        ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
-
-        // Calculer les KPIs
-        const coursesData = courses || [];
-        const coursesToday = coursesData.filter(c => new Date(c.created_date).toDateString() === today).length;
-        const revenueToday = coursesData
-          .filter(c => new Date(c.created_date).toDateString() === today && c.statut === "livree")
-          .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
-        const livreursOnline = (livreurs || []).length;
-        const newUsersData = (users || []).filter(u => new Date(u.created_date).toDateString() === today);
-        const pendingCount = ((profiles || []).length || 0) + ((partenaires || []).length || 0);
-
-        setKpis({
-          coursesToday,
-          revenueToday: Math.round(revenueToday),
-          livreursOnline,
-          newUsers: newUsersData.length,
-          pendingRequests: pendingCount,
-        });
-
-        // Alertes
-        const alertList = [];
-        if (pendingCount > 0) alertList.push({ type: 'pending', count: pendingCount });
-        if ((livreurs || []).filter(l => l.livreur_bloque).length > 0) alertList.push({ type: 'blocked' });
-        if (coursesToday > 20) alertList.push({ type: 'high_activity' });
-        
-        setAlerts(alertList);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadData();
     const interval = setInterval(loadData, 30000); // Rafraîchir chaque 30s
     return () => clearInterval(interval);
   }, []);
+
+  const handleResetData = async () => {
+    const confirmed = window.confirm(
+      "⚠️ Êtes-vous sûr de vouloir réinitialiser toutes les courses et statistiques ?\n\nCette action est définitive."
+    );
+    if (!confirmed) return;
+
+    setResetting(true);
+    try {
+      const res = await base44.functions.invoke('resetAdminData', {});
+      console.log('[AdminDashboard] Réinitialisation:', res.data);
+      if (res.data?.success) {
+        toast.success('✅ Données réinitialisées, rechargement...');
+        setTimeout(() => loadData(), 500);
+      } else {
+        toast.error(res.data?.error || 'Erreur');
+      }
+    } catch (err) {
+      console.error('[AdminDashboard] Erreur reset:', err);
+      toast.error('Erreur: ' + err.message);
+    }
+    setResetting(false);
+  };
 
   if (loading) {
     return (
@@ -142,6 +171,24 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground mt-1">Nouveaux utilisateurs</p>
           </CardContent>
         </Card>
+        <Card className="border-l-4 border-l-orange-500 col-span-2">
+          <CardContent className="p-4">
+            <p className="text-3xl font-bold text-orange-600">{kpis.totalCourses}</p>
+            <p className="text-xs text-muted-foreground mt-1">Total courses en base</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bouton réinitialisation */}
+      <div className="px-4">
+        <Button
+          variant="destructive"
+          className="w-full text-xs h-9"
+          onClick={handleResetData}
+          disabled={resetting}
+        >
+          {resetting ? "Réinitialisation..." : "🔄 Réinitialiser les statistiques"}
+        </Button>
       </div>
 
       {/* Actions rapides */}
