@@ -80,29 +80,30 @@ export default function Suppression() {
     setDeleting(member.id);
     try {
       const email = member.email || member.numero_telephone;
+      const userId = member.id;
       
-      // Supprimer l'entité spécifique
-      if (selectedProfile === "client") {
-        await base44.entities.Client.delete(member.id);
-      } else if (selectedProfile === "partenaire") {
-        const partners = await base44.entities.Partenaire.filter({ user_email: email });
-        for (const partner of partners) {
-          await base44.entities.Partenaire.delete(partner.id);
-        }
+      console.log(`[Suppression] Suppression complète - userId: ${userId}, email: ${email}, type: ${selectedProfile}`);
+      
+      // Appeler la fonction backend qui supprime complètement l'utilisateur et ses données
+      const res = await base44.functions.invoke('deleteUserComplete', {
+        user_id: userId,
+        user_email: email,
+        profile_type: selectedProfile,
+      });
+      
+      console.log(`[Suppression] Résultat:`, res.data);
+      
+      if (res.data?.success) {
+        const name = member.nom_complet || member.full_name || email;
+        toast.success(`✅ ${name} supprimé définitivement (${res.data.deleted_count} entité(s))`);
+        // Retirer de la liste locale
+        setMembers(members.filter(m => m.id !== member.id));
+        setConfirmDelete(null);
+      } else {
+        toast.error(res.data?.error || "Erreur lors de la suppression");
       }
-      
-      // Supprimer l'utilisateur User (sauf pour client où on a juste supprimé l'entité)
-      if (selectedProfile !== "client") {
-        const users = await base44.entities.User.filter({ email });
-        if (users.length > 0) {
-          await base44.entities.User.delete(users[0].id);
-        }
-      }
-      
-      toast.success(`${member.nom_complet || member.full_name || email} a été supprimé`);
-      setMembers(members.filter(m => m.id !== member.id));
-      setConfirmDelete(null);
     } catch (err) {
+      console.error('[Suppression] Exception:', err);
       toast.error("Erreur: " + (err.message || err));
     } finally {
       setDeleting(null);
