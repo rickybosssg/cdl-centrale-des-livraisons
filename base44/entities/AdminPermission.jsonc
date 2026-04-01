@@ -1,0 +1,45 @@
+{
+  "name": "AdminPermission",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "title": "Email de l'utilisateur d\u00e9l\u00e9gu\u00e9"
+    },
+    "user_name": {
+      "type": "string",
+      "title": "Nom de l'utilisateur"
+    },
+    "role_interne": {
+      "type": "string",
+      "enum": [
+        "gestionnaire_profils",
+        "superviseur_validation",
+        "dispatcher_manager",
+        "admin_secondaire"
+      ],
+      "title": "R\u00f4le interne"
+    },
+    "permissions": {
+      "type": "string",
+      "title": "Permissions (JSON array)"
+    },
+    "actif": {
+      "type": "boolean",
+      "title": "Acc\u00e8s actif",
+      "default": true
+    },
+    "attribue_par": {
+      "type": "string",
+      "title": "Attribu\u00e9 par (email admin)"
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "user_email",
+    "role_interne"
+  ]
+}

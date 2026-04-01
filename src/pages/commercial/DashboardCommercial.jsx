@@ -156,69 +156,102 @@ export default function DashboardCommercial({ user }) {
         </div>
       )}
 
-      {/* Code promo */}
+      {/* Code promo — pas encore de code */}
       {!code ? (
+        <Card>
+          <CardContent className="p-5 space-y-4">
+            <div className="text-center space-y-2">
+              <Tag className="h-10 w-10 text-primary mx-auto" />
+              <p className="font-semibold">Créez votre code promo</p>
+              <p className="text-xs text-muted-foreground">Votre code permettra à de nouveaux clients de s'inscrire. Vous gagnerez 50 F CFA par client ayant effectué sa 1ère course.</p>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Ex: JEAN2024"
+                value={newCode}
+                onChange={e => setNewCode(e.target.value.toUpperCase())}
+                maxLength={12}
+              />
+              <Button onClick={creerCode} disabled={creating || !newCode.trim() || newCode.length < 4}>
+                {creating ? "..." : "Créer"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
           {/* Statut du code */}
-          {tab === "apercu" && (
-          <>
+          {(() => {
+            const cfg = statutConfig[code.statut] || statutConfig.en_attente;
+            const Icon = cfg.icon;
+            return (
+              <div className={`p-4 rounded-xl border ${cfg.bg} flex items-center gap-3`}>
+                <Icon className={`h-5 w-5 ${cfg.color} flex-shrink-0`} />
+                <div className="flex-1">
+                  <p className={`font-semibold text-sm ${cfg.color}`}>{cfg.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Code : <strong>{code.code}</strong></p>
+                </div>
+              </div>
+            );
+          })()}
 
-          {/* Stats aperçu */}
-          <div className="grid grid-cols-2 gap-3">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <Users className="h-6 w-6 text-primary mx-auto mb-1" />
-                <p className="text-2xl font-bold">{nbInscriptions}</p>
-                <p className="text-xs text-muted-foreground">Inscriptions</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-green-600">{nbPremieresCoursesValidees}</p>
-                <p className="text-xs text-muted-foreground">1ères courses</p>
-              </CardContent>
-            </Card>
-          </div>
-          {/* Paiement */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-primary" />
-                Mes commissions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="p-2 rounded-lg bg-muted">
-                  <p className="font-bold text-base">{gainReel} F</p>
-                  <p className="text-muted-foreground">Gagné réel</p>
-                </div>
-                <div className="p-2 rounded-lg bg-green-50">
-                  <p className="font-bold text-base text-green-600">{code.commission_payee || 0} F</p>
-                  <p className="text-muted-foreground">Payé</p>
-                </div>
-                <div className={`p-2 rounded-lg ${commissionRestante > 0 ? "bg-amber-50" : "bg-green-50"}`}>
-                  <p className={`font-bold text-base ${commissionRestante > 0 ? "text-amber-600" : "text-green-600"}`}>
-                    {commissionRestante} F
-                  </p>
-                  <p className="text-muted-foreground">Restant</p>
-                </div>
+          {/* Onglet Aperçu */}
+          {tab === "apercu" && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <Users className="h-6 w-6 text-primary mx-auto mb-1" />
+                    <p className="text-2xl font-bold">{nbInscriptions}</p>
+                    <p className="text-xs text-muted-foreground">Inscriptions</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                    <p className="text-2xl font-bold text-green-600">{nbPremieresCoursesValidees}</p>
+                    <p className="text-xs text-muted-foreground">1ères courses</p>
+                  </CardContent>
+                </Card>
               </div>
-              <div className={`p-3 rounded-lg border text-center text-sm font-medium ${
-                code.statut_paiement === "À jour" ? "bg-green-50 border-green-200 text-green-700" : "bg-amber-50 border-amber-200 text-amber-700"
-              }`}>
-                {code.statut_paiement === "À jour" ? "✅ Vous êtes à jour" : "⏳ Paiement en attente"}
-              </div>
-              <p className="text-[10px] text-muted-foreground text-center">50 F CFA par client ayant effectué sa 1ère course validée</p>
-            </CardContent>
-          </Card>
-          </>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-primary" />
+                    Mes commissions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2 rounded-lg bg-muted">
+                      <p className="font-bold text-base">{gainReel} F</p>
+                      <p className="text-muted-foreground">Gagné réel</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-green-50">
+                      <p className="font-bold text-base text-green-600">{code.commission_payee || 0} F</p>
+                      <p className="text-muted-foreground">Payé</p>
+                    </div>
+                    <div className={`p-2 rounded-lg ${commissionRestante > 0 ? "bg-amber-50" : "bg-green-50"}`}>
+                      <p className={`font-bold text-base ${commissionRestante > 0 ? "text-amber-600" : "text-green-600"}`}>
+                        {commissionRestante} F
+                      </p>
+                      <p className="text-muted-foreground">Restant</p>
+                    </div>
+                  </div>
+                  <div className={`p-3 rounded-lg border text-center text-sm font-medium ${
+                    code.statut_paiement === "À jour" ? "bg-green-50 border-green-200 text-green-700" : "bg-amber-50 border-amber-200 text-amber-700"
+                  }`}>
+                    {code.statut_paiement === "À jour" ? "✅ Vous êtes à jour" : "⏳ Paiement en attente"}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground text-center">50 F CFA par client ayant effectué sa 1ère course validée</p>
+                </CardContent>
+              </Card>
+            </>
           )}
 
           {/* ONGLET PERFORMANCES */}
           {tab === "performances" && (
             <div className="space-y-4">
-              {/* Métriques clés */}
               <div className="grid grid-cols-2 gap-3">
                 <Card className="bg-primary/5 border-primary/20">
                   <CardContent className="p-4 text-center">
@@ -262,12 +295,7 @@ export default function DashboardCommercial({ user }) {
               )}
               {!loadingPerf && clients.map(client => {
                 const stat = clientStats[client.email] || {};
-                const status = stat.firstCourseValidated ? "gain_valide" : "premiere_course_manquante";
-                const STATUS_CFG = {
-                  gain_valide: { label: "Gain validé ✅", color: "bg-green-100 text-green-700", gain: 50 },
-                  premiere_course_manquante: { label: "1ère course non encore effectuée", color: "bg-amber-100 text-amber-700", gain: 0 },
-                };
-                const cfg = STATUS_CFG[status];
+                const isValidated = stat.firstCourseValidated;
                 return (
                   <div key={client.id} className="p-3 rounded-xl border bg-card space-y-2">
                     <div className="flex items-start justify-between">
@@ -279,9 +307,12 @@ export default function DashboardCommercial({ user }) {
                         )}
                       </div>
                       <div className="text-right">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg.color}`}>{cfg.label}</span>
-                        <p className={`text-sm font-bold mt-1 ${cfg.gain > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-                          {cfg.gain > 0 ? `+${cfg.gain} F CFA` : "0 F CFA"}
+                        {isValidated
+                          ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Gain validé ✅</span>
+                          : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">1ère course manquante</span>
+                        }
+                        <p className={`text-sm font-bold mt-1 ${isValidated ? "text-green-600" : "text-muted-foreground"}`}>
+                          {isValidated ? "+50 F CFA" : "0 F CFA"}
                         </p>
                       </div>
                     </div>

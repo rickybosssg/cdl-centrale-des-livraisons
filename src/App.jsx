@@ -55,6 +55,8 @@ import CGU from './pages/CGU';
 import SupprimerCompte from './pages/SupprimerCompte';
 import MonBedou from './pages/MonBedou';
 import GestionTransactions from './pages/dispatcher/GestionTransactions';
+import GestionProfils from './pages/dispatcher/GestionProfils';
+import GestionAcces from './pages/dispatcher/GestionAcces';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -187,6 +189,8 @@ const AuthenticatedApp = () => {
           <Route path="/creer-boutique" element={<CreerBoutiqueAdmin />} />
           <Route path="/messages-admin" element={<MessagesAdmin />} />
           <Route path="/gestion-transactions" element={<GestionTransactions />} />
+          <Route path="/gestion-profils" element={<GestionProfils />} />
+          <Route path="/gestion-acces" element={<GestionAcces />} />
         </Route>
       </Route>
 
