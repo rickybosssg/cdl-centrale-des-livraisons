@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { useMessageCount } from "@/hooks/useMessageCount";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
 import MessageAlert from "@/components/MessageAlert";
-import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck, Trash2, Wallet, Radio } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck, Trash2, Wallet, Radio, AlertCircle } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,7 @@ export default function DispatcherDashboard() {
   const [carteVisible, setCarteVisible] = useState(false);
   const [syncingNotifs, setSyncingNotifs] = useState(false);
   const [adminEmail, setAdminEmail] = useState(null);
+  const [partenairesEnAttente, setPartenairesEnAttente] = useState([]);
   
   useEffect(() => {
     base44.auth.me().then(me => setAdminEmail(me?.email));
@@ -44,12 +45,13 @@ export default function DispatcherDashboard() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses] = await Promise.allSettled([
+        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses, partenairesAttente] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 50),
         base44.entities.User.filter({ user_type: "livreur" }),
         base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
         base44.entities.User.filter({ statut_validation_livreur: "valide" }),
         base44.entities.User.filter({ statut_validation_livreur: "refuse" }),
+        base44.entities.Partenaire.filter({ statut: "en_attente" }),
       ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
       const map = new Map();
       const allLivreurs = [...(livreursPurs || []), ...(livreursMultiAttente || []), ...(livreursMultiValides || []), ...(livreursMultiRefuses || [])];
@@ -61,6 +63,7 @@ export default function DispatcherDashboard() {
       });
       setCourses(coursesData);
       setLivreurs(tousLivreurs);
+      setPartenairesEnAttente((partenairesAttente || []).filter(p => !p.deleted));
       } catch (err) {
         console.error('Erreur lors du chargement:', err);
         setCourses([]);
@@ -90,7 +93,20 @@ export default function DispatcherDashboard() {
       });
       else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
     });
-    return () => { unsubCourse(); unsubUser(); clearInterval(interval); };
+    const unsubPartenaire = base44.entities.Partenaire.subscribe((event) => {
+      if (event.type === 'create' && event.data?.statut === 'en_attente') {
+        setPartenairesEnAttente(prev => [...prev, event.data]);
+      } else if (event.type === 'update') {
+        setPartenairesEnAttente(prev => {
+          const filtered = prev.filter(p => p.id !== event.id);
+          if (event.data?.statut === 'en_attente' && !event.data?.deleted) return [...filtered, event.data];
+          return filtered;
+        });
+      } else if (event.type === 'delete') {
+        setPartenairesEnAttente(prev => prev.filter(p => p.id !== event.id));
+      }
+    });
+    return () => { unsubCourse(); unsubUser(); unsubPartenaire(); clearInterval(interval); };
   }, []);
 
   const today = new Date().toDateString();
@@ -163,6 +179,22 @@ export default function DispatcherDashboard() {
               <p className="text-xs text-amber-600">Cliquez pour examiner les dossiers</p>
             </div>
             <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{livreursEnAttente.length}</span>
+          </div>
+        </Link>
+      )}
+
+      {/* Alerte partenaires en attente */}
+      {partenairesEnAttente.length > 0 && (
+        <Link to="/gerer-partenaires?filtre=en_attente">
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-purple-50 border-2 border-purple-300">
+            <div className="h-10 w-10 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">
+              <Store className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-purple-800 text-sm">🏪 {partenairesEnAttente.length} partenaire(s) en attente de validation</p>
+              <p className="text-xs text-purple-600">Cliquez pour valider les dossiers</p>
+            </div>
+            <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{partenairesEnAttente.length}</span>
           </div>
         </Link>
       )}
@@ -373,11 +405,16 @@ export default function DispatcherDashboard() {
             </CardContent>
           </Card>
         </Link>
-        <Link to="/gerer-partenaires">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardContent className="p-4 text-center space-y-2">
-              <Store className="h-8 w-8 text-blue-600 mx-auto" />
-              <p className="text-sm font-medium">Gérer les partenaires</p>
+        <Link to="/gerer-partenaires?filtre=en_attente">
+          <Card className={`hover:shadow-md transition-shadow cursor-pointer ${partenairesEnAttente.length > 0 ? 'border-l-4 border-l-purple-500 bg-purple-50' : ''}`}>
+            <CardContent className="p-4 text-center space-y-2 relative">
+              <Store className={`h-8 w-8 mx-auto ${partenairesEnAttente.length > 0 ? 'text-purple-600' : 'text-blue-600'}`} />
+              <p className={`text-sm font-medium ${partenairesEnAttente.length > 0 ? 'text-purple-700' : ''}`}>Partenaires</p>
+              {partenairesEnAttente.length > 0 && (
+                <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {partenairesEnAttente.length}
+                </span>
+              )}
             </CardContent>
           </Card>
         </Link>

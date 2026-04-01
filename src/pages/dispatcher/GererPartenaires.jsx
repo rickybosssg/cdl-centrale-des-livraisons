@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
 import MessageAlert from "@/components/MessageAlert";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,10 +25,15 @@ const TYPE_EMOJI = {
 
 export default function GererPartenaires() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [partenaires, setPartenaires] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("Tous");
+  const [filterStatut, setFilterStatut] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('filtre') || 'tous';
+  });
   const [selected, setSelected] = useState(null);
   const [savingId, setSavingId] = useState(null);
   const [adminUser, setAdminUser] = useState(null);
@@ -173,7 +178,8 @@ export default function GererPartenaires() {
     const q = search.toLowerCase();
     const match = !q || (p.nom_commerce || "").toLowerCase().includes(q) || (p.quartier || "").toLowerCase().includes(q) || (p.telephone || "").includes(q);
     const matchType = filterType === "Tous" || p.type_commerce === filterType;
-    return match && matchType;
+    const matchStatut = filterStatut === 'tous' || p.statut === filterStatut;
+    return match && matchType && matchStatut;
   });
 
   const stats = {
@@ -190,9 +196,16 @@ export default function GererPartenaires() {
     <div className="space-y-4">
       <MessageAlert newMsg={newMsg} />
       {newMsg && <div className="h-24" />}
+      {/* Filtre statut rapide */}
+      {filterStatut !== 'tous' && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 border border-amber-200">
+          <span className="text-sm text-amber-700 font-medium">🔍 Filtre actif : <strong>En attente</strong></span>
+          <button onClick={() => setFilterStatut('tous')} className="ml-auto text-xs text-amber-600 underline">Voir tous</button>
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
-        <h1 className="text-xl font-bold flex-1">Partenaires</h1>
+        <h1 className="text-xl font-bold flex-1">Partenaires{filterStatut === 'en_attente' ? ' · En attente' : ''}</h1>
         <Button size="sm" onClick={() => navigate('/creer-boutique')}><Plus className="h-4 w-4 mr-1" />Créer</Button>
         <Button variant="outline" size="icon" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
       </div>
