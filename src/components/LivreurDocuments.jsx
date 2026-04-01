@@ -1,109 +1,68 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const DOCS = [
-  { key: "photo_profil",            label: "Photo de profil",        desc: "Selfie clair, visage visible",              emoji: "🤳" },
-  { key: "photo_identite_recto",    label: "CNI – Recto",            desc: "Face avant de votre carte d'identité",      emoji: "🪪" },
-  { key: "photo_identite_verso",    label: "CNI – Verso",            desc: "Face arrière de votre carte d'identité",    emoji: "🪪" },
-  { key: "photo_moyen_deplacement", label: "Moyen de déplacement",   desc: "Photo de votre moto ou véhicule",           emoji: "🛵" },
+  { key: "photo_profil",            label: "Photo de profil",      desc: "Selfie clair, visage visible",              emoji: "🤳" },
+  { key: "photo_identite_recto",    label: "CNI – Recto",          desc: "Face avant de votre carte d'identité",      emoji: "🪪" },
+  { key: "photo_identite_verso",    label: "CNI – Verso",          desc: "Face arrière de votre carte d'identité",    emoji: "🪪" },
+  { key: "photo_moyen_deplacement", label: "Moyen de déplacement", desc: "Photo de votre moto ou véhicule",           emoji: "🛵" },
 ];
 
-function DocUpload({ docKey, hasFile, preview, fileName, onFile }) {
-  const camRef = useRef(null);
-  const galRef = useRef(null);
-  const [debug, setDebug] = useState("");
-
-  const handleChange = (e, source) => {
+// Bouton upload fiable Android : label enveloppe input, input opacity:0 en overlay sur tout le bouton
+// AUCUN JS .click() — c'est le touch direct sur l'input (via label) qui déclenche le picker
+function UploadBtn({ docKey, capture, label, emoji, onFile }) {
+  const handleChange = (e) => {
     const file = e.target.files?.[0];
-    if (!file) { setDebug(`❌ Aucun fichier (${source})`); return; }
-    setDebug(`✅ ${source}: ${file.name}`);
-    onFile(file);
+    if (file) onFile(file);
     e.target.value = "";
   };
 
-  const openCamera = () => {
-    setDebug("🔄 Ouverture caméra...");
-    camRef.current.click();
-  };
-
-  const openGallery = () => {
-    setDebug("🔄 Ouverture galerie...");
-    galRef.current.click();
-  };
-
   return (
-    <div style={{ padding: "8px 12px 12px" }}>
-      {/* Aperçu */}
-      {preview && (
-        <img
-          src={preview}
-          alt="aperçu"
-          style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
-        />
-      )}
-
-      {/* Inputs cachés */}
+    <label
+      style={{
+        position: "relative",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
+        padding: "12px 4px",
+        borderRadius: 8,
+        border: capture ? "1.5px solid #3b82f6" : "1.5px solid #6b7280",
+        background: capture ? "#eff6ff" : "#f9fafb",
+        color: capture ? "#1d4ed8" : "#374151",
+        fontSize: 12,
+        fontWeight: 700,
+        cursor: "pointer",
+        overflow: "visible",
+        WebkitTapHighlightColor: "transparent",
+        userSelect: "none",
+        // pas de overflow:hidden !
+      }}
+    >
+      <span style={{ fontSize: 22, pointerEvents: "none" }}>{emoji}</span>
+      <span style={{ pointerEvents: "none" }}>{label}</span>
+      {/* Input en overlay transparent sur tout le label — touch direct sans JS */}
       <input
-        ref={camRef}
         type="file"
         accept="image/*"
-        capture="environment"
-        style={{ display: "none" }}
-        onChange={(e) => handleChange(e, "caméra")}
+        {...(capture ? { capture: "environment" } : {})}
+        onChange={handleChange}
+        style={{
+          position: "absolute",
+          top: 0, left: 0, right: 0, bottom: 0,
+          width: "100%",
+          height: "100%",
+          opacity: 0,
+          cursor: "pointer",
+          fontSize: 16, // empêche zoom iOS
+        }}
       />
-      <input
-        ref={galRef}
-        type="file"
-        accept="image/*"
-        style={{ display: "none" }}
-        onChange={(e) => handleChange(e, "galerie")}
-      />
-
-      {/* Boutons */}
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          type="button"
-          onClick={openCamera}
-          style={{
-            flex: 1, padding: "10px 0", borderRadius: 8,
-            border: "1.5px solid #3b82f6", background: "#eff6ff",
-            color: "#1d4ed8", fontSize: 13, fontWeight: 700,
-            cursor: "pointer", display: "flex", flexDirection: "column",
-            alignItems: "center", gap: 4,
-            WebkitTapHighlightColor: "rgba(59,130,246,0.2)",
-          }}
-        >
-          <span style={{ fontSize: 22 }}>📷</span>
-          Caméra
-        </button>
-
-        <button
-          type="button"
-          onClick={openGallery}
-          style={{
-            flex: 1, padding: "10px 0", borderRadius: 8,
-            border: "1.5px solid #6b7280", background: "#f9fafb",
-            color: "#374151", fontSize: 13, fontWeight: 700,
-            cursor: "pointer", display: "flex", flexDirection: "column",
-            alignItems: "center", gap: 4,
-            WebkitTapHighlightColor: "rgba(107,114,128,0.2)",
-          }}
-        >
-          <span style={{ fontSize: 22 }}>🖼️</span>
-          Galerie
-        </button>
-      </div>
-
-      {/* Debug visible */}
-      {debug && (
-        <p style={{ fontSize: 11, marginTop: 6, color: debug.startsWith("✅") ? "#15803d" : debug.startsWith("❌") ? "#dc2626" : "#b45309", fontWeight: 600, textAlign: "center" }}>
-          {debug}
-        </p>
-      )}
-    </div>
+    </label>
   );
 }
 
@@ -177,19 +136,21 @@ export default function LivreurDocuments({ onComplete }) {
           </div>
         </div>
 
-        {/* Docs */}
+        {/* Documents */}
         <div className="space-y-3">
           {DOCS.map(doc => {
             const hasFile = !!files[doc.key];
+            const file    = files[doc.key];
             return (
               <div
                 key={doc.key}
                 style={{
                   border: `2px solid ${hasFile ? '#3b82f6' : '#e5e7eb'}`,
                   borderRadius: 12,
-                  background: 'white',
+                  background: "white",
                 }}
               >
+                {/* Titre */}
                 <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 12px 4px" }}>
                   <span style={{ fontSize: 24, flexShrink: 0 }}>{doc.emoji}</span>
                   <div style={{ flex: 1 }}>
@@ -198,13 +159,40 @@ export default function LivreurDocuments({ onComplete }) {
                   </div>
                   {hasFile && <CheckCircle2 style={{ width: 20, height: 20, color: "#3b82f6", flexShrink: 0 }} />}
                 </div>
-                <DocUpload
-                  docKey={doc.key}
-                  hasFile={hasFile}
-                  preview={previews[doc.key]}
-                  fileName={files[doc.key]?.name}
-                  onFile={(file) => handleFile(doc.key, file)}
-                />
+
+                {/* Aperçu */}
+                {previews[doc.key] && (
+                  <img
+                    src={previews[doc.key]}
+                    alt="aperçu"
+                    style={{ width: "100%", height: 100, objectFit: "cover" }}
+                  />
+                )}
+
+                {/* Boutons */}
+                <div style={{ display: "flex", gap: 8, padding: "8px 12px 12px" }}>
+                  <UploadBtn
+                    docKey={doc.key}
+                    capture={true}
+                    label="Caméra"
+                    emoji="📷"
+                    onFile={(f) => handleFile(doc.key, f)}
+                  />
+                  <UploadBtn
+                    docKey={doc.key}
+                    capture={false}
+                    label="Galerie"
+                    emoji="🖼️"
+                    onFile={(f) => handleFile(doc.key, f)}
+                  />
+                </div>
+
+                {/* Confirmation fichier */}
+                {file && (
+                  <p style={{ fontSize: 10, color: "#15803d", textAlign: "center", padding: "0 12px 10px", fontWeight: 600 }}>
+                    ✅ {file.name}
+                  </p>
+                )}
               </div>
             );
           })}
