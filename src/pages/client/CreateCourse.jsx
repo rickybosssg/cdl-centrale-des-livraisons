@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Phone, Package, ArrowLeft, AlertTriangle, Send, RefreshCw } from "lucide-react";
+import { MapPin, Phone, Package, ArrowLeft, AlertTriangle, Send, RefreshCw, User } from "lucide-react";
 import QuartierSelect from "../../components/QuartierSelect";
 import { lancerDispatch } from "@/lib/dispatch";
 import { toast } from "sonner";
@@ -26,7 +26,9 @@ export default function CreateCourse() {
   const [form, setForm] = useState({
     quartier_depart: "",
     quartier_arrivee: "",
+    nom_expediteur: "",
     telephone_expediteur: "",
+    nom_destinataire: "",
     telephone_destinataire: "",
     type_colis: "",
     description: "",
@@ -50,18 +52,11 @@ export default function CreateCourse() {
   const commission = Math.round(prixAvecPromo * 0.2);
   const gainLivreur = prixAvecPromo - commission;
 
-  const handleUrgent = (val) => {
-    setUrgent(val);
-    if (val) setTresUrgent(false);
-  };
-
-  const handleTresUrgent = (val) => {
-    setTresUrgent(val);
-    if (val) setUrgent(false);
-  };
+  const handleUrgent = (val) => { setUrgent(val); if (val) setTresUrgent(false); };
+  const handleTresUrgent = (val) => { setTresUrgent(val); if (val) setUrgent(false); };
 
   const handleSubmit = async () => {
-    if (!form.quartier_depart || !form.quartier_arrivee || !form.telephone_expediteur || !form.telephone_destinataire || !form.type_colis) {
+    if (!form.quartier_depart || !form.quartier_arrivee || !form.nom_expediteur || !form.telephone_expediteur || !form.nom_destinataire || !form.telephone_destinataire || !form.type_colis) {
       toast.error("Veuillez remplir tous les champs obligatoires");
       return;
     }
@@ -75,7 +70,6 @@ export default function CreateCourse() {
     }
     setLoading(true);
     const statut_paiement = form.mode_paiement === "Paiement cash à la livraison" ? "paiement_livraison" : "en_attente";
-    // Récupérer la position GPS du client pour le départ
     let clientLat = user.gps_latitude || null;
     let clientLng = user.gps_longitude || null;
     if (!clientLat && navigator.geolocation) {
@@ -91,7 +85,9 @@ export default function CreateCourse() {
       quartier_arrivee: form.quartier_arrivee,
       latitude_depart: clientLat,
       longitude_depart: clientLng,
+      nom_expediteur: form.nom_expediteur,
       telephone_expediteur: form.telephone_expediteur,
+      nom_destinataire: form.nom_destinataire,
       telephone_destinataire: form.telephone_destinataire,
       type_colis: form.type_colis,
       description: form.description,
@@ -106,7 +102,7 @@ export default function CreateCourse() {
       montant_base: prixBase,
       supplement_urgence: supplement,
       niveau_urgence: tresUrgent ? "tres_urgent" : urgent ? "urgent" : "normal",
-      commission: commission,
+      commission,
       commission_active: true,
       commission_cdl: commission,
       gain_livreur: gainLivreur,
@@ -121,36 +117,54 @@ export default function CreateCourse() {
     navigate("/mes-courses");
   };
 
-  // Étape 0 : choix du type de mission
+  // ── Étape 0 : choix du type de mission ──────────────────────────────────────
   if (!typeMission) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="flex items-center gap-3 p-4 pb-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-xl font-bold">Commander une course</h1>
         </div>
-        <p className="text-sm text-muted-foreground text-center px-4">Que souhaitez-vous faire ?</p>
-        <div className="grid gap-4 px-2">
-          <button onClick={() => setTypeMission('envoyer')}
-            className="flex items-center gap-5 p-6 rounded-2xl border-2 border-primary bg-primary/5 hover:bg-primary/10 transition-all active:scale-[0.98] text-left">
-            <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center flex-shrink-0">
+
+        <div className="flex-1 px-4 pt-6 pb-10 flex flex-col gap-6">
+          <div className="text-center space-y-1">
+            <p className="text-lg font-bold">Que souhaitez-vous faire ?</p>
+            <p className="text-sm text-muted-foreground">Sélectionnez le type de votre demande</p>
+          </div>
+
+          {/* Option 1 – Envoyer */}
+          <button
+            onClick={() => setTypeMission('envoyer')}
+            className="w-full flex items-center gap-5 p-6 rounded-2xl border-2 border-primary bg-primary/5 active:scale-[0.97] transition-all text-left shadow-sm"
+          >
+            <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center flex-shrink-0 shadow">
               <Send className="h-8 w-8 text-white" />
             </div>
-            <div>
-              <p className="text-lg font-bold text-primary">📦 Envoyer un colis</p>
-              <p className="text-sm text-muted-foreground mt-1">J'ai un colis à envoyer à quelqu'un.<br/>Le livreur vient le récupérer chez moi.</p>
+            <div className="flex-1">
+              <p className="text-xl font-extrabold text-primary">📦 Envoyer un colis</p>
+              <p className="text-sm text-muted-foreground mt-1 leading-snug">
+                J'ai un colis à envoyer à quelqu'un.<br />
+                Le livreur vient le récupérer chez moi et le livre au destinataire.
+              </p>
             </div>
           </button>
-          <button onClick={() => setTypeMission('recuperer')}
-            className="flex items-center gap-5 p-6 rounded-2xl border-2 border-accent bg-accent/5 hover:bg-accent/10 transition-all active:scale-[0.98] text-left">
-            <div className="h-16 w-16 rounded-2xl bg-accent flex items-center justify-center flex-shrink-0">
+
+          {/* Option 2 – Récupérer */}
+          <button
+            onClick={() => setTypeMission('recuperer')}
+            className="w-full flex items-center gap-5 p-6 rounded-2xl border-2 border-accent bg-accent/5 active:scale-[0.97] transition-all text-left shadow-sm"
+          >
+            <div className="h-16 w-16 rounded-2xl bg-accent flex items-center justify-center flex-shrink-0 shadow">
               <RefreshCw className="h-8 w-8 text-white" />
             </div>
-            <div>
-              <p className="text-lg font-bold text-accent">🔁 Récupérer un colis</p>
-              <p className="text-sm text-muted-foreground mt-1">Je veux qu'on aille chercher quelque chose<br/>pour me le livrer.</p>
+            <div className="flex-1">
+              <p className="text-xl font-extrabold text-accent">🔁 Récupérer un colis</p>
+              <p className="text-sm text-muted-foreground mt-1 leading-snug">
+                Je veux qu'on aille chercher un colis à un endroit précis<br />
+                avant de me le livrer.
+              </p>
             </div>
           </button>
         </div>
@@ -158,41 +172,54 @@ export default function CreateCourse() {
     );
   }
 
+  // ── Étape 1 : formulaire ─────────────────────────────────────────────────────
+  const isEnvoyer = typeMission === 'envoyer';
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => setTypeMission(null)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
           <h1 className="text-xl font-bold">Commander une course</h1>
-          <p className="text-xs text-muted-foreground">{typeMission === 'envoyer' ? '📦 Envoyer un colis' : '🔁 Récupérer un colis'}</p>
+          <p className="text-xs text-muted-foreground">{isEnvoyer ? '📦 Envoyer un colis' : '🔁 Récupérer un colis'}</p>
         </div>
       </div>
 
       {/* Badge type mission */}
-      <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold w-fit ${
-        typeMission === 'envoyer' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
+      <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold ${
+        isEnvoyer ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
       }`}>
-        {typeMission === 'envoyer' ? <Send className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
-        {typeMission === 'envoyer' ? 'Mission : Envoyer un colis' : 'Mission : Récupérer un colis'}
+        {isEnvoyer ? <Send className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
+        {isEnvoyer ? 'Mission : Envoyer un colis' : 'Mission : Récupérer un colis'}
       </div>
 
       {/* Itinéraire */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-primary" />Itinéraire
+            <MapPin className="h-4 w-4 text-primary" />
+            {isEnvoyer ? 'Lieux de ramassage et livraison' : 'Lieux de récupération et destination'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-2">
-            <Label>{typeMission === 'envoyer' ? 'Quartier de départ (chez vous) *' : 'Quartier de récupération (lieu du colis) *'}</Label>
-            <QuartierSelect value={form.quartier_depart} onValueChange={(v) => setForm({ ...form, quartier_depart: v })} placeholder={typeMission === 'envoyer' ? 'D\'où part le colis ?' : 'Où aller chercher ?'} />
+            <Label>{isEnvoyer ? 'Lieu de ramassage (chez vous) *' : 'Lieu de récupération du colis *'}</Label>
+            <QuartierSelect
+              value={form.quartier_depart}
+              onValueChange={(v) => setForm({ ...form, quartier_depart: v })}
+              placeholder={isEnvoyer ? "D'où part le colis ?" : "Où aller chercher le colis ?"}
+            />
           </div>
           <div className="space-y-2">
-            <Label>{typeMission === 'envoyer' ? 'Quartier d\'arrivée (destinataire) *' : 'Quartier de livraison (chez vous) *'}</Label>
-            <QuartierSelect value={form.quartier_arrivee} onValueChange={(v) => setForm({ ...form, quartier_arrivee: v })} placeholder={typeMission === 'envoyer' ? 'Où livrer ?' : 'Où vous livrer ?'} />
+            <Label>{isEnvoyer ? 'Lieu de livraison (destinataire) *' : 'Lieu de destination finale *'}</Label>
+            <QuartierSelect
+              value={form.quartier_arrivee}
+              onValueChange={(v) => setForm({ ...form, quartier_arrivee: v })}
+              placeholder={isEnvoyer ? "Où livrer ?" : "Où vous livrer ?"}
+            />
           </div>
         </CardContent>
       </Card>
@@ -201,18 +228,55 @@ export default function CreateCourse() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Phone className="h-4 w-4 text-primary" />Contacts
+            <Phone className="h-4 w-4 text-primary" />
+            {isEnvoyer ? 'Expéditeur & Destinataire' : 'Contact récupération & Destinataire'}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-2">
-            <Label>{typeMission === 'envoyer' ? 'Téléphone expéditeur *' : 'Téléphone du lieu de récupération *'}</Label>
-            <Input placeholder="+226 XX XX XX XX" value={form.telephone_expediteur} onChange={(e) => setForm({ ...form, telephone_expediteur: e.target.value })} />
-            {typeMission === 'recuperer' && <p className="text-xs text-muted-foreground">Numéro de la boutique ou de la personne chez qui récupérer</p>}
+        <CardContent className="space-y-4">
+          {/* Bloc expéditeur / remettant */}
+          <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 space-y-3">
+            <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+              {isEnvoyer ? '📤 Expéditeur — chez qui récupérer le colis' : '📍 Personne qui remet le colis'}
+            </p>
+            <div className="space-y-2">
+              <Label>{isEnvoyer ? "Nom de l'expéditeur *" : "Nom de la personne qui remet le colis *"}</Label>
+              <Input
+                placeholder="Nom complet"
+                value={form.nom_expediteur}
+                onChange={(e) => setForm({ ...form, nom_expediteur: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{isEnvoyer ? "Téléphone de l'expéditeur *" : "Téléphone du lieu de récupération *"}</Label>
+              <Input
+                placeholder="+226 XX XX XX XX"
+                value={form.telephone_expediteur}
+                onChange={(e) => setForm({ ...form, telephone_expediteur: e.target.value })}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>{typeMission === 'envoyer' ? 'Téléphone destinataire *' : 'Votre numéro de téléphone *'}</Label>
-            <Input placeholder="+226 XX XX XX XX" value={form.telephone_destinataire} onChange={(e) => setForm({ ...form, telephone_destinataire: e.target.value })} />
+
+          {/* Bloc destinataire */}
+          <div className="p-3 rounded-xl bg-green-50 border border-green-100 space-y-3">
+            <p className="text-xs font-bold text-green-700 uppercase tracking-wide">
+              {isEnvoyer ? '📥 Destinataire — à qui livrer' : '🏠 Destinataire final — à qui livrer'}
+            </p>
+            <div className="space-y-2">
+              <Label>{isEnvoyer ? "Nom du destinataire *" : "Votre nom *"}</Label>
+              <Input
+                placeholder="Nom complet"
+                value={form.nom_destinataire}
+                onChange={(e) => setForm({ ...form, nom_destinataire: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{isEnvoyer ? "Téléphone du destinataire *" : "Votre téléphone *"}</Label>
+              <Input
+                placeholder="+226 XX XX XX XX"
+                value={form.telephone_destinataire}
+                onChange={(e) => setForm({ ...form, telephone_destinataire: e.target.value })}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -235,13 +299,23 @@ export default function CreateCourse() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Description du colis {typeMission === 'recuperer' ? '/ article à récupérer' : ''} (optionnel)</Label>
-            <Textarea placeholder={typeMission === 'recuperer' ? 'Ex: un sac rouge, une commande de médicaments...' : 'Détails sur le colis...'} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
+            <Label>Description du colis (optionnel)</Label>
+            <Textarea
+              placeholder={isEnvoyer ? "Détails sur le colis..." : "Ex: un sac rouge, une commande de médicaments..."}
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+            />
           </div>
-          {typeMission === 'recuperer' && (
+          {!isEnvoyer && (
             <div className="space-y-2">
               <Label>Instructions spéciales (optionnel)</Label>
-              <Textarea placeholder="Ex: payer 500 FCFA sur place, dire le code 1234, sonner 2 fois..." value={form.instructions_speciales} onChange={(e) => setForm({ ...form, instructions_speciales: e.target.value })} rows={2} />
+              <Textarea
+                placeholder="Ex: payer 500 FCFA sur place, dire le code 1234, sonner 2 fois..."
+                value={form.instructions_speciales}
+                onChange={(e) => setForm({ ...form, instructions_speciales: e.target.value })}
+                rows={2}
+              />
             </div>
           )}
         </CardContent>
@@ -269,36 +343,22 @@ export default function CreateCourse() {
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">FCFA</span>
             </div>
           </div>
-
-          {/* Alerte prix bas */}
           <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
             <span>⚠️ Attention — avec un prix trop bas vous risquez de ne pas avoir de livreurs disponibles.</span>
           </div>
-
-          {/* Options urgence */}
           <div className="space-y-2">
             <Label>Niveau d'urgence (optionnel)</Label>
             <div className="space-y-2">
               <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${urgent ? 'border-amber-400 bg-amber-50' : 'border-border'}`}>
-                <input
-                  type="checkbox"
-                  checked={urgent}
-                  onChange={(e) => handleUrgent(e.target.checked)}
-                  className="h-4 w-4 accent-amber-500"
-                />
+                <input type="checkbox" checked={urgent} onChange={(e) => handleUrgent(e.target.checked)} className="h-4 w-4 accent-amber-500" />
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-amber-700">🔔 Urgent <span className="text-amber-600 font-bold">+500 FCFA</span></p>
                   <p className="text-xs text-muted-foreground">(moins de 30 min)</p>
                 </div>
               </label>
               <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${tresUrgent ? 'border-red-400 bg-red-50' : 'border-border'}`}>
-                <input
-                  type="checkbox"
-                  checked={tresUrgent}
-                  onChange={(e) => handleTresUrgent(e.target.checked)}
-                  className="h-4 w-4 accent-red-500"
-                />
+                <input type="checkbox" checked={tresUrgent} onChange={(e) => handleTresUrgent(e.target.checked)} className="h-4 w-4 accent-red-500" />
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-red-700">🚨 Très urgent <span className="text-red-600 font-bold">+1000 FCFA</span></p>
                   <p className="text-xs text-muted-foreground">(moins de 20 min)</p>
@@ -365,7 +425,13 @@ export default function CreateCourse() {
       <Button
         className="w-full h-12 text-base font-semibold"
         onClick={handleSubmit}
-        disabled={loading || !form.quartier_depart || !form.quartier_arrivee || !form.type_colis || !form.mode_paiement || !prixBase}
+        disabled={
+          loading ||
+          !form.quartier_depart || !form.quartier_arrivee ||
+          !form.nom_expediteur || !form.telephone_expediteur ||
+          !form.nom_destinataire || !form.telephone_destinataire ||
+          !form.type_colis || !form.mode_paiement || !prixBase
+        }
       >
         {loading ? "⏳ Recherche d'un livreur..." : "🛵 Commander la course"}
       </Button>

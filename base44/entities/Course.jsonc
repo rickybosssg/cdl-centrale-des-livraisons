@@ -22,9 +22,17 @@
       "type": "string",
       "title": "Quartier d'arriv\u00e9e"
     },
+    "nom_expediteur": {
+      "type": "string",
+      "title": "Nom exp\u00e9diteur / contact r\u00e9cup\u00e9ration"
+    },
     "telephone_expediteur": {
       "type": "string",
       "title": "T\u00e9l\u00e9phone exp\u00e9diteur"
+    },
+    "nom_destinataire": {
+      "type": "string",
+      "title": "Nom destinataire"
     },
     "telephone_destinataire": {
       "type": "string",
