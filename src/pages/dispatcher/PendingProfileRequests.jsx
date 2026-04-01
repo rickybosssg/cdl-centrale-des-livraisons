@@ -4,7 +4,8 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
 import moment from "moment";
 
@@ -15,14 +16,27 @@ const PROFILE_TYPES = {
   client: { emoji: "👤", label: "Client", color: "blue" },
 };
 
+const ITEMS_PER_PAGE = 10;
+
 export default function PendingProfileRequests() {
   const navigate = useNavigate();
   const [pendingProfiles, setPendingProfiles] = useState([]);
+  const [filteredProfiles, setFilteredProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [actionDialog, setActionDialog] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [refusalReason, setRefusalReason] = useState("");
+  const [removing, setRemoving] = useState(new Set());
+
+  // Filtres et recherche
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterProfileType, setFilterProfileType] = useState("all");
+  const [sortOrder, setSortOrder] = useState("newest");
+  const [currentPage, setCurrentPage] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const [validatingAll, setValidatingAll] = useState(false);
+  const [rejectingAll, setRejectingAll] = useState(false);
 
   const loadPendingProfiles = async () => {
     console.log("[PendingProfileRequests] Chargement des demandes en attente...");
@@ -36,6 +50,7 @@ export default function PendingProfileRequests() {
         console.log(`  - ${p.user_email} | ${p.profile_type} | créé ${moment(p.created_date).fromNow()}`);
       });
       setPendingProfiles(profiles);
+      applyFilters(profiles, searchQuery, filterProfileType, sortOrder);
     } catch (err) {
       console.error("[PendingProfileRequests] Erreur chargement:", err);
       toast.error("Erreur lors du chargement des demandes");
@@ -43,11 +58,34 @@ export default function PendingProfileRequests() {
     setLoading(false);
   };
 
+  const applyFilters = (profiles, query, typeFilter, sort) => {
+    let filtered = [...profiles];
+
+    // Filtre par type
+    if (typeFilter !== "all") {
+      filtered = filtered.filter(p => p.profile_type === typeFilter);
+    }
+
+    // Recherche par email/nom
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      filtered = filtered.filter(p => p.user_email.toLowerCase().includes(q));
+    }
+
+    // Tri
+    if (sort === "newest") {
+      filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    } else if (sort === "oldest") {
+      filtered.sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+    }
+
+    setFilteredProfiles(filtered);
+    setCurrentPage(0);
+  };
+
   useEffect(() => {
     loadPendingProfiles();
-    // Subscribe aux changements
     const unsubscribe = base44.entities.UserProfile.subscribe((event) => {
-      console.log(`[PendingProfileRequests] Event: ${event.type}`, event.data?.profile_type);
       if (event.data?.status === "en_attente" && !event.data?.deleted) {
         loadPendingProfiles();
       }
@@ -55,14 +93,16 @@ export default function PendingProfileRequests() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    applyFilters(pendingProfiles, searchQuery, filterProfileType, sortOrder);
+  }, [searchQuery, filterProfileType, sortOrder, pendingProfiles]);
+
   const handleApprove = async (profile) => {
     setActionLoading(true);
     try {
-      // Mettre à jour le statut du profil
       await base44.entities.UserProfile.update(profile.id, { status: "actif" });
       console.log(`[PendingProfileRequests] Profil ${profile.profile_type} approuvé pour ${profile.user_email}`);
       
-      // Notifier l'utilisateur
       await base44.entities.Notification.create({
         destinataire_email: profile.user_email,
         destinataire_role: profile.profile_type,
@@ -71,10 +111,20 @@ export default function PendingProfileRequests() {
         type: "success",
       });
 
-      toast.success(`Profil approuvé pour ${profile.user_email}`);
+      // Animation de disparition
+      setRemoving(prev => new Set(prev).add(profile.id));
+      setTimeout(() => {
+        setPendingProfiles(prev => prev.filter(p => p.id !== profile.id));
+        setRemoving(prev => {
+          const next = new Set(prev);
+          next.delete(profile.id);
+          return next;
+        });
+      }, 600);
+
+      toast.success(`✅ ${profile.user_email} validé`);
       setActionDialog(null);
       setSelectedProfile(null);
-      loadPendingProfiles();
     } catch (err) {
       console.error("[PendingProfileRequests] Erreur approbation:", err);
       toast.error("Erreur lors de l'approbation");
@@ -89,14 +139,12 @@ export default function PendingProfileRequests() {
     }
     setActionLoading(true);
     try {
-      // Mettre à jour le statut du profil
       await base44.entities.UserProfile.update(profile.id, {
         status: "refuse",
         refusal_reason: refusalReason,
       });
       console.log(`[PendingProfileRequests] Profil ${profile.profile_type} refusé pour ${profile.user_email}`);
 
-      // Notifier l'utilisateur
       await base44.entities.Notification.create({
         destinataire_email: profile.user_email,
         destinataire_role: profile.profile_type,
@@ -105,16 +153,96 @@ export default function PendingProfileRequests() {
         type: "danger",
       });
 
-      toast.success(`Profil refusé pour ${profile.user_email}`);
+      setRemoving(prev => new Set(prev).add(profile.id));
+      setTimeout(() => {
+        setPendingProfiles(prev => prev.filter(p => p.id !== profile.id));
+        setRemoving(prev => {
+          const next = new Set(prev);
+          next.delete(profile.id);
+          return next;
+        });
+      }, 600);
+
+      toast.success(`❌ ${profile.user_email} refusé`);
       setActionDialog(null);
       setSelectedProfile(null);
       setRefusalReason("");
-      loadPendingProfiles();
     } catch (err) {
       console.error("[PendingProfileRequests] Erreur refus:", err);
       toast.error("Erreur lors du refus");
     }
     setActionLoading(false);
+  };
+
+  const handleValidateAll = async () => {
+    if (filteredProfiles.length === 0) {
+      toast.error("Aucun profil à valider");
+      return;
+    }
+    const confirmed = window.confirm(`Valider ${filteredProfiles.length} profil(s) ?`);
+    if (!confirmed) return;
+
+    setValidatingAll(true);
+    let validated = 0;
+    for (const profile of filteredProfiles) {
+      try {
+        await base44.entities.UserProfile.update(profile.id, { status: "actif" });
+        await base44.entities.Notification.create({
+          destinataire_email: profile.user_email,
+          destinataire_role: profile.profile_type,
+          titre: "✅ Profil validé",
+          message: `Votre demande de profil ${PROFILE_TYPES[profile.profile_type]?.label} a été approuvée!`,
+          type: "success",
+        });
+        validated++;
+        setRemoving(prev => new Set(prev).add(profile.id));
+      } catch (err) {
+        console.error("Erreur validation:", err);
+      }
+    }
+    setTimeout(() => {
+      setPendingProfiles(prev => prev.filter(p => !filteredProfiles.find(f => f.id === p.id)));
+      setRemoving(new Set());
+    }, 600);
+    toast.success(`✅ ${validated} profil(s) validé(s)`);
+    setValidatingAll(false);
+  };
+
+  const handleRejectAll = async () => {
+    if (filteredProfiles.length === 0) {
+      toast.error("Aucun profil à refuser");
+      return;
+    }
+    const reason = prompt(`Motif de refus pour ${filteredProfiles.length} profil(s):`);
+    if (!reason) return;
+
+    setRejectingAll(true);
+    let rejected = 0;
+    for (const profile of filteredProfiles) {
+      try {
+        await base44.entities.UserProfile.update(profile.id, {
+          status: "refuse",
+          refusal_reason: reason,
+        });
+        await base44.entities.Notification.create({
+          destinataire_email: profile.user_email,
+          destinataire_role: profile.profile_type,
+          titre: "❌ Profil refusé",
+          message: `Votre demande de profil a été refusée. Motif: ${reason}`,
+          type: "danger",
+        });
+        rejected++;
+        setRemoving(prev => new Set(prev).add(profile.id));
+      } catch (err) {
+        console.error("Erreur refus:", err);
+      }
+    }
+    setTimeout(() => {
+      setPendingProfiles(prev => prev.filter(p => !filteredProfiles.find(f => f.id === p.id)));
+      setRemoving(new Set());
+    }, 600);
+    toast.success(`❌ ${rejected} profil(s) refusé(s)`);
+    setRejectingAll(false);
   };
 
   if (loading) {
@@ -125,8 +253,11 @@ export default function PendingProfileRequests() {
     );
   }
 
-  const sortedProfiles = pendingProfiles.sort(
-    (a, b) => new Date(b.created_date) - new Date(a.created_date)
+  // Pagination
+  const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
+  const paginatedProfiles = filteredProfiles.slice(
+    currentPage * ITEMS_PER_PAGE,
+    (currentPage + 1) * ITEMS_PER_PAGE
   );
 
   return (
@@ -139,81 +270,218 @@ export default function PendingProfileRequests() {
         <div>
           <h1 className="text-xl font-bold">Demandes de profils en attente</h1>
           <p className="text-xs text-muted-foreground">
-            {pendingProfiles.length} demande{pendingProfiles.length > 1 ? "s" : ""} à valider
+            {filteredProfiles.length}/{pendingProfiles.length} demande{pendingProfiles.length > 1 ? "s" : ""}
           </p>
         </div>
       </div>
 
-      {/* Info compteur */}
-      <div className="px-4 py-3 rounded-lg bg-primary/5 border border-primary/20 text-sm">
-        <p>
-          <strong>Total:</strong> {pendingProfiles.length} demande{pendingProfiles.length > 1 ? "s" : ""} en attente de validation
-        </p>
+      {/* Recherche et filtres */}
+      <div className="px-4 space-y-2">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher par email..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button
+            variant={showFilters ? "default" : "outline"}
+            size="icon"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Filtres avancés */}
+        {showFilters && (
+          <div className="p-3 rounded-lg bg-muted/50 space-y-3">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold">Type de profil</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setFilterProfileType("all")}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                    filterProfileType === "all"
+                      ? "border-primary bg-primary text-white"
+                      : "border-border hover:border-primary"
+                  }`}
+                >
+                  Tous
+                </button>
+                {Object.entries(PROFILE_TYPES).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilterProfileType(key)}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                      filterProfileType === key
+                        ? "border-primary bg-primary text-white"
+                        : "border-border hover:border-primary"
+                    }`}
+                  >
+                    {cfg.emoji} {cfg.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold">Tri</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSortOrder("newest")}
+                  className={`flex-1 text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                    sortOrder === "newest"
+                      ? "border-primary bg-primary text-white"
+                      : "border-border hover:border-primary"
+                  }`}
+                >
+                  Plus récent
+                </button>
+                <button
+                  onClick={() => setSortOrder("oldest")}
+                  className={`flex-1 text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                    sortOrder === "oldest"
+                      ? "border-primary bg-primary text-white"
+                      : "border-border hover:border-primary"
+                  }`}
+                >
+                  Plus ancien
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Actions rapides */}
+      {filteredProfiles.length > 0 && (
+        <div className="px-4 flex gap-2">
+          <Button
+            size="sm"
+            className="flex-1 text-xs h-9"
+            onClick={handleValidateAll}
+            disabled={validatingAll}
+          >
+            {validatingAll ? "Validation..." : `✅ Valider tous (${filteredProfiles.length})`}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1 text-xs h-9 text-red-600 border-red-300 hover:bg-red-50"
+            onClick={handleRejectAll}
+            disabled={rejectingAll}
+          >
+            {rejectingAll ? "Refus..." : `❌ Refuser tous (${filteredProfiles.length})`}
+          </Button>
+        </div>
+      )}
+
       {/* Liste */}
-      {pendingProfiles.length === 0 ? (
+      {filteredProfiles.length === 0 ? (
         <div className="text-center py-12 space-y-2">
           <p className="text-lg font-semibold">✅ Aucune demande en attente</p>
           <p className="text-sm text-muted-foreground">Tous les profils ont été traités</p>
         </div>
       ) : (
         <div className="space-y-3 px-4">
-          {sortedProfiles.map(profile => {
-            const cfg = PROFILE_TYPES[profile.profile_type] || { emoji: "❓", label: profile.profile_type };
-            return (
-              <Card key={profile.id} className="border-l-4 border-l-amber-500">
-                <CardContent className="p-4 space-y-3">
-                  {/* En-tête */}
-                  <div className="flex items-start gap-3">
-                    <div className="text-2xl flex-shrink-0">{cfg.emoji}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm">{cfg.label}</p>
-                      <p className="text-xs text-muted-foreground truncate">{profile.user_email}</p>
-                      <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span>
-                          Envoyée {moment(profile.created_date).format("DD/MM/YYYY HH:mm")} (
-                          {moment().diff(moment(profile.created_date), "hours")}h)
-                        </span>
-                      </div>
+          {paginatedProfiles.map(profile => (
+            <Card
+              key={profile.id}
+              className={`border-l-4 border-l-amber-500 transition-all ${
+                removing.has(profile.id) ? "opacity-0 scale-95" : "opacity-100 scale-100"
+              }`}
+            >
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl flex-shrink-0">
+                    {PROFILE_TYPES[profile.profile_type]?.emoji}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm">{PROFILE_TYPES[profile.profile_type]?.label}</p>
+                    <p className="text-xs text-muted-foreground truncate">{profile.user_email}</p>
+                    <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <span>
+                        {moment(profile.created_date).format("DD/MM/YYYY HH:mm")} (
+                        {moment().diff(moment(profile.created_date), "hours")}h)
+                      </span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-800 flex-shrink-0">
-                      ⏳ En attente
-                    </span>
                   </div>
+                  <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-800 flex-shrink-0">
+                    ⏳
+                  </span>
+                </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className="flex-1 text-xs h-9"
-                      onClick={() => {
-                        setSelectedProfile(profile);
-                        setActionDialog("approve");
-                      }}
-                    >
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Valider
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 text-xs h-9 text-red-600 border-red-300 hover:bg-red-50"
-                      onClick={() => {
-                        setSelectedProfile(profile);
-                        setActionDialog("reject");
-                        setRefusalReason("");
-                      }}
-                    >
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Refuser
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 text-xs h-9"
+                    onClick={() => {
+                      setSelectedProfile(profile);
+                      setActionDialog("approve");
+                    }}
+                  >
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Valider
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 text-xs h-9 text-red-600 border-red-300 hover:bg-red-50"
+                    onClick={() => {
+                      setSelectedProfile(profile);
+                      setActionDialog("reject");
+                      setRefusalReason("");
+                    }}
+                  >
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Refuser
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-center gap-2 px-4">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={currentPage === 0}
+            onClick={() => setCurrentPage(currentPage - 1)}
+          >
+            ← Précédent
+          </Button>
+          <div className="flex items-center gap-2">
+            {Array.from({ length: totalPages }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentPage(i)}
+                className={`h-8 w-8 rounded text-xs font-semibold transition-all ${
+                  currentPage === i
+                    ? "bg-primary text-white"
+                    : "bg-muted hover:bg-muted/70"
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={currentPage === totalPages - 1}
+            onClick={() => setCurrentPage(currentPage + 1)}
+          >
+            Suivant →
+          </Button>
         </div>
       )}
 
@@ -232,7 +500,7 @@ export default function PendingProfileRequests() {
                 <p className="text-xs text-blue-700 mt-1">{selectedProfile.user_email}</p>
               </div>
               <p className="text-sm text-muted-foreground">
-                ✅ Le profil sera activé et l'utilisateur sera notifié par email.
+                ✅ Le profil sera activé et l'utilisateur sera notifié.
               </p>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setActionDialog(null)}>
@@ -243,7 +511,7 @@ export default function PendingProfileRequests() {
                   disabled={actionLoading}
                   onClick={() => handleApprove(selectedProfile)}
                 >
-                  {actionLoading ? "Validation..." : "Valider le profil"}
+                  {actionLoading ? "Validation..." : "Valider"}
                 </Button>
               </div>
             </div>
