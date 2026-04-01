@@ -1,15 +1,123 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera } from "lucide-react";
+import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const DOCS = [
-  { key: "photo_profil",            label: "Photo de profil",      desc: "Selfie clair, visage visible",              emoji: "🤳" },
-  { key: "photo_identite_recto",    label: "CNI – Recto",          desc: "Face avant de votre carte d'identité",      emoji: "🪪" },
-  { key: "photo_identite_verso",    label: "CNI – Verso",          desc: "Face arrière de votre carte d'identité",    emoji: "🪪" },
-  { key: "photo_moyen_deplacement", label: "Moyen de déplacement", desc: "Photo de votre moto ou véhicule",           emoji: "🛵" },
+  { key: "photo_profil",            label: "Photo de profil",      desc: "Selfie clair, visage visible",         emoji: "🤳" },
+  { key: "photo_identite_recto",    label: "CNI – Recto",          desc: "Face avant de votre carte d'identité", emoji: "🪪" },
+  { key: "photo_identite_verso",    label: "CNI – Verso",          desc: "Face arrière de votre carte d'identité", emoji: "🪪" },
+  { key: "photo_moyen_deplacement", label: "Moyen de déplacement", desc: "Photo de votre moto ou véhicule",      emoji: "🛵" },
 ];
+
+// Un seul composant d'upload par champ avec 2 labels/inputs distincts
+function DocUpload({ docKey, hasFile, preview, fileName, onFile }) {
+  const camId = `cam_${docKey}`;
+  const galId = `gal_${docKey}`;
+
+  const handleChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) onFile(file);
+    // reset value pour permettre re-sélection du même fichier
+    e.target.value = "";
+  };
+
+  return (
+    <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}>
+      {/* Aperçu */}
+      {preview && (
+        <img
+          src={preview}
+          alt="aperçu"
+          style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
+        />
+      )}
+
+      {/* 2 boutons côte à côte */}
+      <div style={{ display: "flex", gap: 8 }}>
+
+        {/* BOUTON CAMÉRA */}
+        <label
+          htmlFor={camId}
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            padding: "10px 4px",
+            borderRadius: 8,
+            border: "1.5px solid hsl(207 90% 54% / 0.5)",
+            background: "hsl(207 90% 54% / 0.08)",
+            color: "hsl(207, 90%, 40%)",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            textAlign: "center",
+            WebkitTapHighlightColor: "transparent",
+            userSelect: "none",
+          }}
+        >
+          <span style={{ fontSize: 20 }}>📷</span>
+          Caméra
+        </label>
+        {/* input caméra — clip invisible, pas display:none */}
+        <input
+          id={camId}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleChange}
+          style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", clip: "rect(0,0,0,0)" }}
+        />
+
+        {/* BOUTON GALERIE */}
+        <label
+          htmlFor={galId}
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            padding: "10px 4px",
+            borderRadius: 8,
+            border: "1.5px solid hsl(var(--border))",
+            background: "hsl(var(--muted))",
+            color: "hsl(var(--foreground))",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            textAlign: "center",
+            WebkitTapHighlightColor: "transparent",
+            userSelect: "none",
+          }}
+        >
+          <span style={{ fontSize: 20 }}>🖼️</span>
+          Galerie
+        </label>
+        {/* input galerie — sans capture */}
+        <input
+          id={galId}
+          type="file"
+          accept="image/*"
+          onChange={handleChange}
+          style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", clip: "rect(0,0,0,0)" }}
+        />
+      </div>
+
+      {/* Confirmation */}
+      {hasFile && fileName && (
+        <p style={{ fontSize: 10, color: "hsl(207, 90%, 40%)", marginTop: 6, textAlign: "center", fontWeight: 600 }}>
+          ✅ {fileName}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function LivreurDocuments({ onComplete }) {
   const [files, setFiles]             = useState({});
@@ -89,76 +197,32 @@ export default function LivreurDocuments({ onComplete }) {
         <div className="space-y-3">
           {DOCS.map(doc => {
             const hasFile = !!files[doc.key];
-            const preview = previews[doc.key];
-            const inputId = `file_input_${doc.key}`;
             return (
               <div
                 key={doc.key}
-                style={{ border: `2px solid ${hasFile ? 'hsl(var(--primary))' : 'hsl(var(--border))'}`, borderRadius: '12px' }}
+                style={{
+                  border: `2px solid ${hasFile ? 'hsl(207, 90%, 54%)' : 'hsl(var(--border))'}`,
+                  borderRadius: 12,
+                  background: 'hsl(var(--card))',
+                }}
               >
-                {/* Infos doc */}
-                <div className="p-3 flex items-center gap-3">
-                  <span className="text-2xl flex-shrink-0">{doc.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">{doc.label}</p>
-                    <p className="text-xs text-muted-foreground">{doc.desc}</p>
+                {/* Titre */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 12px 4px" }}>
+                  <span style={{ fontSize: 24, flexShrink: 0 }}>{doc.emoji}</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{doc.label}</p>
+                    <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", margin: 0 }}>{doc.desc}</p>
                   </div>
-                  {hasFile && <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />}
+                  {hasFile && <CheckCircle2 style={{ width: 20, height: 20, color: "hsl(207, 90%, 54%)", flexShrink: 0 }} />}
                 </div>
 
-                {/* Aperçu */}
-                {preview && (
-                  <img src={preview} alt={doc.label} className="w-full h-32 object-cover" />
-                )}
-
-                {/* Zone upload — label enveloppe l'input, PAS d'overflow:hidden */}
-                <div className="px-3 pb-3">
-                  <label
-                    htmlFor={inputId}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      width: '100%',
-                      padding: '10px 0',
-                      borderRadius: '8px',
-                      border: '1px solid',
-                      borderColor: hasFile ? 'hsl(var(--primary) / 0.4)' : 'hsl(var(--border))',
-                      background: hasFile ? 'hsl(var(--primary) / 0.08)' : 'hsl(var(--muted))',
-                      color: hasFile ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      WebkitTapHighlightColor: 'transparent',
-                      userSelect: 'none',
-                    }}
-                  >
-                    <Camera style={{ width: '16px', height: '16px', flexShrink: 0 }} />
-                    {hasFile ? '📷 Remplacer la photo' : '📷 Prendre ou choisir une photo'}
-                  </label>
-                  {/* Input complètement séparé du label mais lié par htmlFor */}
-                  <input
-                    id={inputId}
-                    type="file"
-                    accept="image/*"
-                    onChange={e => handleFile(doc.key, e.target.files?.[0])}
-                    style={{
-                      position: 'absolute',
-                      width: '1px',
-                      height: '1px',
-                      opacity: 0,
-                      overflow: 'hidden',
-                      clip: 'rect(0,0,0,0)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  />
-                  {hasFile && files[doc.key] && (
-                    <p className="text-[10px] text-primary mt-1 text-center font-medium">
-                      ✅ {files[doc.key].name}
-                    </p>
-                  )}
-                </div>
+                <DocUpload
+                  docKey={doc.key}
+                  hasFile={hasFile}
+                  preview={previews[doc.key]}
+                  fileName={files[doc.key]?.name}
+                  onFile={(file) => handleFile(doc.key, file)}
+                />
               </div>
             );
           })}
