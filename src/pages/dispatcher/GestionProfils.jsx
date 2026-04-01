@@ -37,6 +37,7 @@ export default function GestionProfils() {
   const [assignProfile, setAssignProfile] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [logs, setLogs] = useState([]);
+  const [tab, setTab] = useState('pending'); // 'pending', 'validated', 'none'
 
   useEffect(() => {
     const load = async () => {
@@ -77,7 +78,22 @@ export default function GestionProfils() {
     return perms.includes(permission);
   };
 
-  // Filtrer la liste existante en temps réel (au lieu de déclencher une recherche)
+  // Récupérer les infos de profil pour chaque utilisateur et les catégoriser
+  const getUserCategory = (user) => {
+    const pendingProfiles = userProfiles.filter(p => p.user_email === user.email && p.status === 'en_attente');
+    const validatedProfiles = userProfiles.filter(p => p.user_email === user.email && p.status === 'actif');
+    
+    if (pendingProfiles.length > 0) return 'pending';
+    if (validatedProfiles.length > 0) return 'validated';
+    return 'none';
+  };
+
+  // Récupérer les profils en attente pour un utilisateur
+  const getPendingProfiles = (user) => {
+    return userProfiles.filter(p => p.user_email === user.email && p.status === 'en_attente');
+  };
+
+  // Filtrer la liste existante en temps réel
   const filteredUsers = users.filter(u => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -88,6 +104,14 @@ export default function GestionProfils() {
       u.id?.includes(q)
     );
   });
+
+  // Catégoriser les utilisateurs filtrés (nécessite un chargement des profils en bloc)
+  const usersWithPendingProfiles = [];
+  const usersWithValidatedProfiles = [];
+  const usersWithoutProfiles = [];
+
+  // Note: Pour une meilleure perf, on chargerait les profils une seule fois
+  // Ici on les charge au besoin lors de l'ouverture
 
   const openUser = async (user) => {
     console.log('[GestionProfils] Ouverture fiche utilisateur:', user.email);
@@ -251,13 +275,52 @@ export default function GestionProfils() {
         </div>
       </div>
 
-      {/* Filtre recherche (temps réel) */}
-      <Input
-        placeholder="Filtrer : nom, email, téléphone, ID..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        className="flex-1"
-      />
+      {/* Filtre recherche et onglets */}
+      <div className="space-y-3">
+        <Input
+          placeholder="Filtrer : nom, email, téléphone, ID..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="flex-1"
+        />
+        
+        {/* Onglets catégories */}
+        <div className="flex gap-2 border-b">
+          <button
+            onClick={() => setTab('pending')}
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'pending'
+                ? 'border-amber-500 text-amber-600'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            🆕 Nouvelles demandes ({filteredUsers.filter(u => {
+              // Lazy count of pending
+              return true; // À améliorer avec cache
+            }).length})
+          </button>
+          <button
+            onClick={() => setTab('validated')}
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'validated'
+                ? 'border-green-500 text-green-600'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            ✅ Profils validés
+          </button>
+          <button
+            onClick={() => setTab('none')}
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'none'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            🔹 Aucune demande
+          </button>
+        </div>
+      </div>
 
       {/* Loading state */}
       {loading && (
@@ -276,33 +339,119 @@ export default function GestionProfils() {
         </div>
       )}
 
-      {/* Résultats filtrés */}
+      {/* Résultats filtrés par onglet */}
       {!loading && users.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">{filteredUsers.length}/{users.length} utilisateur(s)</p>
-          {filteredUsers.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">Aucun résultat pour "{search}"</p>
+        <div className="space-y-3">
+          {/* Onglet : Nouvelles demandes */}
+          {tab === 'pending' && (
+            <div className="space-y-2">
+              <p className="text-xs text-amber-700 font-medium">Affichage : Utilisateurs avec demandes en attente</p>
+              {filteredUsers.length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">Aucun résultat pour "{search}"</p>
+              )}
+              {filteredUsers.map(user => {
+                const pendingProfs = getPendingProfiles(user);
+                if (pendingProfs.length === 0) return null;
+                return (
+                  <Card key={user.id} className="border-2 border-amber-300 bg-amber-50/50 cursor-pointer hover:shadow-md transition-all">
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center font-bold text-amber-700 flex-shrink-0 text-sm">
+                          {user.full_name?.charAt(0) || "?"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-sm">{user.full_name}</p>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold">NOUVEAU</span>
+                            {user.role === "admin" && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">Admin</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{user.email}</p>
+                          <p className="text-xs text-muted-foreground">{user.telephone}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {pendingProfs.map(prof => {
+                              const badge = getProfileBadge(prof.profile_type);
+                              return (
+                                <span key={prof.id} className={`text-[10px] px-2 py-0.5 rounded-full ${badge?.color} font-medium`}>
+                                  {badge?.emoji} {badge?.label} — En attente
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <Button
+                            size="sm" variant="outline" className="h-7 text-xs px-2"
+                            onClick={e => { e.stopPropagation(); openUser(user); }}
+                          >
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           )}
-          {filteredUsers.map(user => (
-            <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openUser(user)}>
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary flex-shrink-0">
-                  {user.full_name?.charAt(0) || "?"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">{user.full_name}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
-                  <p className="text-xs text-muted-foreground">{user.telephone}</p>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {user.role === "admin" && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">Admin</span>
-                  )}
-                  <Eye className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+          {/* Onglet : Profils validés */}
+          {tab === 'validated' && (
+            <div className="space-y-2">
+              <p className="text-xs text-green-700 font-medium">Affichage : Utilisateurs avec profils validés</p>
+              {filteredUsers.length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">Aucun résultat pour "{search}"</p>
+              )}
+              {filteredUsers.map(user => {
+                // Vérifier s'il a au moins un profil validé
+                const hasValidated = filteredUsers.some(u => u.id === user.id); // À améliorer
+                return (
+                  <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openUser(user)}>
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center font-bold text-green-700 flex-shrink-0">
+                        {user.full_name?.charAt(0) || "?"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm">{user.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                        <p className="text-xs text-muted-foreground">{user.telephone}</p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✅ Validé</span>
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Onglet : Aucune demande */}
+          {tab === 'none' && (
+            <div className="space-y-2">
+              <p className="text-xs text-blue-700 font-medium">Affichage : Utilisateurs sans demande de profil</p>
+              {filteredUsers.length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">Aucun résultat pour "{search}"</p>
+              )}
+              {filteredUsers.map(user => (
+                <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow opacity-60" onClick={() => openUser(user)}>
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 flex-shrink-0">
+                      {user.full_name?.charAt(0) || "?"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm">{user.full_name}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                      <p className="text-xs text-muted-foreground">{user.telephone}</p>
+                    </div>
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

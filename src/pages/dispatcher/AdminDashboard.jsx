@@ -194,10 +194,22 @@ export default function AdminDashboard() {
       {/* Actions rapides */}
       <div className="px-4 space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Accès rapide</p>
+        <Link to="/gestion-profils">
+          <Button className="w-full justify-start gap-2" variant="outline">
+            <Users className="h-4 w-4" />
+            👤 Gestion des profils
+          </Button>
+        </Link>
+        <Link to="/gestion-profils?tab=pending">
+          <Button className="w-full justify-start gap-2" variant="outline" className="border-amber-300 hover:bg-amber-50">
+            <AlertCircle className="h-4 w-4" />
+            ⏳ Demandes de profils en attente ({kpis.pendingRequests})
+          </Button>
+        </Link>
         <Link to="/pending-profiles">
           <Button className="w-full justify-start gap-2" variant="outline">
             <AlertCircle className="h-4 w-4" />
-            📋 Profils en attente ({kpis.pendingRequests})
+            📋 Profils en attente de validation ({kpis.pendingRequests})
           </Button>
         </Link>
         <Link to="/gerer-courses">
