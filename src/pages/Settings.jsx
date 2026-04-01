@@ -358,22 +358,34 @@ export default function Settings() {
                   ))}
                   {selectedProfile === 'livreur' && (
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold">Mode de déplacement *</Label>
-                      {[{val:'moto',label:'🛵 Motocyclette'},{val:'vehicule',label:'🚗 Véhicule'}].map(m => (
-                        <label key={m.val} className={`flex items-center gap-3 p-2.5 rounded-lg border-2 cursor-pointer transition-all ${
-                          moyenDeplacement.includes(m.val) ? 'border-primary bg-primary/5' : 'border-border'
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={moyenDeplacement.includes(m.val)}
-                            onChange={() => setMoyenDeplacement(prev =>
-                              prev.includes(m.val) ? prev.filter(x => x !== m.val) : [...prev, m.val]
-                            )}
-                            className="h-4 w-4 accent-primary"
-                          />
-                          <span className="text-sm font-medium">{m.label}</span>
-                        </label>
-                      ))}
+                      <Label className="text-xs font-semibold">Mode de déplacement * <span className="text-amber-600">(obligatoire)</span></Label>
+                      <div className="flex gap-2">
+                        {[{val:'moto',label:'🛵 Moto'},{val:'vehicule',label:'🚗 Véhicule'}].map(m => {
+                          const selected = moyenDeplacement.includes(m.val);
+                          return (
+                            <button
+                              key={m.val}
+                              type="button"
+                              onClick={() => {
+                                setMoyenDeplacement(prev =>
+                                  prev.includes(m.val) ? prev.filter(x => x !== m.val) : [...prev, m.val]
+                                );
+                              }}
+                              className={`flex-1 py-3 rounded-xl border-2 font-semibold text-sm transition-all ${
+                                selected
+                                  ? 'border-primary bg-primary text-white'
+                                  : 'border-border bg-white text-foreground'
+                              }`}
+                            >
+                              {m.label}
+                              {selected && <span className="ml-1">✓</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {moyenDeplacement.length > 0 && (
+                        <p className="text-xs text-green-700 font-medium">✅ Sélectionné : {moyenDeplacement.join(', ')}</p>
+                      )}
                     </div>
                   )}
                 </div>
