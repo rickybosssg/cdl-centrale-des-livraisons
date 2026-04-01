@@ -19,20 +19,19 @@ export default function CourseCard({ course, onClick, children }) {
       onClick={() => onClick?.(course)}
     >
       <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {course.type_mission === 'envoyer' && (
-              <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
-                <Send className="h-2.5 w-2.5" />ENVOYER
-              </span>
-            )}
-            {course.type_mission === 'recuperer' && (
-              <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">
-                <RefreshCw className="h-2.5 w-2.5" />RÉCUPÉRER
-              </span>
-            )}
-            <Package className="h-4 w-4 text-accent" />
-            <span className="text-sm font-medium">{course.type_colis}</span>
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          {course.type_mission === 'envoyer' && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+              <Send className="h-2.5 w-2.5" />ENVOYER
+            </span>
+          )}
+          {course.type_mission === 'recuperer' && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">
+              <RefreshCw className="h-2.5 w-2.5" />RÉCUPÉRER
+            </span>
+          )}
+          <Package className="h-4 w-4 text-accent" />
+          <span className="text-sm font-medium">{course.type_colis}</span>
         </div>
 
         <div className="space-y-2">
@@ -70,11 +69,11 @@ export default function CourseCard({ course, onClick, children }) {
               <span className="font-medium">Livreur:</span> {course.livreur_name}
             </div>
           )}
-          </div>
+        </div>
 
-          {children && <div className="mt-3 pt-3 border-t">{children}</div>}
-          </CardContent>
-          </Card>
-          </motion.div>
+        {children && <div className="mt-3 pt-3 border-t">{children}</div>}
+      </CardContent>
+    </Card>
+    </motion.div>
   );
 }
