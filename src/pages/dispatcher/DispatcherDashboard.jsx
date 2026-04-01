@@ -20,6 +20,7 @@ export default function DispatcherDashboard() {
   const [syncingNotifs, setSyncingNotifs] = useState(false);
   const [adminEmail, setAdminEmail] = useState(null);
   const [partenairesEnAttente, setPartenairesEnAttente] = useState([]);
+  const [profilesEnAttente, setProfilesEnAttente] = useState([]);
   
   useEffect(() => {
     base44.auth.me().then(me => setAdminEmail(me?.email));
@@ -45,14 +46,15 @@ export default function DispatcherDashboard() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses, partenairesAttente] = await Promise.allSettled([
+        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses, partenairesAttente, profilesAttente] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 50),
         base44.entities.User.filter({ user_type: "livreur" }),
         base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
         base44.entities.User.filter({ statut_validation_livreur: "valide" }),
         base44.entities.User.filter({ statut_validation_livreur: "refuse" }),
         base44.entities.Partenaire.filter({ statut: "en_attente" }),
-      ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
+        base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),
+       ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
       const map = new Map();
       const allLivreurs = [...(livreursPurs || []), ...(livreursMultiAttente || []), ...(livreursMultiValides || []), ...(livreursMultiRefuses || [])];
       allLivreurs.forEach(u => map.set(u.id, u));
@@ -64,6 +66,7 @@ export default function DispatcherDashboard() {
       setCourses(coursesData);
       setLivreurs(tousLivreurs);
       setPartenairesEnAttente((partenairesAttente || []).filter(p => !p.deleted));
+      setProfilesEnAttente(profilesAttente || []);
       } catch (err) {
         console.error('Erreur lors du chargement:', err);
         setCourses([]);
@@ -106,7 +109,20 @@ export default function DispatcherDashboard() {
         setPartenairesEnAttente(prev => prev.filter(p => p.id !== event.id));
       }
     });
-    return () => { unsubCourse(); unsubUser(); unsubPartenaire(); clearInterval(interval); };
+    const unsubUserProfile = base44.entities.UserProfile.subscribe((event) => {
+      if (event.type === 'create' && event.data?.status === 'en_attente') {
+        setProfilesEnAttente(prev => [...prev, event.data]);
+      } else if (event.type === 'update') {
+        setProfilesEnAttente(prev => {
+          const filtered = prev.filter(p => p.id !== event.id);
+          if (event.data?.status === 'en_attente' && !event.data?.deleted) return [...filtered, event.data];
+          return filtered;
+        });
+      } else if (event.type === 'delete') {
+        setProfilesEnAttente(prev => prev.filter(p => p.id !== event.id));
+      }
+    });
+    return () => { unsubCourse(); unsubUser(); unsubPartenaire(); unsubUserProfile(); clearInterval(interval); };
   }, []);
 
   const today = new Date().toDateString();
@@ -195,6 +211,22 @@ export default function DispatcherDashboard() {
               <p className="text-xs text-purple-600">Cliquez pour valider les dossiers</p>
             </div>
             <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{partenairesEnAttente.length}</span>
+          </div>
+        </Link>
+      )}
+
+      {/* Alerte demandes de profil en attente (UserProfile) */}
+      {profilesEnAttente.length > 0 && (
+        <Link to="/gestion-profils">
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-blue-50 border-2 border-blue-300 animate-pulse">
+            <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-blue-800 text-sm">📋 {profilesEnAttente.length} demande(s) de profil en attente</p>
+              <p className="text-xs text-blue-600">Cliquez pour examiner et valider</p>
+            </div>
+            <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{profilesEnAttente.length}</span>
           </div>
         </Link>
       )}

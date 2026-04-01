@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
     // Créer le profil
     const status = requirements.immediate ? 'actif' : 'en_attente';
     console.log('[addProfileToUser] Statut du nouveau profil:', status);
+    console.log('[addProfileToUser] ← DEBUG: Validation requise pour ce type:', requirements.needsAdminValidation);
     const userProfiles = user.profiles_list ? JSON.parse(user.profiles_list) : [];
 
     if (!userProfiles.includes(profile_type)) {
@@ -154,9 +155,12 @@ Deno.serve(async (req) => {
 
     // Notifier les admins si validation requise avec données détaillées
     if (requirements.needsAdminValidation) {
-      console.log('[addProfileToUser] Notification admin...');
+      console.log('[addProfileToUser] ← ADMIN NOTIFICATION: Envoi aux admins...');
       const admins = await base44.entities.User.filter({ role: 'admin' });
-      console.log('[addProfileToUser] Nombre admins notifiés:', admins.length);
+      console.log('[addProfileToUser] ← ADMIN NOTIFICATION: Nombre admins trouvés:', admins.length);
+      if (admins.length === 0) {
+        console.warn('[addProfileToUser] ⚠️ ATTENTION: Aucun admin trouvé pour notification!');
+      }
       let adminMessage = `Nom: ${user.full_name} | Email: ${user.email} | Téléphone: ${data.telephone || 'N/A'}`;
       
       if (profile_type === 'partenaire') {
@@ -181,9 +185,9 @@ Deno.serve(async (req) => {
 
     // Déclencher le recalcul des compteurs en tâche de fond (non bloquant)
     try {
-      console.log('[addProfileToUser] Recalcul des compteurs...');
+      console.log('[addProfileToUser] ← COMPTEURS: Invocation recalculateProfileCounters...');
       await base44.asServiceRole.functions.invoke('recalculateProfileCounters', {});
-      console.log('[addProfileToUser] Compteurs recalculés');
+      console.log('[addProfileToUser] ← COMPTEURS: Recalcul SUCCÈS');
     } catch (err) {
       console.warn('[addProfileToUser] Erreur recalcul compteurs (non bloquant):', err.message);
     }
