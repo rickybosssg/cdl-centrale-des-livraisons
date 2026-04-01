@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, Upload, Loader2, ShieldCheck } from "lucide-react";
@@ -17,21 +17,12 @@ export default function LivreurDocuments({ onComplete }) {
   const [uploading, setUploading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
-  const inputRefs = useRef({});
 
   const handleFile = (key, file) => {
     if (!file) return;
     setFiles(prev => ({ ...prev, [key]: file }));
     const url = URL.createObjectURL(file);
     setPreviews(prev => ({ ...prev, [key]: url }));
-  };
-
-  const triggerUpload = (key) => {
-    const input = inputRefs.current[key];
-    if (input) {
-      input.value = '';
-      input.click();
-    }
   };
 
   const completed = DOCS.filter(d => files[d.key]).length;
@@ -132,27 +123,25 @@ export default function LivreurDocuments({ onComplete }) {
                   </div>
                 )}
 
-                {/* Bouton upload */}
+                {/* Bouton upload — input overlay (compatible Android/WebView) */}
                 <div className="px-3 pb-3">
-                  <input
-                    ref={el => inputRefs.current[doc.key] = el}
-                    type="file"
-                    accept="image/*, image/jpeg, image/jpg, image/png, image/webp"
-                    className="hidden"
-                    onChange={e => handleFile(doc.key, e.target.files[0])}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => triggerUpload(doc.key)}
-                    className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-colors active:scale-[0.98] ${
-                      hasFile
-                        ? "bg-primary/10 text-primary border border-primary/30"
-                        : "bg-muted text-foreground border border-border"
-                    }`}
-                  >
-                    <Camera className="h-4 w-4" />
-                    {hasFile ? "📷 Remplacer la photo" : "📷 Prendre ou choisir une photo"}
-                  </button>
+                  <div className={`relative h-11 rounded-lg overflow-hidden border ${
+                    hasFile ? "bg-primary/10 border-primary/30" : "bg-muted border-border"
+                  }`}>
+                    <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
+                      <Camera className={`h-4 w-4 ${hasFile ? 'text-primary' : 'text-foreground'}`} />
+                      <span className={`text-sm font-medium ${hasFile ? 'text-primary' : 'text-foreground'}`}>
+                        {hasFile ? '📷 Remplacer la photo' : '📷 Prendre ou choisir une photo'}
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => handleFile(doc.key, e.target.files[0])}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      style={{ fontSize: '16px' }}
+                    />
+                  </div>
                 </div>
               </div>
             );
