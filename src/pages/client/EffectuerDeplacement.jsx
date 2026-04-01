@@ -118,7 +118,7 @@ export default function EffectuerDeplacement() {
         destinataire_email: livreur.email,
         destinataire_role: "livreur",
         titre: "📦 Nouvelle course disponible",
-        message: `${quartier_depart} → ${quartier_arrivee} · ${prix} FCFA`,
+        message: `${quartier_depart} → ${quartier_arrivee} · ${prixTotal} FCFA`,
         type: "info",
         lue: false,
         course_id: course.id,
