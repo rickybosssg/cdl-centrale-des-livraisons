@@ -43,12 +43,31 @@ export default function GestionProfils() {
       const me = await base44.auth.me();
       setAdminUser(me);
       if (me.role !== "admin") {
-        // Check delegate permissions
         const perms = await base44.entities.AdminPermission.filter({ user_email: me.email, actif: true });
         setAdminPerms(perms[0] || null);
       }
     };
     load();
+  }, []);
+
+  // Charger automatiquement les utilisateurs au mount
+  useEffect(() => {
+    const loadUsers = async () => {
+      console.log('[GestionProfils] Chargement automatique des utilisateurs...');
+      setLoading(true);
+      try {
+        const all = await base44.entities.User.list("-created_date", 500);
+        console.log('[GestionProfils] Utilisateurs chargés:', all?.length || 0);
+        setUsers(all || []);
+      } catch (err) {
+        console.error('[GestionProfils] Erreur chargement initial:', err);
+        toast.error('Erreur lors du chargement des utilisateurs');
+        setUsers([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUsers();
   }, []);
 
   const canDo = (permission) => {
@@ -58,45 +77,17 @@ export default function GestionProfils() {
     return perms.includes(permission);
   };
 
-  const searchUsers = async () => {
-    if (!search.trim()) {
-      console.log('[GestionProfils] Recherche vide, aucune action');
-      return;
-    }
-    
-    console.log('[GestionProfils] Recherche lancée pour:', search);
-    setLoading(true);
-    try {
-      const all = await base44.entities.User.list("-created_date", 500);
-      console.log('[GestionProfils] Nombres d\'utilisateurs en base:', all?.length || 0);
-      
-      if (!all || all.length === 0) {
-        console.warn('[GestionProfils] Aucun utilisateur trouvé en base');
-        setUsers([]);
-        setLoading(false);
-        return;
-      }
-      
-      const q = search.toLowerCase();
-      const found = all.filter(u =>
-        u.full_name?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q) ||
-        u.telephone?.includes(q) ||
-        u.id?.includes(q)
-      );
-      
-      console.log('[GestionProfils] Résultats trouvés:', found.length);
-      found.forEach(u => console.log(`  - ${u.full_name} (${u.email}) role=${u.role} type=${u.user_type}`));
-      
-      setUsers(found);
-    } catch (err) {
-      console.error('[GestionProfils] Erreur recherche:', err);
-      toast.error('Erreur lors de la recherche: ' + err.message);
-      setUsers([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Filtrer la liste existante en temps réel (au lieu de déclencher une recherche)
+  const filteredUsers = users.filter(u => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      u.full_name?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q) ||
+      u.telephone?.includes(q) ||
+      u.id?.includes(q)
+    );
+  });
 
   const openUser = async (user) => {
     console.log('[GestionProfils] Ouverture fiche utilisateur:', user.email);
@@ -260,33 +251,39 @@ export default function GestionProfils() {
         </div>
       </div>
 
-      {/* Recherche */}
-      <div className="flex gap-2">
-        <Input
-          placeholder="Nom, email, téléphone, ID..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && searchUsers()}
-          className="flex-1"
-        />
-        <Button onClick={searchUsers} disabled={loading}>
-          {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-        </Button>
-      </div>
+      {/* Filtre recherche (temps réel) */}
+      <Input
+        placeholder="Filtrer : nom, email, téléphone, ID..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className="flex-1"
+      />
 
-      {/* Info aide initiale */}
-      {users.length === 0 && !search && !loading && (
-        <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700">
-          <p className="font-medium">💡 Commencez une recherche</p>
-          <p className="text-xs mt-1">Entrez un nom, email, téléphone ou ID pour chercher un utilisateur et gérer ses profils.</p>
+      {/* Loading state */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center space-y-2">
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
+            <p className="text-sm text-muted-foreground">Chargement des utilisateurs...</p>
+          </div>
         </div>
       )}
 
-      {/* Résultats */}
-      {users.length > 0 && (
+      {/* Aucun utilisateur */}
+      {!loading && users.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Aucun utilisateur disponible</p>
+        </div>
+      )}
+
+      {/* Résultats filtrés */}
+      {!loading && users.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">{users.length} utilisateur(s) trouvé(s)</p>
-          {users.map(user => (
+          <p className="text-xs text-muted-foreground">{filteredUsers.length}/{users.length} utilisateur(s)</p>
+          {filteredUsers.length === 0 && (
+            <p className="text-center text-sm text-muted-foreground py-8">Aucun résultat pour "{search}"</p>
+          )}
+          {filteredUsers.map(user => (
             <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openUser(user)}>
               <CardContent className="p-3 flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary flex-shrink-0">
