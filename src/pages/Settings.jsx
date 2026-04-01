@@ -107,9 +107,8 @@ export default function Settings() {
     setSwitching(null);
     if (result.data?.success) {
       toast.success(`🔄 Profil basculé : ${PROFILES.find(p => p.type === profileType)?.label}`);
-      await load();
-      // Rediriger vers l'accueil pour recharger le bon dashboard
-      navigate('/');
+      // Hard reload pour forcer le rechargement complet de l'UI (APK + navigateur)
+      setTimeout(() => { window.location.href = '/'; }, 500);
     } else {
       toast.error(result.data?.error || 'Erreur');
     }
