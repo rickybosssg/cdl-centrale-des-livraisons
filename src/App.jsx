@@ -39,6 +39,7 @@ import GererPublicites from './pages/dispatcher/GererPublicites';
 import GererCommerciaux from './pages/dispatcher/GererCommerciaux';
 import Suppression from './pages/dispatcher/Suppression';
 import AuditUtilisateurs from './pages/dispatcher/AuditUtilisateurs';
+import AdminDashboard from './pages/dispatcher/AdminDashboard';
 import CreerBoutiqueAdmin from './pages/dispatcher/CreerBoutiqueAdmin';
 import AdminTrash from './pages/dispatcher/AdminTrash';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
@@ -171,6 +172,7 @@ const AuthenticatedApp = () => {
 
         {/* Admin uniquement */}
         <Route element={<DispatcherGuard />}>
+          <Route path="/admin-dashboard" element={<AdminDashboard />} />
           <Route path="/gerer-courses" element={<GererCourses />} />
           <Route path="/gerer-livreurs" element={<GererLivreurs />} />
           <Route path="/statistiques" element={<Statistiques />} />
