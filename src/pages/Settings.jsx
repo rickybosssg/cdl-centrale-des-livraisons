@@ -281,7 +281,15 @@ export default function Settings() {
       </Card>
 
       {/* Dialog ajouter profil */}
-      <Dialog open={dialogAdd} onOpenChange={v => { setDialogAdd(v); if (!v) { setSelectedProfile(null); setFormData({}); } }}>
+      <Dialog open={dialogAdd} onOpenChange={v => {
+        setDialogAdd(v);
+        if (!v) {
+          setSelectedProfile(null);
+          setFormData({});
+          setMoyenDeplacement([]);
+          setSubmitting(false);
+        }
+      }}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Ajouter un profil</DialogTitle>
@@ -319,7 +327,8 @@ export default function Settings() {
             ) : (
               <div className="space-y-4">
                 <button
-                  onClick={() => { setSelectedProfile(null); setFormData({}); }}
+                  type="button"
+                  onClick={() => { setSelectedProfile(null); setFormData({}); setMoyenDeplacement([]); }}
                   className="flex items-center gap-1 text-xs text-primary hover:underline"
                 >
                   ← Changer de profil
@@ -375,10 +384,10 @@ export default function Settings() {
                   </div>
                 )}
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" className="flex-1" onClick={() => setDialogAdd(false)}>
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setDialogAdd(false)}>
                     Annuler
                   </Button>
-                  <Button className="flex-1" onClick={handleAddProfile} disabled={submitting}>
+                  <Button type="button" className="flex-1" onClick={handleAddProfile} disabled={submitting}>
                     {submitting
                       ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Envoi...</>
                       : PROFILES.find(p => p.type === selectedProfile)?.immediate ? '✅ Créer le profil' : '📩 Envoyer la demande'
