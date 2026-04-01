@@ -1,118 +1,106 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera, Image } from "lucide-react";
+import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const DOCS = [
-  { key: "photo_profil",            label: "Photo de profil",      desc: "Selfie clair, visage visible",         emoji: "🤳" },
-  { key: "photo_identite_recto",    label: "CNI – Recto",          desc: "Face avant de votre carte d'identité", emoji: "🪪" },
-  { key: "photo_identite_verso",    label: "CNI – Verso",          desc: "Face arrière de votre carte d'identité", emoji: "🪪" },
-  { key: "photo_moyen_deplacement", label: "Moyen de déplacement", desc: "Photo de votre moto ou véhicule",      emoji: "🛵" },
+  { key: "photo_profil",            label: "Photo de profil",        desc: "Selfie clair, visage visible",              emoji: "🤳" },
+  { key: "photo_identite_recto",    label: "CNI – Recto",            desc: "Face avant de votre carte d'identité",      emoji: "🪪" },
+  { key: "photo_identite_verso",    label: "CNI – Verso",            desc: "Face arrière de votre carte d'identité",    emoji: "🪪" },
+  { key: "photo_moyen_deplacement", label: "Moyen de déplacement",   desc: "Photo de votre moto ou véhicule",           emoji: "🛵" },
 ];
 
-// Un seul composant d'upload par champ avec 2 labels/inputs distincts
 function DocUpload({ docKey, hasFile, preview, fileName, onFile }) {
-  const camId = `cam_${docKey}`;
-  const galId = `gal_${docKey}`;
+  const camRef = useRef(null);
+  const galRef = useRef(null);
+  const [debug, setDebug] = useState("");
 
-  const handleChange = (e) => {
+  const handleChange = (e, source) => {
     const file = e.target.files?.[0];
-    if (file) onFile(file);
-    // reset value pour permettre re-sélection du même fichier
+    if (!file) { setDebug(`❌ Aucun fichier (${source})`); return; }
+    setDebug(`✅ ${source}: ${file.name}`);
+    onFile(file);
     e.target.value = "";
   };
 
+  const openCamera = () => {
+    setDebug("🔄 Ouverture caméra...");
+    camRef.current.click();
+  };
+
+  const openGallery = () => {
+    setDebug("🔄 Ouverture galerie...");
+    galRef.current.click();
+  };
+
   return (
-    <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}>
+    <div style={{ padding: "8px 12px 12px" }}>
       {/* Aperçu */}
       {preview && (
         <img
           src={preview}
           alt="aperçu"
-          style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
+          style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
         />
       )}
 
-      {/* 2 boutons côte à côte */}
+      {/* Inputs cachés */}
+      <input
+        ref={camRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(e) => handleChange(e, "caméra")}
+      />
+      <input
+        ref={galRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => handleChange(e, "galerie")}
+      />
+
+      {/* Boutons */}
       <div style={{ display: "flex", gap: 8 }}>
-
-        {/* BOUTON CAMÉRA */}
-        <label
-          htmlFor={camId}
+        <button
+          type="button"
+          onClick={openCamera}
           style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 4,
-            padding: "10px 4px",
-            borderRadius: 8,
-            border: "1.5px solid hsl(207 90% 54% / 0.5)",
-            background: "hsl(207 90% 54% / 0.08)",
-            color: "hsl(207, 90%, 40%)",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-            textAlign: "center",
-            WebkitTapHighlightColor: "transparent",
-            userSelect: "none",
+            flex: 1, padding: "10px 0", borderRadius: 8,
+            border: "1.5px solid #3b82f6", background: "#eff6ff",
+            color: "#1d4ed8", fontSize: 13, fontWeight: 700,
+            cursor: "pointer", display: "flex", flexDirection: "column",
+            alignItems: "center", gap: 4,
+            WebkitTapHighlightColor: "rgba(59,130,246,0.2)",
           }}
         >
-          <span style={{ fontSize: 20 }}>📷</span>
+          <span style={{ fontSize: 22 }}>📷</span>
           Caméra
-        </label>
-        {/* input caméra — clip invisible, pas display:none */}
-        <input
-          id={camId}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleChange}
-          style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", clip: "rect(0,0,0,0)" }}
-        />
+        </button>
 
-        {/* BOUTON GALERIE */}
-        <label
-          htmlFor={galId}
+        <button
+          type="button"
+          onClick={openGallery}
           style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 4,
-            padding: "10px 4px",
-            borderRadius: 8,
-            border: "1.5px solid hsl(var(--border))",
-            background: "hsl(var(--muted))",
-            color: "hsl(var(--foreground))",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-            textAlign: "center",
-            WebkitTapHighlightColor: "transparent",
-            userSelect: "none",
+            flex: 1, padding: "10px 0", borderRadius: 8,
+            border: "1.5px solid #6b7280", background: "#f9fafb",
+            color: "#374151", fontSize: 13, fontWeight: 700,
+            cursor: "pointer", display: "flex", flexDirection: "column",
+            alignItems: "center", gap: 4,
+            WebkitTapHighlightColor: "rgba(107,114,128,0.2)",
           }}
         >
-          <span style={{ fontSize: 20 }}>🖼️</span>
+          <span style={{ fontSize: 22 }}>🖼️</span>
           Galerie
-        </label>
-        {/* input galerie — sans capture */}
-        <input
-          id={galId}
-          type="file"
-          accept="image/*"
-          onChange={handleChange}
-          style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", clip: "rect(0,0,0,0)" }}
-        />
+        </button>
       </div>
 
-      {/* Confirmation */}
-      {hasFile && fileName && (
-        <p style={{ fontSize: 10, color: "hsl(207, 90%, 40%)", marginTop: 6, textAlign: "center", fontWeight: 600 }}>
-          ✅ {fileName}
+      {/* Debug visible */}
+      {debug && (
+        <p style={{ fontSize: 11, marginTop: 6, color: debug.startsWith("✅") ? "#15803d" : debug.startsWith("❌") ? "#dc2626" : "#b45309", fontWeight: 600, textAlign: "center" }}>
+          {debug}
         </p>
       )}
     </div>
@@ -120,14 +108,13 @@ function DocUpload({ docKey, hasFile, preview, fileName, onFile }) {
 }
 
 export default function LivreurDocuments({ onComplete }) {
-  const [files, setFiles]             = useState({});
-  const [previews, setPreviews]       = useState({});
-  const [uploading, setUploading]     = useState(false);
+  const [files, setFiles]         = useState({});
+  const [previews, setPreviews]   = useState({});
+  const [uploading, setUploading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [showTerms, setShowTerms]     = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   const handleFile = (key, file) => {
-    if (!file) return;
     setFiles(prev    => ({ ...prev, [key]: file }));
     setPreviews(prev => ({ ...prev, [key]: URL.createObjectURL(file) }));
   };
@@ -167,7 +154,7 @@ export default function LivreurDocuments({ onComplete }) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col p-4">
+    <div className="min-h-screen bg-background p-4">
       <div className="max-w-sm mx-auto w-full space-y-5 py-6">
 
         {/* Header */}
@@ -186,14 +173,11 @@ export default function LivreurDocuments({ onComplete }) {
             <span className="font-semibold text-primary">{completed}/{DOCS.length} documents</span>
           </div>
           <div className="h-2 rounded-full bg-muted">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-500"
-              style={{ width: `${(completed / DOCS.length) * 100}%` }}
-            />
+            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${(completed / DOCS.length) * 100}%` }} />
           </div>
         </div>
 
-        {/* Documents */}
+        {/* Docs */}
         <div className="space-y-3">
           {DOCS.map(doc => {
             const hasFile = !!files[doc.key];
@@ -201,21 +185,19 @@ export default function LivreurDocuments({ onComplete }) {
               <div
                 key={doc.key}
                 style={{
-                  border: `2px solid ${hasFile ? 'hsl(207, 90%, 54%)' : 'hsl(var(--border))'}`,
+                  border: `2px solid ${hasFile ? '#3b82f6' : '#e5e7eb'}`,
                   borderRadius: 12,
-                  background: 'hsl(var(--card))',
+                  background: 'white',
                 }}
               >
-                {/* Titre */}
                 <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 12px 4px" }}>
                   <span style={{ fontSize: 24, flexShrink: 0 }}>{doc.emoji}</span>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{doc.label}</p>
-                    <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", margin: 0 }}>{doc.desc}</p>
+                    <p style={{ fontSize: 11, color: "#6b7280", margin: 0 }}>{doc.desc}</p>
                   </div>
-                  {hasFile && <CheckCircle2 style={{ width: 20, height: 20, color: "hsl(207, 90%, 54%)", flexShrink: 0 }} />}
+                  {hasFile && <CheckCircle2 style={{ width: 20, height: 20, color: "#3b82f6", flexShrink: 0 }} />}
                 </div>
-
                 <DocUpload
                   docKey={doc.key}
                   hasFile={hasFile}
@@ -228,22 +210,22 @@ export default function LivreurDocuments({ onComplete }) {
           })}
         </div>
 
-        {/* Bouton soumettre */}
+        {/* Submit */}
         <Button
           className="w-full h-12 text-base font-semibold"
           disabled={!allDone || !termsAccepted || uploading}
           onClick={handleSubmit}
         >
-          {uploading ? (
-            <><Loader2 className="h-5 w-5 animate-spin mr-2" />Upload en cours…</>
-          ) : (
-            <><Upload className="h-5 w-5 mr-2" />Envoyer mon dossier ({completed}/{DOCS.length})</>
-          )}
+          {uploading
+            ? <><Loader2 className="h-5 w-5 animate-spin mr-2" />Upload en cours…</>
+            : <><Upload className="h-5 w-5 mr-2" />Envoyer mon dossier ({completed}/{DOCS.length})</>
+          }
         </Button>
 
         {/* Conditions */}
         <div className="rounded-xl border-2 border-amber-300 bg-amber-50">
           <button
+            type="button"
             className="w-full flex items-center justify-between p-4 text-left"
             onClick={() => setShowTerms(!showTerms)}
           >
@@ -258,16 +240,13 @@ export default function LivreurDocuments({ onComplete }) {
           </button>
 
           {showTerms && (
-            <div className="px-4 pb-4 space-y-3 text-xs text-amber-900 border-t border-amber-200 pt-3">
-              <p className="font-semibold">📄 Engagement et responsabilité du livreur – CDL</p>
-              <ol className="space-y-2 list-decimal list-inside">
+            <div className="px-4 pb-4 text-xs text-amber-900 border-t border-amber-200 pt-3 space-y-2">
+              <ol className="space-y-1.5 list-decimal list-inside">
                 <li>Je m'engage à assurer la livraison des colis avec sérieux et professionnalisme.</li>
                 <li>Je suis entièrement responsable de tout dommage, perte ou vol survenant lors du transport.</li>
                 <li>CDL agit uniquement comme intermédiaire de mise en relation.</li>
-                <li>J'accepte que CDL ne puisse être tenue responsable en cas d'incident lié à la livraison.</li>
-                <li>Je m'engage à indemniser le client en cas de faute de ma part.</li>
+                <li>J'accepte que CDL ne puisse être tenue responsable en cas d'incident.</li>
                 <li>Je certifie que les informations et documents fournis sont exacts et authentiques.</li>
-                <li>Toute fausse déclaration peut entraîner la suspension définitive de mon compte.</li>
               </ol>
             </div>
           )}
@@ -290,6 +269,7 @@ export default function LivreurDocuments({ onComplete }) {
         </p>
 
         <button
+          type="button"
           className="w-full text-xs text-muted-foreground underline text-center"
           onClick={() => base44.auth.logout()}
         >
