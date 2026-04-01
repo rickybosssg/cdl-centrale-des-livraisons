@@ -30,11 +30,38 @@ export default function GererCommerciaux() {
   const [filtre, setFiltre] = useState("tous");
   const [adminUser, setAdminUser] = useState(null);
   const [dialogTab, setDialogTab] = useState("profil");
+  const [mainTab, setMainTab] = useState("liste");
+  const [perfClients, setPerfClients] = useState([]); // clients for selected commercial perf view
+  const [perfStats, setPerfStats] = useState({});
+  const [loadingPerf, setLoadingPerf] = useState(false);
 
   useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
   const [showCommissionsDues, setShowCommissionsDues] = useState(false);
   const [paiementEnCours, setPaiementEnCours] = useState({});
   const newMsg = useMessageNotification(selected?.email);
+
+  const loadPerf = async (codeValue) => {
+    setLoadingPerf(true);
+    const usersWithCode = await base44.entities.User.filter({ code_promo_utilise: codeValue });
+    setPerfClients(usersWithCode);
+    if (usersWithCode.length > 0) {
+      const allCourses = await base44.entities.Course.filter({ statut: "livree" }, "-date_livraison", 500);
+      const stats = {};
+      for (const u of usersWithCode) {
+        const userCourses = allCourses.filter(c => c.client_email === u.email);
+        if (userCourses.length > 0) {
+          const sorted = [...userCourses].sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+          stats[u.email] = { firstCourseValidated: true, firstCourseDate: sorted[0].date_livraison || sorted[0].created_date };
+        } else {
+          stats[u.email] = { firstCourseValidated: false, firstCourseDate: null };
+        }
+      }
+      setPerfStats(stats);
+    } else {
+      setPerfStats({});
+    }
+    setLoadingPerf(false);
+  };
 
   const loadData = async () => {
     const [usersData, codesData] = await Promise.all([
@@ -184,13 +211,62 @@ export default function GererCommerciaux() {
         </div>
       </div>
 
-      {/* Btn commissions dues */}
       <Button className="w-full" onClick={() => setShowCommissionsDues(true)}>
         💰 Voir les commissions dues
       </Button>
 
-      {/* Filtres */}
-      <div className="grid grid-cols-2 gap-2">
+      {/* ONGLET PERFORMANCES GLOBALES */}
+      {mainTab === "performances" && (
+        <div className="space-y-4">
+          {/* Global stats */}
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="bg-primary/5 border-primary/20">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-muted-foreground">Inscriptions total</p>
+                <p className="text-2xl font-black text-primary">{codes.reduce((s, c) => s + (c.nombre_utilisations || 0), 0)}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-green-50 border-green-200">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-green-700">Commissions dues</p>
+                <p className="text-2xl font-black text-green-700">{codes.reduce((s, c) => s + Math.max(0, (c.commission_due || 0) - (c.commission_payee || 0)), 0)} F</p>
+              </CardContent>
+            </Card>
+          </div>
+          {/* Classement commerciaux */}
+          <p className="text-sm font-semibold">🏆 Classement par inscriptions</p>
+          <div className="space-y-2">
+            {[...codes].sort((a, b) => (b.nombre_utilisations || 0) - (a.nombre_utilisations || 0)).map(code => {
+              const commercial = commerciaux.find(c => c.email === code.commercial_email);
+              const restant = Math.max(0, (code.commission_due || 0) - (code.commission_payee || 0));
+              return (
+                <div key={code.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-base font-bold text-primary flex-shrink-0">
+                    {commercial?.full_name?.charAt(0) || "?"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{commercial?.full_name || code.commercial_email}</p>
+                    <p className="text-xs text-muted-foreground">Code : {code.code}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-bold">{code.nombre_utilisations || 0} inscrits</p>
+                    {restant > 0 && <p className="text-xs text-amber-600 font-medium">{restant} F dû</p>}
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs flex-shrink-0"
+                    onClick={() => { setSelected(commercial); setSelectedCode(code); loadPerf(code.code); setDialogTab("perf"); setDialogOpen(true); }}>
+                    Détail
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Section liste : filtres + liste */}
+      {mainTab === "liste" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2">
         {filtres.map(f => {
           const FILTRE_EMOJI = { tous: "👥", en_attente: "⏳", valide: "✅", doit: "💰" };
           return (
@@ -208,10 +284,9 @@ export default function GererCommerciaux() {
             </button>
           );
         })}
-      </div>
+          </div>
 
-      {/* Liste */}
-      <div className="space-y-3">
+          <div className="space-y-3">
         {filtres_commerciaux.map(commercial => {
           const code = getCodeForCommercial(commercial.email);
           const commissionRestante = code ? (code.commission_due || 0) - (code.commission_payee || 0) : 0;
@@ -294,21 +369,22 @@ export default function GererCommerciaux() {
             <p className="text-muted-foreground text-sm">Aucun commercial trouvé</p>
           </div>
         )}
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* Dialog profil */}
-      <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setDialogTab("profil"); }}>
-        <DialogContent>
+      <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) { setDialogTab("profil"); setPerfClients([]); setPerfStats({}); } }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Profil commercial</DialogTitle>
           </DialogHeader>
           {selected && (
             <div className="space-y-4">
-              {/* Tabs */}
-              <div className="flex gap-2 border-b pb-2">
-                {[{val:"profil",label:"Profil"},{val:"messages",label:"💬 Chat"}].map(t => (
+              <div className="flex gap-2 border-b pb-2 overflow-x-auto">
+                {[{val:"profil",label:"Profil"},{val:"perf",label:"📊 Perfs"},{val:"messages",label:"💬 Chat"}].map(t => (
                   <button key={t.val} onClick={() => setDialogTab(t.val)}
-                    className={`text-sm font-medium px-3 py-1 rounded-full transition-colors ${
+                    className={`flex-shrink-0 text-sm font-medium px-3 py-1 rounded-full transition-colors ${
                       dialogTab === t.val ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
                     }`}>{t.label}</button>
                 ))}
@@ -316,6 +392,48 @@ export default function GererCommerciaux() {
 
               {dialogTab === "messages" ? (
                 <ChatAdmin userEmail={selected.email} userRole="commercial" currentUser={adminUser} />
+              ) : dialogTab === "perf" ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                    <div className="p-2 rounded-lg bg-primary/5 border">
+                      <p className="font-bold text-lg text-primary">{perfClients.length}</p>
+                      <p className="text-muted-foreground">Inscriptions</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-green-50 border-green-200">
+                      <p className="font-bold text-lg text-green-700">{Object.values(perfStats).filter(s => s.firstCourseValidated).length}</p>
+                      <p className="text-muted-foreground">1ères courses</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-amber-50 border-amber-200">
+                      <p className="font-bold text-lg text-amber-700">{perfClients.length > 0 ? Math.round(Object.values(perfStats).filter(s => s.firstCourseValidated).length / perfClients.length * 100) : 0}%</p>
+                      <p className="text-muted-foreground">Conversion</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-green-50 border-green-200">
+                      <p className="font-bold text-lg text-green-700">{Object.values(perfStats).filter(s => s.firstCourseValidated).length * 50} F</p>
+                      <p className="text-muted-foreground">Gains réels</p>
+                    </div>
+                  </div>
+                  {loadingPerf && <div className="flex justify-center py-4"><div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" /></div>}
+                  <p className="text-xs font-semibold text-muted-foreground">Détail des clients</p>
+                  {perfClients.map(client => {
+                    const stat = perfStats[client.email] || {};
+                    return (
+                      <div key={client.id} className="flex items-start justify-between p-2 rounded-lg border bg-card">
+                        <div>
+                          <p className="text-xs font-semibold">{client.full_name || client.email}</p>
+                          <p className="text-[10px] text-muted-foreground">Inscrit {moment(client.created_date).format("DD/MM/YYYY")}</p>
+                          {stat.firstCourseDate && <p className="text-[10px] text-muted-foreground">1ère course {moment(stat.firstCourseDate).format("DD/MM/YYYY")}</p>}
+                        </div>
+                        <div className="text-right">
+                          {stat.firstCourseValidated
+                            ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">+50 F validé</span>
+                            : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">En attente</span>
+                          }
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!loadingPerf && perfClients.length === 0 && <p className="text-center text-xs text-muted-foreground py-4">Aucun client inscrit avec ce code</p>}
+                </div>
               ) : (
                 <>
               <div className="flex items-center gap-3">
@@ -330,7 +448,6 @@ export default function GererCommerciaux() {
                 </div>
               </div>
 
-              {/* Validation profil */}
               {!selected.profil_valide && (
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">Validation du profil</p>
@@ -345,7 +462,6 @@ export default function GererCommerciaux() {
                 </div>
               )}
 
-              {/* Validation code */}
               {selectedCode && (
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">Code promo : <span className="font-black text-primary">{selectedCode.code}</span></p>
@@ -408,11 +524,8 @@ export default function GererCommerciaux() {
                 <Label>Mode de paiement</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {MODES_PAIEMENT.map(m => (
-                    <button
-                      key={m}
-                      onClick={() => setFormPaiement({ ...formPaiement, mode: m })}
-                      className={`p-2 rounded-lg border text-xs font-medium transition-all ${formPaiement.mode === m ? "border-primary bg-primary/10 text-primary" : "border-border"}`}
-                    >
+                    <button key={m} onClick={() => setFormPaiement({ ...formPaiement, mode: m })}
+                      className={`p-2 rounded-lg border text-xs font-medium transition-all ${formPaiement.mode === m ? "border-primary bg-primary/10 text-primary" : "border-border"}`}>
                       {m}
                     </button>
                   ))}
@@ -450,12 +563,9 @@ export default function GererCommerciaux() {
                         <p className="text-xs text-muted-foreground">Dû</p>
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      className="w-full h-7 text-xs"
+                    <Button size="sm" className="w-full h-7 text-xs"
                       onClick={() => marquerCommePayeDirectement(code)}
-                      disabled={paiementEnCours[code.id]}
-                    >
+                      disabled={paiementEnCours[code.id]}>
                       {paiementEnCours[code.id] ? "Enregistrement..." : "✅ Marquer comme payé"}
                     </Button>
                   </div>

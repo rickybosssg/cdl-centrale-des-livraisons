@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle, User } from "lucide-react";
+import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle, User, BarChart2 } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
 import { toast } from "sonner";
+import moment from "moment";
 
 export default function DashboardCommercial({ user }) {
   const navigate = useNavigate();
@@ -16,6 +17,10 @@ export default function DashboardCommercial({ user }) {
   const [newCode, setNewCode] = useState("");
   const [creating, setCreating] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
+  const [tab, setTab] = useState("apercu");
+  const [clients, setClients] = useState([]); // users who used the code
+  const [clientStats, setClientStats] = useState({}); // email -> { firstCourseValidated, firstCourseDate }
+  const [loadingPerf, setLoadingPerf] = useState(false);
 
   useEffect(() => {
     loadCode();
@@ -23,8 +28,34 @@ export default function DashboardCommercial({ user }) {
 
   const loadCode = async () => {
     const codes = await base44.entities.CodePromo.filter({ commercial_email: user.email });
-    if (codes.length > 0) setCode(codes[0]);
+    if (codes.length > 0) {
+      setCode(codes[0]);
+      await loadPerformances(codes[0].code);
+    }
     setLoading(false);
+  };
+
+  const loadPerformances = async (codeValue) => {
+    setLoadingPerf(true);
+    // Get all users who used this promo code
+    const usersWithCode = await base44.entities.User.filter({ code_promo_utilise: codeValue });
+    setClients(usersWithCode);
+    if (usersWithCode.length === 0) { setLoadingPerf(false); return; }
+    // Fetch all completed courses and cross-reference
+    const allCourses = await base44.entities.Course.filter({ statut: "livree" }, "-date_livraison", 500);
+    const stats = {};
+    for (const u of usersWithCode) {
+      const userCourses = allCourses.filter(c => c.client_email === u.email);
+      if (userCourses.length > 0) {
+        // Sort by created_date to find the first course
+        const sorted = [...userCourses].sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+        stats[u.email] = { firstCourseValidated: true, firstCourseDate: sorted[0].date_livraison || sorted[0].created_date };
+      } else {
+        stats[u.email] = { firstCourseValidated: false, firstCourseDate: null };
+      }
+    }
+    setClientStats(stats);
+    setLoadingPerf(false);
   };
 
   const creerCode = async () => {
@@ -71,6 +102,9 @@ export default function DashboardCommercial({ user }) {
   }
 
   const commissionRestante = (code?.commission_due || 0) - (code?.commission_payee || 0);
+  const nbInscriptions = clients.length;
+  const nbPremieresCoursesValidees = Object.values(clientStats).filter(s => s.firstCourseValidated).length;
+  const gainReel = nbPremieresCoursesValidees * 50;
 
   return (
     <div className="space-y-4">
@@ -110,88 +144,41 @@ export default function DashboardCommercial({ user }) {
         </div>
       )}
 
+      {/* Tabs (only when code exists) */}
+      {code && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {[{k:"apercu",l:"Aperçu"},{k:"performances",l:"Performances"},{k:"historique",l:"Historique"}].map(t => (
+            <button key={t.k} onClick={() => setTab(t.k)}
+              className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                tab === t.k ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+              }`}>{t.l}</button>
+          ))}
+        </div>
+      )}
+
       {/* Code promo */}
       {!code ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Tag className="h-4 w-4 text-primary" />
-              Créer mon code promotionnel
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Choisissez un code unique (ex: JOHN2024). Vos clients l'utiliseront pour bénéficier de 20% de réduction sur leur première course.
-            </p>
-            <div className="space-y-2">
-              <Label>Votre code promo</Label>
-              <Input
-                placeholder="Ex: JOHN2024"
-                value={newCode}
-                onChange={e => setNewCode(e.target.value.toUpperCase())}
-                maxLength={15}
-              />
-            </div>
-            <Button className="w-full" onClick={creerCode} disabled={creating || !newCode.trim()}>
-              {creating ? "Création..." : "Créer le code"}
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
           {/* Statut du code */}
-          {(() => {
-            const cfg = statutConfig[code.statut] || statutConfig.en_attente;
-            const Icon = cfg.icon;
-            return (
-              <div className={`p-4 rounded-xl border ${cfg.bg} flex items-center gap-3`}>
-                <Icon className={`h-5 w-5 ${cfg.color}`} />
-                <div>
-                  <p className={`text-sm font-bold ${cfg.color}`}>{cfg.label}</p>
-                  {code.motif_refus && <p className="text-xs text-red-600 mt-0.5">Motif : {code.motif_refus}</p>}
-                </div>
-              </div>
-            );
-          })()}
+          {tab === "apercu" && (
+          <>
 
-          {/* Code affiché */}
-          <Card className="bg-primary text-white">
-            <CardContent className="p-6 text-center">
-              <p className="text-xs text-white/70 mb-1">Mon code promotionnel</p>
-              <p className="text-4xl font-black tracking-widest">{code.code}</p>
-              <p className="text-xs text-white/70 mt-2">Partagez ce code pour que vos clients bénéficient de 20% de réduction</p>
-            </CardContent>
-          </Card>
-
-          {/* Montant dû à vous (CDL) */}
-          {commissionRestante > 0 && (
-            <Card className="border-2 border-amber-200 bg-amber-50">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-amber-600 font-medium mb-2">💰 CDL VOUS DOIT</p>
-                <p className="text-4xl font-black text-amber-600">{commissionRestante.toLocaleString()}</p>
-                <p className="text-sm text-amber-700 font-semibold mt-1">FCFA à payer</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Stats */}
+          {/* Stats aperçu */}
           <div className="grid grid-cols-2 gap-3">
             <Card>
               <CardContent className="p-4 text-center">
                 <Users className="h-6 w-6 text-primary mx-auto mb-1" />
-                <p className="text-2xl font-bold">{code.nombre_utilisations || 0}</p>
-                <p className="text-xs text-muted-foreground">Clients recrutés</p>
+                <p className="text-2xl font-bold">{nbInscriptions}</p>
+                <p className="text-xs text-muted-foreground">Inscriptions</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <TrendingUp className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-2xl font-bold">{(code.nombre_utilisations || 0) * 50}</p>
-                <p className="text-xs text-muted-foreground">FCFA gagnés</p>
+                <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-green-600">{nbPremieresCoursesValidees}</p>
+                <p className="text-xs text-muted-foreground">1ères courses</p>
               </CardContent>
             </Card>
           </div>
-
           {/* Paiement */}
           <Card>
             <CardHeader className="pb-2">
@@ -203,8 +190,8 @@ export default function DashboardCommercial({ user }) {
             <CardContent className="space-y-3">
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="p-2 rounded-lg bg-muted">
-                  <p className="font-bold text-base">{code.commission_due || 0} F</p>
-                  <p className="text-muted-foreground">Total dû</p>
+                  <p className="font-bold text-base">{gainReel} F</p>
+                  <p className="text-muted-foreground">Gagné réel</p>
                 </div>
                 <div className="p-2 rounded-lg bg-green-50">
                   <p className="font-bold text-base text-green-600">{code.commission_payee || 0} F</p>
@@ -222,9 +209,87 @@ export default function DashboardCommercial({ user }) {
               }`}>
                 {code.statut_paiement === "À jour" ? "✅ Vous êtes à jour" : "⏳ Paiement en attente"}
               </div>
-              <p className="text-[10px] text-muted-foreground text-center">50 FCFA par nouveau client utilisant votre code</p>
+              <p className="text-[10px] text-muted-foreground text-center">50 F CFA par client ayant effectué sa 1ère course validée</p>
             </CardContent>
           </Card>
+          </>
+          )}
+
+          {/* ONGLET PERFORMANCES */}
+          {tab === "performances" && (
+            <div className="space-y-4">
+              {/* Métriques clés */}
+              <div className="grid grid-cols-2 gap-3">
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardContent className="p-4 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Inscriptions avec code</p>
+                    <p className="text-3xl font-black text-primary">{nbInscriptions}</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-green-50 border-green-200">
+                  <CardContent className="p-4 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">1ères courses validées</p>
+                    <p className="text-3xl font-black text-green-700">{nbPremieresCoursesValidees}</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-amber-50 border-amber-200">
+                  <CardContent className="p-4 text-center">
+                    <p className="text-xs text-amber-700 mb-1">Taux de conversion</p>
+                    <p className="text-3xl font-black text-amber-700">{nbInscriptions > 0 ? Math.round(nbPremieresCoursesValidees / nbInscriptions * 100) : 0}%</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-green-50 border-green-200">
+                  <CardContent className="p-4 text-center">
+                    <p className="text-xs text-green-700 mb-1">Gains réels</p>
+                    <p className="text-3xl font-black text-green-700">{gainReel} <span className="text-sm">F</span></p>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800">
+                💡 Vous gagnez <strong>50 F CFA</strong> uniquement quand un client inscrit avec votre code effectue sa <strong>toute première course validée</strong>. Une seule fois par client.
+              </div>
+              {loadingPerf && <div className="flex justify-center py-4"><div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" /></div>}
+            </div>
+          )}
+
+          {/* ONGLET HISTORIQUE */}
+          {tab === "historique" && (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">Clients inscrits avec votre code</p>
+              {loadingPerf && <div className="flex justify-center py-4"><div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" /></div>}
+              {!loadingPerf && clients.length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-6">Aucun client n'a encore utilisé votre code</p>
+              )}
+              {!loadingPerf && clients.map(client => {
+                const stat = clientStats[client.email] || {};
+                const status = stat.firstCourseValidated ? "gain_valide" : "premiere_course_manquante";
+                const STATUS_CFG = {
+                  gain_valide: { label: "Gain validé ✅", color: "bg-green-100 text-green-700", gain: 50 },
+                  premiere_course_manquante: { label: "1ère course non encore effectuée", color: "bg-amber-100 text-amber-700", gain: 0 },
+                };
+                const cfg = STATUS_CFG[status];
+                return (
+                  <div key={client.id} className="p-3 rounded-xl border bg-card space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">{client.full_name || client.email}</p>
+                        <p className="text-xs text-muted-foreground">Inscrit le {moment(client.created_date).format("DD/MM/YYYY")}</p>
+                        {stat.firstCourseDate && (
+                          <p className="text-xs text-muted-foreground">1ère course : {moment(stat.firstCourseDate).format("DD/MM/YYYY")}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg.color}`}>{cfg.label}</span>
+                        <p className={`text-sm font-bold mt-1 ${cfg.gain > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                          {cfg.gain > 0 ? `+${cfg.gain} F CFA` : "0 F CFA"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
     </div>
