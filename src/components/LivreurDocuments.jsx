@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, Upload, Loader2, ShieldCheck } from "lucide-react";
@@ -17,12 +17,21 @@ export default function LivreurDocuments({ onComplete }) {
   const [uploading, setUploading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const inputRefs = useRef({});
 
   const handleFile = (key, file) => {
     if (!file) return;
     setFiles(prev => ({ ...prev, [key]: file }));
     const url = URL.createObjectURL(file);
     setPreviews(prev => ({ ...prev, [key]: url }));
+  };
+
+  const triggerUpload = (key) => {
+    const input = inputRefs.current[key];
+    if (input) {
+      input.value = '';
+      input.click();
+    }
   };
 
   const completed = DOCS.filter(d => files[d.key]).length;
@@ -126,24 +135,24 @@ export default function LivreurDocuments({ onComplete }) {
                 {/* Bouton upload */}
                 <div className="px-3 pb-3">
                   <input
+                    ref={el => inputRefs.current[doc.key] = el}
                     type="file"
-                    accept="image/*"
-                    capture="environment"
+                    accept="image/*, image/jpeg, image/jpg, image/png, image/webp"
                     className="hidden"
-                    id={`doc_${doc.key}`}
                     onChange={e => handleFile(doc.key, e.target.files[0])}
                   />
-                  <label
-                    htmlFor={`doc_${doc.key}`}
-                    className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
+                  <button
+                    type="button"
+                    onClick={() => triggerUpload(doc.key)}
+                    className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-colors active:scale-[0.98] ${
                       hasFile
-                        ? "bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20"
-                        : "bg-muted text-foreground border border-border hover:bg-muted/80"
+                        ? "bg-primary/10 text-primary border border-primary/30"
+                        : "bg-muted text-foreground border border-border"
                     }`}
                   >
                     <Camera className="h-4 w-4" />
                     {hasFile ? "📷 Remplacer la photo" : "📷 Prendre ou choisir une photo"}
-                  </label>
+                  </button>
                 </div>
               </div>
             );
