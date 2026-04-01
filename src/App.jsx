@@ -61,6 +61,7 @@ import GestionTransactions from './pages/dispatcher/GestionTransactions';
 import GestionProfils from './pages/dispatcher/GestionProfils';
 import GestionAcces from './pages/dispatcher/GestionAcces';
 import DiffusionGlobale from './pages/dispatcher/DiffusionGlobale';
+import PendingProfileRequests from './pages/dispatcher/PendingProfileRequests';
 import TestUpload from './pages/TestUpload';
 
 // Wrappers qui chargent le user avant de rendre
@@ -215,6 +216,7 @@ const AuthenticatedApp = () => {
           <Route path="/gestion-profils" element={<GestionProfils />} />
           <Route path="/gestion-acces" element={<GestionAcces />} />
           <Route path="/diffusion-globale" element={<DiffusionGlobale />} />
+          <Route path="/pending-profiles" element={<PendingProfileRequests />} />
           <Route path="/test-upload" element={<TestUpload />} />
         </Route>
       </Route>

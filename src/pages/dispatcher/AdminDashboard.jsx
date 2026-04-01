@@ -147,7 +147,7 @@ export default function AdminDashboard() {
       {/* Actions rapides */}
       <div className="px-4 space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Accès rapide</p>
-        <Link to="/gestion-profils">
+        <Link to="/pending-profiles">
           <Button className="w-full justify-start gap-2" variant="outline">
             <AlertCircle className="h-4 w-4" />
             📋 Profils en attente ({kpis.pendingRequests})
