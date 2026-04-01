@@ -41,6 +41,7 @@ import Suppression from './pages/dispatcher/Suppression';
 import AuditUtilisateurs from './pages/dispatcher/AuditUtilisateurs';
 import AdminDashboard from './pages/dispatcher/AdminDashboard';
 import AdminRoleCorrection from './pages/AdminRoleCorrection';
+import DebugAdmin from './pages/DebugAdmin';
 import CreerBoutiqueAdmin from './pages/dispatcher/CreerBoutiqueAdmin';
 import AdminTrash from './pages/dispatcher/AdminTrash';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
@@ -148,6 +149,7 @@ const AuthenticatedApp = () => {
       {/* Routes publiques sans layout */}
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
+      <Route path="/debug-admin" element={<DebugAdmin />} />
 
       {/* Toutes les routes avec layout */}
       <Route element={<AppLayoutWithUser />}>
