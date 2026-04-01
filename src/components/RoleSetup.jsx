@@ -61,11 +61,12 @@ export default function RoleSetup({ onComplete }) {
     // ÉTAPE 1 : Sauvegarder le rôle (await obligatoire)
     await base44.auth.updateMe({
       user_type: selectedRole,
+      active_profile_type: selectedRole,
       onboarding_completed: true,
       user_roles: JSON.stringify([selectedRole]),
       statut_compte: selectedRole === 'client' ? 'actif' : 'en_attente',
       profil_valide: selectedRole === "client",
-      docs_envoyes: selectedRole !== 'livreur', // livreur doit envoyer docs séparément
+      docs_envoyes: selectedRole !== 'livreur',
       statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : undefined,
       statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
       statut_validation_partenaire: selectedRole === "partenaire" ? "en_attente" : undefined,
@@ -151,12 +152,8 @@ export default function RoleSetup({ onComplete }) {
     }
     setLoading(false);
     localStorage.removeItem('cdl_pending_role');
-    // Livreur → afficher écran bienvenue avant LivreurDocuments
-    if (selectedRole === 'livreur') {
-      setShowLivreurBienvenue(true);
-    } else {
-      onComplete();
-    }
+    // Aller directement vers onComplete → Home détecte livreur+docs_envoyes=false → LivreurDocuments
+    onComplete();
   };
 
   if (showLivreurBienvenue) {
