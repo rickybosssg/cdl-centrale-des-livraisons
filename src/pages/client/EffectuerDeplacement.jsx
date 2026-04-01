@@ -80,16 +80,6 @@ export default function EffectuerDeplacement() {
     }
     setLoading(true);
 
-    // Débiter Bedou avant assignation
-    const courseRef = `tmp_deplacement_${user.email}_${Date.now()}`;
-    const payRes = await base44.functions.invoke('bedouEngine', { action: 'payer_course', montant: prixTotal, course_ref: courseRef });
-    if (!payRes.data.success) {
-      toast.error(payRes.data.error || "Erreur de paiement Bedou");
-      setLoading(false);
-      return;
-    }
-    setSoldeBedou(payRes.data.nouveau_solde);
-
     try {
       const livreur = await searchAndAssignLivreur();
       

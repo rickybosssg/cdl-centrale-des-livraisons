@@ -380,40 +380,62 @@ Deno.serve(async (req) => {
     return Response.json({ success: true, bonus: BONUS_COMMERCIAL });
   }
 
-  // ── ACTION: payer_course (client) ─────────────────────────────
-  if (action === 'payer_course') {
-    const { montant, course_ref } = body;
+  // ── ACTION: finaliser_course (livreur appelle à la livraison) ─────────────
+  // Débite le client, crédite le livreur (80%), CDL garde 20%
+  if (action === 'finaliser_course') {
+    const { course_id, client_email, client_nom, livreur_email, livreur_nom, montant } = body;
     if (!montant || montant <= 0) return Response.json({ error: 'Montant invalide' }, { status: 400 });
-    const bedou = await getBedou(user.email);
-    if (!bedou) return Response.json({ error: 'Bedou introuvable. Rechargez votre Bedou.' }, { status: 404 });
-    if (bedou.statut_bedou === 'suspendu') return Response.json({ error: 'Bedou suspendu' }, { status: 403 });
-    // Anti double-débit
-    if (course_ref) {
-      const existing = await base44.asServiceRole.entities.Transaction.filter({ reference_id: course_ref, user_email: user.email });
-      if (existing.length > 0) return Response.json({ error: 'Paiement déjà effectué pour cette commande' }, { status: 400 });
+    // Anti double-exécution
+    const existingTx = await base44.asServiceRole.entities.Transaction.filter({ reference_id: course_id, type: 'paiement' });
+    if (existingTx.length > 0) return Response.json({ error: 'Course déjà réglée' }, { status: 400 });
+    // Bedou client
+    const bedouClient = await getBedou(client_email);
+    if (!bedouClient) return Response.json({ error: 'Bedou client introuvable' }, { status: 404 });
+    if ((bedouClient.solde_disponible || 0) < montant) {
+      return Response.json({ success: false, insuffisant: true, solde: bedouClient.solde_disponible || 0 }, { status: 200 });
     }
-    if ((bedou.solde_disponible || 0) < montant) {
-      return Response.json({ success: false, insuffisant: true, solde: bedou.solde_disponible || 0, manquant: montant - (bedou.solde_disponible || 0) }, { status: 200 });
-    }
-    await updateBedou(bedou.id, {
-      solde: Math.max(0, (bedou.solde || 0) - montant),
-      solde_disponible: Math.max(0, (bedou.solde_disponible || 0) - montant),
-      depenses_totales: (bedou.depenses_totales || 0) + montant,
+    // Débiter client
+    await updateBedou(bedouClient.id, {
+      solde: Math.max(0, (bedouClient.solde || 0) - montant),
+      solde_disponible: Math.max(0, (bedouClient.solde_disponible || 0) - montant),
+      depenses_totales: (bedouClient.depenses_totales || 0) + montant,
     });
     await createTransaction({
-      user_email: user.email,
-      user_nom: user.full_name,
-      role: user.user_type || 'client',
+      user_email: client_email,
+      user_nom: client_nom,
+      role: 'client',
       type: 'paiement',
       sens: 'debit',
       montant,
       source: 'course',
       methode: 'interne',
-      reference_id: course_ref || '',
-      description: `Paiement course via Bedou — ${montant} F CFA`,
+      reference_id: course_id,
+      description: `Paiement course #${course_id} via Bedou`,
       statut: 'valide',
     });
-    return Response.json({ success: true, nouveau_solde: Math.max(0, (bedou.solde_disponible || 0) - montant) });
+    // Créditer livreur 80%
+    const gainLivreur = Math.round(montant * 0.8);
+    const commissionCdl = montant - gainLivreur;
+    const bedouLivreur = await ensureBedou(livreur_email, 'livreur', livreur_nom);
+    await updateBedou(bedouLivreur.id, {
+      solde: (bedouLivreur.solde || 0) + gainLivreur,
+      solde_disponible: (bedouLivreur.solde_disponible || 0) + gainLivreur,
+      gains_totaux: (bedouLivreur.gains_totaux || 0) + gainLivreur,
+    });
+    await createTransaction({
+      user_email: livreur_email,
+      user_nom: livreur_nom,
+      role: 'livreur',
+      type: 'gain',
+      sens: 'credit',
+      montant: gainLivreur,
+      source: 'course',
+      methode: 'interne',
+      reference_id: course_id,
+      description: `Gain course #${course_id} (80% de ${montant} FCFA)`,
+      statut: 'valide',
+    });
+    return Response.json({ success: true, gainLivreur, commissionCdl });
   }
 
   // ── ACTION: ajuster_solde (admin) ────────────────────────────

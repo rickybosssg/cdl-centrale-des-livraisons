@@ -70,29 +70,6 @@ export default function CreateCourse() {
     }
     setLoading(true);
 
-    // Générer une référence temporaire pour anti-double-débit
-    const courseRef = `tmp_${user.email}_${Date.now()}`;
-
-    // Débiter Bedou AVANT de créer la course
-    const payRes = await base44.functions.invoke('bedouEngine', {
-      action: 'payer_course',
-      montant: prixAvecPromo,
-      course_ref: courseRef,
-    });
-
-    if (!payRes.data.success) {
-      if (payRes.data.insuffisant) {
-        toast.error(`Solde insuffisant. Il vous manque ${payRes.data.manquant} F CFA.`);
-      } else {
-        toast.error(payRes.data.error || "Erreur de paiement Bedou");
-      }
-      setLoading(false);
-      return;
-    }
-
-    // Mettre à jour le solde affiché
-    setSoldeBedou(payRes.data.nouveau_solde);
-
     let clientLat = user.gps_latitude || null;
     let clientLng = user.gps_longitude || null;
     if (!clientLat && navigator.geolocation) {
@@ -122,7 +99,7 @@ export default function CreateCourse() {
       type_mission: typeMission,
       mode_paiement: "Bedou",
       statut: "en_attente",
-      statut_paiement: "paye",
+      statut_paiement: "en_attente",
       client_email: user.email,
       client_name: user.full_name,
       prix: prixAvecPromo,

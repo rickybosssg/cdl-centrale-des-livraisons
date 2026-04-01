@@ -67,34 +67,65 @@ export default function CourseLivreur() {
 
   const livrerColis = async () => {
     setUpdating(true);
-    // Si code promo utilisé : pas de commission CDL sur cette course
-    const avecPromo = !!course.code_promo_utilise;
-    const commissionCdl = avecPromo ? 0 : (course.prix || 0) * 0.2;
-    const gainLivreur = avecPromo ? (course.prix || 0) : (course.prix || 0) * 0.8;
+    const montant = course.prix || 0;
+    const gainLivreur = Math.round(montant * 0.8);
+    const commissionCdl = montant - gainLivreur;
+
+    // Débiter client + créditer livreur via Bedou
+    const res = await base44.functions.invoke('bedouEngine', {
+      action: 'finaliser_course',
+      course_id: course.id,
+      client_email: course.client_email,
+      client_nom: course.client_name,
+      livreur_email: course.livreur_email,
+      livreur_nom: course.livreur_name,
+      montant,
+    });
+
+    if (!res.data.success) {
+      if (res.data.insuffisant) {
+        toast.error(`Solde Bedou du client insuffisant (${res.data.solde} FCFA). Contactez l'administration.`);
+      } else {
+        toast.error(res.data.error || 'Erreur lors du règlement Bedou');
+      }
+      setUpdating(false);
+      return;
+    }
+
     // Optimistic UI
-    setCourse(prev => ({ ...prev, statut: "livree", date_livraison: new Date().toISOString() }));
+    setCourse(prev => ({ ...prev, statut: 'livree', date_livraison: new Date().toISOString() }));
     await base44.entities.Course.update(id, {
-      statut: "livree",
+      statut: 'livree',
       date_livraison: new Date().toISOString(),
+      statut_paiement: 'paye',
       commission_cdl: commissionCdl,
       gain_livreur: gainLivreur,
-      statut_paiement_livreur: avecPromo ? "Payé" : "Commission due",
+      statut_paiement_livreur: 'Payé',
     });
-    // Mettre à jour le solde du livreur
+
+    // Mettre à jour stats livreur
     const livreurs = await base44.entities.User.filter({ email: course.livreur_email });
     if (livreurs.length > 0) {
       const livreur = livreurs[0];
-      const nouveauSolde = (livreur.solde_commission_du || 0) + commissionCdl;
       await base44.entities.User.update(livreur.id, {
-        solde_commission_du: nouveauSolde,
         total_courses_livrees: (livreur.total_courses_livrees || 0) + 1,
-        total_commissions_generees: (livreur.total_commissions_generees || 0) + commissionCdl,
-        statut_financier_livreur: nouveauSolde > 0 ? "Doit une commission" : "À jour",
         nombre_courses_actives: Math.max(0, (livreur.nombre_courses_actives || 0) - 1),
       });
     }
+
+    // Notifier client pour noter
+    await base44.entities.Notification.create({
+      destinataire_email: course.client_email,
+      destinataire_role: 'client',
+      titre: '✅ Colis livré ! Notez votre livreur',
+      message: `Votre colis a été livré. ${montant} FCFA débités de votre Bedou. Notez ${course.livreur_name} !`,
+      type: 'success',
+      lue: false,
+      course_id: course.id,
+    });
+
     vibrateSuccess();
-    toast.success("Colis livré avec succès !");
+    toast.success(`🎉 Livraison confirmée ! +${gainLivreur} FCFA crédités sur votre Bedou.`);
     setUpdating(false);
   };
 
