@@ -110,8 +110,13 @@ export default function Home() {
     );
   }
 
-  // Profil actif = active_profile_type (multi-profils) ou fallback user_type
-  const activeProfile = user?.active_profile_type || user?.user_type;
+  // Déterminer le profil actif — ADMIN PRIORITAIRE
+  let activeProfile = null;
+  if (isAdmin) {
+    activeProfile = 'admin';
+  } else {
+    activeProfile = user?.active_profile_type || user?.user_type;
+  }
 
   // 2. Pas encore de profil → inscription
   if (!activeProfile) {
@@ -153,11 +158,11 @@ export default function Home() {
   };
 
   const PROFILE_CFG = {
-    client:     { label: 'Client',      emoji: '👤', color: '#3b82f6' },
-    livreur:    { label: 'Livreur',     emoji: '🛵', color: '#22c55e' },
-    partenaire: { label: 'Partenaire',  emoji: '🏪', color: '#a855f7' },
-    commercial: { label: 'Commercial',  emoji: '📣', color: '#f97316' },
-    admin:      { label: 'Admin',       emoji: '🛡️', color: '#ef4444' },
+    admin:      { label: 'Administrateur', emoji: '🛡️', color: '#1e40af', bgGradient: 'from-blue-900 to-blue-700' },
+    client:     { label: 'Client',         emoji: '👤', color: '#3b82f6' },
+    livreur:    { label: 'Livreur',        emoji: '🛵', color: '#22c55e' },
+    partenaire: { label: 'Partenaire',     emoji: '🏪', color: '#a855f7' },
+    commercial: { label: 'Commercial',     emoji: '📣', color: '#f97316' },
   };
 
   return (
@@ -172,15 +177,24 @@ export default function Home() {
       <div className="flex justify-between items-center pb-3 px-4 pt-4">
         {/* Badge profil actif + switch rapide — toujours visible */}
         {activeProfile && PROFILE_CFG[activeProfile] && (
-          <button
-            onClick={() => setShowSwitch(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full border-2 text-sm font-bold transition-all active:scale-95"
-            style={{ borderColor: PROFILE_CFG[activeProfile].color, color: PROFILE_CFG[activeProfile].color, background: PROFILE_CFG[activeProfile].color + '15' }}
-          >
-            <span>{PROFILE_CFG[activeProfile].emoji}</span>
-            <span>{PROFILE_CFG[activeProfile].label}</span>
-            <span className="text-xs opacity-60">▼</span>
-          </button>
+          isAdmin ? (
+            /* Admin: badge spécial sans switch */
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full border-2 text-sm font-bold bg-gradient-to-r from-blue-900 to-blue-700 text-white border-blue-600 shadow-lg">
+              <span>{PROFILE_CFG[activeProfile].emoji}</span>
+              <span>{PROFILE_CFG[activeProfile].label}</span>
+            </div>
+          ) : (
+            /* Non-admin: badge avec switch */
+            <button
+              onClick={() => setShowSwitch(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full border-2 text-sm font-bold transition-all active:scale-95"
+              style={{ borderColor: PROFILE_CFG[activeProfile].color, color: PROFILE_CFG[activeProfile].color, background: PROFILE_CFG[activeProfile].color + '15' }}
+            >
+              <span>{PROFILE_CFG[activeProfile].emoji}</span>
+              <span>{PROFILE_CFG[activeProfile].label}</span>
+              <span className="text-xs opacity-60">▼</span>
+            </button>
+          )
         )}
         <Button variant="outline" size="sm" className="gap-2 ml-auto" onClick={() => navigate('/settings')}>
           <User className="h-4 w-4" /> Mon compte
@@ -189,7 +203,8 @@ export default function Home() {
 
       {renderDashboard()}
 
-      {/* Modal switch profil */}
+      {/* Modal switch profil — MASQUÉ POUR ADMINS */}
+      {!isAdmin && (
       <Dialog open={showSwitch} onOpenChange={setShowSwitch}>
         <DialogContent className="max-w-xs">
           <p className="font-bold text-base mb-1">Mes profils</p>
@@ -226,8 +241,10 @@ export default function Home() {
           {/* Profils non actifs avec actions */}
           {allProfiles.filter(p => p.status !== 'actif').length > 0 && (
             <div className="mt-3 space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Autres profils</p>
-              {allProfiles.filter(p => p.status !== 'actif').map(p => {
+              {!isAdmin && (
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Autres profils</p>
+        )}
+              {!isAdmin && allProfiles.filter(p => p.status !== 'actif').map(p => {
                 console.log('[Home.Modal] Profil non actif:', p.profile_type, '-', p.status);
                 const cfg = PROFILE_CFG[p.profile_type];
                 if (!cfg) return null;
@@ -317,6 +334,7 @@ export default function Home() {
           </button>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 }
