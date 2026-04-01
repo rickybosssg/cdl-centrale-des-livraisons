@@ -88,6 +88,15 @@ Deno.serve(async (req) => {
       console.warn('[cancelProfileRequest] Erreur AdminActionLog (non bloquant):', err.message);
     }
 
+    // Recalculer les compteurs admin
+    console.log('[cancelProfileRequest] Recalcul compteurs admin...');
+    try {
+      await base44.asServiceRole.functions.invoke('recalculateAdminCounters', {});
+      console.log('[cancelProfileRequest] Compteurs recalculés');
+    } catch (err) {
+      console.warn('[cancelProfileRequest] Erreur recalcul compteurs (non bloquant):', err.message);
+    }
+
     console.log('[cancelProfileRequest] ====== SUCCÈS ANNULATION ======');
     return Response.json({
       success: true,
