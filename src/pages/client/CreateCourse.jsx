@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Phone, Package, ArrowLeft, AlertTriangle, Send, RefreshCw, Wallet } from "lucide-react";
+import { fmt } from "@/lib/formatMoney";
 import QuartierSelect from "../../components/QuartierSelect";
 import { lancerDispatch } from "@/lib/dispatch";
 import { toast } from "sonner";
@@ -137,7 +138,7 @@ export default function CreateCourse() {
             <Wallet className={`h-5 w-5 flex-shrink-0 ${soldeBedou > 0 ? 'text-green-600' : 'text-amber-600'}`} />
             <div>
               <p className={`text-sm font-semibold ${soldeBedou > 0 ? 'text-green-700' : 'text-amber-700'}`}>
-                Mon Bedou : {soldeBedou.toLocaleString()} F CFA
+                Mon Bedou : {fmt(soldeBedou)}
               </p>
               {soldeBedou === 0 && (
                 <p className="text-xs text-amber-600">Rechargez votre Bedou pour commander</p>
@@ -353,20 +354,20 @@ export default function CreateCourse() {
         <CardContent className="space-y-3">
           <div className="flex justify-between items-center text-sm">
             <span className="text-muted-foreground">Mon solde Bedou</span>
-            <span className="font-bold">{soldeBedou !== null ? `${soldeBedou.toLocaleString()} F CFA` : '...'}</span>
+            <span className="font-bold text-foreground">{soldeBedou !== null ? fmt(soldeBedou) : '...'}</span>
           </div>
           {prixAvecPromo > 0 && (
             <>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">Montant total</span>
-                <span className="font-bold text-primary">{prixAvecPromo.toLocaleString()} F CFA</span>
+                <span className="font-bold text-primary">{fmt(prixAvecPromo)}</span>
               </div>
               <div className={`flex items-center gap-2 p-2 rounded-lg text-sm font-semibold ${soldeInsuffisant ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                 {soldeInsuffisant ? '❌ Solde insuffisant' : '✅ Solde suffisant'}
               </div>
               {soldeInsuffisant && (
                 <div className="space-y-2">
-                  <p className="text-xs text-red-600">Il vous manque {(prixAvecPromo - (soldeBedou || 0)).toLocaleString()} F CFA. Rechargez votre Bedou pour continuer.</p>
+                  <p className="text-xs text-red-700 font-medium">Il vous manque {fmt(prixAvecPromo - (soldeBedou || 0))}. Rechargez votre Bedou pour continuer.</p>
                   <Button className="w-full" variant="outline" onClick={() => navigate('/mon-bedou')}>
                     🔄 Recharger mon Bedou
                   </Button>
@@ -388,17 +389,17 @@ export default function CreateCourse() {
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Prix de base</span>
-                <span>{prixBase} FCFA</span>
+                  <span className="font-medium text-foreground">{fmt(prixBase)}</span>
               </div>
               {supplement > 0 && (
                 <div className="flex justify-between text-amber-700">
                   <span>{tresUrgent ? "🚨 Très urgent" : "🔔 Urgent"}</span>
-                  <span>+{supplement} FCFA</span>
+                    <span className="font-medium text-amber-700">+{fmt(supplement)}</span>
                 </div>
               )}
               <div className="border-t pt-2 flex justify-between font-bold text-base">
                 <span>Total à débiter</span>
-                <span className="text-primary text-xl">{prixAvecPromo} FCFA</span>
+                  <span className="text-primary text-xl">{fmt(prixAvecPromo)}</span>
               </div>
             </div>
           </CardContent>

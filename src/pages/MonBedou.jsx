@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Wallet, ArrowLeft, Plus, ArrowDownCircle, TrendingUp, Lock, Upload, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { fmt } from "@/lib/formatMoney";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -139,21 +140,21 @@ export default function MonBedou() {
           <Wallet className="h-5 w-5" />
           <span className="text-sm font-medium">Portefeuille CDL</span>
         </div>
-        <p className="text-4xl font-extrabold">{(bedou?.solde || 0).toLocaleString()} <span className="text-xl">F CFA</span></p>
+        <p className="text-4xl font-extrabold">{fmt(bedou?.solde || 0)}</p>
         <div className="flex gap-5 mt-4">
           <div>
             <div className="flex items-center gap-1.5">
               <TrendingUp className="h-4 w-4 text-green-300" />
               <span className="text-xs text-white/70">Disponible</span>
             </div>
-            <p className="font-bold">{(bedou?.solde_disponible || 0).toLocaleString()} F</p>
+            <p className="font-bold text-white">{fmt(bedou?.solde_disponible || 0)}</p>
           </div>
           <div>
             <div className="flex items-center gap-1.5">
               <Lock className="h-4 w-4 text-amber-300" />
               <span className="text-xs text-white/70">Bloqué</span>
             </div>
-            <p className="font-bold">{(bedou?.solde_bloque || 0).toLocaleString()} F</p>
+            <p className="font-bold text-white">{fmt(bedou?.solde_bloque || 0)}</p>
           </div>
           {(bedou?.bonus || 0) > 0 && (
             <div>
@@ -161,7 +162,7 @@ export default function MonBedou() {
                 <span className="text-amber-300 text-sm">🎁</span>
                 <span className="text-xs text-white/70">Bonus</span>
               </div>
-              <p className="font-bold">{(bedou?.bonus || 0).toLocaleString()} F</p>
+              <p className="font-bold text-white">{fmt(bedou?.bonus || 0)}</p>
             </div>
           )}
         </div>
@@ -194,13 +195,13 @@ export default function MonBedou() {
             <Card className="bg-green-50 border-green-200">
               <CardContent className="p-4 text-center">
                 <p className="text-xs text-green-700 mb-1">Gains totaux</p>
-                <p className="text-xl font-bold text-green-700">{(bedou?.gains_totaux || 0).toLocaleString()} F</p>
+                <p className="text-xl font-bold text-green-700">{fmt(bedou?.gains_totaux || 0)}</p>
               </CardContent>
             </Card>
             <Card className="bg-red-50 border-red-200">
               <CardContent className="p-4 text-center">
                 <p className="text-xs text-red-700 mb-1">Dépenses totales</p>
-                <p className="text-xl font-bold text-red-700">{(bedou?.depenses_totales || 0).toLocaleString()} F</p>
+                <p className="text-xl font-bold text-red-700">{fmt(bedou?.depenses_totales || 0)}</p>
               </CardContent>
             </Card>
           </div>
@@ -244,7 +245,7 @@ export default function MonBedou() {
                 className="w-full mt-1 h-11 rounded-xl border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
               {bonus > 0 && (
-                <p className="text-xs text-green-600 mt-1 font-medium">🎁 Bonus automatique : +{bonus} F CFA !</p>
+                <p className="text-xs text-green-700 mt-1 font-semibold">🎁 Bonus automatique : +{fmt(bonus)} !</p>
               )}
             </div>
             <div>
@@ -282,7 +283,7 @@ export default function MonBedou() {
               </label>
             </div>
             <Button className="w-full h-12 font-semibold" onClick={handleRecharge} disabled={submitting || !form.montant}>
-              {submitting ? "Envoi en cours..." : `Envoyer la demande${bonus > 0 ? ` (+${bonus} F bonus)` : ''}`}
+              {submitting ? "Envoi en cours..." : `Envoyer la demande${bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ''}`}
             </Button>
           </div>
         </div>
@@ -292,7 +293,7 @@ export default function MonBedou() {
       {tab === "retrait" && canRetrait && (
         <div className="space-y-4">
           <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
-            ⚠️ Solde disponible : <strong>{(bedou?.solde_disponible || 0).toLocaleString()} F CFA</strong>. Retrait minimum : 500 F CFA.
+            ⚠️ Solde disponible : <strong>{fmt(bedou?.solde_disponible || 0)}</strong>. Retrait minimum : 500 F CFA.
           </div>
           <div className="space-y-3">
             <div>
@@ -378,12 +379,12 @@ function TransactionRow({ tx }) {
         <Wallet className="h-4 w-4 text-primary" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{tx.description || typeLabels[tx.type]}</p>
+        <p className="text-sm font-medium text-foreground truncate">{tx.description || typeLabels[tx.type]}</p>
         <p className="text-xs text-muted-foreground">{moment(tx.created_date).format("DD/MM/YY HH:mm")}</p>
       </div>
       <div className="text-right flex-shrink-0">
-        <p className={`text-sm font-bold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
-          {isCredit ? '+' : '-'}{(tx.montant || 0).toLocaleString()} F
+        <p className={`text-sm font-bold ${isCredit ? 'text-green-700' : 'text-red-700'}`}>
+          {isCredit ? '+' : '-'}{fmt(tx.montant || 0)}
         </p>
         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STATUT_BADGE[tx.statut] || 'bg-gray-100 text-gray-600'}`}>
           {tx.statut}

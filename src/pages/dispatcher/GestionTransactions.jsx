@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Wallet, CheckCircle2, XCircle, Clock, Filter, RefreshCw, TrendingUp, AlertCircle } from "lucide-react";
+import { fmt } from "@/lib/formatMoney";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,8 +129,8 @@ export default function GestionTransactions() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-primary uppercase tracking-wide">💼 Bedou CDL (commissions)</p>
-                <p className="text-2xl font-black text-primary mt-1">{(bedouCdl.solde_disponible || 0).toLocaleString()} F CFA</p>
-                <p className="text-xs text-muted-foreground">Total encaissé : {(bedouCdl.gains_totaux || 0).toLocaleString()} F CFA</p>
+                <p className="text-2xl font-black text-primary mt-1">{fmt(bedouCdl.solde_disponible || 0)}</p>
+                <p className="text-xs text-muted-foreground">Total encaissé : {fmt(bedouCdl.gains_totaux || 0)}</p>
               </div>
               <Wallet className="h-10 w-10 text-primary/30" />
             </div>
@@ -142,13 +143,13 @@ export default function GestionTransactions() {
         <Card className="bg-green-50 border-green-200">
           <CardContent className="p-3">
             <p className="text-xs text-green-700">Recharges validées</p>
-            <p className="text-lg font-bold text-green-700">{totalRechargesValides.toLocaleString()} F</p>
+            <p className="text-lg font-bold text-green-700">{fmt(totalRechargesValides)}</p>
           </CardContent>
         </Card>
         <Card className="bg-blue-50 border-blue-200">
           <CardContent className="p-3">
             <p className="text-xs text-blue-700">Retraits payés</p>
-            <p className="text-lg font-bold text-blue-700">{totalRetraitsPayes.toLocaleString()} F</p>
+            <p className="text-lg font-bold text-blue-700">{fmt(totalRetraitsPayes)}</p>
           </CardContent>
         </Card>
         {enAttenteRecharges > 0 && (
@@ -193,8 +194,8 @@ export default function GestionTransactions() {
                     <p className="text-xs text-muted-foreground">{r.methode} — {moment(r.created_date).format("DD/MM/YY HH:mm")}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-green-700">+{r.montant.toLocaleString()} F</p>
-                    {r.bonus_applique > 0 && <p className="text-xs text-blue-600">🎁 +{r.bonus_applique} F bonus</p>}
+                    <p className="font-bold text-green-700">+{fmt(r.montant)}</p>
+                    {r.bonus_applique > 0 && <p className="text-xs text-blue-700 font-medium">🎁 +{fmt(r.bonus_applique)} bonus</p>}
                   </div>
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUT_CFG[r.statut]}`}>{r.statut}</span>
@@ -235,7 +236,7 @@ export default function GestionTransactions() {
                     <p className="text-xs text-muted-foreground">→ {r.numero_reception} ({r.nom_compte})</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-red-700">-{r.montant.toLocaleString()} F</p>
+                    <p className="font-bold text-red-700">-{fmt(r.montant)}</p>
                   </div>
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUT_CFG[r.statut]}`}>{r.statut}</span>
@@ -275,8 +276,8 @@ export default function GestionTransactions() {
                 <p className="text-[10px] text-muted-foreground">{moment(tx.created_date).format("DD/MM HH:mm")}</p>
               </div>
               <div className="text-right">
-                <p className={`text-sm font-bold ${tx.sens === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
-                  {tx.sens === 'credit' ? '+' : '-'}{tx.montant.toLocaleString()} F
+                <p className={`text-sm font-bold ${tx.sens === 'credit' ? 'text-green-700' : 'text-red-700'}`}>
+                  {tx.sens === 'credit' ? '+' : '-'}{fmt(tx.montant)}
                 </p>
                 <p className="text-[10px] text-muted-foreground">{tx.role}</p>
               </div>

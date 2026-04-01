@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, Wallet } from "lucide-react";
+import { fmt } from "@/lib/formatMoney";
 import { toast } from "sonner";
 
 export default function EffectuerDeplacement() {
@@ -128,7 +129,7 @@ export default function EffectuerDeplacement() {
         destinataire_email: livreur.email,
         destinataire_role: "livreur",
         titre: "📦 Nouvelle course disponible",
-        message: `${quartier_depart} → ${quartier_arrivee} · ${prixTotal} FCFA`,
+        message: `${quartier_depart} → ${quartier_arrivee} · ${fmt(prixTotal)}`,
         type: "info",
         lue: false,
         course_id: course.id,
@@ -250,17 +251,17 @@ export default function EffectuerDeplacement() {
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Prix de base</span>
-                  <span>{prixBaseNum} FCFA</span>
+                  <span className="font-medium text-foreground">{fmt(prixBaseNum)}</span>
                 </div>
                 {supplement > 0 && (
                   <div className="flex justify-between text-amber-700">
                     <span>{tresUrgent ? '🚨 Très urgent' : '🔔 Urgent'}</span>
-                    <span>+{supplement} FCFA</span>
+                    <span className="font-semibold">+{fmt(supplement)}</span>
                   </div>
                 )}
                 <div className="border-t pt-2 flex justify-between font-bold text-base">
                   <span>Total</span>
-                  <span className="text-primary text-xl">{prixTotal} FCFA</span>
+                  <span className="text-primary text-xl font-bold">{fmt(prixTotal)}</span>
                 </div>
               </div>
             </div>
@@ -284,11 +285,11 @@ export default function EffectuerDeplacement() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Mon solde</span>
-                <span className="font-bold">{soldeBedou !== null ? `${soldeBedou.toLocaleString()} F CFA` : '...'}</span>
+                <span className="font-bold text-foreground">{soldeBedou !== null ? fmt(soldeBedou) : '...'}</span>
               </div>
               {prixTotal > 0 && (
                 <div className={`flex items-center gap-2 p-2 rounded-lg text-sm font-semibold ${soldeInsuffisant ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                  {soldeInsuffisant ? '❌ Solde insuffisant' : `✅ Total : ${prixTotal} FCFA`}
+                  {soldeInsuffisant ? '❌ Solde insuffisant' : `✅ Total : ${fmt(prixTotal)}`}
                 </div>
               )}
               {soldeInsuffisant && (

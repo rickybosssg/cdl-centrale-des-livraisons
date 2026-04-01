@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Wallet, TrendingUp, Lock, Plus, ArrowDownCircle } from "lucide-react";
+import { fmt } from "@/lib/formatMoney";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
 
@@ -27,7 +28,7 @@ export default function BedouWidget({ user, compact = false }) {
       <Link to="/mon-bedou">
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20">
           <Wallet className="h-4 w-4 text-primary" />
-          <span className="text-sm font-bold text-primary">{(bedou.solde_disponible || 0).toLocaleString()} F CFA</span>
+          <span className="text-sm font-bold text-primary">{fmt(bedou.solde_disponible || 0)}</span>
         </div>
       </Link>
     );
@@ -49,19 +50,19 @@ export default function BedouWidget({ user, compact = false }) {
           <span className="text-xs bg-white/20 px-2 py-1 rounded-full font-medium">Voir tout →</span>
         </div>
 
-        <p className="text-3xl font-extrabold tracking-tight">
-          {(bedou.solde || 0).toLocaleString()} <span className="text-lg font-semibold">F CFA</span>
+        <p className="text-3xl font-extrabold tracking-tight text-white">
+          {fmt(bedou.solde || 0)}
         </p>
 
         <div className="flex gap-4 mt-3">
           <div className="flex items-center gap-1">
             <TrendingUp className="h-3.5 w-3.5 text-green-300" />
-            <span className="text-xs text-white/80">Dispo : {(bedou.solde_disponible || 0).toLocaleString()} F</span>
+            <span className="text-xs text-white/90 font-medium">Dispo : {fmt(bedou.solde_disponible || 0)}</span>
           </div>
           {(bedou.solde_bloque || 0) > 0 && (
             <div className="flex items-center gap-1">
               <Lock className="h-3.5 w-3.5 text-amber-300" />
-              <span className="text-xs text-white/80">Bloqué : {(bedou.solde_bloque || 0).toLocaleString()} F</span>
+              <span className="text-xs text-white/90 font-medium">Bloqué : {fmt(bedou.solde_bloque || 0)}</span>
             </div>
           )}
         </div>
