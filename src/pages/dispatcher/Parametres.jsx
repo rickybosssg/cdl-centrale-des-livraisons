@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, Trash2, AlertTriangle, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Save, Trash2, AlertTriangle, ShieldAlert, Bell, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,15 @@ import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
 const STORAGE_KEY = "cdl_parametres";
+const ALERTE_KEY = "cdl_alertes_config";
+
+function getAlertesConfig() {
+  try {
+    const stored = localStorage.getItem(ALERTE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch (_) {}
+  return { actif: true, seuil_courses: 3, ratio_seuil: 2, delai_min_minutes: 60 };
+}
 
 function getParams() {
   try {
@@ -31,6 +40,9 @@ function getParams() {
 export default function Parametres() {
   const navigate = useNavigate();
   const [params, setParams] = useState(getParams());
+  const [alertesConfig, setAlertesConfig] = useState(getAlertesConfig());
+  const [alerteStatus, setAlerteStatus] = useState(null);
+  const [testingAlerte, setTestingAlerte] = useState(false);
   const [saved, setSaved] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -39,6 +51,30 @@ export default function Parametres() {
   useEffect(() => {
     setParams(prev => ({ ...prev, mode_dispatch: getDispatchMode() }));
   }, []);
+
+  const sauvegarderAlertes = () => {
+    localStorage.setItem(ALERTE_KEY, JSON.stringify(alertesConfig));
+    toast.success("Configuration alertes sauvegardée !");
+  };
+
+  const testerAlerte = async () => {
+    setTestingAlerte(true);
+    const res = await base44.functions.invoke('alerteLivreurs', { ...alertesConfig, dry_run: true });
+    setAlerteStatus(res.data);
+    setTestingAlerte(false);
+    toast.info(res.data.dry_run ? `Test OK : ${res.data.courses_disponibles} courses, ${res.data.livreurs_en_ligne} livreurs en ligne` : `Ignoré : ${res.data.reason}`);
+  };
+
+  const lancerAlerteMaintenant = async () => {
+    setTestingAlerte(true);
+    const res = await base44.functions.invoke('alerteLivreurs', { ...alertesConfig, delai_min_minutes: 0 });
+    setAlerteStatus(res.data);
+    setTestingAlerte(false);
+    if (res.data.success) toast.success(`✅ ${res.data.nb_alertes_envoyees} livreur(s) alerté(s) !`);
+    else toast.info(`Ignoré : ${res.data.reason}`);
+  };
+
+  const updateAlerte = (key, value) => setAlertesConfig(prev => ({ ...prev, [key]: value }));
 
   const sauvegarder = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(params));
@@ -145,6 +181,64 @@ export default function Parametres() {
               onCheckedChange={v => update("blocage_auto", v)}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Alertes livreurs */}
+      <Card className="border-amber-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Bell className="h-4 w-4 text-amber-600" />
+            Alertes livreurs automatiques
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Système activé</p>
+              <p className="text-xs text-muted-foreground">Envoyer des alertes automatiques aux livreurs</p>
+            </div>
+            <Switch checked={alertesConfig.actif} onCheckedChange={v => updateAlerte('actif', v)} />
+          </div>
+          <div className="space-y-1">
+            <Label>Seuil de déclenchement (nombre de courses)</Label>
+            <Input type="number" min={1} max={20}
+              value={alertesConfig.seuil_courses}
+              onChange={e => updateAlerte('seuil_courses', parseInt(e.target.value) || 3)} />
+            <p className="text-xs text-muted-foreground">Alerte si ≥ ce nombre de courses en attente</p>
+          </div>
+          <div className="space-y-1">
+            <Label>Ratio courses/livreurs pour déclencher</Label>
+            <Input type="number" min={1} max={10} step={0.5}
+              value={alertesConfig.ratio_seuil}
+              onChange={e => updateAlerte('ratio_seuil', parseFloat(e.target.value) || 2)} />
+            <p className="text-xs text-muted-foreground">Ex: 2 = alerte si 2x plus de courses que de livreurs</p>
+          </div>
+          <div className="space-y-1">
+            <Label>Délai minimum entre deux alertes (minutes)</Label>
+            <Input type="number" min={10} max={360}
+              value={alertesConfig.delai_min_minutes}
+              onChange={e => updateAlerte('delai_min_minutes', parseInt(e.target.value) || 60)} />
+          </div>
+          {alerteStatus && (
+            <div className="p-3 rounded-xl bg-muted text-xs space-y-1">
+              <p className="font-medium">Dernier test :</p>
+              {alerteStatus.dry_run && <p>✅ Conditions remplies — {alerteStatus.courses_disponibles} courses, {alerteStatus.livreurs_en_ligne} livreurs en ligne, ratio {alerteStatus.ratio}</p>}
+              {alerteStatus.skip && <p>⏭️ Ignoré : {alerteStatus.reason} {alerteStatus.prochaine_alerte_dans && `(prochaine dans ${alerteStatus.prochaine_alerte_dans})`}</p>}
+              {alerteStatus.success && <p>📤 {alerteStatus.nb_alertes_envoyees} livreur(s) alerté(s) sur {alerteStatus.total_livreurs_valides}</p>}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1 text-xs" onClick={testerAlerte} disabled={testingAlerte}>
+              <RefreshCw className={`h-3.5 w-3.5 mr-1 ${testingAlerte ? 'animate-spin' : ''}`} /> Tester
+            </Button>
+            <Button className="flex-1 text-xs bg-amber-500 hover:bg-amber-600" onClick={lancerAlerteMaintenant} disabled={testingAlerte}>
+              <Bell className="h-3.5 w-3.5 mr-1" /> Alerter maintenant
+            </Button>
+          </div>
+          <Button variant="outline" className="w-full text-sm" onClick={sauvegarderAlertes}>
+            <Save className="h-4 w-4 mr-2" /> Sauvegarder config alertes
+          </Button>
         </CardContent>
       </Card>
 
