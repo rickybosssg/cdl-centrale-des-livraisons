@@ -67,7 +67,12 @@ export default function Settings() {
   const load = async () => {
     console.log('[Settings] Chargement utilisateur et profils...');
     const me = await base44.auth.me();
-    console.log('[Settings] User:', me.email, '| active_profile_type:', me.active_profile_type);
+    console.log('[Settings] User loaded:', {
+      email: me.email,
+      role: me.role,
+      user_type: me.user_type,
+      active_profile_type: me.active_profile_type,
+    });
     setUser(me);
     const userProfiles = await base44.entities.UserProfile.filter({
       user_email: me.email,
@@ -86,7 +91,10 @@ export default function Settings() {
     load();
   }, []);
 
-  const activeProfileType = user?.active_profile_type || user?.user_type;
+  // LOGIQUE STRICTE: admin role est prioritaire
+  const isAdmin = user?.role === 'admin' || user?.user_type === 'admin';
+  const activeProfileType = isAdmin ? 'admin' : (user?.active_profile_type || user?.user_type);
+  console.log('[Settings] Display logic:', { isAdmin, activeProfileType, 'user.role': user?.role });
 
   const handleAddProfile = async () => {
     console.log('[Settings.handleAddProfile] Début création profil:', selectedProfile);
@@ -200,23 +208,39 @@ export default function Settings() {
         <h1 className="text-xl font-bold flex-1">Paramètres du compte</h1>
       </div>
 
-      {/* Carte profil actif */}
-      {activeCfg && (
-        <div className="rounded-2xl bg-gradient-to-br from-primary to-blue-700 p-5 text-white shadow-lg">
-          <p className="text-xs text-white/70 mb-2 font-medium uppercase tracking-wide">Profil actif</p>
+      {/* Carte profil actif - ADMIN PRIORITAIRE */}
+      {(() => {
+        // Recalculer activeCfg pour cette section aussi
+        const displayProfile = isAdmin ? 'admin' : activeProfileType;
+        const displayCfg = PROFILES.find(p => p.type === displayProfile) || { emoji: '👤', label: 'Profil', color: 'bg-blue-100 text-blue-700', desc: '' };
+        return displayCfg;
+      })() && (
+        <div className={`rounded-2xl p-5 text-white shadow-lg ${
+          isAdmin 
+            ? 'bg-gradient-to-br from-blue-900 to-blue-700'
+            : 'bg-gradient-to-br from-primary to-blue-700'
+        }`}>
+            <p className="text-xs text-white/70 mb-2 font-medium uppercase tracking-wide">Profil actif</p>
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl">
-              {activeCfg.emoji}
+              {isAdmin ? '🛡️' : (() => {
+                const cfg = PROFILES.find(p => p.type === activeProfileType);
+                return cfg?.emoji || '👤';
+              })()}
             </div>
             <div>
-              <p className="text-xl font-extrabold">{activeCfg.label}</p>
+              <p className="text-xl font-extrabold">{isAdmin ? 'Administrateur' : (() => {
+                const cfg = PROFILES.find(p => p.type === activeProfileType);
+                return cfg?.label || activeProfileType || 'Profil';
+              })()}</p>
               <p className="text-xs text-white/70">{user?.email}</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Mes profils */}
+      {/* Mes profils - MASQUÉ POUR ADMINS */}
+      {!isAdmin && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center justify-between">
@@ -294,10 +318,21 @@ export default function Settings() {
             </p>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+        )}
 
-      {/* Légal & Conformité */}
-      <Card>
+        {/* Info admin - afficher si admin */}
+        {isAdmin && (
+        <Card className="border-blue-300 bg-blue-50">
+         <CardContent className="p-4 space-y-2">
+           <p className="text-sm font-semibold text-blue-900">🛡️ Profil administrateur</p>
+           <p className="text-xs text-blue-700">Vous êtes administrateur du système CDL. Vous avez accès complet au tableau de bord d'administration.</p>
+         </CardContent>
+        </Card>
+        )}
+
+        {/* Légal & Conformité */}
+        <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Légal & Conformité</CardTitle>
         </CardHeader>
