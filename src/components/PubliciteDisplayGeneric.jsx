@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 
-export default function PubliciteDisplay({ userRole = 'client', userId, userEmail }) {
+const ROLE_PLACEMENT = {
+  client: 'dashboard_client',
+  livreur: 'dashboard_livreur',
+  partenaire: 'dashboard_partenaire',
+  commercial: 'dashboard_commercial',
+  admin: 'dashboard_admin',
+};
+
+export default function PubliciteDisplayGeneric({ userId, userEmail, userRole = 'client' }) {
   const [pub, setPub] = useState(null);
   const [dismissed, setDismissed] = useState(false);
+
+  const placement = ROLE_PLACEMENT[userRole] || 'dashboard_client';
 
   useEffect(() => {
     const loadPublicite = async () => {
@@ -13,8 +23,7 @@ export default function PubliciteDisplay({ userRole = 'client', userId, userEmai
 
         const filtered = (allPubs || []).filter(p => {
           if (!p.active) return false;
-          // Accueil or tous_pages
-          if (p.placement !== 'accueil' && p.placement !== 'toutes_pages') return false;
+          if (p.placement !== placement) return false;
           if (p.date_debut && new Date(p.date_debut) > now) return false;
           if (p.date_fin && new Date(p.date_fin) < now) return false;
           const targets = p.targets || ['all'];
@@ -37,7 +46,7 @@ export default function PubliciteDisplay({ userRole = 'client', userId, userEmai
     loadPublicite();
     const unsub = base44.entities.Publicite.subscribe(loadPublicite);
     return unsub;
-  }, [userRole]);
+  }, [userRole, placement]);
 
   const trackView = (pubId) => {
     base44.functions.invoke('trackPubliciteInteraction', {
