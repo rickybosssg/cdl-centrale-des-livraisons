@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import GpsLocationManager from "@/components/GpsLocationManager";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { vibrateSuccess } from "@/lib/vibration";
@@ -41,6 +42,16 @@ export default function CreateCourse() {
     instructions_speciales: "",
   });
 
+  const handleGpsLocationUpdate = async (locationData) => {
+    try {
+      await base44.auth.updateMe(locationData);
+      setGpsDepart({ lat: locationData.gps_latitude, lng: locationData.gps_longitude });
+      setUser(prev => ({ ...prev, ...locationData }));
+    } catch (err) {
+      console.error('[CreateCourse] Erreur GPS:', err);
+    }
+  };
+
   useEffect(() => {
     const load = async () => {
       const me = await base44.auth.me();
@@ -48,14 +59,9 @@ export default function CreateCourse() {
       setForm(f => ({ ...f, telephone_expediteur: me.telephone || '', nom_expediteur: me.full_name || '' }));
       const res = await base44.functions.invoke('bedouEngine', { action: 'get_bedou' });
       setSoldeBedou(res.data.bedou?.solde_disponible || 0);
-      // Auto-GPS départ
+      // Auto-GPS départ depuis le profil utilisateur
       if (me.gps_latitude && me.gps_longitude) {
         setGpsDepart({ lat: me.gps_latitude, lng: me.gps_longitude });
-      } else if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-          setGpsDepart({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          base44.auth.updateMe({ gps_latitude: pos.coords.latitude, gps_longitude: pos.coords.longitude });
-        }, () => {});
       }
     };
     load();
@@ -218,7 +224,7 @@ export default function CreateCourse() {
   // Étape 0 : choix du type de mission
   if (!typeMission) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background space-y-4">
         <div className="flex items-center gap-3 p-4 pb-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-5 w-5" />
@@ -245,7 +251,12 @@ export default function CreateCourse() {
           </div>
         )}
 
-        <div className="px-4 pt-4 pb-8 space-y-4">
+      {/* Activation localisation GPS */}
+      <div className="px-4">
+        <GpsLocationManager onLocationUpdate={handleGpsLocationUpdate} />
+      </div>
+
+        <div className="px-4 pb-8 space-y-4">
           <div className="text-center">
             <p className="text-base font-semibold">Que souhaitez-vous faire ?</p>
             <p className="text-sm text-muted-foreground mt-1">Choisissez le type de votre demande</p>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import GpsLocationManager from "@/components/GpsLocationManager";
 import { base44 } from "@/api/base44Client";
 import { useNavigate, Link } from "react-router-dom";
 import {
@@ -345,7 +346,19 @@ export default function Settings() {
         </Card>
         )}
 
-        {/* Légal & Conformité */}
+        {/* Localisation GPS */}
+      {!isAdmin && activeProfileType === 'client' && (
+        <GpsLocationManager onLocationUpdate={async (data) => {
+          try {
+            await base44.auth.updateMe(data);
+            setUser(prev => ({ ...prev, ...data }));
+          } catch (err) {
+            console.error('[Settings] Erreur GPS:', err);
+          }
+        }} />
+      )}
+
+      {/* Légal & Conformité */}
         <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Légal & Conformité</CardTitle>
