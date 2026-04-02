@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin, MessageCircle } from "lucide-react";
 import LivreurBadges from "../../components/LivreurBadges";
+import LivreurGameStats from "../../components/LivreurGameStats";
 import ChatAdmin from "@/components/ChatAdmin";
 import BannierePublicitaire from "../../components/BannierePublicitaire";
 import BedouWidget from "../../components/BedouWidget";
@@ -281,6 +282,9 @@ export default function LivreurHome({ user }) {
 
       {/* Badges & Classement */}
       <LivreurBadges user={user} classement={classement} />
+
+      {/* Gamification : objectifs, streak, comparaison */}
+      <LivreurGameStats user={user} coursesToday={completedTodayCount} classement={classement} />
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">

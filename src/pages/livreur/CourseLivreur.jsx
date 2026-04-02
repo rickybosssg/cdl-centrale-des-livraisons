@@ -113,6 +113,9 @@ export default function CourseLivreur() {
       });
     }
 
+    // Mettre à jour streak + classement en arrière-plan
+    base44.functions.invoke('updateLivreurStreak', {}).catch(() => {});
+
     // Notifier client pour noter
     await base44.entities.Notification.create({
       destinataire_email: course.client_email,
