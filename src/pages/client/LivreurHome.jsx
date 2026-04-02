@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin, MessageCircle } from "lucide-react";
+import LivreurBadges from "../../components/LivreurBadges";
 import ChatAdmin from "@/components/ChatAdmin";
 import BannierePublicitaire from "../../components/BannierePublicitaire";
 import BedouWidget from "../../components/BedouWidget";
@@ -19,6 +20,7 @@ export default function LivreurHome({ user }) {
   const [disponible, setDisponible] = useState(user.disponible !== false);
   const [loading, setLoading] = useState(true);
   const [showMessages, setShowMessages] = useState(false);
+  const [classement, setClassement] = useState(null);
 
   const reloadCourses = async () => {
     const data = await base44.entities.Course.filter({ livreur_email: user.email }, "-created_date", 10);
@@ -80,6 +82,10 @@ export default function LivreurHome({ user }) {
 
   useEffect(() => {
     reloadCourses();
+    // Charger classement en arrière-plan
+    base44.functions.invoke('getLivreurClassement', {}).then(r => {
+      if (r.data?.rank) setClassement(r.data);
+    }).catch(() => {});
 
     const unsub = base44.entities.Course.subscribe((event) => {
       if (event.type === 'create' && event.data?.livreur_email === user.email) {
@@ -272,6 +278,9 @@ export default function LivreurHome({ user }) {
       }`}>
         {motivationMsg}
       </div>
+
+      {/* Badges & Classement */}
+      <LivreurBadges user={user} classement={classement} />
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
