@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin, MessageCircle } from "lucide-react";
+import PubliciteDisplayLivreur from "../../components/PubliciteDisplayLivreur";
 import LivreurBadges from "../../components/LivreurBadges";
 import LivreurGameStats from "../../components/LivreurGameStats";
 import ChatAdmin from "@/components/ChatAdmin";
@@ -292,6 +293,9 @@ export default function LivreurHome({ user }) {
 
       {/* Bedou */}
       <BedouWidget user={user} />
+
+      {/* Publicités actives */}
+      {user && <PubliciteDisplayLivreur userId={user.id} userEmail={user.email} />}
 
       {/* Solde commission */}
       <SoldeBlock user={user} />
