@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin, MessageCircle } from "lucide-react";
-import PubliciteDisplayLivreur from "../../components/PubliciteDisplayLivreur";
+import PubliciteHomeBanner from "../../components/PubliciteHomeBanner";
 import LivreurBadges from "../../components/LivreurBadges";
 import LivreurGameStats from "../../components/LivreurGameStats";
 import ChatAdmin from "@/components/ChatAdmin";
@@ -237,7 +237,7 @@ export default function LivreurHome({ user }) {
   return (
     <div className="space-y-5">
       {/* Publicités en haut du dashboard */}
-      {user && <PubliciteDisplayLivreur userId={user.id} userEmail={user.email} user={user} disponible={disponible} coursesToday={completedTodayCount} />}
+      {user && <PubliciteHomeBanner userRole="livreur" userId={user.id} userEmail={user.email} />}
 
       {/* Message inactivité */}
       {inactivityMsg}

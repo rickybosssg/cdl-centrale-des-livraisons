@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import PubliciteDisplay from "@/components/PubliciteDisplay";
+import PubliciteHomeBanner from "@/components/PubliciteHomeBanner";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
 import { useMessageCount } from "@/hooks/useMessageCount";
 import MessageAlert from "@/components/MessageAlert";
@@ -183,7 +183,7 @@ export default function DashboardPartenaire({ user }) {
 
   return (
     <div className="space-y-0">
-      {user && <PubliciteDisplay userRole="partenaire" userId={user.id} userEmail={user.email} />}
+      {user && <PubliciteHomeBanner userRole="partenaire" userId={user.id} userEmail={user.email} />}
       <div className="space-y-4 mt-4">
         <MessageAlert newMsg={newMsg} />
       {newMsg && <div className="h-24" />}
