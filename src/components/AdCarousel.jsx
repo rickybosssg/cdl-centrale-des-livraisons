@@ -11,28 +11,35 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
   useEffect(() => {
     const loadAds = async () => {
       try {
-        // Charger les pubs actives pour cet emplacement
+        // ✅ Charger TOUTES les pubs actives SANS filtre placement initial
         const now = new Date().toISOString();
-        const allAds = await base44.entities.Publicite.filter({
-          active: true,
-          placement,
-        });
+        const allAds = await base44.entities.Publicite.list('-created_date', 50);
 
-        // Filtrer par date
+        // ✅ Filtrer par date et active
         const active = allAds.filter(ad => {
+          if (!ad.active) return false;
+          if (!ad.date_debut || !ad.date_fin) return true;
           const start = new Date(ad.date_debut);
           const end = new Date(ad.date_fin);
           return start <= new Date(now) && new Date(now) <= end;
         });
 
-        // Filtrer par cible
+        // ✅ Filtrer par placement et cible (sans bloquant)
         const targeted = active.filter(ad => {
-          const cible = (ad.destinataires || "tous").split(",").map(c => c.trim());
-          if (cible.includes("tous")) return true;
-          if (userRole === "client" && cible.includes("clients")) return true;
-          if (userRole === "livreur" && cible.includes("livreurs")) return true;
-          if (userRole === "partenaire" && cible.includes("partenaires")) return true;
-          return false;
+          const matchPlace = !placement || ad.placement === placement || ad.placement === 'toutes_pages' || ad.placement === 'tous';
+          const dest = ad.destinataires || 'tous';
+          const matchDest = !dest || dest === 'tous' || dest === '' || 
+            (() => {
+              const cible = dest.split(',').map(c => c.trim());
+              if (cible.includes('tous')) return true;
+              if (userRole === 'client' && cible.includes('clients')) return true;
+              if (userRole === 'livreur' && cible.includes('livreurs')) return true;
+              if (userRole === 'partenaire' && cible.includes('partenaires')) return true;
+              if (userRole === 'commercial' && cible.includes('commerciaux')) return true;
+              if (userRole === 'admin' && cible.includes('admin')) return true;
+              return cible.length === 0;
+            })();
+          return matchPlace && matchDest;
         });
 
         setAds(targeted);
@@ -44,6 +51,15 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
     };
 
     loadAds();
+
+    // Subscribe pour mise à jour temps réel
+    const unsub = base44.entities.Publicite.subscribe((event) => {
+      if (event.type === 'create' || event.type === 'update') {
+        loadAds();
+      }
+    });
+
+    return unsub;
   }, [placement, userRole]);
 
   if (loading || ads.length === 0) return null;
