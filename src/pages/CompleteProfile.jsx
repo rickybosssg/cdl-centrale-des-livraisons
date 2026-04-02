@@ -3,8 +3,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Upload, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import DocumentUploader from "@/components/DocumentUploader";
 
 export default function CompleteProfile() {
   const { profileId } = useParams();
@@ -207,26 +208,18 @@ export default function CompleteProfile() {
             </p>
             {analysis.received.map(doc => (
               <Card key={doc.key} className="border-green-200 bg-green-50">
-                <CardContent className="p-4 flex items-center justify-between">
+                <CardContent className="p-4 space-y-3">
                   <div>
                     <p className="font-medium text-sm">{doc.label}</p>
                     <p className="text-[10px] text-green-700">✅ Validé</p>
                   </div>
-                  <button
-                    onClick={() => {
-                      const input = document.createElement("input");
-                      input.type = "file";
-                      input.accept = "image/*";
-                      input.onchange = e => {
-                        const file = e.target.files[0];
-                        if (file) handleUpload(doc.key, doc.label, file);
-                      };
-                      input.click();
-                    }}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-green-300 text-green-700 hover:bg-green-100 transition-colors"
-                  >
-                    Remplacer
-                  </button>
+                  <DocumentUploader
+                    docKey={doc.key}
+                    docLabel={doc.label}
+                    onUpload={handleUpload}
+                    disabled={uploading[doc.key]}
+                    preview={doc.url}
+                  />
                 </CardContent>
               </Card>
             ))}
@@ -269,23 +262,13 @@ export default function CompleteProfile() {
                       <p className="font-medium text-sm">{doc.label}</p>
                       <p className="text-[10px] text-red-700">❌ Manquant</p>
                     </div>
-                    <button
-                      onClick={() => {
-                        const input = document.createElement("input");
-                        input.type = "file";
-                        input.accept = "image/*";
-                        input.onchange = e => {
-                          const file = e.target.files[0];
-                          if (file) handleUpload(doc.key, doc.label, file);
-                        };
-                        input.click();
-                      }}
+                    <DocumentUploader
+                      docKey={doc.key}
+                      docLabel={doc.label}
+                      onUpload={handleUpload}
                       disabled={uploading[doc.key]}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 border-dashed border-red-300 text-red-700 hover:bg-red-100 transition-colors text-xs font-medium disabled:opacity-50"
-                    >
-                      <Upload className="h-4 w-4" />
-                      {uploading[doc.key] ? "Upload..." : "Ajouter"}
-                    </button>
+                      preview={null}
+                    />
                   </CardContent>
                 </Card>
               );
