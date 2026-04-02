@@ -66,210 +66,209 @@ export default function ClientHome({ user }) {
     <div className="space-y-0">
       {user && <PubliciteDisplay userRole="client" userId={user.id} userEmail={user.email} />}
       <div className="space-y-6 mt-4">
-      {/* Welcome */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold">Bonjour, {user.full_name?.split(" ")[0]} 👋</h1>
-        <p className="text-sm text-muted-foreground">Bienvenue sur CDL - Centrale des Livraisons</p>
-      </div>
-
-      {/* Bedou */}
-      <BedouWidget user={user} />
-
-      {/* Carousel publicités */}
-      <AdCarousel placement="accueil" userRole="client" />
-
-      {/* Bouton principal Commander */}
-      <Link to="/commander">
-        <div className="relative overflow-hidden w-full p-6 rounded-3xl bg-gradient-to-br from-primary to-blue-700 text-white shadow-xl active:scale-[0.97] transition-all cursor-pointer">
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-4xl">🛵</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-2xl font-extrabold tracking-tight">Commander une course</p>
-              <p className="text-sm text-white/80 mt-0.5">Livreur disponible en quelques minutes</p>
-            </div>
-            <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
-              <span className="text-xl font-bold">→</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 mt-4 pt-3 border-t border-white/20">
-            <div className="flex items-center gap-1.5">
-              <span className="text-base">⚡</span>
-              <span className="text-xs font-semibold text-white/90">Livraison rapide</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-base">🛡️</span>
-              <span className="text-xs font-semibold text-white/90">Livreurs vérifiés</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-base">📍</span>
-              <span className="text-xs font-semibold text-white/90">Partout à Ouaga</span>
-            </div>
-          </div>
+        {/* Welcome */}
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold">Bonjour, {user.full_name?.split(" ")[0]} 👋</h1>
+          <p className="text-sm text-muted-foreground">Bienvenue sur CDL - Centrale des Livraisons</p>
         </div>
-      </Link>
 
-      {/* Badges de confiance */}
-      <div className="flex items-center justify-center gap-6 py-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-green-500 font-bold text-sm">✓</span>
-          <span className="text-xs text-muted-foreground font-medium">+100 courses livrées</span>
-        </div>
-        <div className="h-3 w-px bg-border" />
-        <div className="flex items-center gap-1.5">
-          <span className="text-green-500 font-bold text-sm">✓</span>
-          <span className="text-xs text-muted-foreground font-medium">Livreurs certifiés CDL</span>
-        </div>
-      </div>
+        {/* Bedou */}
+        <BedouWidget user={user} />
 
-      {/* Stats acquisition */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="p-3 text-center">
-            <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1" />
-            <p className="text-xl font-bold text-amber-700">{activeCourses.length}</p>
-            <p className="text-[10px] text-amber-600">En attente</p>
-          </CardContent>
-        </Card>
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-3 text-center">
-            <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto mb-1" />
-            <p className="text-xl font-bold text-green-700">{completedCount}</p>
-            <p className="text-[10px] text-green-600">Traitées</p>
-          </CardContent>
-        </Card>
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-3 text-center">
-            <TrendingUp className="h-5 w-5 text-primary mx-auto mb-1" />
-            <p className="text-xl font-bold text-primary">
-              {courses.length > 0 ? Math.round((completedCount / courses.length) * 100) : 0}%
-            </p>
-            <p className="text-[10px] text-primary/70">Conversion</p>
-          </CardContent>
-        </Card>
-      </div>
+        {/* Carousel publicités */}
+        <AdCarousel placement="accueil" userRole="client" />
 
-      {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-3">
+        {/* Bouton principal Commander */}
         <Link to="/commander">
-          <Card className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer h-full">
-            <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
-              <Plus className="h-6 w-6" />
-              <div>
-                <p className="font-semibold text-sm">Commander</p>
-                <p className="text-xs opacity-80">une course</p>
+          <div className="relative overflow-hidden w-full p-6 rounded-3xl bg-gradient-to-br from-primary to-blue-700 text-white shadow-xl active:scale-[0.97] transition-all cursor-pointer">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-4xl">🛵</span>
               </div>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link to="/effectuer-deplacement">
-          <Card className="bg-accent text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer h-full">
-            <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
-              <User className="h-6 w-6" />
-              <div>
-                <p className="font-semibold text-sm">Effectuer</p>
-                <p className="text-xs opacity-80">un déplacement</p>
+              <div className="flex-1">
+                <p className="text-2xl font-extrabold tracking-tight">Commander une course</p>
+                <p className="text-sm text-white/80 mt-0.5">Livreur disponible en quelques minutes</p>
               </div>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link to="/vitrines">
-          <Card className="hover:opacity-90 transition-opacity cursor-pointer h-full border-primary/30">
-            <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
-              <Store className="h-6 w-6 text-primary" />
-              <div>
-                <p className="font-semibold text-sm">Boutiques</p>
-                <p className="text-xs text-muted-foreground">Commander en ligne</p>
+              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
+                <span className="text-xl font-bold">→</span>
               </div>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link to="/mes-commandes-marketplace">
-          <Card className="hover:opacity-90 transition-opacity cursor-pointer h-full">
-            <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
-              <ShoppingBag className="h-6 w-6 text-accent" />
-              <div>
-                <p className="font-semibold text-sm">Commandes</p>
-                <p className="text-xs text-muted-foreground">Mes achats</p>
+            </div>
+            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-white/20">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">⚡</span>
+                <span className="text-xs font-semibold text-white/90">Livraison rapide</span>
               </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="p-3 text-center">
-            <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1" />
-            <p className="text-xl font-bold">{activeCourses.length}</p>
-            <p className="text-[10px] text-muted-foreground">En cours</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 text-center">
-            <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto mb-1" />
-            <p className="text-xl font-bold">{completedCount}</p>
-            <p className="text-[10px] text-muted-foreground">Livrées</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 text-center">
-            <Package className="h-5 w-5 text-primary mx-auto mb-1" />
-            <p className="text-xl font-bold">{courses.length}</p>
-            <p className="text-[10px] text-muted-foreground">Total</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Active courses */}
-      {activeCourses.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Courses actives</h2>
-            <Link to="/mes-courses" className="text-xs text-primary font-medium">Voir tout</Link>
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">🛡️</span>
+                <span className="text-xs font-semibold text-white/90">Livreurs vérifiés</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">📍</span>
+                <span className="text-xs font-semibold text-white/90">Partout à Ouaga</span>
+              </div>
+            </div>
           </div>
-          {activeCourses.map((course) => (
-            <Link key={course.id} to={`/course/${course.id}`}>
-              <CourseCard course={course} />
-            </Link>
-          ))}
+        </Link>
+
+        {/* Badges de confiance */}
+        <div className="flex items-center justify-center gap-6 py-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-green-500 font-bold text-sm">✓</span>
+            <span className="text-xs text-muted-foreground font-medium">+100 courses livrées</span>
+          </div>
+          <div className="h-3 w-px bg-border" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-green-500 font-bold text-sm">✓</span>
+            <span className="text-xs text-muted-foreground font-medium">Livreurs certifiés CDL</span>
+          </div>
         </div>
-      )}
 
-      {/* Messages CDL */}
-      <button
-        onClick={() => setShowMessages(!showMessages)}
-        className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
-          showMessages ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
-        }`}
-      >
-        <MessageCircle className={`h-5 w-5 ${showMessages ? "text-primary" : "text-muted-foreground"}`} />
-        <div className="text-left">
-          <p className="font-semibold text-sm">Messages CDL</p>
-          <p className="text-xs text-muted-foreground">Discussion avec l'administration</p>
+        {/* Stats acquisition */}
+        <div className="grid grid-cols-3 gap-3">
+          <Card className="border-amber-200 bg-amber-50">
+            <CardContent className="p-3 text-center">
+              <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1" />
+              <p className="text-xl font-bold text-amber-700">{activeCourses.length}</p>
+              <p className="text-[10px] text-amber-600">En attente</p>
+            </CardContent>
+          </Card>
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="p-3 text-center">
+              <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto mb-1" />
+              <p className="text-xl font-bold text-green-700">{completedCount}</p>
+              <p className="text-[10px] text-green-600">Traitées</p>
+            </CardContent>
+          </Card>
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-3 text-center">
+              <TrendingUp className="h-5 w-5 text-primary mx-auto mb-1" />
+              <p className="text-xl font-bold text-primary">
+                {courses.length > 0 ? Math.round((completedCount / courses.length) * 100) : 0}%
+              </p>
+              <p className="text-[10px] text-primary/70">Conversion</p>
+            </CardContent>
+          </Card>
         </div>
-      </button>
 
-      {showMessages && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm font-semibold mb-3">💬 Discussion avec l'Administration CDL</p>
-            <ChatAdmin userEmail={user.email} userRole="client" currentUser={user} />
-          </CardContent>
-        </Card>
-      )}
-
-
-
-      {courses.length === 0 && !loading && (
-        <div className="text-center py-8 space-y-2">
-          <Truck className="h-12 w-12 text-muted-foreground/40 mx-auto" />
-          <p className="text-muted-foreground text-sm">Aucune course pour le moment</p>
-          <p className="text-xs text-muted-foreground">Commandez votre première livraison !</p>
+        {/* Quick actions */}
+        <div className="grid grid-cols-2 gap-3">
+          <Link to="/commander">
+            <Card className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer h-full">
+              <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
+                <Plus className="h-6 w-6" />
+                <div>
+                  <p className="font-semibold text-sm">Commander</p>
+                  <p className="text-xs opacity-80">une course</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link to="/effectuer-deplacement">
+            <Card className="bg-accent text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer h-full">
+              <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
+                <User className="h-6 w-6" />
+                <div>
+                  <p className="font-semibold text-sm">Effectuer</p>
+                  <p className="text-xs opacity-80">un déplacement</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link to="/vitrines">
+            <Card className="hover:opacity-90 transition-opacity cursor-pointer h-full border-primary/30">
+              <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
+                <Store className="h-6 w-6 text-primary" />
+                <div>
+                  <p className="font-semibold text-sm">Boutiques</p>
+                  <p className="text-xs text-muted-foreground">Commander en ligne</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link to="/mes-commandes-marketplace">
+            <Card className="hover:opacity-90 transition-opacity cursor-pointer h-full">
+              <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
+                <ShoppingBag className="h-6 w-6 text-accent" />
+                <div>
+                  <p className="font-semibold text-sm">Commandes</p>
+                  <p className="text-xs text-muted-foreground">Mes achats</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
-      )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          <Card>
+            <CardContent className="p-3 text-center">
+              <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1" />
+              <p className="text-xl font-bold">{activeCourses.length}</p>
+              <p className="text-[10px] text-muted-foreground">En cours</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto mb-1" />
+              <p className="text-xl font-bold">{completedCount}</p>
+              <p className="text-[10px] text-muted-foreground">Livrées</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <Package className="h-5 w-5 text-primary mx-auto mb-1" />
+              <p className="text-xl font-bold">{courses.length}</p>
+              <p className="text-[10px] text-muted-foreground">Total</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Active courses */}
+        {activeCourses.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Courses actives</h2>
+              <Link to="/mes-courses" className="text-xs text-primary font-medium">Voir tout</Link>
+            </div>
+            {activeCourses.map((course) => (
+              <Link key={course.id} to={`/course/${course.id}`}>
+                <CourseCard course={course} />
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Messages CDL */}
+        <button
+          onClick={() => setShowMessages(!showMessages)}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
+            showMessages ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"
+          }`}
+        >
+          <MessageCircle className={`h-5 w-5 ${showMessages ? "text-primary" : "text-muted-foreground"}`} />
+          <div className="text-left">
+            <p className="font-semibold text-sm">Messages CDL</p>
+            <p className="text-xs text-muted-foreground">Discussion avec l'administration</p>
+          </div>
+        </button>
+
+        {showMessages && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm font-semibold mb-3">💬 Discussion avec l'Administration CDL</p>
+              <ChatAdmin userEmail={user.email} userRole="client" currentUser={user} />
+            </CardContent>
+          </Card>
+        )}
+
+        {courses.length === 0 && !loading && (
+          <div className="text-center py-8 space-y-2">
+            <Truck className="h-12 w-12 text-muted-foreground/40 mx-auto" />
+            <p className="text-muted-foreground text-sm">Aucune course pour le moment</p>
+            <p className="text-xs text-muted-foreground">Commandez votre première livraison !</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
