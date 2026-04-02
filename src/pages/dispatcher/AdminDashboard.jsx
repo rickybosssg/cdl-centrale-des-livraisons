@@ -244,9 +244,9 @@ export default function AdminDashboard() {
           </Button>
         </Link>
         <Link to="/whatsapp-orders">
-          <Button className="w-full justify-start gap-2 border-green-400 hover:bg-green-50 text-green-900" variant="outline">
-            <span className="text-base">📲</span>
-            Commandes WhatsApp
+          <Button className="w-full justify-start gap-2 border-green-300 hover:bg-green-50 text-green-800" variant="outline">
+            <span className="text-base">💬</span>
+            WhatsApp Orders
           </Button>
         </Link>
       </div>
