@@ -25,48 +25,40 @@ export default function DocumentUploader({ docLabel, docKey, onUpload, disabled 
 
   // Ouvrir galerie
   const openGallery = () => {
+    setError(null);
     try {
-      setError(null);
       if (!fileInputRef.current) {
-        setError("Erreur: composant indisponible");
+        setError("Erreur composant");
         return;
       }
-      // Reset input pour permettre de sélectionner le même fichier
       fileInputRef.current.value = '';
-      fileInputRef.current.type = "file";
-      fileInputRef.current.accept = "image/*";
-      fileInputRef.current.capture = undefined;
-      console.log(`[DocumentUploader] Ouverture galerie pour ${docKey}`);
-      fileInputRef.current.click();
+      // Délai minimal pour APK
+      setTimeout(() => {
+        if (fileInputRef.current) {
+          fileInputRef.current.click();
+        }
+      }, 50);
     } catch (err) {
-      const msg = `Impossible d'ouvrir la galerie: ${err.message}`;
-      setError(msg);
-      toast.error(msg);
-      console.error('[DocumentUploader] Galerie error:', err);
+      setError(`Galerie: ${err.message}`);
     }
   };
 
-  // Ouvrir caméra
+  // Ouvrir caméra (avec fallback galerie)
   const openCamera = () => {
+    setError(null);
     try {
-      setError(null);
       if (!cameraInputRef.current) {
-        setError("Erreur: composant indisponible");
+        setError("Erreur composant");
         return;
       }
-      // Reset input
       cameraInputRef.current.value = '';
-      cameraInputRef.current.type = "file";
-      cameraInputRef.current.accept = "image/*";
-      // Force caméra sur tous les devices
-      cameraInputRef.current.capture = "environment";
-      console.log(`[DocumentUploader] Ouverture caméra pour ${docKey}`);
-      cameraInputRef.current.click();
+      setTimeout(() => {
+        if (cameraInputRef.current) {
+          cameraInputRef.current.click();
+        }
+      }, 50);
     } catch (err) {
-      const msg = `Impossible d'ouvrir la caméra: ${err.message}`;
-      setError(msg);
-      toast.error(msg);
-      console.error('[DocumentUploader] Caméra error:', err);
+      setError(`Caméra: ${err.message}`);
     }
   };
 
@@ -181,23 +173,24 @@ export default function DocumentUploader({ docLabel, docKey, onUpload, disabled 
         </div>
       )}
 
-      {/* Inputs cachés - essentiels */}
+      {/* Inputs cachés - ESSENTIELS pour APK */}
       <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => handleFileSelect(e, false)}
-        aria-label={`Galerie pour ${docLabel}`}
+       ref={fileInputRef}
+       type="file"
+       accept="image/*"
+       capture="none"
+       className="hidden"
+       onChange={(e) => handleFileSelect(e, false)}
+       aria-label={`Galerie pour ${docLabel}`}
       />
       <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => handleFileSelect(e, true)}
-        aria-label={`Caméra pour ${docLabel}`}
+       ref={cameraInputRef}
+       type="file"
+       accept="image/*"
+       capture="environment"
+       className="hidden"
+       onChange={(e) => handleFileSelect(e, true)}
+       aria-label={`Caméra pour ${docLabel}`}
       />
     </div>
   );
