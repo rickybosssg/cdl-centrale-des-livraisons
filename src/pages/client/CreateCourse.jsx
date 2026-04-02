@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MapPin, Phone, Package, ArrowLeft, AlertTriangle, Send, RefreshCw, Wallet } from "lucide-react";
 import { fmt } from "@/lib/formatMoney";
 import QuartierSelect from "../../components/QuartierSelect";
+import AdDisplay from "../../components/AdDisplay";
 import { lancerDispatch } from "@/lib/dispatch";
 import { toast } from "sonner";
 
@@ -148,7 +149,14 @@ export default function CreateCourse() {
   // Écran : recherche livreur en cours
   if (searchingCourse) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 space-y-6 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 space-y-6 text-center relative">
+        {/* Publicité pendant attente */}
+        <AdDisplay
+          ad={null}
+          onClose={null}
+          placement="attente_livreur"
+          userRole="client"
+        />
         {livreurTrouve ? (
           <>
             <div className="h-24 w-24 rounded-full bg-green-100 flex items-center justify-center">
