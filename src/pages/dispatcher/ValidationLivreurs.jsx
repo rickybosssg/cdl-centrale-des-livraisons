@@ -38,7 +38,7 @@ export default function ValidationLivreurs() {
 
   useEffect(() => {
     loadData();
-    const unsub = base44.entities.User.subscribe((event) => {
+    const unsubUser = base44.entities.User.subscribe((event) => {
       const isLivreur = event.data?.user_type === 'livreur' || event.data?.statut_validation_livreur;
       if (!isLivreur) return;
       if (event.type === 'create') {
@@ -50,7 +50,31 @@ export default function ValidationLivreurs() {
         setLivreurs(prev => prev.filter(l => l.id !== event.id));
       }
     });
-    return unsub;
+    
+    // Subscribe à UserProfile livreur pour détecter nouveaux profils
+    const unsubProfile = base44.entities.UserProfile.subscribe((event) => {
+      if (event.data?.profile_type !== 'livreur' || event.data?.deleted) return;
+      if (event.type === 'create' || event.type === 'update') {
+        // Chercher si cet utilisateur existe déjà
+        base44.entities.User.filter({ email: event.data.user_email }).then(users => {
+          if (users.length > 0) {
+            const user = users[0];
+            // Ajouter ou mettre à jour avec info du profil
+            setLivreurs(prev => {
+              const exists = prev.find(l => l.email === event.data.user_email);
+              if (exists) {
+                return prev.map(l => l.email === event.data.user_email ? 
+                  { ...l, profile_status: event.data.status, profile_id: event.data.id } : l);
+              }
+              toast.info(`Nouveau profil livreur de ${user.full_name} détecté!`);
+              return [...prev, { ...user, profile_status: event.data.status, profile_id: event.data.id }];
+            });
+          }
+        });
+      }
+    });
+    
+    return () => { unsubUser(); unsubProfile(); };
   }, []);
 
   const valider = async (livreur) => {

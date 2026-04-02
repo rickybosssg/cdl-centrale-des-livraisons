@@ -102,6 +102,34 @@ export default function GererLivreurs() {
     loadData();
     // Rafraîchissement automatique toutes les 30 secondes
     const interval = setInterval(loadData, 30000);
+    
+    // Subscribe à UserProfile livreur pour détecter nouveaux profils créés
+    const unsubProfile = base44.entities.UserProfile.subscribe((event) => {
+      if (event.data?.profile_type !== 'livreur' || event.data?.deleted) return;
+      if (event.type === 'create') {
+        // Chercher l'utilisateur correspondant
+        base44.entities.User.filter({ email: event.data.user_email }).then(users => {
+          if (users.length > 0) {
+            setLivreurs(prev => {
+              const exists = prev.find(l => l.email === event.data.user_email);
+              if (!exists) {
+                toast.info(`✅ Nouveau profil livreur créé: ${users[0].full_name}`);
+                return [...prev, { ...users[0], profile_status: event.data.status }];
+              }
+              return prev;
+            });
+          }
+        });
+      } else if (event.type === 'update') {
+        // Mettre à jour le statut du profil
+        setLivreurs(prev => prev.map(l => 
+          l.email === event.data.user_email ? { ...l, profile_status: event.data.status } : l
+        ));
+      } else if (event.type === 'delete') {
+        setLivreurs(prev => prev.filter(l => l.email !== event.data.user_email));
+      }
+    });
+    
     const unsubUser = base44.entities.User.subscribe((event) => {
       if (event.type === 'update') {
         // Toujours mettre à jour si le livreur est déjà dans la liste
@@ -119,7 +147,7 @@ export default function GererLivreurs() {
         setLivreurs(prev => prev.filter(l => l.id !== event.id));
       }
     });
-    return () => { unsubUser(); clearInterval(interval); };
+    return () => { unsubUser(); unsubProfile(); clearInterval(interval); };
   }, []);
 
   const valider = async (livreur) => {

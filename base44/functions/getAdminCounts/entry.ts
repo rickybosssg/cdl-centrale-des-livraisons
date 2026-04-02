@@ -10,11 +10,26 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin only' }, { status: 403 });
     }
 
-    // Compter livreurs en attente de validation ou incomplets
-    const livreurs = await base44.asServiceRole.entities.User.filter({ user_type: "livreur" });
-    const livreursPendants = livreurs.filter(l => 
-      !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente"
-    ).length;
+    // Compter livreurs : User + UserProfile livreur
+    const [livreurUsers, userProfileLivreurs] = await Promise.all([
+      base44.asServiceRole.entities.User.filter({ user_type: "livreur" }),
+      base44.asServiceRole.entities.UserProfile.filter({ profile_type: "livreur", deleted: false }),
+    ]);
+    
+    // Fusionner User + UserProfile (éviter doublons)
+    const mapLivreurs = new Map();
+    livreurUsers.forEach(u => mapLivreurs.set(u.email, { ...u, source: 'User' }));
+    userProfileLivreurs.forEach(p => {
+      if (!mapLivreurs.has(p.user_email)) {
+        mapLivreurs.set(p.user_email, { email: p.user_email, profile_type: 'livreur', source: 'UserProfile', status: p.status });
+      }
+    });
+    const tousLivreurs = Array.from(mapLivreurs.values());
+    
+    const livreursPendants = tousLivreurs.filter(l => {
+      if (l.source === 'User') return !l.statut_validation_livreur || l.statut_validation_livreur === 'en_attente';
+      return l.status === 'incomplet' || l.status === 'en_attente';
+    }).length;
 
     // Compter clients nouveaux (créés depuis 7 jours)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -42,7 +57,7 @@ Deno.serve(async (req) => {
     return Response.json({
       livreurs: {
         pending: livreursPendants,
-        count: livreurs.length,
+        count: tousLivreurs.length,
       },
       clients: {
         new: clientsNouveaux,
