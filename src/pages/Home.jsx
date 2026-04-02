@@ -22,15 +22,19 @@ const isUserAdmin = (user) => {
   return ADMIN_EMAILS.includes(user.email);
 };
 
-// SOURCE DE VÉRITÉ : retourne le profil via son ID stocké en localStorage
+// SOURCE DE VÉRITÉ : retourne toujours un profil valide
 function resolveActiveProfile(profiles, storedId) {
   if (!profiles || profiles.length === 0) return null;
   if (storedId) {
     const byId = profiles.find(p => p.id === storedId);
     if (byId) return byId;
+    // ID invalide → nettoyer localStorage
+    localStorage.removeItem('activeProfileId');
   }
-  // Fallback : premier profil actif, sinon premier profil
-  return profiles.find(p => p.status === 'actif') || profiles[0];
+  // Fallback garanti : premier profil actif, sinon le premier disponible
+  const fallback = profiles.find(p => p.status === 'actif') || profiles[0];
+  if (fallback) localStorage.setItem('activeProfileId', fallback.id);
+  return fallback;
 }
 
 const PROFILE_CFG = {
@@ -176,6 +180,8 @@ export default function Home() {
 
   const activeProfiles = allProfiles.filter(p => p.status === 'actif');
   const otherProfiles = allProfiles.filter(p => p.status !== 'actif');
+  const hasMultipleActive = activeProfiles.length > 1;
+  const incompleteProfiles = allProfiles.filter(p => p.status === 'incomplet');
 
   return (
     <div className="space-y-0">
@@ -186,96 +192,102 @@ export default function Home() {
         </div>
       )}
 
-      <div className="flex justify-between items-center pb-3 px-4 pt-4">
-        {activeProfiles.length > 1 ? (
-          <button
-            onClick={() => setShowSwitch(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full border-2 text-sm font-bold transition-all active:scale-95"
-            style={{ borderColor: activeCfg.color, color: activeCfg.color, background: activeCfg.color + '15' }}
-          >
-            <span>{activeCfg.emoji}</span>
-            <span>{activeCfg.label}</span>
-            <span className="text-xs opacity-60">▼</span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border-2 text-sm font-bold"
-            style={{ borderColor: activeCfg.color, color: activeCfg.color, background: activeCfg.color + '15' }}>
-            <span>{activeCfg.emoji}</span>
-            <span>{activeCfg.label}</span>
-          </div>
-        )}
-        <Button variant="outline" size="sm" className="gap-2 ml-auto" onClick={() => navigate('/settings')}>
+      {/* Barre profil actif */}
+      <div className="flex justify-between items-center px-4 pt-4 pb-2">
+        <button
+          onClick={() => setShowSwitch(true)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full border-2 text-sm font-bold transition-all active:scale-95"
+          style={{ borderColor: activeCfg.color, color: activeCfg.color, background: activeCfg.color + '15' }}
+        >
+          <span>{activeCfg.emoji}</span>
+          <span>{activeCfg.label}</span>
+          <span className="text-xs opacity-50">▼</span>
+        </button>
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/settings')}>
           <User className="h-4 w-4" /> Mon compte
         </Button>
       </div>
+
+      {/* Alerte profil incomplet */}
+      {incompleteProfiles.length > 0 && (
+        <div className="mx-4 mb-1 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-300">
+          <span className="text-base flex-shrink-0">⚠️</span>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-amber-800">Profil incomplet</p>
+            <p className="text-xs text-amber-700">{incompleteProfiles.map(p => PROFILE_CFG[p.profile_type]?.label).join(', ')} — complétez vos documents pour accéder aux fonctionnalités</p>
+          </div>
+          <button onClick={() => navigate('/settings')} className="text-xs font-bold text-amber-700 underline flex-shrink-0">Compléter</button>
+        </div>
+      )}
 
       {renderDashboard()}
 
       {/* Modal switch profil */}
       <Dialog open={showSwitch} onOpenChange={setShowSwitch}>
         <DialogContent className="max-w-sm">
-          <p className="font-bold text-base">Mes profils</p>
-          <p className="text-xs text-muted-foreground -mt-1">Actif : <strong style={{ color: activeCfg.color }}>{activeCfg.emoji} {activeCfg.label}</strong></p>
+          <div>
+            <p className="font-bold text-base">Mes profils</p>
+            <p className="text-xs text-muted-foreground">Profil actif : <strong style={{ color: activeCfg.color }}>{activeCfg.emoji} {activeCfg.label}</strong></p>
+          </div>
 
-          {/* Profils actifs */}
-          <div className="space-y-2 mt-1">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Profils disponibles</p>
-            {activeProfiles.map(p => {
+          {/* Tous les profils */}
+          <div className="space-y-2">
+            {allProfiles.map(p => {
               const cfg = PROFILE_CFG[p.profile_type];
               if (!cfg) return null;
               const isCurrent = p.id === activeProfileId;
+              const isUsable = p.status === 'actif';
+              const STATUS_BADGE = {
+                actif:      { label: '✓ Actif',      bg: cfg.color, text: 'white' },
+                incomplet:  { label: '📋 Incomplet',  bg: '#fef9c3', text: '#92400e' },
+                en_attente: { label: '⏳ En attente', bg: '#fef3c7', text: '#92400e' },
+                refuse:     { label: '❌ Refusé',     bg: '#fee2e2', text: '#991b1b' },
+                suspendu:   { label: '🔒 Suspendu',   bg: '#f3f4f6', text: '#374151' },
+              }[p.status] || { label: p.status, bg: '#f3f4f6', text: '#374151' };
               return (
-                <button
+                <div
                   key={p.id}
-                  disabled={isCurrent}
-                  onClick={() => switchProfile(p.id)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all active:scale-95 disabled:cursor-default"
-                  style={{ borderColor: isCurrent ? cfg.color : '#e5e7eb', background: isCurrent ? cfg.color + '18' : 'white' }}
+                  className="flex items-center gap-3 p-3 rounded-xl border-2 transition-all"
+                  style={{ borderColor: isCurrent ? cfg.color : '#e5e7eb', background: isCurrent ? cfg.color + '10' : 'white' }}
                 >
-                  <span className="text-2xl">{cfg.emoji}</span>
-                  <div className="flex-1 text-left">
+                  <span className="text-2xl flex-shrink-0">{cfg.emoji}</span>
+                  <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm" style={{ color: cfg.color }}>{cfg.label}</p>
-                    <p className="text-xs text-gray-500">{isCurrent ? '✓ Profil actuel' : 'Basculer vers ce profil'}</p>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-0.5" style={{ background: STATUS_BADGE.bg, color: STATUS_BADGE.text }}>
+                      {STATUS_BADGE.label}
+                    </span>
+                    {p.status === 'incomplet' && (
+                      <p className="text-[10px] text-amber-700 mt-0.5">Documents manquants — complétez pour activer</p>
+                    )}
                   </div>
-                  {isCurrent
-                    ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: cfg.color }}>✓ Actif</span>
-                    : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">⇄ Utiliser</span>
-                  }
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Profils non actifs */}
-          {otherProfiles.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Autres profils</p>
-              {otherProfiles.map(p => {
-                const cfg = PROFILE_CFG[p.profile_type];
-                if (!cfg) return null;
-                const STATUS = {
-                  incomplet:  { label: '📋 Incomplet',  bg: '#f0fdf4', border: '#86efac', color: '#166534' },
-                  en_attente: { label: '⏳ En attente', bg: '#fffbeb', border: '#fcd34d', color: '#92400e' },
-                  refuse:     { label: '❌ Refusé',     bg: '#fff1f2', border: '#fecdd3', color: '#9f1239' },
-                  suspendu:   { label: '🔒 Suspendu',   bg: '#f3f4f6', border: '#d1d5db', color: '#374151' },
-                }[p.status] || { label: p.status, bg: '#f3f4f6', border: '#e5e7eb', color: '#374151' };
-                return (
-                  <div key={p.id} className="flex items-center gap-2 p-3 rounded-xl border-2" style={{ background: STATUS.bg, borderColor: STATUS.border }}>
-                    <span className="text-xl">{cfg.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold" style={{ color: cfg.color }}>{cfg.label}</p>
-                      <span className="text-[10px] font-semibold" style={{ color: STATUS.color }}>{STATUS.label}</span>
-                    </div>
+                  <div className="flex-shrink-0">
+                    {isCurrent && isUsable && (
+                      <span className="text-[10px] font-bold px-2 py-1 rounded-full text-white" style={{ background: cfg.color }}>Actif</span>
+                    )}
+                    {!isCurrent && isUsable && (
+                      <button
+                        onClick={() => switchProfile(p.id)}
+                        className="text-xs font-bold px-3 py-1.5 rounded-lg border-2 transition-all active:scale-95"
+                        style={{ borderColor: cfg.color, color: cfg.color }}
+                      >
+                        Utiliser
+                      </button>
+                    )}
+                    {p.status === 'incomplet' && (
+                      <button onClick={() => { setShowSwitch(false); navigate('/settings'); }} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 text-white">
+                        Compléter
+                      </button>
+                    )}
                     {(p.status === 'en_attente' || p.status === 'refuse') && (
-                      <button onClick={() => setCancelingProfile(p)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors">
+                      <button onClick={() => setCancelingProfile(p)} className="p-1.5 rounded-lg text-red-400 hover:bg-red-50">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
 
           {/* Confirmation annulation */}
           {cancelingProfile && (
