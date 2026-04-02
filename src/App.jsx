@@ -74,6 +74,7 @@ import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
 import ProfilsAdmin from './pages/dispatcher/ProfilsAdmin';
 import TestUpload from './pages/TestUpload';
 import PhoneAuth from './pages/PhoneAuth';
+import HealthDashboard from './pages/dispatcher/HealthDashboard';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -242,6 +243,7 @@ const AuthenticatedApp = () => {
           <Route path="/profils-admin" element={<ProfilsAdmin />} />
           <Route path="/test-upload" element={<TestUpload />} />
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
+          <Route path="/health-dashboard" element={<HealthDashboard />} />
         </Route>
       </Route>
 

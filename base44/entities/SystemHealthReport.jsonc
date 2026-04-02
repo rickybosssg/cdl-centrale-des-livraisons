@@ -1,0 +1,56 @@
+{
+  "name": "SystemHealthReport",
+  "type": "object",
+  "properties": {
+    "date_check": {
+      "type": "string",
+      "title": "Date du contr\u00f4le"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "warning",
+        "critical"
+      ],
+      "title": "Statut global",
+      "default": "healthy"
+    },
+    "modules_checked": {
+      "type": "string",
+      "title": "Modules v\u00e9rifi\u00e9s (JSON array)"
+    },
+    "errors_detected": {
+      "type": "number",
+      "title": "Nombre d'erreurs d\u00e9tect\u00e9es",
+      "default": 0
+    },
+    "errors_fixed": {
+      "type": "number",
+      "title": "Nombre d'erreurs corrig\u00e9es",
+      "default": 0
+    },
+    "errors_critical": {
+      "type": "number",
+      "title": "Nombre d'erreurs critiques (non corrig\u00e9es)",
+      "default": 0
+    },
+    "report_json": {
+      "type": "string",
+      "title": "Rapport d\u00e9taill\u00e9 (JSON)"
+    },
+    "admin_notified": {
+      "type": "boolean",
+      "title": "Admin notifi\u00e9",
+      "default": false
+    },
+    "execution_time_ms": {
+      "type": "number",
+      "title": "Temps d'ex\u00e9cution (ms)"
+    }
+  },
+  "required": [
+    "date_check",
+    "status"
+  ]
+}
