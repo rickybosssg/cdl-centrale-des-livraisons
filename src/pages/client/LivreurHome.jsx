@@ -237,6 +237,9 @@ export default function LivreurHome({ user }) {
 
   return (
     <div className="space-y-5">
+      {/* Publicités en haut du dashboard */}
+      {user && <PubliciteDisplayLivreur userId={user.id} userEmail={user.email} user={user} disponible={disponible} coursesToday={completedTodayCount} />}
+
       {/* Message inactivité */}
       {inactivityMsg}
 
