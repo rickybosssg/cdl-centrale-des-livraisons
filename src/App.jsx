@@ -16,6 +16,7 @@ import ResetAdmin from './pages/ResetAdmin';
 import CreateCourse from './pages/client/CreateCourse';
 import MesCourses from './pages/client/MesCourses';
 import CourseDetail from './pages/client/CourseDetail';
+import CourseTracking from './pages/client/CourseTracking';
 import EffectuerDeplacement from './pages/client/EffectuerDeplacement';
 import Vitrines from './pages/client/Vitrines';
 import CoursesDisponibles from './pages/livreur/CoursesDisponibles';
@@ -167,6 +168,7 @@ const AuthenticatedApp = () => {
         <Route path="/commander" element={<CreateCourse />} />
         <Route path="/mes-courses" element={<MesCourses />} />
         <Route path="/course/:id" element={<CourseDetail />} />
+        <Route path="/course/:id/track" element={<CourseTracking />} />
         <Route path="/effectuer-deplacement" element={<EffectuerDeplacement />} />
         <Route path="/vitrines" element={<Vitrines />} />
         <Route path="/mes-commandes-marketplace" element={<MesCommandesMarketplace />} />
