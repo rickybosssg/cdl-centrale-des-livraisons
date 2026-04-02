@@ -107,20 +107,33 @@ export default function GererCommerciaux() {
   };
 
   const supprimerCommercial = async (commercial) => {
-    if (!window.confirm(`Supprimer définitivement ${commercial.full_name} ?`)) return;
-    await base44.entities.User.delete(commercial.id);
-    await base44.entities.AdminActionLog.create({
-      admin_email: admin.email,
-      object_type: "commercial",
-      object_id: commercial.id,
-      object_name: commercial.full_name,
-      action: "delete",
-      reason: "Suppression commercial",
-      target_email: commercial.email,
-    });
-    toast.success("Commercial supprimé");
-    setDialog(false);
-    loadData();
+    const confirmed = window.confirm(
+      `⚠️ SUPPRESSION COMPLÈTE\n\n` +
+      `Cela supprimera :\n` +
+      `• Le compte ${commercial.full_name}\n` +
+      `• Tous les profils liés\n` +
+      `• Code promo et toutes les données associées\n\n` +
+      `Cette action est IRRÉVERSIBLE.\n` +
+      `Confirmer ?"`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await base44.functions.invoke('deleteUserComplete', {
+        user_id: commercial.id,
+        user_email: commercial.email,
+      });
+      if (res.data?.success) {
+        toast.success(`✅ ${commercial.full_name} supprimé complètement`);
+        setDialog(false);
+        setCommerciaux(prev => prev.filter(c => c.id !== commercial.id));
+        setSelected(null);
+      } else {
+        toast.error(`Erreur : ${res.data?.error || 'Suppression échouée'}`);
+      }
+    } catch (err) {
+      toast.error(`Erreur suppression : ${err.message}`);
+    }
   };
 
   const filtered = commerciaux.filter(c => {
