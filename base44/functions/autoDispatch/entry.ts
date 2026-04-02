@@ -109,14 +109,22 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
 
+    // Récupérer les profils livreur actifs (source de vérité multi-profils)
+    const activeProfiles = await base44.asServiceRole.entities.UserProfile.filter({
+      profile_type: 'livreur',
+      status: 'actif',
+      deleted: false,
+    });
+    const activeLibvreurEmails = new Set(activeProfiles.map(p => p.user_email));
+
     // Récupérer tous les livreurs
     const allDrivers = await base44.asServiceRole.entities.User.filter({ user_type: 'livreur' });
 
-    // Filtrer les livreurs éligibles
+    // Filtrer les livreurs éligibles (profil actif + en ligne + non bloqué)
     const eligibles = allDrivers.filter(d =>
       d.disponible === true &&
       d.actif !== false &&
-      d.statut_validation_livreur === 'valide' &&
+      activeLibvreurEmails.has(d.email) &&
       !d.livreur_bloque &&
       (d.nombre_courses_actives || 0) < 5 &&
       !excludeEmails.includes(d.email) &&

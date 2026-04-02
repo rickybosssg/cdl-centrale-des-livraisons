@@ -62,6 +62,7 @@ import GestionProfils from './pages/dispatcher/GestionProfils';
 import GestionAcces from './pages/dispatcher/GestionAcces';
 import DiffusionGlobale from './pages/dispatcher/DiffusionGlobale';
 import PendingProfileRequests from './pages/dispatcher/PendingProfileRequests';
+import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
 import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
 import TestUpload from './pages/TestUpload';
 
@@ -220,6 +221,7 @@ const AuthenticatedApp = () => {
           <Route path="/pending-profiles" element={<PendingProfileRequests />} />
           <Route path="/livreurs-incomplets" element={<LivreursIncompletsList />} />
           <Route path="/test-upload" element={<TestUpload />} />
+          <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
         </Route>
       </Route>
 

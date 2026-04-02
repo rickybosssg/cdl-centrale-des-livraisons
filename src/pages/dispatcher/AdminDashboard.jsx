@@ -237,6 +237,12 @@ export default function AdminDashboard() {
             💰 Finances & Bedou
           </Button>
         </Link>
+        <Link to="/dispatch-monitor">
+          <Button className="w-full justify-start gap-2 border-green-300 hover:bg-green-50 text-green-800" variant="outline">
+            <Zap className="h-4 w-4 text-green-600" />
+            ⚡ Dispatch Monitor (temps réel)
+          </Button>
+        </Link>
       </div>
 
       {/* Info rapide */}
