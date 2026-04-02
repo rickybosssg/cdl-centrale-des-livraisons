@@ -40,29 +40,22 @@ export default function Home() {
   const [cancelingProfile, setCancelingProfile] = useState(null);
 
   const loadUser = async () => {
-    console.log('[Home] Chargement utilisateur et profils...');
-    // Invalider le cache pour forcer un refetch
-    queryClient.invalidateQueries({ queryKey: ['auth'] });
-    queryClient.invalidateQueries({ queryKey: ['user'] });
-    
-    // Forcer refetch via base44.auth.me()
     const me = await base44.auth.me();
-    console.log('[Home.loadUser] User fetched fresh:', {
-      email: me?.email,
-      role: me?.role,
-      user_type: me?.user_type,
-      active_profile_type: me?.active_profile_type,
-    });
     setUser(me);
-    // Charger tous les profils pour le switcher
     try {
       const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
-      console.log('[Home] Profils chargés:', profs.length);
       setAllProfiles(profs);
-      // Extraire les profils en attente
-      const pending = profs.filter(p => p.status === 'en_attente');
-      console.log('[Home] Profils en attente:', pending.length);
-      setPendingProfiles(pending);
+      setPendingProfiles(profs.filter(p => p.status === 'en_attente'));
+      // Restaurer le profil actif depuis localStorage si disponible
+      const savedProfileType = localStorage.getItem('cdl_active_profile');
+      if (savedProfileType && profs.find(p => p.profile_type === savedProfileType && p.status === 'actif')) {
+        // Si le localStorage diffère du serveur, on applique localement sans recharger
+        if (me.active_profile_type !== savedProfileType) {
+          setUser(prev => ({ ...prev, active_profile_type: savedProfileType }));
+        }
+      } else if (me.active_profile_type) {
+        localStorage.setItem('cdl_active_profile', me.active_profile_type);
+      }
     } catch (err) {
       console.error('[Home] Erreur chargement profils:', err);
     }
@@ -72,12 +65,13 @@ export default function Home() {
   const handleSwitch = async (profileType) => {
     if (switching) return;
     setSwitching(profileType);
-    const result = await base44.functions.invoke('switchActiveProfile', { profile_type: profileType });
+    // Switch instantané local (pas de rechargement)
+    localStorage.setItem('cdl_active_profile', profileType);
+    setUser(prev => ({ ...prev, active_profile_type: profileType }));
+    setShowSwitch(false);
     setSwitching(null);
-    if (result.data?.success) {
-      setShowSwitch(false);
-      setTimeout(() => { window.location.href = '/'; }, 300);
-    }
+    // Sync serveur en arrière-plan (non bloquant)
+    base44.functions.invoke('switchActiveProfile', { profile_type: profileType }).catch(() => {});
   };
 
   useEffect(() => { 
@@ -249,79 +243,72 @@ export default function Home() {
       {/* Modal switch profil — MASQUÉ POUR ADMINS */}
       {!isAdmin && (
       <Dialog open={showSwitch} onOpenChange={setShowSwitch}>
-        <DialogContent className="max-w-xs">
-          <p className="font-bold text-base mb-1">Mes profils</p>
-          <p className="text-xs text-muted-foreground mb-3">Profil actuel : <strong>{PROFILE_CFG[activeProfile]?.label}</strong></p>
+        <DialogContent className="max-w-sm">
+          <p className="font-bold text-base">Mes profils</p>
+          <p className="text-xs text-muted-foreground -mt-1">Profil actif : <strong style={{ color: PROFILE_CFG[activeProfile]?.color }}>{PROFILE_CFG[activeProfile]?.emoji} {PROFILE_CFG[activeProfile]?.label}</strong></p>
 
-          {/* Profils actifs — interchangeables */}
-          <div className="space-y-2">
+          {/* Profils actifs — utilisables */}
+          <div className="space-y-2 mt-1">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Profils disponibles</p>
             {allProfiles.filter(p => p.status === 'actif').map(p => {
-              console.log('[Home.Modal] Profil actif:', p.profile_type);
               const cfg = PROFILE_CFG[p.profile_type];
               if (!cfg) return null;
               const isActive = p.profile_type === activeProfile;
               return (
                 <button
                   key={p.id}
-                  disabled={isActive || !!switching}
+                  disabled={isActive}
                   onClick={() => handleSwitch(p.profile_type)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all active:scale-95"
-                  style={{ borderColor: isActive ? cfg.color : '#e5e7eb', background: isActive ? cfg.color + '15' : 'white' }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all active:scale-95 disabled:cursor-default"
+                  style={{ borderColor: isActive ? cfg.color : '#e5e7eb', background: isActive ? cfg.color + '18' : 'white' }}
                 >
                   <span className="text-2xl">{cfg.emoji}</span>
                   <div className="flex-1 text-left">
-                    <p className="font-semibold text-sm" style={{ color: cfg.color }}>{cfg.label}</p>
-                    <p className="text-xs" style={{ color: isActive ? cfg.color : '#6b7280' }}>{isActive ? '✓ Profil actuel' : 'Basculer vers ce profil'}</p>
+                    <p className="font-bold text-sm" style={{ color: cfg.color }}>{cfg.label}</p>
+                    <p className="text-xs text-gray-500">{isActive ? '✓ Profil actuel' : 'Basculer vers ce profil'}</p>
                   </div>
-                  {switching === p.profile_type && (
-                    <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin flex-shrink-0" />
-                  )}
+                  {isActive
+                    ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: cfg.color }}>✓ Actif</span>
+                    : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">⇄ Utiliser</span>
+                  }
                 </button>
               );
             })}
           </div>
 
-          {/* Profils non actifs avec actions */}
+          {/* Profils non actifs */}
           {allProfiles.filter(p => p.status !== 'actif').length > 0 && (
-            <div className="mt-3 space-y-2">
-              {!isAdmin && (
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Autres profils</p>
-        )}
-              {!isAdmin && allProfiles.filter(p => p.status !== 'actif').map(p => {
-                console.log('[Home.Modal] Profil non actif:', p.profile_type, '-', p.status);
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Autres profils</p>
+              {allProfiles.filter(p => p.status !== 'actif').map(p => {
                 const cfg = PROFILE_CFG[p.profile_type];
                 if (!cfg) return null;
-                const statusCfg = {
-                  en_attente: { label: '⏳ En attente', bg: '#fef3c7', color: '#92400e' },
-                  refuse:     { label: '❌ Refusé',     bg: '#fee2e2', color: '#991b1b' },
-                  suspendu:   { label: '🔒 Suspendu',   bg: '#f3f4f6', color: '#374151' },
-                }[p.status] || { label: p.status, bg: '#f3f4f6', color: '#374151' };
-
-                const canCancel = p.status === 'en_attente' || p.status === 'refuse';
-
+                const STATUS = {
+                  incomplet:  { label: '📋 Incomplet',  bg: '#f0fdf4', border: '#86efac', color: '#166534', action: 'Compléter', actionFn: () => { setShowSwitch(false); navigate('/settings'); } },
+                  en_attente: { label: '⏳ En attente', bg: '#fffbeb', border: '#fcd34d', color: '#92400e', action: 'Voir', actionFn: () => setShowSwitch(false) },
+                  refuse:     { label: '❌ Refusé',     bg: '#fff1f2', border: '#fecdd3', color: '#9f1239', action: 'Voir motif', actionFn: () => setShowSwitch(false) },
+                  suspendu:   { label: '🔒 Suspendu',   bg: '#f3f4f6', border: '#d1d5db', color: '#374151', action: null, actionFn: null },
+                }[p.status] || { label: p.status, bg: '#f3f4f6', border: '#e5e7eb', color: '#374151', action: null };
                 return (
-                  <div key={p.id} className="flex items-center gap-2 p-3 rounded-xl border" style={{ borderColor: p.status === 'en_attente' ? '#fcd34d' : '#e5e7eb', background: p.status === 'en_attente' ? '#fffbeb' : '#f9fafb' }}>
+                  <div key={p.id} className="flex items-center gap-2 p-3 rounded-xl border-2" style={{ background: STATUS.bg, borderColor: STATUS.border }}>
                     <span className="text-xl">{cfg.emoji}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-700">{cfg.label}</p>
-                      <p className="text-xs text-gray-500">{p.status === 'en_attente' ? 'Demande en cours...' : 'Non actif'}</p>
+                      <p className="text-sm font-bold" style={{ color: cfg.color }}>{cfg.label}</p>
+                      <span className="text-[10px] font-semibold" style={{ color: STATUS.color }}>{STATUS.label}</span>
                     </div>
-                    <div className="flex gap-1 flex-shrink-0">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: statusCfg.bg, color: statusCfg.color }}>
-                        {statusCfg.label}
-                      </span>
-                      {canCancel && (
+                    <div className="flex gap-1 items-center flex-shrink-0">
+                      {STATUS.action && (
+                        <button onClick={STATUS.actionFn} className="text-[10px] font-bold px-2 py-1 rounded-lg border" style={{ borderColor: STATUS.border, color: STATUS.color }}>
+                          {STATUS.action}
+                        </button>
+                      )}
+                      {(p.status === 'en_attente' || p.status === 'refuse') && (
                         <button
                           onClick={() => setCancelingProfile(p)}
                           disabled={cancelingProfile?.id === p.id}
-                          className="p-1.5 rounded-lg hover:bg-red-100 text-red-600 transition-colors"
-                          title="Annuler cette demande"
+                          className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors"
                         >
-                          {cancelingProfile?.id === p.id ? (
-                            <span className="w-3.5 h-3.5 border-2 border-red-200 border-t-red-600 rounded-full animate-spin inline-block" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>
@@ -331,36 +318,22 @@ export default function Home() {
             </div>
           )}
 
-          {/* Confirmation annulation inline */}
+          {/* Confirmation annulation */}
           {cancelingProfile && (
-            <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-300 space-y-2">
-              <p className="text-xs font-semibold text-red-700">
-                Êtes-vous sûr d'annuler votre demande de {PROFILE_CFG[cancelingProfile.profile_type]?.label} ?
-              </p>
+            <div className="p-3 rounded-lg bg-red-50 border border-red-300 space-y-2">
+              <p className="text-xs font-semibold text-red-700">Annuler la demande {PROFILE_CFG[cancelingProfile.profile_type]?.label} ?</p>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setCancelingProfile(null)}
-                  className="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-white border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
-                >
+                <button onClick={() => setCancelingProfile(null)} className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-white border border-red-300 text-red-600">
                   Garder
                 </button>
                 <button
                   onClick={async () => {
-                    console.log('[Home] Annulation du profil:', cancelingProfile.id);
                     try {
                       const result = await base44.functions.invoke('cancelProfileRequest', { profile_id: cancelingProfile.id });
-                      console.log('[Home] Résultat annulation:', result.data);
-                      if (result.data?.success) {
-                        console.log('[Home] Profil annulé, rechargement...');
-                        setCancelingProfile(null);
-                        setShowSwitch(false);
-                        await loadUser();
-                      }
-                    } catch (err) {
-                      console.error('[Home] Erreur annulation:', err);
-                    }
+                      if (result.data?.success) { setCancelingProfile(null); setShowSwitch(false); await loadUser(); }
+                    } catch (err) { console.error('[Home] Erreur annulation:', err); }
                   }}
-                  className="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+                  className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-red-600 text-white"
                 >
                   <Trash2 className="h-3 w-3 inline mr-1" /> Oui, annuler
                 </button>
@@ -368,12 +341,12 @@ export default function Home() {
             </div>
           )}
 
-          {/* Créer un nouveau profil */}
+          {/* Ajouter un profil */}
           <button
-            className="mt-4 w-full py-2.5 rounded-xl border-2 border-dashed border-primary/40 text-primary text-sm font-semibold hover:bg-primary/5 transition-colors"
+            className="w-full py-3 rounded-xl border-2 border-dashed border-primary/40 text-primary text-sm font-bold hover:bg-primary/5 transition-colors"
             onClick={() => { setShowSwitch(false); navigate('/settings'); }}
           >
-            + Créer un nouveau profil
+            ➕ Ajouter un profil
           </button>
         </DialogContent>
       </Dialog>

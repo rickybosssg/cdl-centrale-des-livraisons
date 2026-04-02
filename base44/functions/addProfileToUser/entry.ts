@@ -9,9 +9,10 @@ const PROFILE_REQUIREMENTS = {
   },
   livreur: {
     immediate: false,
-    fields: ['telephone', 'quartier', 'moyen_deplacement'],
-    documents: ['photo_profil', 'photo_identite_recto', 'photo_identite_verso', 'photo_moyen_deplacement'],
+    fields: ['telephone', 'quartier'],
+    documents: [],
     needsAdminValidation: true,
+    optionalDocuments: ['photo_profil', 'photo_identite_recto', 'photo_identite_verso', 'photo_moyen_deplacement'],
   },
   partenaire: {
     immediate: false,
@@ -60,24 +61,22 @@ Deno.serve(async (req) => {
 
     const requirements = PROFILE_REQUIREMENTS[profile_type];
 
-    // VALIDATION STRICTE: Vérifier les champs requis
+    // VALIDATION: Vérifier les champs requis
     const missingFields = requirements.fields.filter(f => !data[f]);
     console.log('[addProfileToUser] Champs manquants:', missingFields);
 
-    // VALIDATION STRICTE: Vérifier les documents requis
-    const missingDocuments = requirements.documents.filter(docKey => !data[docKey]);
-    console.log('[addProfileToUser] Documents manquants:', missingDocuments);
-
-    // ❌ Refuser si données ou documents obligatoires manquent
-    if (missingFields.length > 0 || missingDocuments.length > 0) {
+    // ❌ Refuser si champs obligatoires manquent
+    if (missingFields.length > 0) {
       return Response.json({
-        error: 'Incomplete profile: missing fields and/or documents',
+        error: 'Incomplete profile: missing required fields',
         missingFields,
-        missingDocuments,
         requiredFields: requirements.fields,
-        requiredDocuments: requirements.documents,
       }, { status: 400 });
     }
+
+    // Vérifier les documents (optionnels pour livreur à ce stade)
+    const allDocKeys = [...requirements.documents, ...(requirements.optionalDocuments || [])];
+    const missingDocuments = allDocKeys.filter(docKey => !data[docKey]);
 
     // Pour commercial : valider unicité du code promo AVANT toute création
     if (profile_type === 'commercial') {
@@ -116,21 +115,24 @@ Deno.serve(async (req) => {
       userProfiles.push(profile_type);
     }
 
-    // FIX 2: Seul client peut être actif immédiatement. Autres = toujours en_attente
+    // Pour livreur sans docs → statut incomplet, sinon en_attente
+    const livreurHasDocs = profile_type === 'livreur' && allDocKeys.every(k => data[k]);
+    const statusForNonClient = livreurHasDocs ? 'en_attente' : (profile_type === 'livreur' ? 'incomplet' : 'en_attente');
+    const finalStatus = profile_type === 'client' ? 'actif' : statusForNonClient;
+    // Seul client peut être actif immédiatement.
     const isActiveProfile = profile_type === 'client' && !user.active_profile_type;
 
     console.log('[addProfileToUser] Création UserProfile...');
     // Extraire les URLs des documents pour tous les profils
     const docUrls = {};
-    requirements.documents.forEach(docKey => {
-      docUrls[docKey] = data[docKey] || null;
+    allDocKeys.forEach(docKey => {
+      if (data[docKey]) docUrls[docKey] = data[docKey];
     });
 
-    // Préparer les champs manquants et les documents manquants (à ce stade: vides)
     const createdProfile = await base44.entities.UserProfile.create({
       user_email: user.email,
       profile_type,
-      status,
+      status: finalStatus,
       is_active_profile: isActiveProfile,
       data_json: JSON.stringify(data),
       documents_json: Object.keys(docUrls).length > 0 ? JSON.stringify(docUrls) : null,
@@ -190,19 +192,23 @@ Deno.serve(async (req) => {
     await base44.entities.Notification.create({
       destinataire_email: user.email,
       destinataire_role: profile_type,
-      titre: status === 'actif' 
+      titre: finalStatus === 'actif' 
         ? `✅ ${roleEmojis[profile_type] || ''} ${roleNames[profile_type] || profile_type} activé`
+        : finalStatus === 'incomplet'
+        ? `📋 ${roleEmojis[profile_type] || ''} Profil ${roleNames[profile_type] || profile_type} — documents requis`
         : `⏳ ${roleEmojis[profile_type] || ''} Demande en attente de validation`,
-      message: status === 'actif'
+      message: finalStatus === 'actif'
         ? `Votre profil ${roleNames[profile_type] || profile_type} CDL a été activé avec succès. Bienvenue!`
+        : finalStatus === 'incomplet'
+        ? `Envoyez vos documents pour activer votre profil ${roleNames[profile_type] || profile_type}.`
         : `Votre demande de profil ${roleNames[profile_type] || profile_type} CDL est en attente de validation par l'équipe CDL.`,
-      type: status === 'actif' ? 'success' : 'warning',
+      type: finalStatus === 'actif' ? 'success' : 'warning',
       lue: false,
     });
     console.log('[addProfileToUser] Notification créée');
 
-    // Notifier les admins si validation requise avec données détaillées
-    if (requirements.needsAdminValidation) {
+    // Notifier les admins si validation requise (seulement si en_attente, pas incomplet)
+    if (requirements.needsAdminValidation && finalStatus === 'en_attente') {
       console.log('[addProfileToUser] ← ADMIN NOTIFICATION: Envoi aux admins...');
       const admins = await base44.entities.User.filter({ role: 'admin' });
       console.log('[addProfileToUser] ← ADMIN NOTIFICATION: Nombre admins trouvés:', admins.length);

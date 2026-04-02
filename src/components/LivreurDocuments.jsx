@@ -38,14 +38,36 @@ export default function LivreurDocuments({ onComplete }) {
       );
       const docUrls = {};
       DOCS.forEach((d, i) => { docUrls[d.key] = uploads[i].file_url; });
-      await base44.auth.updateMe({
-        ...docUrls,
-        docs_envoyes: true,
-        terms_accepted: true,
-        terms_accepted_at: new Date().toISOString(),
+
+      const me = await base44.auth.me();
+
+      // Trouver le UserProfile livreur existant et le mettre à jour avec les docs
+      const livreurProfiles = await base44.entities.UserProfile.filter({
+        user_email: me.email,
+        profile_type: 'livreur',
+        deleted: false,
       });
+
+      if (livreurProfiles.length > 0) {
+        // Mettre à jour le UserProfile avec les documents et passer en en_attente
+        await base44.entities.UserProfile.update(livreurProfiles[0].id, {
+          documents_json: JSON.stringify(docUrls),
+          status: 'en_attente',
+          missing_documents: JSON.stringify([]),
+          completion_percentage: 100,
+        });
+      } else {
+        // Fallback : créer le profil livreur avec les docs si inexistant
+        await base44.functions.invoke('addProfileToUser', {
+          profile_type: 'livreur',
+          data: { telephone: me.telephone || '', quartier: me.quartier || '', ...docUrls },
+        });
+      }
+
+      // Marquer docs_envoyes sur User pour compatibilité
+      await base44.auth.updateMe({ docs_envoyes: true, terms_accepted: true, terms_accepted_at: new Date().toISOString() });
+
       try {
-        const me = await base44.auth.me();
         await base44.functions.invoke('notifyAdminNewSignup', {
           entity_name: 'Livreur',
           entity_data: { nom_complet: me.full_name, telephone: me.telephone, quartier: me.quartier },

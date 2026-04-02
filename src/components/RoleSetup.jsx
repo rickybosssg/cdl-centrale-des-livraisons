@@ -58,27 +58,28 @@ export default function RoleSetup({ onComplete }) {
         statut_paiement: "Doit",
       });
     }
-    // ÉTAPE 1 : Sauvegarder le rôle (await obligatoire)
-    await base44.auth.updateMe({
-      user_type: selectedRole,
-      active_profile_type: selectedRole,
+    // ÉTAPE 1 : Lire le user actuel pour ne pas écraser ce qui existe déjà
+    const currentUser = await base44.auth.me();
+    const isFirstProfile = !currentUser.user_type;
+
+    // Ne mettre à jour user_type que si c'est le premier profil (ne pas écraser)
+    const updateData = {
       onboarding_completed: true,
-      user_roles: JSON.stringify([selectedRole]),
-      statut_compte: selectedRole === 'client' ? 'actif' : 'en_attente',
-      profil_valide: selectedRole === "client",
-      docs_envoyes: selectedRole !== 'livreur',
-      statut_validation_livreur: selectedRole === "livreur" ? "en_attente" : undefined,
-      statut_validation_commercial: selectedRole === "commercial" ? "en_attente" : undefined,
-      statut_validation_partenaire: selectedRole === "partenaire" ? "en_attente" : undefined,
-      verified: selectedRole === "client",
-      total_courses: 0,
-      commission_mode: true,
-      solde_commission_du: 0,
-      statut_financier_livreur: "À jour",
-      livreur_bloque: false,
-      moyen_deplacement: selectedRole === "livreur" ? JSON.stringify(moyenDeplacement) : undefined,
-      code_promo_utilise: (selectedRole === "client" && codePromoApplique) ? codePromoApplique.code : undefined,
-    });
+      active_profile_type: selectedRole, // Activer ce profil
+    };
+    if (isFirstProfile) {
+      // Premier profil : initialiser user_type
+      updateData.user_type = selectedRole;
+    }
+    // Stocker le moyen de déplacement livreur sur le user pour compatibilité
+    if (selectedRole === 'livreur') {
+      updateData.moyen_deplacement = JSON.stringify(moyenDeplacement);
+      updateData.docs_envoyes = false;
+    }
+    if (selectedRole === 'client') {
+      updateData.code_promo_utilise = codePromoApplique ? codePromoApplique.code : undefined;
+    }
+    await base44.auth.updateMe(updateData);
 
     // ÉTAPE 2 : Forcer le refresh de session pour vider le cache
     const me = await base44.auth.me();
