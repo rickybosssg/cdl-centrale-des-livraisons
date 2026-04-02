@@ -244,9 +244,9 @@ export default function AdminDashboard() {
 
         <Link to="/gestion-profils">
           <div className="relative">
-            <Button className="w-full justify-start gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary" variant="outline">
+            <Button className="w-full justify-start gap-2 bg-gradient-to-r from-primary to-blue-600 text-white font-semibold" size="lg">
               <LayoutGrid className="h-4 w-4" />
-              🎛️ Centre de contrôle
+              ⚙️ Gestion des profils
             </Button>
             <AdminBadge count={counts.profilesIncomplets} />
           </div>
