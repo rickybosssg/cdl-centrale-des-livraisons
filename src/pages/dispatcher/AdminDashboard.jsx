@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ export default function AdminDashboard() {
   const [resetting, setResetting] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [demandeBedouCount, setDemandeBedouCount] = useState(0);
 
   const loadData = async () => {
     try {
@@ -86,11 +87,19 @@ export default function AdminDashboard() {
         setCounts(countsRes.data);
       }
 
+      // Charger les demandes Bedou en attente
+      const [recharges, retraits] = await Promise.allSettled([
+        base44.entities.DemandeRecharge.filter({ statut: 'en_attente' }),
+        base44.entities.DemandeRetrait.filter({ statut: 'en_attente' }),
+      ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
+      setDemandeBedouCount((recharges || []).length + (retraits || []).length);
+
       const alertList = [];
       if (countsRes.data?.livreurs?.pending > 0) alertList.push({ type: 'livreurs', count: countsRes.data.livreurs.pending });
       if (countsRes.data?.partenaires?.pending > 0) alertList.push({ type: 'partenaires', count: countsRes.data.partenaires.pending });
       if (countsRes.data?.commerciaux?.pending > 0) alertList.push({ type: 'commerciaux', count: countsRes.data.commerciaux.pending });
       if ((livreurs || []).filter(l => l.livreur_bloque).length > 0) alertList.push({ type: 'blocked' });
+      if ((recharges || []).length + (retraits || []).length > 0) alertList.push({ type: 'bedou', count: (recharges || []).length + (retraits || []).length });
       
       setAlerts(alertList);
     } finally {
@@ -317,6 +326,16 @@ export default function AdminDashboard() {
               ⚙️ Gestion des profils
             </Button>
             <AdminBadge count={counts.profilesIncomplets} />
+          </div>
+        </Link>
+
+        <Link to="/gestion-bedou">
+          <div className="relative">
+            <Button className="w-full justify-start gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold">
+              <Wallet className="h-4 w-4" />
+              💰 Bedou & Transactions
+            </Button>
+            <AdminBadge count={demandeBedouCount} />
           </div>
         </Link>
       </div>

@@ -64,6 +64,7 @@ import CompleteProfile from './pages/CompleteProfile';
 import GestionTransactions from './pages/dispatcher/GestionTransactions';
 import GestionProfils from './pages/dispatcher/GestionProfils';
 import GestionAcces from './pages/dispatcher/GestionAcces';
+import GestionBedou from './pages/dispatcher/GestionBedou';
 import DiffusionGlobale from './pages/dispatcher/DiffusionGlobale';
 import PendingProfileRequests from './pages/dispatcher/PendingProfileRequests';
 import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
@@ -229,6 +230,7 @@ const AuthenticatedApp = () => {
           <Route path="/gestion-transactions" element={<GestionTransactions />} />
           <Route path="/gestion-profils" element={<GestionProfils />} />
           <Route path="/gestion-acces" element={<GestionAcces />} />
+          <Route path="/gestion-bedou" element={<GestionBedou />} />
           <Route path="/diffusion-globale" element={<DiffusionGlobale />} />
           <Route path="/pending-profiles" element={<PendingProfileRequests />} />
           <Route path="/livreurs-incomplets" element={<LivreursIncompletsList />} />
