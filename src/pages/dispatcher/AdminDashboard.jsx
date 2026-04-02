@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
+import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AdminNotificationSystem from "@/components/AdminNotificationSystem";
+import AdminBadge from "@/components/AdminBadge";
 import moment from "moment";
 
 export default function AdminDashboard() {
@@ -21,24 +23,30 @@ export default function AdminDashboard() {
     totalPartenairesActifs: 0,
     revenuAbonnements: 0,
   });
+  const [counts, setCounts] = useState({
+    livreurs: { pending: 0, count: 0 },
+    clients: { new: 0, count: 0 },
+    partenaires: { pending: 0, count: 0 },
+    commerciaux: { pending: 0, count: 0 },
+    profilesIncomplets: 0,
+  });
   const [resetting, setResetting] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     try {
+      // Charger KPIs
       const today = new Date().toDateString();
-      
-      // Charger les données en parallèle
-      const [courses, livreurs, users, partenaires, profiles] = await Promise.allSettled([
+      const [courses, livreurs, users, partenaires, profiles, countsRes] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 100),
         base44.entities.User.filter({ user_type: "livreur", disponible: true }),
         base44.entities.User.list("-created_date", 100),
         base44.entities.Partenaire.list('-created_date', 200),
         base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),
+        base44.functions.invoke('getAdminCounts', {}),
       ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
 
-      // Calculer les KPIs
       const coursesData = courses || [];
       const coursesToday = coursesData.filter(c => new Date(c.created_date).toDateString() === today).length;
       const revenueToday = coursesData
@@ -49,14 +57,11 @@ export default function AdminDashboard() {
       const pendingCount = (profiles || []).length;
       const totalCourses = coursesData.length;
 
-      // Revenus CDL totaux (20% de chaque course livrée)
       const totalRevenuCDL = coursesData
         .filter(c => c.statut === 'livree')
         .reduce((sum, c) => sum + (c.commission_cdl || Math.round((c.prix || 0) * 0.2)), 0);
 
-      // Partenaires actifs + revenus abonnements
       const partenairesActifs = (partenaires || []).filter(p => p.statut === 'actif');
-      // Estimation: 1er mois = 10 000, mois suivants = 30 000 (on utilise chiffre_affaires si dispo)
       const revenuAbonnements = partenairesActifs.reduce((sum, p) => {
         const moisDepuis = p.date_paiement_abonnement
           ? Math.max(1, Math.round((Date.now() - new Date(p.date_paiement_abonnement)) / (1000*60*60*24*30)))
@@ -76,11 +81,16 @@ export default function AdminDashboard() {
         revenuAbonnements,
       });
 
-      // Alertes
+      // Charger les compteurs admin
+      if (countsRes.data) {
+        setCounts(countsRes.data);
+      }
+
       const alertList = [];
-      if (pendingCount > 0) alertList.push({ type: 'pending', count: pendingCount });
+      if (countsRes.data?.livreurs?.pending > 0) alertList.push({ type: 'livreurs', count: countsRes.data.livreurs.pending });
+      if (countsRes.data?.partenaires?.pending > 0) alertList.push({ type: 'partenaires', count: countsRes.data.partenaires.pending });
+      if (countsRes.data?.commerciaux?.pending > 0) alertList.push({ type: 'commerciaux', count: countsRes.data.commerciaux.pending });
       if ((livreurs || []).filter(l => l.livreur_bloque).length > 0) alertList.push({ type: 'blocked' });
-      if (coursesToday > 20) alertList.push({ type: 'high_activity' });
       
       setAlerts(alertList);
     } finally {
@@ -90,28 +100,42 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 30000); // Rafraîchir chaque 30s
-    return () => clearInterval(interval);
+    const interval = setInterval(loadData, 30000);
+
+    // Subscriptions temps réel
+    const unsubs = [];
+    
+    unsubs.push(base44.entities.User.subscribe((event) => {
+      if (['livreur', 'client', 'commercial'].includes(event.data?.user_type)) {
+        loadData();
+      }
+    }));
+
+    unsubs.push(base44.entities.Partenaire.subscribe(() => loadData()));
+    unsubs.push(base44.entities.UserProfile.subscribe(() => loadData()));
+    unsubs.push(base44.entities.Course.subscribe(() => loadData()));
+
+    return () => {
+      clearInterval(interval);
+      unsubs.forEach(u => u?.());
+    };
   }, []);
 
   const handleResetData = async () => {
-    const confirmed = window.confirm(
-      "⚠️ Êtes-vous sûr de vouloir réinitialiser toutes les courses et statistiques ?\n\nCette action est définitive."
-    );
+    const confirmed = window.confirm("⚠️ Êtes-vous sûr de vouloir réinitialiser toutes les courses et statistiques ?");
     if (!confirmed) return;
 
     setResetting(true);
     try {
       const res = await base44.functions.invoke('resetAdminData', {});
-      console.log('[AdminDashboard] Réinitialisation:', res.data);
       if (res.data?.success) {
-        toast.success('✅ Données réinitialisées, rechargement...');
+        toast.success('✅ Données réinitialisées');
         setTimeout(() => loadData(), 500);
       } else {
         toast.error(res.data?.error || 'Erreur');
       }
     } catch (err) {
-      console.error('[AdminDashboard] Erreur reset:', err);
+      console.error('[AdminDashboard] Error reset:', err);
       toast.error('Erreur: ' + err.message);
     }
     setResetting(false);
@@ -126,39 +150,37 @@ export default function AdminDashboard() {
   }
 
   const alertConfig = {
-    pending: { icon: AlertCircle, color: 'bg-blue-50 border-blue-300', text: '📋 ' + kpis.pendingRequests + ' demandes en attente' },
-    blocked: { icon: AlertCircle, color: 'bg-red-50 border-red-300', text: '🔒 Livreurs bloqués détectés' },
-    high_activity: { icon: Zap, color: 'bg-amber-50 border-amber-300', text: '⚡ Activité élevée détectée' },
+    livreurs: { icon: Truck, text: '📋 ' + counts.livreurs?.pending + ' livreurs à valider' },
+    partenaires: { icon: Store, text: '🏪 ' + counts.partenaires?.pending + ' partenaires en attente' },
+    commerciaux: { icon: Megaphone, text: '📢 ' + counts.commerciaux?.pending + ' commerciaux à valider' },
+    blocked: { icon: AlertCircle, text: '🔒 Livreurs bloqués détectés' },
   };
 
   return (
     <div className="pb-24 space-y-4">
-      {/* Header */}
       <div className="sticky top-0 bg-background/95 backdrop-blur p-4 border-b z-10">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">CDL Control Center</h1>
             <p className="text-xs text-muted-foreground">{moment().format('DD MMM YYYY')}</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
+          <Button variant="ghost" size="icon">
             <Bell className="h-5 w-5" />
           </Button>
         </div>
       </div>
 
-      {/* Notifications */}
       <div className="px-4">
         <AdminNotificationSystem />
       </div>
 
-      {/* Alertes */}
       {alerts.length > 0 && (
         <div className="px-4 space-y-2">
           {alerts.map((alert, idx) => {
             const cfg = alertConfig[alert.type];
             return (
-              <div key={idx} className={`p-3 rounded-xl border-2 ${cfg.color}`}>
-                <p className="text-sm font-semibold">{cfg.text}</p>
+              <div key={idx} className="p-3 rounded-xl border-2 border-red-300 bg-red-50">
+                <p className="text-sm font-semibold text-red-700">{cfg.text}</p>
               </div>
             );
           })}
@@ -200,24 +222,11 @@ export default function AdminDashboard() {
         <Card className="border-l-4 border-l-green-700 col-span-2">
           <CardContent className="p-4">
             <p className="text-3xl font-bold text-green-700">{kpis.totalRevenuCDL.toLocaleString()} F</p>
-            <p className="text-xs text-muted-foreground mt-1">💰 Total gains CDL (commissions 20%)</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-purple-500">
-          <CardContent className="p-4">
-            <p className="text-3xl font-bold text-purple-600">{kpis.totalPartenairesActifs}</p>
-            <p className="text-xs text-muted-foreground mt-1">Partenaires actifs</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-pink-500">
-          <CardContent className="p-4">
-            <p className="text-xl font-bold text-pink-600">{kpis.revenuAbonnements.toLocaleString()} F</p>
-            <p className="text-xs text-muted-foreground mt-1">Revenus abonnements</p>
+            <p className="text-xs text-muted-foreground mt-1">💰 Total gains CDL</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Bouton réinitialisation */}
       <div className="px-4">
         <Button
           variant="destructive"
@@ -225,99 +234,98 @@ export default function AdminDashboard() {
           onClick={handleResetData}
           disabled={resetting}
         >
-          {resetting ? "Réinitialisation..." : "🔄 Réinitialiser les statistiques"}
+          {resetting ? "Réinitialisation..." : "🔄 Réinitialiser"}
         </Button>
       </div>
 
-      {/* Actions rapides */}
+      {/* Actions rapides avec badges */}
       <div className="px-4 space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Accès rapide</p>
-        <Link to="/profils-admin">
-          <Button className="w-full justify-start gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary" variant="outline">
-            <LayoutGrid className="h-4 w-4" />
-            🎛️ Centre de contrôle — tous les profils
-          </Button>
-        </Link>
+
         <Link to="/gestion-profils">
-          <Button className="w-full justify-start gap-2" variant="outline">
-            <Users className="h-4 w-4" />
-            👤 Gestion des profils
-          </Button>
+          <div className="relative">
+            <Button className="w-full justify-start gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary" variant="outline">
+              <LayoutGrid className="h-4 w-4" />
+              🎛️ Centre de contrôle
+            </Button>
+            <AdminBadge count={counts.profilesIncomplets} />
+          </div>
         </Link>
-        <Link to="/pending-profiles">
-          <Button className="w-full justify-start gap-2" variant="outline">
-            <AlertCircle className="h-4 w-4" />
-            📋 Demandes de profils ({kpis.pendingRequests})
-          </Button>
+
+        <Link to="/validation-livreurs">
+          <div className="relative">
+            <Button className="w-full justify-start gap-2" variant="outline">
+              <Truck className="h-4 w-4" />
+              🛵 Validation livreurs
+            </Button>
+            <AdminBadge count={counts.livreurs?.pending} />
+          </div>
         </Link>
-        <Link to="/livreurs-incomplets">
-          <Button className="w-full justify-start gap-2 border-amber-300 hover:bg-amber-50 text-amber-800" variant="outline">
-            <AlertCircle className="h-4 w-4 text-amber-500" />
-            ⚠️ Livreurs incomplets
-          </Button>
+
+        <Link to="/gerer-clients">
+          <div className="relative">
+            <Button className="w-full justify-start gap-2" variant="outline">
+              <Users className="h-4 w-4" />
+              👤 Gestion clients
+            </Button>
+            <AdminBadge count={counts.clients?.new} />
+          </div>
         </Link>
+
+        <Link to="/gerer-partenaires">
+          <div className="relative">
+            <Button className="w-full justify-start gap-2" variant="outline">
+              <Store className="h-4 w-4" />
+              🏪 Gestion partenaires
+            </Button>
+            <AdminBadge count={counts.partenaires?.pending} />
+          </div>
+        </Link>
+
+        <Link to="/gerer-commerciaux">
+          <div className="relative">
+            <Button className="w-full justify-start gap-2" variant="outline">
+              <Megaphone className="h-4 w-4" />
+              💼 Gestion commerciaux
+            </Button>
+            <AdminBadge count={counts.commerciaux?.pending} />
+          </div>
+        </Link>
+
         <Link to="/gerer-courses">
           <Button className="w-full justify-start gap-2" variant="outline">
             <Package className="h-4 w-4" />
             📦 Gérer les courses
           </Button>
         </Link>
-        <Link to="/validation-livreurs">
-          <Button className="w-full justify-start gap-2" variant="outline">
-            <Users className="h-4 w-4" />
-            🛵 Valider les livreurs
+
+        <Link to="/livreurs-incomplets">
+          <Button className="w-full justify-start gap-2 border-amber-300 hover:bg-amber-50 text-amber-800" variant="outline">
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+            ⚠️ Livreurs incomplets
           </Button>
         </Link>
-        <Link to="/gerer-clients">
-          <Button className="w-full justify-start gap-2" variant="outline">
-            <Users className="h-4 w-4" />
-            👤 Gestion clients
-          </Button>
-        </Link>
-        <Link to="/gerer-livreurs">
-          <Button className="w-full justify-start gap-2" variant="outline">
-            <TrendingUp className="h-4 w-4" />
-            📊 Gestion livreurs
-          </Button>
-        </Link>
-        <Link to="/gerer-partenaires">
-          <Button className="w-full justify-start gap-2" variant="outline">
-            <Users className="h-4 w-4" />
-            🏪 Gestion partenaires
-          </Button>
-        </Link>
-        <Link to="/gerer-commerciaux">
-          <Button className="w-full justify-start gap-2" variant="outline">
-            <Users className="h-4 w-4" />
-            💼 Gestion commerciaux
-          </Button>
-        </Link>
+
         <Link to="/gestion-transactions">
           <Button className="w-full justify-start gap-2" variant="outline">
-            <Clock className="h-4 w-4" />
+            <TrendingUp className="h-4 w-4" />
             💰 Finances & Bedou
           </Button>
         </Link>
+
         <Link to="/dispatch-monitor">
           <Button className="w-full justify-start gap-2 border-green-300 hover:bg-green-50 text-green-800" variant="outline">
             <Zap className="h-4 w-4 text-green-600" />
-            ⚡ Dispatch Monitor (temps réel)
-          </Button>
-        </Link>
-        <Link to="/whatsapp-orders">
-          <Button className="w-full justify-start gap-2 border-green-300 hover:bg-green-50 text-green-800" variant="outline">
-            <span className="text-base">💬</span>
-            WhatsApp Orders
+            ⚡ Dispatch Monitor
           </Button>
         </Link>
       </div>
 
-      {/* Info rapide */}
       <div className="px-4 pb-4">
         <Card className="bg-primary/5">
           <CardContent className="p-4">
             <p className="text-xs font-medium text-muted-foreground">
-              ⚡ Dashboard mis à jour chaque 30 secondes. Cliquez sur une section pour plus de détails.
+              ⚡ Dashboard synchronisé en temps réel. Badges automatiques pour les éléments à traiter.
             </p>
           </CardContent>
         </Card>
