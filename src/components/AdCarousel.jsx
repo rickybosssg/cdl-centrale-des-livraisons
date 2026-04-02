@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import AdDisplay from "@/components/AdDisplay";
+import PubliciteTracker from "./PubliciteTracker";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function AdCarousel({ placement = "accueil", userRole = "client" }) {
@@ -75,9 +75,10 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
   }, [currentIndex, ads.length]);
 
   return (
-    <div className="relative w-full bg-gray-900 rounded-lg overflow-hidden group">
-      {/* Pub */}
-      <div className="relative aspect-video bg-black">
+    <PubliciteTracker publiciteId={current.id} userRole={userRole}>
+      <div className="relative w-full bg-gray-900 rounded-lg overflow-hidden group">
+        {/* Pub */}
+        <div className="relative aspect-video bg-black">
         {current.type === "video" ? (
           <video
             src={current.image_url}
@@ -126,22 +127,23 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
         )}
       </div>
 
-      {/* Info overlay */}
-      {current.titre && (
-        <div className="p-3 bg-gradient-to-t from-black/80 to-transparent">
-          <p className="text-white font-semibold text-sm truncate">{current.titre}</p>
-          {current.lien_url && (
-            <a
-              href={current.lien_url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary text-xs font-medium mt-1 inline-block hover:underline"
-            >
-              En savoir plus →
-            </a>
-          )}
-        </div>
-      )}
-    </div>
+        {/* Info overlay */}
+        {current.titre && (
+          <div className="p-3 bg-gradient-to-t from-black/80 to-transparent">
+            <p className="text-white font-semibold text-sm truncate">{current.titre}</p>
+            {current.lien_url && (
+              <a
+                href={current.lien_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary text-xs font-medium mt-1 inline-block hover:underline"
+              >
+                En savoir plus →
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+    </PubliciteTracker>
   );
 }

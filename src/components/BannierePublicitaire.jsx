@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import PubliciteTracker from "./PubliciteTracker";
 import { X } from "lucide-react";
 
 export default function BannierePublicitaire({ placement }) {
@@ -42,51 +43,64 @@ export default function BannierePublicitaire({ placement }) {
 
   const pub = pubs[current];
 
-  const handleClick = () => {
-    base44.entities.Publicite.update(pub.id, { clics: (pub.clics || 0) + 1 });
+  const handleClick = async () => {
+    try {
+      const user = await base44.auth.me();
+      await base44.functions.invoke('trackPubliciteInteraction', {
+        publicite_id: pub.id,
+        interaction_type: 'click',
+        user_id: user?.id,
+        user_email: user?.email,
+        user_role: 'client',
+      });
+    } catch (err) {
+      console.error('[BannierePublicitaire] Click tracking error:', err);
+    }
     if (pub.lien_url) window.open(pub.lien_url, "_blank");
   };
 
   return (
-    <div className="relative rounded-xl overflow-hidden shadow-sm border border-border">
-      <div className="absolute top-1.5 left-2 z-10">
-        <span className="text-[9px] bg-black/50 text-white px-1.5 py-0.5 rounded-full font-medium">Pub</span>
-      </div>
-      <button
-        className="absolute top-1.5 right-1.5 z-10 h-5 w-5 rounded-full bg-black/50 flex items-center justify-center"
-        onClick={() => setDismissed(true)}
-      >
-        <X className="h-3 w-3 text-white" />
-      </button>
-
-      <img
-        src={pub.image_url}
-        alt={pub.titre}
-        className="w-full h-28 object-cover cursor-pointer"
-        onClick={handleClick}
-      />
-
-      {pub.description && (
-        <div
-          className="px-3 py-2 bg-card cursor-pointer"
-          onClick={handleClick}
+    <PubliciteTracker publiciteId={pub.id} userRole="client">
+      <div className="relative rounded-xl overflow-hidden shadow-sm border border-border">
+        <div className="absolute top-1.5 left-2 z-10">
+          <span className="text-[9px] bg-black/50 text-white px-1.5 py-0.5 rounded-full font-medium">Pub</span>
+        </div>
+        <button
+          className="absolute top-1.5 right-1.5 z-10 h-5 w-5 rounded-full bg-black/50 flex items-center justify-center"
+          onClick={() => setDismissed(true)}
         >
-          <p className="text-xs font-semibold truncate">{pub.titre}</p>
-          <p className="text-[10px] text-muted-foreground truncate">{pub.description}</p>
-        </div>
-      )}
+          <X className="h-3 w-3 text-white" />
+        </button>
 
-      {pubs.length > 1 && (
-        <div className="flex justify-center gap-1 py-1.5 bg-card">
-          {pubs.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrent(i)}
-              className={`h-1.5 rounded-full transition-all ${i === current ? "w-4 bg-primary" : "w-1.5 bg-muted-foreground/30"}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+        <img
+          src={pub.image_url}
+          alt={pub.titre}
+          className="w-full h-28 object-cover cursor-pointer"
+          onClick={handleClick}
+        />
+
+        {pub.description && (
+          <div
+            className="px-3 py-2 bg-card cursor-pointer"
+            onClick={handleClick}
+          >
+            <p className="text-xs font-semibold truncate">{pub.titre}</p>
+            <p className="text-[10px] text-muted-foreground truncate">{pub.description}</p>
+          </div>
+        )}
+
+        {pubs.length > 1 && (
+          <div className="flex justify-center gap-1 py-1.5 bg-card">
+            {pubs.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrent(i)}
+                className={`h-1.5 rounded-full transition-all ${i === current ? "w-4 bg-primary" : "w-1.5 bg-muted-foreground/30"}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </PubliciteTracker>
   );
 }
