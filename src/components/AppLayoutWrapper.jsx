@@ -20,11 +20,25 @@ export default function AppLayoutWrapper({ user }) {
         const isAdmin = me.role === 'admin' || ADMIN_EMAILS.includes(me.email);
 
         if (!isAdmin) {
-          // CAS 1 : pas de rôle → forcer le choix du profil
-          if (!me.user_type) {
-            setNeedsRole(true);
-            setLoading(false);
-            return;
+          // CAS 1 : pas de rôle → vérifier d'abord si un UserProfile existe
+          if (!me.user_type && !me.active_profile_type) {
+            // Vérifier si l'utilisateur a déjà des profils dans UserProfile
+            try {
+              const existingProfiles = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
+              if (existingProfiles.length > 0) {
+                // Il a des profils, auto-réparer user_type depuis le premier profil actif
+                const actif = existingProfiles.find(p => p.status === 'actif') || existingProfiles[0];
+                await base44.auth.updateMe({ user_type: actif.profile_type, active_profile_type: actif.profile_type, onboarding_completed: true });
+              } else {
+                setNeedsRole(true);
+                setLoading(false);
+                return;
+              }
+            } catch (_) {
+              setNeedsRole(true);
+              setLoading(false);
+              return;
+            }
           }
 
           // CAS 2 : rôle présent mais onboarding non terminé OU fiche métier potentiellement absente
