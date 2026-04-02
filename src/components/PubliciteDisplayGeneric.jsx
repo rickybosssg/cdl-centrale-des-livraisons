@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import PubliciteTracker from './PubliciteTracker';
 
 const ROLE_PLACEMENT = {
   client: 'dashboard_client',
@@ -12,6 +13,7 @@ const ROLE_PLACEMENT = {
 export default function PubliciteDisplayGeneric({ userId, userEmail, userRole = 'client' }) {
   const [pub, setPub] = useState(null);
   const [dismissed, setDismissed] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const placement = ROLE_PLACEMENT[userRole] || 'dashboard_client';
 
@@ -44,9 +46,18 @@ export default function PubliciteDisplayGeneric({ userId, userEmail, userRole = 
     };
 
     loadPublicite();
-    const unsub = base44.entities.Publicite.subscribe(loadPublicite);
-    return unsub;
-  }, [userRole, placement]);
+    
+    // Écoute temps réel
+    const unsub = base44.entities.Publicite.subscribe(() => loadPublicite());
+    
+    // Refresh automatique toutes les 30 secondes
+    const intervalId = setInterval(loadPublicite, 30000);
+    
+    return () => {
+      unsub?.();
+      clearInterval(intervalId);
+    };
+  }, [userRole, placement, refreshTrigger]);
 
   const trackView = (pubId) => {
     base44.functions.invoke('trackPubliciteInteraction', {
@@ -65,7 +76,7 @@ export default function PubliciteDisplayGeneric({ userId, userEmail, userRole = 
       user_id: userId,
       user_email: userEmail,
       user_role: userRole,
-    }).catch(() => {});
+    }).catch((err) => console.error('[PubliciteDisplayGeneric] Click tracking error:', err));
 
     if (pubUrl) window.open(pubUrl, '_blank');
   };
@@ -73,22 +84,24 @@ export default function PubliciteDisplayGeneric({ userId, userEmail, userRole = 
   if (dismissed || !pub || !pub.image_url) return null;
 
   return (
-    <div className="relative w-full rounded-lg overflow-hidden bg-gray-100">
-      <img
-        src={pub.image_url}
-        alt={pub.titre || 'Publicité'}
-        className="w-full h-auto display-block cursor-pointer hover:opacity-95 transition-opacity"
-        onClick={() => trackClick(pub.id, pub.lien_url)}
-        loading="lazy"
-      />
-      
-      <button
-        onClick={() => setDismissed(true)}
-        className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg leading-none transition-colors z-10"
-        title="Fermer"
-      >
-        ×
-      </button>
-    </div>
+    <PubliciteTracker publiciteId={pub.id} userRole={userRole}>
+      <div className="relative w-full rounded-lg overflow-hidden bg-gray-100">
+        <img
+          src={pub.image_url}
+          alt={pub.titre || 'Publicité'}
+          className="w-full h-auto display-block cursor-pointer hover:opacity-95 transition-opacity"
+          onClick={() => trackClick(pub.id, pub.lien_url)}
+          loading="lazy"
+        />
+        
+        <button
+          onClick={() => setDismissed(true)}
+          className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg leading-none transition-colors z-10"
+          title="Fermer"
+        >
+          ×
+        </button>
+      </div>
+    </PubliciteTracker>
   );
 }

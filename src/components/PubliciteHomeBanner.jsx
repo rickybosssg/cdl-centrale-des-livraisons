@@ -7,6 +7,7 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
   const [pub, setPub] = useState(null);
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Clé session pour persistance
   const SESSION_KEY = `pub_dismissed_${userRole}`;
@@ -59,9 +60,18 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
     };
 
     loadPublicite();
+    
+    // Écoute temps réel des changements de pubs
     const unsub = base44.entities.Publicite.subscribe(() => loadPublicite());
-    return unsub;
-  }, [userRole]);
+    
+    // Refresh automatique toutes les 30 secondes
+    const intervalId = setInterval(loadPublicite, 30000);
+    
+    return () => {
+      unsub?.();
+      clearInterval(intervalId);
+    };
+  }, [userRole, refreshTrigger]);
 
   const trackView = (pubId) => {
     base44.functions

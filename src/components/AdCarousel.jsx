@@ -7,15 +7,14 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
   const [ads, setAds] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     const loadAds = async () => {
       try {
-        // ✅ Charger TOUTES les pubs actives SANS filtre placement initial
         const now = new Date().toISOString();
         const allAds = await base44.entities.Publicite.list('-created_date', 50);
 
-        // ✅ Filtrer par date et active
         const active = allAds.filter(ad => {
           if (!ad.active) return false;
           if (!ad.date_debut || !ad.date_fin) return true;
@@ -24,7 +23,6 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
           return start <= new Date(now) && new Date(now) <= end;
         });
 
-        // ✅ Filtrer par placement et cible (sans bloquant)
         const targeted = active.filter(ad => {
           const matchPlace = !placement || ad.placement === placement || ad.placement === 'toutes_pages' || ad.placement === 'tous';
           const dest = ad.destinataires || 'tous';
@@ -52,15 +50,17 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
 
     loadAds();
 
-    // Subscribe pour mise à jour temps réel
-    const unsub = base44.entities.Publicite.subscribe((event) => {
-      if (event.type === 'create' || event.type === 'update') {
-        loadAds();
-      }
-    });
-
-    return unsub;
-  }, [placement, userRole]);
+    // Écoute temps réel
+    const unsub = base44.entities.Publicite.subscribe(() => loadAds());
+    
+    // Refresh automatique toutes les 30 secondes
+    const intervalId = setInterval(loadAds, 30000);
+    
+    return () => {
+      unsub?.();
+      clearInterval(intervalId);
+    };
+  }, [placement, userRole, refreshTrigger]);
 
   if (loading || ads.length === 0) return null;
 
