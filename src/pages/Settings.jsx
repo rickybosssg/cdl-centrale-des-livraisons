@@ -63,6 +63,8 @@ export default function Settings() {
   const [submitting, setSubmitting] = useState(false);
   const [switching, setSwitching] = useState(null);
   const [deplError, setDeplError] = useState(false);
+  const [codePromo, setCodePromo] = useState("");
+  const [codePromoError, setCodePromoError] = useState("");
 
   const load = async () => {
     console.log('[Settings] Chargement utilisateur et profils...');
@@ -116,8 +118,10 @@ export default function Settings() {
 
     const payload = { ...formData, email: user.email, full_name: user.full_name };
     if (selectedProfile === 'livreur') {
-      // Format exact attendu par le backend : JSON string de ["moto"] ou ["vehicule"] ou ["moto","vehicule"]
       payload.moyen_deplacement = JSON.stringify(moyenDeplacement);
+    }
+    if (selectedProfile === 'commercial') {
+      payload.code_promo = codePromo.trim().toUpperCase();
     }
 
     console.log('[AddProfile] ====== PAYLOAD ENVOYÉ ======');
@@ -142,6 +146,8 @@ export default function Settings() {
         setSelectedProfile(null);
         setFormData({});
         setMoyenDeplacement([]);
+        setCodePromo("");
+        setCodePromoError("");
         console.log('[Settings.handleAddProfile] Rechargement des données...');
         await load();
       } else {
@@ -367,6 +373,8 @@ export default function Settings() {
           setSelectedProfile(null);
           setFormData({});
           setMoyenDeplacement([]);
+          setCodePromo("");
+          setCodePromoError("");
           setSubmitting(false);
           setDeplError(false);
         }
@@ -414,6 +422,8 @@ export default function Settings() {
                     setSelectedProfile(null);
                     setFormData({});
                     setMoyenDeplacement([]);
+                    setCodePromo("");
+                    setCodePromoError("");
                     setDeplError(false);
                   }}
                   className="flex items-center gap-1 text-xs text-primary hover:underline"
@@ -448,7 +458,7 @@ export default function Settings() {
                       <Label className="text-xs font-semibold">Mode de déplacement * <span className="text-amber-600">(obligatoire)</span></Label>
                       <div className="flex gap-2">
                         {[{val:'moto',label:'🛵 Moto'},{val:'vehicule',label:'🚗 Véhicule'}].map(m => {
-                          const selected = moyenDeplacement.includes(m.val);
+                          const sel = moyenDeplacement.includes(m.val);
                           return (
                             <button
                               key={m.val}
@@ -460,13 +470,10 @@ export default function Settings() {
                                 );
                               }}
                               className={`flex-1 py-3 rounded-xl border-2 font-semibold text-sm transition-all ${
-                                selected
-                                  ? 'border-primary bg-primary text-white'
-                                  : 'border-border bg-white text-foreground'
+                                sel ? 'border-primary bg-primary text-white' : 'border-border bg-white text-foreground'
                               }`}
                             >
-                              {m.label}
-                              {selected && <span className="ml-1">✓</span>}
+                              {m.label}{sel && <span className="ml-1">✓</span>}
                             </button>
                           );
                         })}
@@ -477,6 +484,43 @@ export default function Settings() {
                       {deplError && moyenDeplacement.length === 0 && (
                         <p className="text-xs text-red-600 font-semibold">⚠️ Veuillez choisir un moyen de déplacement</p>
                       )}
+                    </div>
+                  )}
+                  {selectedProfile === 'commercial' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Code promo * <span className="text-amber-600">(obligatoire)</span></Label>
+                      <p className="text-[10px] text-muted-foreground">Votre code promo est votre source de revenu. Partagez-le pour gagner de l'argent 💰</p>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Ex: ERIC01, CDL245..."
+                          value={codePromo}
+                          onChange={e => {
+                            setCodePromoError('');
+                            setCodePromo(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                          }}
+                          maxLength={12}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-xs whitespace-nowrap"
+                          onClick={() => {
+                            const base = (user?.full_name || 'CDL').replace(/\s+/g, '').toUpperCase().slice(0, 4);
+                            const rand = Math.floor(10 + Math.random() * 90);
+                            setCodePromo(base + rand);
+                            setCodePromoError('');
+                          }}
+                        >
+                          🎲 Générer
+                        </Button>
+                      </div>
+                      {codePromo && (
+                        <p className="text-xs font-bold text-primary">Code : <span className="bg-primary/10 px-2 py-0.5 rounded">{codePromo}</span></p>
+                      )}
+                      {codePromoError && <p className="text-xs text-red-600">{codePromoError}</p>}
+                      <p className="text-[10px] text-muted-foreground">4-12 caractères, lettres et chiffres uniquement. Non modifiable après création.</p>
                     </div>
                   )}
                 </div>

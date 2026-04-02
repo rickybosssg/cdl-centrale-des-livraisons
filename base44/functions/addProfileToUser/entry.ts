@@ -21,7 +21,7 @@ const PROFILE_REQUIREMENTS = {
   },
   commercial: {
     immediate: false,
-    fields: ['telephone', 'quartier'],
+    fields: ['telephone', 'quartier', 'code_promo'],
     documents: [],
     needsAdminValidation: true,
   },
@@ -77,6 +77,18 @@ Deno.serve(async (req) => {
         requiredFields: requirements.fields,
         requiredDocuments: requirements.documents,
       }, { status: 400 });
+    }
+
+    // Pour commercial : valider unicité du code promo AVANT toute création
+    if (profile_type === 'commercial') {
+      const codeValue = (data.code_promo || '').toUpperCase().trim();
+      if (!codeValue || codeValue.length < 4 || codeValue.length > 12 || !/^[A-Z0-9]+$/.test(codeValue)) {
+        return Response.json({ error: 'Code promo invalide : 4-12 caractères, lettres et chiffres uniquement' }, { status: 400 });
+      }
+      const existingCode = await base44.entities.CodePromo.filter({ code: codeValue });
+      if (existingCode.length > 0) {
+        return Response.json({ error: 'Ce code promo est déjà utilisé, veuillez en choisir un autre' }, { status: 400 });
+      }
     }
 
     // Vérifier qu'on n'a pas déjà ce profil
@@ -139,11 +151,25 @@ Deno.serve(async (req) => {
     });
     console.log('[addProfileToUser] User mis à jour');
 
+    // Créer le code promo commercial
+    if (profile_type === 'commercial') {
+      const codeValue = (data.code_promo || '').toUpperCase().trim();
+      await base44.entities.CodePromo.create({
+        commercial_email: user.email,
+        commercial_name: user.full_name,
+        code: codeValue,
+        statut: 'en_attente',
+        actif: false,
+        nombre_utilisations: 0,
+        commission_due: 0,
+        commission_payee: 0,
+        statut_paiement: 'À jour',
+      });
+    }
+
     // Créer/mettre à jour l'entité associée si nécessaire
     if (profile_type === 'client') {
-      const existingClient = await base44.entities.Client.filter({
-        email: user.email,
-      });
+      const existingClient = await base44.entities.Client.filter({ email: user.email });
       if (existingClient.length === 0) {
         await base44.entities.Client.create({
           nom_complet: user.full_name,

@@ -189,11 +189,22 @@ export default function DashboardCommercial({ user }) {
                 <Icon className={`h-5 w-5 ${cfg.color} flex-shrink-0`} />
                 <div className="flex-1">
                   <p className={`font-semibold text-sm ${cfg.color}`}>{cfg.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Code : <strong>{code.code}</strong></p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Code : <strong className="font-mono text-base tracking-widest">{code.code}</strong></p>
                 </div>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(code.code); toast.success('Code copié !'); }}
+                  className="px-3 py-1.5 rounded-lg bg-white border text-xs font-bold hover:bg-primary hover:text-white hover:border-primary transition-colors"
+                >
+                  📋 Copier
+                </button>
               </div>
             );
           })()}
+
+          {/* Message UX */}
+          <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-xs text-green-800">
+            💡 <strong>Votre code promo est votre source de revenu.</strong> Partagez-le pour gagner <strong>50 F CFA</strong> par client actif !
+          </div>
 
           {/* Onglet Aperçu */}
           {tab === "apercu" && (
