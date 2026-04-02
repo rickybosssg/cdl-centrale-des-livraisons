@@ -204,11 +204,17 @@ export default function GererLivreurs() {
     );
     if (!confirmed) return;
     try {
-      await base44.functions.invoke('deleteUserComplete', { user_id: livreur.id, user_email: livreur.email });
-      toast.success(`✅ ${livreur.full_name} supprimé complètement avec tous ses profils`);
-      loadData();
+      const res = await base44.functions.invoke('deleteUserComplete', { user_id: livreur.id, user_email: livreur.email });
+      if (res.data?.success) {
+        toast.success(`✅ ${livreur.full_name} supprimé complètement avec tous ses profils`);
+        setLivreurs(prev => prev.filter(l => l.id !== livreur.id));
+        setDialogProfil(false);
+        setSelectedLivreur(null);
+      } else {
+        toast.error(`Erreur : ${res.data?.error || 'Suppression échouée'}`);
+      }
     } catch (err) {
-      toast.error('Erreur: ' + err.message);
+      toast.error(`Erreur suppression : ${err.message}`);
     }
   };
 

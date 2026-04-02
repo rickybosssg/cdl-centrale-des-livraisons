@@ -94,20 +94,33 @@ export default function GererClients() {
   };
 
   const supprimerClient = async (client) => {
-    if (!window.confirm(`Supprimer définitivement ${client.nom_complet} ?`)) return;
-    await base44.entities.Client.delete(client.id);
-    await base44.entities.AdminActionLog.create({
-      admin_email: admin.email,
-      object_type: "client",
-      object_id: client.id,
-      object_name: client.nom_complet,
-      action: "delete",
-      reason: "Suppression client",
-      target_email: client.email,
-    });
-    toast.success("Client supprimé");
-    setDialog(false);
-    loadData();
+    const confirmed = window.confirm(
+      `⚠️ SUPPRESSION COMPLÈTE\n\n` +
+      `Cela supprimera :\n` +
+      `• Le compte ${client.nom_complet}\n` +
+      `• Tous les profils liés\n` +
+      `• Toutes les données associées\n\n` +
+      `Cette action est IRRÉVERSIBLE.\n` +
+      `Confirmer ?"`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await base44.functions.invoke('deleteUserComplete', {
+        user_id: client.id,
+        user_email: client.email,
+      });
+      if (res.data?.success) {
+        toast.success(`✅ ${client.nom_complet} supprimé complètement`);
+        setDialog(false);
+        setClients(prev => prev.filter(c => c.id !== client.id));
+        setSelected(null);
+      } else {
+        toast.error(`Erreur : ${res.data?.error || 'Suppression échouée'}`);
+      }
+    } catch (err) {
+      toast.error(`Erreur suppression : ${err.message}`);
+    }
   };
 
   const filtered = clients.filter(c => {

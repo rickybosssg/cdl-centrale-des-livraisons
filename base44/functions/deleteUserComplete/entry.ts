@@ -136,6 +136,62 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
 
+    // Supprimer les FCM tokens
+    try {
+      const tokens = await base44.entities.FcmToken.filter({ user_email: deletingUser.email });
+      for (const token of tokens || []) {
+        await base44.entities.FcmToken.delete(token.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les permissions admin
+    try {
+      const perms = await base44.entities.AdminPermission.filter({ user_email: deletingUser.email });
+      for (const perm of perms || []) {
+        await base44.entities.AdminPermission.delete(perm.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les visites partenaire
+    try {
+      const visites = await base44.entities.VisitePartenaire.filter({ livreur_email: deletingUser.email });
+      for (const v of visites || []) {
+        await base44.entities.VisitePartenaire.delete(v.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les produits partenaire créés
+    try {
+      const produits = await base44.entities.ProduitPartenaire.filter({ partenaire_email: deletingUser.email });
+      for (const prod of produits || []) {
+        await base44.entities.ProduitPartenaire.delete(prod.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les paiements commission
+    try {
+      const paiements = await base44.entities.PaiementCommission.filter({ livreur_email: deletingUser.email });
+      for (const p of paiements || []) {
+        await base44.entities.PaiementCommission.delete(p.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les notes de livreur
+    try {
+      const ratings = await base44.entities.LivreurRating.filter({ livreur_email: deletingUser.email });
+      for (const r of ratings || []) {
+        await base44.entities.LivreurRating.delete(r.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les clients liés si type client
+    try {
+      const clients = await base44.entities.Client.filter({ email: deletingUser.email });
+      for (const c of clients || []) {
+        await base44.entities.Client.delete(c.id);
+      }
+    } catch (_) {}
+
     // Étape 4: Supprimer l'utilisateur
     await base44.entities.User.delete(user_id);
 

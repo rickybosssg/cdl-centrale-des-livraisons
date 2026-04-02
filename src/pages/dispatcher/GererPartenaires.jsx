@@ -92,20 +92,33 @@ export default function GererPartenaires() {
   };
 
   const supprimerPartenaire = async (partenaire) => {
-    if (!window.confirm(`Supprimer définitivement ${partenaire.nom_commerce} ?`)) return;
-    await base44.entities.Partenaire.delete(partenaire.id);
-    await base44.entities.AdminActionLog.create({
-      admin_email: admin.email,
-      object_type: "partenaire",
-      object_id: partenaire.id,
-      object_name: partenaire.nom_commerce,
-      action: "delete",
-      reason: "Suppression partenaire",
-      target_email: partenaire.user_email,
-    });
-    toast.success("Partenaire supprimé");
-    setDialog(false);
-    loadData();
+    const confirmed = window.confirm(
+      `⚠️ SUPPRESSION COMPLÈTE\n\n` +
+      `Cela supprimera :\n` +
+      `• Le compte ${partenaire.nom_commerce}\n` +
+      `• Tous les profils liés\n` +
+      `• Toutes les données associées\n\n` +
+      `Cette action est IRRÉVERSIBLE.\n` +
+      `Confirmer ?"`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await base44.functions.invoke('deleteUserComplete', {
+        user_id: partenaire.id,
+        user_email: partenaire.user_email,
+      });
+      if (res.data?.success) {
+        toast.success(`✅ ${partenaire.nom_commerce} supprimé complètement`);
+        setDialog(false);
+        setPartenaires(prev => prev.filter(p => p.id !== partenaire.id));
+        setSelected(null);
+      } else {
+        toast.error(`Erreur : ${res.data?.error || 'Suppression échouée'}`);
+      }
+    } catch (err) {
+      toast.error(`Erreur suppression : ${err.message}`);
+    }
   };
 
   const filtered = partenaires.filter(p => {
