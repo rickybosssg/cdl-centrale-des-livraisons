@@ -283,6 +283,9 @@ export default function Home() {
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
+                    {p.status === 'suspendu' && (
+                      <span className="text-[10px] text-gray-500 px-2">Suspendu</span>
+                    )}
                   </div>
                 </div>
               );
@@ -299,7 +302,16 @@ export default function Home() {
                   onClick={async () => {
                     try {
                       const result = await base44.functions.invoke('cancelProfileRequest', { profile_id: cancelingProfile.id });
-                      if (result.data?.success) { setCancelingProfile(null); setShowSwitch(false); await loadUser(); }
+                      if (result.data?.success) {
+                        // Si on supprime le profil actif, nettoyer le localStorage
+                        if (cancelingProfile.id === activeProfileId) {
+                          localStorage.removeItem('activeProfileId');
+                          setActiveProfileId(null);
+                        }
+                        setCancelingProfile(null);
+                        setShowSwitch(false);
+                        await loadUser();
+                      }
                     } catch (err) { console.error('[Home] Erreur annulation:', err); }
                   }}
                   className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-red-600 text-white"
