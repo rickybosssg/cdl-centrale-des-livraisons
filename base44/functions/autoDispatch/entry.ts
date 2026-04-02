@@ -166,8 +166,33 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, message: 'Aucun livreur disponible' });
     }
 
-    // Sélectionner le meilleur livreur (cascade: top 3 disponibles)
-    const scored = eligibles
+    // ── DISPATCH PAR RAYON PROGRESSIF (GPS prioritaire) ─────────────────────
+    // Si la course a des coordonnées GPS, filtrer par rayon d'abord
+    let candidates = eligibles;
+
+    if (course.latitude_depart && course.longitude_depart) {
+      const RAYONS = [3, 5, 10]; // km progressifs
+      for (const rayon of RAYONS) {
+        const dansRayon = eligibles.filter(d => {
+          if (!d.gps_latitude || !d.gps_longitude) return false;
+          const dist = distanceKm(d.gps_latitude, d.gps_longitude, course.latitude_depart, course.longitude_depart);
+          return dist <= rayon;
+        });
+        if (dansRayon.length > 0) {
+          candidates = dansRayon;
+          console.log(`[DISPATCH] ${dansRayon.length} livreur(s) dans un rayon de ${rayon} km`);
+          break;
+        }
+        console.log(`[DISPATCH] Aucun livreur dans ${rayon} km — élargissement...`);
+      }
+      // Si toujours personne avec GPS, fallback sur tous les éligibles (par quartier)
+      if (candidates === eligibles && eligibles.filter(d => d.gps_latitude).length === 0) {
+        console.log('[DISPATCH] Aucun GPS disponible — dispatch par quartier');
+      }
+    }
+
+    // Scorer et trier les candidats
+    const scored = candidates
       .map(d => ({ driver: d, score: scoreDriver(d, course) }))
       .sort((a, b) => b.score - a.score);
 

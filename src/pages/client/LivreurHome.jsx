@@ -48,7 +48,7 @@ export default function LivreurHome({ user }) {
           gps_enabled: true,
           disponible: true,
         });
-        // Mise à jour GPS toutes les 15s
+        // Mise à jour GPS toutes les 10s
         const interval = setInterval(() => {
           navigator.geolocation.getCurrentPosition((p) => {
             base44.auth.updateMe({
@@ -56,7 +56,7 @@ export default function LivreurHome({ user }) {
               gps_longitude: p.coords.longitude,
             });
           }, () => {});
-        }, 15000);
+        }, 10000);
         return () => clearInterval(interval);
       },
       (err) => {
