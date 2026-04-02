@@ -107,20 +107,31 @@ export default function LivreurHome({ user }) {
   const [toggleLoading, setToggleLoading] = useState(false);
 
   const toggleDisponible = async () => {
-    if (!disponible && gpsBloque) {
-      toast.error('Vous devez activer votre localisation pour passer en ligne');
-      return;
+    // Vérifications SEULEMENT si on veut passer EN LIGNE
+    if (disponible === false) {
+      // On est hors ligne et on veut passer en ligne
+      if (gpsBloque) {
+        toast.error('Vous devez activer votre localisation pour passer en ligne');
+        return;
+      }
+      if (user.statut_validation_livreur !== 'valide') {
+        toast.error('Votre compte doit être validé avant de pouvoir passer en ligne');
+        return;
+      }
     }
-    if (!disponible && user.statut_validation_livreur !== 'valide') {
-      toast.error('Votre compte doit être validé avant de pouvoir passer en ligne');
-      return;
-    }
+    
     const newVal = !disponible;
     setToggleLoading(true);
     setDisponible(newVal);
-    await base44.auth.updateMe({ disponible: newVal });
-    setToggleLoading(false);
-    toast.success(newVal ? '🟢 Vous êtes maintenant en ligne' : '🔴 Vous êtes maintenant hors ligne');
+    try {
+      await base44.auth.updateMe({ disponible: newVal });
+      toast.success(newVal ? '🟢 Vous êtes maintenant en ligne' : '🔴 Vous êtes maintenant hors ligne');
+    } catch (err) {
+      setDisponible(!newVal); // Revert on error
+      toast.error('Impossible de changer votre statut. Veuillez réessayer.');
+    } finally {
+      setToggleLoading(false);
+    }
   };
 
   const activeCourse = courses.find(c => ["acceptee", "en_cours"].includes(c.statut));
