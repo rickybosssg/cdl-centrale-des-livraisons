@@ -75,25 +75,19 @@ export default function ClientHome({ user }) {
       {/* Bannière publicitaire */}
       <BannierePublicitaire placement="home_client" />
 
-      {/* Bouton WhatsApp Commander */}
-      <div className="space-y-1">
-        <a
-          href={`https://wa.me/22600000000?text=${encodeURIComponent('📦 Nouvelle commande CDL\nType : envoyer un colis / récupérer un colis / déplacement\n📍 Départ : \n📍 Destination : \n📞 Téléphone : \n📝 Détails : ')}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 w-full p-4 rounded-2xl bg-green-500 text-white font-bold shadow-lg hover:bg-green-600 active:scale-[0.98] transition-all"
-        >
-          <span className="text-3xl">💬</span>
-          <div className="flex-1">
-            <p className="text-base font-extrabold">Commander via WhatsApp</p>
-            <p className="text-xs text-white/80">Rapide · Direct · Sans friction</p>
+      {/* Bouton principal Commander */}
+      <Link to="/commander">
+        <div className="flex items-center gap-4 w-full p-5 rounded-2xl bg-primary text-white font-bold shadow-lg active:scale-[0.98] transition-all cursor-pointer">
+          <div className="h-14 w-14 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+            <Plus className="h-8 w-8 text-white" />
           </div>
-          <span className="text-xl">→</span>
-        </a>
-        <p className="text-[11px] text-muted-foreground text-center px-2">
-          Remplissez le message pré-rempli et envoyez-le pour lancer votre commande rapidement.
-        </p>
-      </div>
+          <div className="flex-1">
+            <p className="text-xl font-extrabold">Commander une course</p>
+            <p className="text-sm text-white/80">Livraison rapide · Livreur en quelques minutes</p>
+          </div>
+          <span className="text-2xl">→</span>
+        </div>
+      </Link>
 
       {/* Stats acquisition */}
       <div className="grid grid-cols-3 gap-3">
