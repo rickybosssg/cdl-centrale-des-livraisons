@@ -175,18 +175,19 @@ export default function NotificationPanel({ open, onClose, notifs, setNotifs, us
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {unread > 0 && (
-                  <button
-                    onClick={markAllRead}
-                    className="text-xs text-primary font-medium flex items-center gap-1 hover:underline"
-                  >
-                    <Check className="h-3 w-3" />
-                    Tout lire
-                  </button>
-                )}
+               {unread > 0 && (
                 <button
-                  onClick={onClose}
-                  className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+                  onClick={markAllRead}
+                  className="text-xs text-primary font-medium flex items-center gap-1 hover:underline"
+                >
+                  <Check className="h-3 w-3" />
+                  Tout lire
+                </button>
+               )}
+               <Link to="/mes-notifications" onClick={onClose} className="text-xs text-muted-foreground hover:underline">Voir tout</Link>
+               <button
+                onClick={onClose}
+                 className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
