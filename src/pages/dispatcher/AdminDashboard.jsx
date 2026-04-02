@@ -187,19 +187,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Accès rapide primaire */}
-      <div className="px-4">
-        <Link to="/gestion-profils">
-          <div className="relative">
-            <Button className="w-full justify-start gap-2 bg-gradient-to-r from-primary to-blue-600 text-white font-semibold" size="lg">
-              <LayoutGrid className="h-4 w-4" />
-              ⚙️ Gestion des profils
-            </Button>
-            <AdminBadge count={counts.profilesIncomplets} />
-          </div>
-        </Link>
-      </div>
-
       {/* KPIs */}
       <div className="px-4 grid grid-cols-2 gap-3">
         <Card className="border-l-4 border-l-primary">
@@ -321,6 +308,16 @@ export default function AdminDashboard() {
             <Zap className="h-4 w-4 text-green-600" />
             ⚡ Dispatch Monitor
           </Button>
+        </Link>
+
+        <Link to="/gestion-profils">
+          <div className="relative">
+            <Button className="w-full justify-start gap-2 bg-gradient-to-r from-primary to-blue-600 text-white font-semibold">
+              <LayoutGrid className="h-4 w-4" />
+              ⚙️ Gestion des profils
+            </Button>
+            <AdminBadge count={counts.profilesIncomplets} />
+          </div>
         </Link>
       </div>
 
