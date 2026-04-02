@@ -1,582 +1,296 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { useMessageNotification } from "@/hooks/useMessageNotification";
-import MessageAlert from "@/components/MessageAlert";
-import { ArrowLeft, CheckCircle2, XCircle, Users, Tag, Wallet, Eye } from "lucide-react";
-import ChatAdmin from "@/components/ChatAdmin";
+import { ArrowLeft, Phone, MessageCircle, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import moment from "moment";
 
-const MODES_PAIEMENT = ["Espèces", "Orange Money", "Moov Money", "Telecel Money"];
+const STATUT_CONFIG = {
+  "en_attente": "bg-amber-100 text-amber-700",
+  "valide": "bg-green-100 text-green-700",
+  "refuse": "bg-red-100 text-red-700",
+};
 
 export default function GererCommerciaux() {
   const navigate = useNavigate();
   const [commerciaux, setCommerciaux] = useState([]);
   const [codes, setCodes] = useState([]);
+  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [admin, setAdmin] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [selectedCode, setSelectedCode] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogPaiement, setDialogPaiement] = useState(false);
-  const [motifRefus, setMotifRefus] = useState("");
-  const [formPaiement, setFormPaiement] = useState({ montant: "", mode: "" });
-  const [saving, setSaving] = useState(false);
+  const [dialog, setDialog] = useState(false);
+  const [search, setSearch] = useState("");
   const [filtre, setFiltre] = useState("tous");
-  const [adminUser, setAdminUser] = useState(null);
-  const [dialogTab, setDialogTab] = useState("profil");
-  const [mainTab, setMainTab] = useState("liste");
-  const [perfClients, setPerfClients] = useState([]); // clients for selected commercial perf view
-  const [perfStats, setPerfStats] = useState({});
-  const [loadingPerf, setLoadingPerf] = useState(false);
-
-  useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
-  const [showCommissionsDues, setShowCommissionsDues] = useState(false);
-  const [paiementEnCours, setPaiementEnCours] = useState({});
-  const newMsg = useMessageNotification(selected?.email);
-
-  const loadPerf = async (codeValue) => {
-    setLoadingPerf(true);
-    const usersWithCode = await base44.entities.User.filter({ code_promo_utilise: codeValue });
-    setPerfClients(usersWithCode);
-    if (usersWithCode.length > 0) {
-      const allCourses = await base44.entities.Course.filter({ statut: "livree" }, "-date_livraison", 500);
-      const stats = {};
-      for (const u of usersWithCode) {
-        const userCourses = allCourses.filter(c => c.client_email === u.email);
-        if (userCourses.length > 0) {
-          const sorted = [...userCourses].sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
-          stats[u.email] = { firstCourseValidated: true, firstCourseDate: sorted[0].date_livraison || sorted[0].created_date };
-        } else {
-          stats[u.email] = { firstCourseValidated: false, firstCourseDate: null };
-        }
-      }
-      setPerfStats(stats);
-    } else {
-      setPerfStats({});
-    }
-    setLoadingPerf(false);
-  };
 
   const loadData = async () => {
-    const [usersData, codesData] = await Promise.all([
+    const [dataCommerciaux, dataCodes, me] = await Promise.all([
       base44.entities.User.filter({ user_type: "commercial" }),
       base44.entities.CodePromo.list("-created_date", 200),
+      base44.auth.me(),
     ]);
-    setCommerciaux(usersData);
-    setCodes(codesData);
+    setCommerciaux(dataCommerciaux);
+    setCodes(dataCodes);
+    setAdmin(me);
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
-
-  const getCodeForCommercial = (email) => codes.find(c => c.commercial_email === email);
-
-  const validerProfil = async (commercial) => {
-    await base44.entities.User.update(commercial.id, { profil_valide: true, statut_validation_commercial: "valide" });
-    toast.success("Profil commercial validé !");
+  useEffect(() => {
     loadData();
-  };
+    const unsub = base44.entities.User.subscribe((event) => {
+      if (event.data?.user_type === 'commercial') {
+        if (event.type === 'create') setCommerciaux(prev => [...prev, event.data]);
+        else if (event.type === 'update') setCommerciaux(prev => prev.map(c => c.id === event.id ? event.data : c));
+        else if (event.type === 'delete') setCommerciaux(prev => prev.filter(c => c.id !== event.id));
+      }
+    });
+    return unsub;
+  }, []);
 
-  const refuserProfil = async (commercial) => {
-    await base44.entities.User.update(commercial.id, { profil_valide: false, statut_validation_commercial: "refuse" });
-    toast.success("Profil refusé");
-    loadData();
-  };
-
-  const notifierCommercial = async (commercial, titre, message) => {
+  const ouvrirFiche = async (commercial) => {
+    setSelected(commercial);
     try {
-      await base44.entities.Notification.create({
-        destinataire_email: commercial.email,
-        destinataire_role: 'commercial',
-        titre, message, type: 'info', lue: false,
-      });
-    } catch (_) {}
-  };
-
-  const validerCode = async (code) => {
-    await base44.entities.CodePromo.update(code.id, { statut: "valide", actif: true, motif_refus: "", date_validation: new Date().toISOString() });
-    const commercial = commerciaux.find(c => c.email === code.commercial_email);
-    if (commercial) notifierCommercial(commercial, '✅ Code promo validé', `Votre code "${code.code}" a été validé et est maintenant actif.`);
-    toast.success("Code promo validé !");
-    setDialogOpen(false);
-    loadData();
-  };
-
-  const refuserCode = async (code) => {
-    if (!motifRefus.trim()) { toast.error("Veuillez indiquer un motif"); return; }
-    await base44.entities.CodePromo.update(code.id, { statut: "refuse", actif: false, motif_refus: motifRefus });
-    const commercial = commerciaux.find(c => c.email === code.commercial_email);
-    if (commercial) notifierCommercial(commercial, '❌ Code promo refusé', `Votre code "${code.code}" a été refusé. Motif : ${motifRefus}`);
-    toast.success("Code refusé");
-    setMotifRefus("");
-    setDialogOpen(false);
-    loadData();
-  };
-
-  const demanderModifCode = async (code) => {
-    if (!motifRefus.trim()) { toast.error("Veuillez indiquer un commentaire"); return; }
-    await base44.entities.CodePromo.update(code.id, { statut: "a_modifier", actif: false, motif_refus: motifRefus });
-    const commercial = commerciaux.find(c => c.email === code.commercial_email);
-    if (commercial) notifierCommercial(commercial, '✏️ Modification demandée', `Votre code "${code.code}" doit être modifié. Message admin : ${motifRefus}`);
-    toast.success("Modification demandée au commercial");
-    setMotifRefus("");
-    setDialogOpen(false);
-    loadData();
-  };
-
-  const enregistrerPaiement = async () => {
-    if (!formPaiement.montant || !formPaiement.mode) { toast.error("Remplissez tous les champs"); return; }
-    setSaving(true);
-    const montant = parseFloat(formPaiement.montant);
-    const nouvellePaye = (selectedCode.commission_payee || 0) + montant;
-    const nouvelleRestante = (selectedCode.commission_due || 0) - nouvellePaye;
-    await base44.entities.CodePromo.update(selectedCode.id, {
-      commission_payee: nouvellePaye,
-      statut_paiement: nouvelleRestante <= 0 ? "À jour" : "Doit",
-    });
-    toast.success("Paiement enregistré !");
-    setDialogPaiement(false);
-    setFormPaiement({ montant: "", mode: "" });
-    setSaving(false);
-    loadData();
-  };
-
-  const marquerCommePayeDirectement = async (code) => {
-    setPaiementEnCours(prev => ({ ...prev, [code.id]: true }));
-    const montantDu = (code.commission_due || 0) - (code.commission_payee || 0);
-    await base44.entities.CodePromo.update(code.id, {
-      commission_payee: code.commission_due,
-      statut_paiement: "À jour",
-    });
-    toast.success("Commission marquée comme payée !");
-    setPaiementEnCours(prev => ({ ...prev, [code.id]: false }));
-    loadData();
-  };
-
-  const filtres = [
-    { val: "tous", label: "Tous" },
-    { val: "en_attente", label: "À valider" },
-    { val: "valide", label: "Validés" },
-    { val: "doit", label: "Commission due" },
-  ];
-
-  const filtres_commerciaux = commerciaux.filter(c => {
-    if (filtre === "en_attente") return !c.profil_valide || c.statut_validation_commercial === "en_attente";
-    if (filtre === "valide") return c.profil_valide;
-    if (filtre === "doit") {
-      const code = getCodeForCommercial(c.email);
-      return code && code.statut_paiement === "Doit";
+      const history = await base44.entities.AdminActionLog.filter({ target_email: commercial.email }, "-created_date", 20);
+      setLogs(history || []);
+    } catch (_) {
+      setLogs([]);
     }
-    return true;
+    setDialog(true);
+  };
+
+  const validerCommercial = async (commercial) => {
+    await base44.entities.User.update(commercial.id, { statut_validation_commercial: "valide" });
+    const code = codes.find(c => c.commercial_email === commercial.email);
+    if (!code) {
+      const newCode = "COM" + Math.floor(1000 + Math.random() * 9000);
+      await base44.entities.CodePromo.create({
+        commercial_email: commercial.email,
+        commercial_name: commercial.full_name,
+        code: newCode,
+        statut: "valide",
+        actif: true,
+      });
+    }
+    await base44.entities.AdminActionLog.create({
+      admin_email: admin.email,
+      object_type: "commercial",
+      object_id: commercial.id,
+      object_name: commercial.full_name,
+      action: "validate",
+      reason: "Validation commercial",
+      target_email: commercial.email,
+    });
+    toast.success("Commercial validé");
+    setDialog(false);
+    loadData();
+  };
+
+  const refuserCommercial = async (commercial) => {
+    await base44.entities.User.update(commercial.id, { statut_validation_commercial: "refuse" });
+    await base44.entities.AdminActionLog.create({
+      admin_email: admin.email,
+      object_type: "commercial",
+      object_id: commercial.id,
+      object_name: commercial.full_name,
+      action: "refuse",
+      reason: "Refus commercial",
+      target_email: commercial.email,
+    });
+    toast.success("Commercial refusé");
+    setDialog(false);
+    loadData();
+  };
+
+  const supprimerCommercial = async (commercial) => {
+    if (!window.confirm(`Supprimer définitivement ${commercial.full_name} ?`)) return;
+    await base44.entities.User.delete(commercial.id);
+    await base44.entities.AdminActionLog.create({
+      admin_email: admin.email,
+      object_type: "commercial",
+      object_id: commercial.id,
+      object_name: commercial.full_name,
+      action: "delete",
+      reason: "Suppression commercial",
+      target_email: commercial.email,
+    });
+    toast.success("Commercial supprimé");
+    setDialog(false);
+    loadData();
+  };
+
+  const filtered = commerciaux.filter(c => {
+    const q = search.toLowerCase();
+    const code = codes.find(cp => cp.commercial_email === c.email);
+    const match = !q || c.full_name?.toLowerCase().includes(q) || c.telephone?.includes(q) || c.email?.toLowerCase().includes(q) || code?.code?.toLowerCase().includes(q);
+    let filtre_match = true;
+    if (filtre === "valides") filtre_match = c.statut_validation_commercial === "valide";
+    else if (filtre === "en_attente") filtre_match = !c.statut_validation_commercial || c.statut_validation_commercial === "en_attente";
+    else if (filtre === "refuses") filtre_match = c.statut_validation_commercial === "refuse";
+    return match && filtre_match;
   });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>;
 
   return (
-    <div className="space-y-4">
-      <MessageAlert newMsg={newMsg} />
-      {newMsg && <div className="h-24" />}
+    <div className="space-y-4 pb-20">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="text-xl font-bold">Gérer les commerciaux</h1>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-        <div className="p-3 rounded-xl bg-card border">
-          <p className="font-bold text-lg">{commerciaux.length}</p>
-          <p className="text-muted-foreground">Total</p>
-        </div>
-        <div className="p-3 rounded-xl bg-card border">
-          <p className="font-bold text-lg text-green-600">{codes.filter(c => c.statut === "valide" && c.actif).length}</p>
-          <p className="text-muted-foreground">Codes actifs</p>
-        </div>
-        <div className="p-3 rounded-xl bg-card border">
-          <p className="font-bold text-lg text-amber-600">{codes.reduce((s, c) => s + ((c.commission_due || 0) - (c.commission_payee || 0)), 0).toLocaleString()} F</p>
-          <p className="text-muted-foreground">Dû total</p>
-        </div>
+      <div className="grid grid-cols-3 gap-2">
+        <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold">{commerciaux.length}</p><p className="text-[10px] text-muted-foreground">Total</p></CardContent></Card>
+        <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-green-600">{commerciaux.filter(c => c.statut_validation_commercial === "valide").length}</p><p className="text-[10px] text-muted-foreground">Validés</p></CardContent></Card>
+        <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-amber-600">{commerciaux.filter(c => !c.statut_validation_commercial || c.statut_validation_commercial === "en_attente").length}</p><p className="text-[10px] text-muted-foreground">En attente</p></CardContent></Card>
       </div>
 
-      <Button className="w-full" onClick={() => setShowCommissionsDues(true)}>
-        💰 Voir les commissions dues
-      </Button>
+      <Input placeholder="Rechercher par nom, tél, code promo..." value={search} onChange={e => setSearch(e.target.value)} />
 
-      {/* ONGLET PERFORMANCES GLOBALES */}
-      {mainTab === "performances" && (
-        <div className="space-y-4">
-          {/* Global stats */}
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="bg-primary/5 border-primary/20">
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-muted-foreground">Inscriptions total</p>
-                <p className="text-2xl font-black text-primary">{codes.reduce((s, c) => s + (c.nombre_utilisations || 0), 0)}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-green-50 border-green-200">
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-green-700">Commissions dues</p>
-                <p className="text-2xl font-black text-green-700">{codes.reduce((s, c) => s + Math.max(0, (c.commission_due || 0) - (c.commission_payee || 0)), 0)} F</p>
-              </CardContent>
-            </Card>
-          </div>
-          {/* Classement commerciaux */}
-          <p className="text-sm font-semibold">🏆 Classement par inscriptions</p>
-          <div className="space-y-2">
-            {[...codes].sort((a, b) => (b.nombre_utilisations || 0) - (a.nombre_utilisations || 0)).map(code => {
-              const commercial = commerciaux.find(c => c.email === code.commercial_email);
-              const restant = Math.max(0, (code.commission_due || 0) - (code.commission_payee || 0));
-              return (
-                <div key={code.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-base font-bold text-primary flex-shrink-0">
-                    {commercial?.full_name?.charAt(0) || "?"}
-                  </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {[{val:"tous",label:"Tous"},{val:"valides",label:"✅ Validés"},{val:"en_attente",label:"⏳ En attente"},{val:"refuses",label:"❌ Refusés"}]
+          .map(f => (
+          <button key={f.val} onClick={() => setFiltre(f.val)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
+              filtre === f.val ? "bg-primary text-primary-foreground border-primary" : "border-border"
+            }`}>{f.label}</button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {filtered.map(commercial => {
+          const statut = commercial.statut_validation_commercial || "en_attente";
+          const cfg = STATUT_CONFIG[statut] || "bg-gray-100 text-gray-700";
+          const code = codes.find(c => c.commercial_email === commercial.email);
+          return (
+            <Card key={commercial.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{commercial?.full_name || code.commercial_email}</p>
-                    <p className="text-xs text-muted-foreground">Code : {code.code}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm truncate">{commercial.full_name}</p>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg}`}>{statut === "en_attente" ? "En attente" : statut === "valide" ? "Validé" : "Refusé"}</span>
+                    </div>
+                    <p className="text-xs font-medium">{commercial.telephone || "non renseigné"}</p>
+                    <p className="text-xs text-muted-foreground">{commercial.email}</p>
+                    {code && <p className="text-xs font-bold text-accent">Code: {code.code}</p>}
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold">{code.nombre_utilisations || 0} inscrits</p>
-                    {restant > 0 && <p className="text-xs text-amber-600 font-medium">{restant} F dû</p>}
-                  </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs flex-shrink-0"
-                    onClick={() => { setSelected(commercial); setSelectedCode(code); loadPerf(code.code); setDialogTab("perf"); setDialogOpen(true); }}>
-                    Détail
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Section liste : filtres + liste */}
-      {mainTab === "liste" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-        {filtres.map(f => {
-          const FILTRE_EMOJI = { tous: "👥", en_attente: "⏳", valide: "✅", doit: "💰" };
-          return (
-            <button
-              key={f.val}
-              onClick={() => setFiltre(f.val)}
-              className={`flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all ${
-                filtre === f.val
-                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                  : "bg-card border-border hover:bg-muted"
-              }`}
-            >
-              <span className="text-2xl">{FILTRE_EMOJI[f.val]}</span>
-              <span className="text-xs font-medium">{f.label}</span>
-            </button>
-          );
-        })}
-          </div>
-
-          <div className="space-y-3">
-        {filtres_commerciaux.map(commercial => {
-          const code = getCodeForCommercial(commercial.email);
-          const commissionRestante = code ? (code.commission_due || 0) - (code.commission_payee || 0) : 0;
-          return (
-            <Card key={commercial.id}>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary flex-shrink-0">
-                    {commercial.full_name?.charAt(0) || "?"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm">{commercial.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{commercial.telephone}</p>
-                    <p className="text-xs text-muted-foreground">{commercial.quartier}</p>
-                  </div>
-                  <div className="flex flex-col gap-1 items-end">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                      commercial.profil_valide ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                    }`}>
-                      {commercial.profil_valide ? "Validé" : "En attente"}
-                    </span>
-                    {code && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                        code.statut === "valide" ? "bg-green-100 text-green-700" :
-                        code.statut === "refuse" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
-                      }`}>
-                        Code: {code.statut === "valide" ? "Actif" : code.statut === "refuse" ? "Refusé" : "À valider"}
-                      </span>
-                    )}
-                    {code && commissionRestante > 0 && (
-                      <div className="text-right mt-1 pt-1 border-t border-border/50">
-                        <p className="text-[11px] font-bold text-amber-600">{commissionRestante.toLocaleString()} F</p>
-                        <p className="text-[10px] text-muted-foreground">À payer</p>
-                      </div>
-                    )}
+                    <p className="text-sm font-bold text-primary">{code ? (code.commission_due || 0).toLocaleString() + " F" : "—"}</p>
+                    <p className="text-[10px] text-muted-foreground">Gains dus</p>
                   </div>
                 </div>
-
-                {code && (
-                  <div className="grid grid-cols-3 gap-2 text-center text-xs bg-muted/50 rounded-lg p-2">
-                    <div>
-                      <p className="font-bold text-base">{code.code}</p>
-                      <p className="text-muted-foreground">Code</p>
-                    </div>
-                    <div>
-                      <p className="font-bold text-base">{code.nombre_utilisations || 0}</p>
-                      <p className="text-muted-foreground">Clients</p>
-                    </div>
-                    <div>
-                      <p className={`font-bold text-base ${commissionRestante > 0 ? "text-amber-600" : "text-green-600"}`}>
-                        {commissionRestante} F
-                      </p>
-                      <p className="text-muted-foreground">Dû</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap gap-1.5">
-                  <Button
-                    size="sm" variant="outline" className="h-7 text-xs flex-1"
-                    onClick={() => { setSelected(commercial); setSelectedCode(code); setDialogOpen(true); }}
-                  >
-                    <Eye className="h-3 w-3 mr-1" /> Voir profil
-                  </Button>
-                  {code && commissionRestante > 0 && (
-                    <Button
-                      size="sm" variant="outline" className="h-7 text-xs flex-1"
-                      onClick={() => { setSelected(commercial); setSelectedCode(code); setDialogPaiement(true); setFormPaiement({ montant: String(commissionRestante), mode: "" }); }}
-                    >
-                      <Wallet className="h-3 w-3 mr-1" /> Payer comm.
-                    </Button>
-                  )}
+                <div className="flex gap-2">
+                  {commercial.telephone && <a href={`tel:${commercial.telephone}`} className="flex-1"><button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/5"><Phone className="h-3.5 w-3.5" /> Appeler</button></a>}
+                  {commercial.telephone && <a href={`https://wa.me/${commercial.telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="flex-1"><button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-green-300 text-green-700 text-xs font-medium hover:bg-green-50"><MessageCircle className="h-3.5 w-3.5" /> WhatsApp</button></a>}
+                  <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => ouvrirFiche(commercial)}><Eye className="h-3 w-3 mr-1" />Fiche</Button>
                 </div>
               </CardContent>
             </Card>
           );
         })}
-        {filtres_commerciaux.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-sm">Aucun commercial trouvé</p>
-          </div>
-        )}
-          </div>
-        </div>
-      )}
-
-      {/* Dialog profil */}
-      <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) { setDialogTab("profil"); setPerfClients([]); setPerfStats({}); } }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Profil commercial</DialogTitle>
-          </DialogHeader>
-          {selected && (
-            <div className="space-y-4">
-              <div className="flex gap-2 border-b pb-2 overflow-x-auto">
-                {[{val:"profil",label:"Profil"},{val:"perf",label:"📊 Perfs"},{val:"messages",label:"💬 Chat"}].map(t => (
-                  <button key={t.val} onClick={() => setDialogTab(t.val)}
-                    className={`flex-shrink-0 text-sm font-medium px-3 py-1 rounded-full transition-colors ${
-                      dialogTab === t.val ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
-                    }`}>{t.label}</button>
-                ))}
-              </div>
-
-              {dialogTab === "messages" ? (
-                <ChatAdmin userEmail={selected.email} userRole="commercial" currentUser={adminUser} />
-              ) : dialogTab === "perf" ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                    <div className="p-2 rounded-lg bg-primary/5 border">
-                      <p className="font-bold text-lg text-primary">{perfClients.length}</p>
-                      <p className="text-muted-foreground">Inscriptions</p>
-                    </div>
-                    <div className="p-2 rounded-lg bg-green-50 border-green-200">
-                      <p className="font-bold text-lg text-green-700">{Object.values(perfStats).filter(s => s.firstCourseValidated).length}</p>
-                      <p className="text-muted-foreground">1ères courses</p>
-                    </div>
-                    <div className="p-2 rounded-lg bg-amber-50 border-amber-200">
-                      <p className="font-bold text-lg text-amber-700">{perfClients.length > 0 ? Math.round(Object.values(perfStats).filter(s => s.firstCourseValidated).length / perfClients.length * 100) : 0}%</p>
-                      <p className="text-muted-foreground">Conversion</p>
-                    </div>
-                    <div className="p-2 rounded-lg bg-green-50 border-green-200">
-                      <p className="font-bold text-lg text-green-700">{Object.values(perfStats).filter(s => s.firstCourseValidated).length * 50} F</p>
-                      <p className="text-muted-foreground">Gains réels</p>
-                    </div>
-                  </div>
-                  {loadingPerf && <div className="flex justify-center py-4"><div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" /></div>}
-                  <p className="text-xs font-semibold text-muted-foreground">Détail des clients</p>
-                  {perfClients.map(client => {
-                    const stat = perfStats[client.email] || {};
-                    return (
-                      <div key={client.id} className="flex items-start justify-between p-2 rounded-lg border bg-card">
-                        <div>
-                          <p className="text-xs font-semibold">{client.full_name || client.email}</p>
-                          <p className="text-[10px] text-muted-foreground">Inscrit {moment(client.created_date).format("DD/MM/YYYY")}</p>
-                          {stat.firstCourseDate && <p className="text-[10px] text-muted-foreground">1ère course {moment(stat.firstCourseDate).format("DD/MM/YYYY")}</p>}
-                        </div>
-                        <div className="text-right">
-                          {stat.firstCourseValidated
-                            ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">+50 F validé</span>
-                            : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">En attente</span>
-                          }
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {!loadingPerf && perfClients.length === 0 && <p className="text-center text-xs text-muted-foreground py-4">Aucun client inscrit avec ce code</p>}
-                </div>
-              ) : (
-                <>
-              <div className="flex items-center gap-3">
-                <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
-                  {selected.full_name?.charAt(0)}
-                </div>
-                <div>
-                  <p className="font-bold">{selected.full_name}</p>
-                  <p className="text-sm text-muted-foreground">{selected.telephone}</p>
-                  <p className="text-sm text-muted-foreground">{selected.quartier}</p>
-                  <p className="text-xs text-muted-foreground">Inscrit le {moment(selected.created_date).format("DD/MM/YYYY")}</p>
-                </div>
-              </div>
-
-              {!selected.profil_valide && (
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold">Validation du profil</p>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1 border-red-300 text-red-600" onClick={() => refuserProfil(selected)}>
-                      <XCircle className="h-4 w-4 mr-1" /> Refuser
-                    </Button>
-                    <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => validerProfil(selected)}>
-                      <CheckCircle2 className="h-4 w-4 mr-1" /> Valider profil
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {selectedCode && (
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold">Code promo : <span className="font-black text-primary">{selectedCode.code}</span></p>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-center bg-muted/50 rounded-lg p-3">
-                    <div><p className="font-bold">{selectedCode.nombre_utilisations || 0}</p><p className="text-muted-foreground">Utilisations</p></div>
-                    <div><p className="font-bold text-amber-600">{(selectedCode.commission_due || 0) - (selectedCode.commission_payee || 0)} F</p><p className="text-muted-foreground">Dû</p></div>
-                  </div>
-                  {(selectedCode.statut === "en_attente" || selectedCode.statut === "a_modifier") && (
-                    <>
-                      <div className="space-y-1">
-                        <Label>Commentaire admin (motif refus / modification)</Label>
-                        <Input placeholder="Ex: Code trop générique, proposez un code personnalisé..." value={motifRefus} onChange={e => setMotifRefus(e.target.value)} />
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => validerCode(selectedCode)}>
-                          <CheckCircle2 className="h-4 w-4 mr-1" /> Valider le code
-                        </Button>
-                        <div className="flex gap-2">
-                          <Button variant="outline" className="flex-1 border-orange-300 text-orange-600" onClick={() => demanderModifCode(selectedCode)}>
-                            ✏️ Demander modif
-                          </Button>
-                          <Button variant="outline" className="flex-1 border-red-300 text-red-600" onClick={() => refuserCode(selectedCode)}>
-                            <XCircle className="h-4 w-4 mr-1" /> Refuser
-                          </Button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  {selectedCode.statut === "valide" && (
-                    <Button variant="outline" className="w-full border-red-300 text-red-600" onClick={() => { setMotifRefus("Suspendu par l'administration"); refuserCode({...selectedCode}); }}>
-                      Suspendre le code
-                    </Button>
-                  )}
-                </div>
-              )}
-              </>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog paiement */}
-      <Dialog open={dialogPaiement} onOpenChange={setDialogPaiement}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Payer la commission</DialogTitle>
-          </DialogHeader>
-          {selected && selectedCode && (
-            <div className="space-y-4">
-              <div className="p-3 rounded-lg bg-muted text-sm">
-                <p className="font-medium">{selected.full_name}</p>
-                <p className="text-muted-foreground">Commission restante : <strong className="text-amber-600">{(selectedCode.commission_due || 0) - (selectedCode.commission_payee || 0)} FCFA</strong></p>
-              </div>
-              <div className="space-y-1">
-                <Label>Montant (FCFA)</Label>
-                <Input type="number" value={formPaiement.montant} onChange={e => setFormPaiement({ ...formPaiement, montant: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label>Mode de paiement</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {MODES_PAIEMENT.map(m => (
-                    <button key={m} onClick={() => setFormPaiement({ ...formPaiement, mode: m })}
-                      className={`p-2 rounded-lg border text-xs font-medium transition-all ${formPaiement.mode === m ? "border-primary bg-primary/10 text-primary" : "border-border"}`}>
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <Button className="w-full" onClick={enregistrerPaiement} disabled={saving}>
-                {saving ? "Enregistrement..." : "Confirmer le paiement"}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog Commissions dues */}
-      <Dialog open={showCommissionsDues} onOpenChange={setShowCommissionsDues}>
-        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Commissions dues</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            {codes
-              .filter(c => c.statut === "valide" && (c.commission_due || 0) - (c.commission_payee || 0) > 0)
-              .map(code => {
-                const commercial = commerciaux.find(c => c.email === code.commercial_email);
-                const montantDu = (code.commission_due || 0) - (code.commission_payee || 0);
-                return (
-                  <div key={code.id} className="p-3 rounded-lg border bg-card space-y-2">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-sm">{commercial?.full_name || "Commercial"}</p>
-                        <p className="text-xs text-muted-foreground">{code.code}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-amber-600">{montantDu} F</p>
-                        <p className="text-xs text-muted-foreground">Dû</p>
-                      </div>
-                    </div>
-                    <Button size="sm" className="w-full h-7 text-xs"
-                      onClick={() => marquerCommePayeDirectement(code)}
-                      disabled={paiementEnCours[code.id]}>
-                      {paiementEnCours[code.id] ? "Enregistrement..." : "✅ Marquer comme payé"}
-                    </Button>
-                  </div>
-                );
-              })}
-            {codes.filter(c => c.statut === "valide" && (c.commission_due || 0) - (c.commission_payee || 0) > 0).length === 0 && (
-              <p className="text-center text-sm text-muted-foreground py-6">Aucune commission due</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+        {filtered.length === 0 && <div className="text-center py-12"><p className="text-sm text-muted-foreground">Aucun commercial trouvé</p></div>}
       </div>
-      );
-      }
+
+      <Dialog open={dialog} onOpenChange={setDialog}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Fiche commercial</DialogTitle></DialogHeader>
+          {selected && (
+            <Tabs defaultValue="profil">
+              <TabsList className="w-full">
+                <TabsTrigger value="profil" className="flex-1 text-xs">Profil</TabsTrigger>
+                <TabsTrigger value="code" className="flex-1 text-xs">Code Promo</TabsTrigger>
+                <TabsTrigger value="historique" className="flex-1 text-xs">Historique</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="profil" className="space-y-4 mt-4">
+                <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center font-bold text-lg text-primary">💼</div>
+                  <div>
+                    <p className="font-bold">{selected.full_name}</p>
+                    <p className="text-xs text-muted-foreground">{selected.email}</p>
+                    <p className="text-xs text-muted-foreground">Inscrit {moment(selected.created_date).format("DD/MM/YYYY")}</p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-2">
+                  <p className="text-xs font-bold uppercase text-blue-700">📞 Contacts</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div><p className="text-[10px] text-muted-foreground">Téléphone</p><p className="font-semibold">{selected.telephone || "—"}</p></div>
+                    <div><p className="text-[10px] text-muted-foreground">Quartier</p><p>{selected.quartier || "—"}</p></div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    {selected.telephone && <a href={`tel:${selected.telephone}`} className="flex-1"><button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-white text-xs font-semibold"><Phone className="h-3.5 w-3.5" /> Appeler</button></a>}
+                    {selected.telephone && <a href={`https://wa.me/${selected.telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="flex-1"><button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold"><MessageCircle className="h-3.5 w-3.5" /> WhatsApp</button></a>}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg border text-sm space-y-1">
+                  <div className="flex justify-between"><span>Statut</span><span className="font-bold">{selected.statut_validation_commercial || "en_attente"}</span></div>
+                  <div className="flex justify-between"><span>Inscrit</span><span>{moment(selected.created_date).format("DD/MM/YYYY")}</span></div>
+                </div>
+
+                <div className="flex gap-2">
+                  {!selected.statut_validation_commercial || selected.statut_validation_commercial === "en_attente" ? (
+                    <>
+                      <Button variant="outline" className="flex-1 border-red-300 text-red-600" onClick={() => refuserCommercial(selected)}>❌ Refuser</Button>
+                      <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => validerCommercial(selected)}>✅ Valider</Button>
+                    </>
+                  ) : selected.statut_validation_commercial === "refuse" ? (
+                    <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => validerCommercial(selected)}>✅ Valider quand même</Button>
+                  ) : null}
+                  {admin?.role === "admin" && (
+                    <Button variant="outline" className="flex-1 border-red-400 text-red-700 hover:bg-red-50" onClick={() => supprimerCommercial(selected)}><Trash2 className="h-3 w-3" /></Button>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="code" className="mt-4">
+                {codes.find(c => c.commercial_email === selected.email) ? (
+                  <div className="space-y-2">
+                    {(() => {
+                      const code = codes.find(c => c.commercial_email === selected.email);
+                      return (
+                        <>
+                          <div className="p-3 rounded-lg border"><p className="text-xs text-muted-foreground">Code</p><p className="text-lg font-bold text-accent">{code.code}</p></div>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="p-3 rounded-lg border"><p className="text-[10px] text-muted-foreground">Utilisations</p><p className="font-bold">{code.nombre_utilisations || 0}</p></div>
+                            <div className="p-3 rounded-lg border"><p className="text-[10px] text-muted-foreground">Commission due</p><p className="font-bold text-amber-600">{(code.commission_due || 0).toLocaleString()} F</p></div>
+                            <div className="p-3 rounded-lg border"><p className="text-[10px] text-muted-foreground">Commission payée</p><p className="font-bold text-green-600">{(code.commission_payee || 0).toLocaleString()} F</p></div>
+                            <div className="p-3 rounded-lg border"><p className="text-[10px] text-muted-foreground">Statut</p><p className={`font-bold ${code.actif ? "text-green-600" : "text-red-600"}`}>{code.actif ? "✅ Actif" : "❌ Inactif"}</p></div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-6">Aucun code promo attribué</p>
+                )}
+              </TabsContent>
+
+              <TabsContent value="historique" className="mt-4">
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {logs.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">Aucun historique</p>
+                  ) : (
+                    logs.map(log => (
+                      <div key={log.id} className="text-xs p-2 rounded-lg bg-muted/40 border">
+                        <div className="flex justify-between"><span className="font-medium">{log.action}</span><span className="text-muted-foreground">{moment(log.created_date).format("DD/MM/YY HH:mm")}</span></div>
+                        <p className="text-muted-foreground">{log.reason}</p>
+                        <p className="text-[9px] text-muted-foreground">Par: {log.admin_email}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -268,10 +268,28 @@ export default function AdminDashboard() {
             🛵 Valider les livreurs
           </Button>
         </Link>
+        <Link to="/gerer-clients">
+          <Button className="w-full justify-start gap-2" variant="outline">
+            <Users className="h-4 w-4" />
+            👤 Gestion clients
+          </Button>
+        </Link>
         <Link to="/gerer-livreurs">
           <Button className="w-full justify-start gap-2" variant="outline">
             <TrendingUp className="h-4 w-4" />
             📊 Gestion livreurs
+          </Button>
+        </Link>
+        <Link to="/gerer-partenaires">
+          <Button className="w-full justify-start gap-2" variant="outline">
+            <Users className="h-4 w-4" />
+            🏪 Gestion partenaires
+          </Button>
+        </Link>
+        <Link to="/gerer-commerciaux">
+          <Button className="w-full justify-start gap-2" variant="outline">
+            <Users className="h-4 w-4" />
+            💼 Gestion commerciaux
           </Button>
         </Link>
         <Link to="/gestion-transactions">
