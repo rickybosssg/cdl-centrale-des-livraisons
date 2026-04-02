@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User, ShoppingBag, TrendingUp } from "lucide-react";
+import PubliciteDisplay from "@/components/PubliciteDisplay";
 import BedouWidget from "../../components/BedouWidget";
 import EffectuerDeplacement from "./EffectuerDeplacement";
 import ChatAdmin from "@/components/ChatAdmin";
@@ -62,7 +63,9 @@ export default function ClientHome({ user }) {
   const navigate = useNavigate();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-0">
+      {user && <PubliciteDisplay userRole="client" userId={user.id} userEmail={user.email} />}
+      <div className="space-y-6 mt-4">
       {/* Welcome */}
       <div className="space-y-1">
         <h1 className="text-2xl font-bold">Bonjour, {user.full_name?.split(" ")[0]} 👋</h1>

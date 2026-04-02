@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import PubliciteDisplay from "@/components/PubliciteDisplay";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
 import { useMessageCount } from "@/hooks/useMessageCount";
 import MessageAlert from "@/components/MessageAlert";
@@ -181,8 +182,10 @@ export default function DashboardPartenaire({ user }) {
   const galerie = (() => { try { return JSON.parse(partenaire.galerie_photos || "[]"); } catch (_) { return []; } })();
 
   return (
-    <div className="space-y-4">
-      <MessageAlert newMsg={newMsg} />
+    <div className="space-y-0">
+      {user && <PubliciteDisplay userRole="partenaire" userId={user.id} userEmail={user.email} />}
+      <div className="space-y-4 mt-4">
+        <MessageAlert newMsg={newMsg} />
       {newMsg && <div className="h-24" />}
 
       {/* Header */}
@@ -430,6 +433,7 @@ export default function DashboardPartenaire({ user }) {
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
+      </div>
+      </div>
+      );
+      }
