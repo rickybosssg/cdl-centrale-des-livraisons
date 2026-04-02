@@ -6,6 +6,7 @@ import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation, Map } from 
 import NotationCourse from "../../components/NotationCourse";
 import MiniChat from "../../components/MiniChat";
 import MapSuivi from "../../components/MapSuivi";
+import CancelCourseDialog from "../../components/CancelCourseDialog";
 import PaiementMobile from "../../components/PaiementMobile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +23,7 @@ export default function CourseDetail() {
   const [relancantSeul, setRelancantSeul] = useState(false);
   const [showPrixForm, setShowPrixForm] = useState(false);
   const [prixErreur, setPrixErreur] = useState("");
+  const [cancelDialog, setCancelDialog] = useState(false);
 
   useEffect(() => {
     if (!id || id === ':id') {
@@ -275,6 +277,22 @@ export default function CourseDetail() {
         <PaiementMobile course={course} onConfirmed={() => setCourse(prev => ({ ...prev, statut_paiement: "paye" }))} />
       )}
 
+      {/* Bouton annulation avec frais - course acceptée mais pas arrivée */}
+      {course.statut === "acceptee" && course.livreur_email && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <p className="text-xs text-red-700 mb-3">Vous pouvez annuler cette course, mais 50% du prix seront prélevés (livreur accepté).</p>
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={() => setCancelDialog(true)}
+            >
+              ❌ Annuler la course avec frais
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Appel livreur */}
       {course.livreur_email && ["acceptee", "en_cours"].includes(course.statut) && course.telephone_livreur && (
         <Card className="border-primary/20 bg-primary/5">
@@ -372,6 +390,22 @@ export default function CourseDetail() {
       {course.statut === "livree" && course.livreur_email && !course.note_donnee && (
         <NotationCourse course={course} onDone={() => setCourse(prev => ({ ...prev, note_donnee: true }))} />
       )}
+      {/* Bouton annulation avec frais - course acceptée mais pas arrivée */}
+      {course.statut === "acceptee" && course.livreur_email && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <p className="text-xs text-red-700 mb-3">Vous pouvez annuler cette course, mais 50% du prix seront prélevés (livreur accepté).</p>
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={() => setCancelDialog(true)}
+            >
+              ❌ Annuler la course avec frais
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {course.note_donnee && course.note_client && (
         <Card className="bg-green-50 border-green-200">
           <CardContent className="p-4">
@@ -385,6 +419,16 @@ export default function CourseDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* Dialog annulation */}
+      <CancelCourseDialog
+        open={cancelDialog}
+        onOpenChange={setCancelDialog}
+        course={course}
+        onSuccess={() => {
+          setCourse(prev => ({ ...prev, statut: 'annulee' }));
+        }}
+      />
     </div>
   );
 }
