@@ -88,6 +88,17 @@
     @apply bg-background text-foreground font-inter;
     overscroll-behavior: none;
   }
+  /* CONTRASTE GLOBAL INPUT/TEXTAREA */
+  input, textarea, select {
+    @apply text-foreground bg-white;
+    color-scheme: light dark;
+  }
+  input::placeholder, textarea::placeholder {
+    @apply text-muted-foreground;
+  }
+  input:disabled, textarea:disabled, select:disabled {
+    @apply bg-muted text-muted-foreground cursor-not-allowed;
+  }
 }
 
 @layer utilities {

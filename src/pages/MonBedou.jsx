@@ -254,7 +254,7 @@ export default function MonBedou() {
                 placeholder="Ex: 2000"
                 value={form.montant}
                 onChange={e => setForm({ ...form, montant: e.target.value })}
-                className="w-full mt-1 h-11 rounded-xl border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full mt-1 h-11 rounded-xl border border-input px-3 py-2 text-sm font-medium text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
               {bonus > 0 && (
                 <p className="text-xs text-green-700 mt-1 font-semibold">🎁 Bonus automatique : +{fmt(bonus)} !</p>
@@ -283,17 +283,9 @@ export default function MonBedou() {
                 placeholder="Ex: TXN12345"
                 value={form.numero_transaction}
                 onChange={e => setForm({ ...form, numero_transaction: e.target.value })}
-                className="w-full mt-1 h-11 rounded-xl border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full mt-1 h-11 rounded-xl border border-input px-3 py-2 text-sm text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Preuve de paiement (optionnel)</label>
-              <label className="flex items-center gap-2 mt-1 h-11 px-3 rounded-xl border border-input cursor-pointer hover:bg-muted">
-                <Upload className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">{form.preuve ? form.preuve.name : "Choisir une image..."}</span>
-                <input type="file" accept="image/*" className="hidden" onChange={e => setForm({ ...form, preuve: e.target.files[0] })} />
-              </label>
-            </div>
+              </div>
             <Button className="w-full h-12 font-semibold" onClick={handleRecharge} disabled={submitting || !form.montant}>
               {submitting ? "Envoi en cours..." : `Envoyer la demande${bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ''}`}
             </Button>
@@ -315,18 +307,8 @@ export default function MonBedou() {
                 placeholder="Ex: 1000"
                 value={retraitForm.montant}
                 onChange={e => setRetraitForm({ ...retraitForm, montant: e.target.value })}
-                className="w-full mt-1 h-11 rounded-xl border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full mt-1 h-11 rounded-xl border border-input px-3 py-2 text-sm font-medium text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Méthode *</label>
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                {METHODES.map(m => (
-                  <button key={m.value} onClick={() => setRetraitForm({ ...retraitForm, methode: m.value })}
-                    className={`p-3 rounded-xl border-2 text-sm font-medium ${retraitForm.methode === m.value ? "border-primary bg-primary/10 text-primary" : "border-border"}`}>
-                    {m.label}
-                  </button>
-                ))}
               </div>
             </div>
             <div>
@@ -336,23 +318,9 @@ export default function MonBedou() {
                 placeholder="Ex: 0706070607"
                 value={retraitForm.numero_reception}
                 onChange={e => setRetraitForm({ ...retraitForm, numero_reception: e.target.value })}
-                className="w-full mt-1 h-11 rounded-xl border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full mt-1 h-11 rounded-xl border border-input px-3 py-2 text-sm text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Nom du compte (optionnel)</label>
-              <input
-                type="text"
-                placeholder="Votre nom complet"
-                value={retraitForm.nom_compte}
-                onChange={e => setRetraitForm({ ...retraitForm, nom_compte: e.target.value })}
-                className="w-full mt-1 h-11 rounded-xl border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <Button className="w-full h-12 font-semibold" onClick={handleRetrait} disabled={submitting || !retraitForm.montant || !retraitForm.numero_reception}>
-              {submitting ? "Traitement..." : "Demander le retrait"}
-            </Button>
-          </div>
+              </div>
         </div>
       )}
 
