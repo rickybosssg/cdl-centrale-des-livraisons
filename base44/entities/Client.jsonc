@@ -32,15 +32,26 @@
     },
     "nombre_total_courses": {
       "type": "number",
-      "title": "Nombre total de courses"
+      "title": "Nombre total de courses",
+      "default": 0
+    },
+    "nombre_courses_terminees": {
+      "type": "number",
+      "title": "Nombre courses termin\u00e9es",
+      "default": 0
     },
     "total_depense": {
       "type": "number",
-      "title": "Total d\u00e9pens\u00e9 (FCFA)"
+      "title": "Total d\u00e9pens\u00e9 (FCFA)",
+      "default": 0
     },
     "date_derniere_course": {
       "type": "string",
       "title": "Date derni\u00e8re course"
+    },
+    "date_premiere_course": {
+      "type": "string",
+      "title": "Date premi\u00e8re course termin\u00e9e"
     },
     "statut_client": {
       "type": "string",
@@ -52,11 +63,31 @@
         "Inactif",
         "Bloqu\u00e9"
       ],
-      "title": "Statut client"
+      "title": "Statut client",
+      "default": "Nouveau"
     },
     "note_admin": {
       "type": "string",
       "title": "Note administrateur"
+    },
+    "code_promo_utilise": {
+      "type": "string",
+      "title": "Code promo utilis\u00e9 \u00e0 l'inscription"
+    },
+    "premiere_course_effectuee": {
+      "type": "boolean",
+      "title": "Premi\u00e8re course valid\u00e9e et termin\u00e9e",
+      "default": false
+    },
+    "prime_premiere_course_payee": {
+      "type": "boolean",
+      "title": "Prime premi\u00e8re course (50F commercial) pay\u00e9e",
+      "default": false
+    },
+    "reduction_premiere_course_appliquee": {
+      "type": "boolean",
+      "title": "R\u00e9duction 15% premi\u00e8re course appliqu\u00e9e",
+      "default": false
     }
   },
   "required": [
