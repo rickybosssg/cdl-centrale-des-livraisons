@@ -76,14 +76,16 @@ export default function Home() {
     setLoading(false);
   };
 
-  // Switch instantané basé sur l'ID
+  // Switch profil : sync serveur + reload pour rafraîchir nav bar
   const switchProfile = (profileId) => {
     localStorage.setItem('activeProfileId', profileId);
-    setActiveProfileId(profileId);
     setShowSwitch(false);
-    // Sync serveur en arrière-plan
     const prof = allProfiles.find(p => p.id === profileId);
-    if (prof) base44.functions.invoke('switchActiveProfile', { profile_type: prof.profile_type }).catch(() => {});
+    if (prof) {
+      base44.functions.invoke('switchActiveProfile', { profile_type: prof.profile_type }).catch(() => {});
+    }
+    // Reload pour que AppLayoutWrapper (nav bar) se mette à jour avec le nouveau profil
+    setTimeout(() => { window.location.href = '/'; }, 200);
   };
 
   useEffect(() => {
