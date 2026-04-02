@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User, ShoppingBag } from "lucide-react";
+import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User, ShoppingBag, TrendingUp } from "lucide-react";
 import BedouWidget from "../../components/BedouWidget";
 import EffectuerDeplacement from "./EffectuerDeplacement";
 import ChatAdmin from "@/components/ChatAdmin";
@@ -74,6 +74,48 @@ export default function ClientHome({ user }) {
 
       {/* Bannière publicitaire */}
       <BannierePublicitaire placement="home_client" />
+
+      {/* Bouton WhatsApp Commander */}
+      <a
+        href="https://wa.me/22600000000?text=Bonjour%20CDL%20!%20Je%20voudrais%20commander%20une%20livraison."
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 w-full p-4 rounded-2xl bg-green-500 text-white font-bold shadow-lg hover:bg-green-600 active:scale-[0.98] transition-all"
+      >
+        <span className="text-3xl">💬</span>
+        <div className="flex-1">
+          <p className="text-base font-extrabold">Commander via WhatsApp</p>
+          <p className="text-xs text-white/80">Rapide · Direct · Sans app</p>
+        </div>
+        <span className="text-xl">→</span>
+      </a>
+
+      {/* Stats acquisition */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-3 text-center">
+            <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1" />
+            <p className="text-xl font-bold text-amber-700">{activeCourses.length}</p>
+            <p className="text-[10px] text-amber-600">En attente</p>
+          </CardContent>
+        </Card>
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="p-3 text-center">
+            <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto mb-1" />
+            <p className="text-xl font-bold text-green-700">{completedCount}</p>
+            <p className="text-[10px] text-green-600">Traitées</p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-3 text-center">
+            <TrendingUp className="h-5 w-5 text-primary mx-auto mb-1" />
+            <p className="text-xl font-bold text-primary">
+              {courses.length > 0 ? Math.round((completedCount / courses.length) * 100) : 0}%
+            </p>
+            <p className="text-[10px] text-primary/70">Conversion</p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Quick actions */}
       <div className="grid grid-cols-2 gap-3">
