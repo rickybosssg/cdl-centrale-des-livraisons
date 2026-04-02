@@ -149,16 +149,31 @@ export default function GererCommerciaux() {
         <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-amber-600">{commerciaux.filter(c => !c.statut_validation_commercial || c.statut_validation_commercial === "en_attente").length}</p><p className="text-[10px] text-muted-foreground">En attente</p></CardContent></Card>
       </div>
 
-      <Input placeholder="Rechercher par nom, tél, code promo..." value={search} onChange={e => setSearch(e.target.value)} />
-
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {[{val:"tous",label:"Tous"},{val:"valides",label:"✅ Validés"},{val:"en_attente",label:"⏳ En attente"},{val:"refuses",label:"❌ Refusés"}]
-          .map(f => (
-          <button key={f.val} onClick={() => setFiltre(f.val)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
-              filtre === f.val ? "bg-primary text-primary-foreground border-primary" : "border-border"
-            }`}>{f.label}</button>
-        ))}
+      {/* RECHERCHE ET FILTRES */}
+      <div className="space-y-3 p-3 rounded-xl bg-muted/40 border">
+        <Input 
+          placeholder="Rechercher par nom, tél, code promo..." 
+          value={search} 
+          onChange={e => setSearch(e.target.value)} 
+          className="bg-white"
+        />
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {[{val:"tous",label:"Tous"},{val:"valides",label:"✅ Validés"},{val:"en_attente",label:"⏳ En attente"},{val:"refuses",label:"❌ Refusés"}]
+            .map(f => (
+            <button key={f.val} onClick={() => setFiltre(f.val)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
+                filtre === f.val ? "bg-primary text-primary-foreground border-primary" : "border-border"
+              }`}>{f.label}</button>
+          ))}
+        </div>
+        {(search || filtre !== 'tous') && (
+          <button
+            onClick={() => { setSearch(''); setFiltre('tous'); }}
+            className="w-full text-xs font-medium text-primary hover:underline"
+          >
+            ↻ Réinitialiser
+          </button>
+        )}
       </div>
 
       <div className="space-y-2">

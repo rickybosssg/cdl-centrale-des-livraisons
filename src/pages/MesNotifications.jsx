@@ -47,6 +47,7 @@ export default function MesNotifications() {
   const [notifs, setNotifs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // all | unread
+  const [searchQuery, setSearchQuery] = useState('');
 
   const load = async () => {
     const me = await base44.auth.me();
@@ -91,7 +92,12 @@ export default function MesNotifications() {
     setNotifs(prev => prev.filter(n => n.id !== id));
   };
 
-  const displayed = filter === "unread" ? notifs.filter(n => !n.lue) : notifs;
+  const filtered = (filter === "unread" ? notifs.filter(n => !n.lue) : notifs).filter(n => {
+    const search = searchQuery.toLowerCase();
+    return !search || 
+      n.titre?.toLowerCase().includes(search) ||
+      n.message?.toLowerCase().includes(search);
+  });
   const unreadCount = notifs.filter(n => !n.lue).length;
 
   return (
@@ -116,21 +122,38 @@ export default function MesNotifications() {
         )}
       </div>
 
-      {/* Filtre */}
-      <div className="flex gap-2">
-        {["all", "unread"].map(f => (
+      {/* RECHERCHE ET FILTRE */}
+      <div className="space-y-3 p-3 rounded-xl bg-muted/40 border">
+        <input
+          type="text"
+          placeholder="Rechercher dans les notifications..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+        <div className="flex gap-2">
+          {["all", "unread"].map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                filter === f
+                  ? "bg-primary text-white border-primary"
+                  : "bg-background border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {f === "all" ? `Toutes (${notifs.length})` : `Non lues (${unreadCount})`}
+            </button>
+          ))}
+        </div>
+        {searchQuery && (
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-              filter === f
-                ? "bg-primary text-white border-primary"
-                : "bg-background border-border text-muted-foreground hover:bg-muted"
-            }`}
+            onClick={() => setSearchQuery('')}
+            className="w-full text-xs font-medium text-primary hover:underline"
           >
-            {f === "all" ? `Toutes (${notifs.length})` : `Non lues (${unreadCount})`}
+            ↻ Réinitialiser recherche
           </button>
-        ))}
+        )}
       </div>
 
       {/* Loading */}
@@ -141,7 +164,7 @@ export default function MesNotifications() {
       )}
 
       {/* Vide */}
-      {!loading && displayed.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div className="text-center py-16 space-y-3">
           <Bell className="h-12 w-12 text-muted-foreground/30 mx-auto" />
           <p className="text-muted-foreground font-medium">
@@ -152,7 +175,7 @@ export default function MesNotifications() {
 
       {/* Liste */}
       <div className="space-y-2">
-        {displayed.map(notif => {
+        {filtered.map(notif => {
           const cfg = TYPE_CFG[notif.type] || TYPE_CFG.info;
           const hasAction = !!getNavPath(notif);
           return (

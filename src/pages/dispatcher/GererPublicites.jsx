@@ -14,6 +14,7 @@ import moment from "moment";
 const TYPES = ["Image", "Vidéo"];
 const PLACEMENTS = ["accueil", "attente_livreur", "dashboard_livreur", "marketplace"];
 const CIBLES = ["tous", "clients", "livreurs", "partenaires"];
+const STATUTS = ["actif", "inactif"];
 
 export default function GererPublicites() {
   const navigate = useNavigate();
@@ -22,6 +23,8 @@ export default function GererPublicites() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatut, setFilterStatut] = useState('tous');
   const [form, setForm] = useState({
     titre: "",
     description: "",
@@ -163,6 +166,17 @@ export default function GererPublicites() {
     setDialogOpen(true);
   };
 
+  const pubsFiltrees = pubs.filter(p => {
+    const search = searchQuery.toLowerCase();
+    const matchesSearch = !search || 
+      p.titre?.toLowerCase().includes(search) ||
+      p.description?.toLowerCase().includes(search);
+    const matchesStatut = filterStatut === 'tous' || 
+      (filterStatut === 'actif' && p.active) ||
+      (filterStatut === 'inactif' && !p.active);
+    return matchesSearch && matchesStatut;
+  });
+
   const stats = {
     total: pubs.length,
     actives: pubs.filter(p => p.active).length,
@@ -223,15 +237,43 @@ export default function GererPublicites() {
         </Card>
       </div>
 
+      {/* RECHERCHE ET FILTRES */}
+      <div className="space-y-3 p-3 rounded-xl bg-muted/40 border">
+        <input
+          type="text"
+          placeholder="Rechercher par titre ou description..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+        <select
+          value={filterStatut}
+          onChange={(e) => setFilterStatut(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border bg-white text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          <option value="tous">Tous les statuts</option>
+          <option value="actif">Actif</option>
+          <option value="inactif">Inactif</option>
+        </select>
+        {(searchQuery || filterStatut !== 'tous') && (
+          <button
+            onClick={() => { setSearchQuery(''); setFilterStatut('tous'); }}
+            className="w-full text-xs font-medium text-primary hover:underline"
+          >
+            ↻ Réinitialiser
+          </button>
+        )}
+      </div>
+
       {/* Liste */}
       <div className="space-y-2">
-        {pubs.length === 0 ? (
+        {pubsFiltrees.length === 0 ? (
           <div className="text-center py-12">
             <AlertCircle className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
             <p className="text-muted-foreground">Aucune publicité</p>
           </div>
         ) : (
-          pubs.map(pub => {
+          pubsFiltrees.map(pub => {
             const isActive = new Date(pub.date_debut) <= new Date() && new Date() <= new Date(pub.date_fin) && pub.active;
             return (
               <Card key={pub.id} className={`${isActive ? "" : "opacity-60"}`}>
