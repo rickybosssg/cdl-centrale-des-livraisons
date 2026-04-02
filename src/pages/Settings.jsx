@@ -307,6 +307,14 @@ export default function Settings() {
                         }
                         Utiliser
                       </Button>
+                    ) : profile.status === 'incomplet' ? (
+                      <Button
+                        size="sm"
+                        className="bg-amber-500 hover:bg-amber-600 text-xs gap-1.5"
+                        onClick={() => navigate(`/complete-profile/${profile.id}`)}
+                      >
+                        Compléter
+                      </Button>
                     ) : (
                       <span className="text-xs text-muted-foreground">En cours</span>
                     )}

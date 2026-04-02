@@ -60,6 +60,7 @@ import CGU from './pages/CGU';
 import SupprimerCompte from './pages/SupprimerCompte';
 import MonBedou from './pages/MonBedou';
 import MesNotifications from './pages/MesNotifications';
+import CompleteProfile from './pages/CompleteProfile';
 import GestionTransactions from './pages/dispatcher/GestionTransactions';
 import GestionProfils from './pages/dispatcher/GestionProfils';
 import GestionAcces from './pages/dispatcher/GestionAcces';
@@ -199,6 +200,7 @@ const AuthenticatedApp = () => {
         <Route path="/supprimer-compte" element={<SupprimerCompte />} />
         <Route path="/mon-bedou" element={<MonBedou />} />
         <Route path="/mes-notifications" element={<MesNotifications />} />
+        <Route path="/complete-profile/:profileId" element={<CompleteProfile />} />
 
         {/* Admin uniquement */}
         <Route element={<DispatcherGuard />}>

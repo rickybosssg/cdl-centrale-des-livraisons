@@ -290,7 +290,7 @@ export default function Home() {
                       </button>
                     )}
                     {p.status === 'incomplet' && (
-                      <button onClick={() => { setShowSwitch(false); navigate('/settings'); }} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 text-white">
+                      <button onClick={() => { setShowSwitch(false); navigate(`/complete-profile/${p.id}`); }} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors">
                         Compléter
                       </button>
                     )}
