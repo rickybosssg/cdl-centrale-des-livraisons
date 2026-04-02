@@ -65,6 +65,7 @@ import DiffusionGlobale from './pages/dispatcher/DiffusionGlobale';
 import PendingProfileRequests from './pages/dispatcher/PendingProfileRequests';
 import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
 import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
+import ProfilsAdmin from './pages/dispatcher/ProfilsAdmin';
 import TestUpload from './pages/TestUpload';
 
 // Wrappers qui chargent le user avant de rendre
@@ -222,6 +223,7 @@ const AuthenticatedApp = () => {
           <Route path="/diffusion-globale" element={<DiffusionGlobale />} />
           <Route path="/pending-profiles" element={<PendingProfileRequests />} />
           <Route path="/livreurs-incomplets" element={<LivreursIncompletsList />} />
+          <Route path="/profils-admin" element={<ProfilsAdmin />} />
           <Route path="/test-upload" element={<TestUpload />} />
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
         </Route>

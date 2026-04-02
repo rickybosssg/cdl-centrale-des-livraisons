@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -232,6 +232,12 @@ export default function AdminDashboard() {
       {/* Actions rapides */}
       <div className="px-4 space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Accès rapide</p>
+        <Link to="/profils-admin">
+          <Button className="w-full justify-start gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary" variant="outline">
+            <LayoutGrid className="h-4 w-4" />
+            🎛️ Centre de contrôle — tous les profils
+          </Button>
+        </Link>
         <Link to="/gestion-profils">
           <Button className="w-full justify-start gap-2" variant="outline">
             <Users className="h-4 w-4" />

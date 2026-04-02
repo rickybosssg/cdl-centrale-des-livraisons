@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { X, Phone, MapPin, Calendar, Save, Ban, UserCheck, MessageCircle, UserPlus, Zap } from "lucide-react";
+import { X, Phone, MapPin, Calendar, Save, Ban, UserCheck, MessageCircle, UserPlus, Zap, Mail } from "lucide-react";
 import ChatAdmin from "./ChatAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,6 +104,18 @@ export default function FicheClient({ client, onClose, onUpdated, onDeleted }) {
         </div>
 
         <div className="p-4 space-y-4">
+          {/* Bloc contacts rapides */}
+          <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-2">
+            <p className="text-xs font-bold uppercase text-blue-700">📞 Contacts</p>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div><p className="text-[10px] text-muted-foreground">Téléphone</p><p className="font-semibold">{form.numero_telephone || "non renseigné"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Email</p><p className="text-xs">{client.email || "—"}</p></div>
+            </div>
+            <div className="flex gap-2">
+              {form.numero_telephone && <a href={`tel:${form.numero_telephone}`} className="flex-1"><button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-white text-xs font-semibold"><Phone className="h-3.5 w-3.5" /> Appeler</button></a>}
+              {form.numero_telephone && <a href={`https://wa.me/${form.numero_telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="flex-1"><button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold"><MessageCircle className="h-3.5 w-3.5" /> WhatsApp</button></a>}
+            </div>
+          </div>
           {/* Tabs custom scrollable */}
           <div className="flex overflow-x-auto border-b gap-0 -mx-4 px-4">
             {[

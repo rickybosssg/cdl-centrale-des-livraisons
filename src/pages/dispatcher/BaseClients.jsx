@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Search, Users, Star, TrendingUp, UserX, UserCheck, RefreshCw } from "lucide-react";
+import { ArrowLeft, Search, Users, Star, TrendingUp, UserX, UserCheck, RefreshCw, Phone, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -224,32 +224,42 @@ export default function BaseClients() {
         {filtered.map(client => {
           const cfg = STATUT_CONFIG[client.statut_client] || STATUT_CONFIG.Actif;
           return (
-            <Card
-              key={client.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => setSelectedClient(client)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
+            <Card key={client.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2" onClick={() => setSelectedClient(client)}>
+                  <div className="flex-1 min-w-0 cursor-pointer">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-sm truncate">{client.nom_complet || "—"}</p>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>
-                        {client.statut_client || "Actif"}
-                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{client.statut_client || "Actif"}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">{client.numero_telephone}</p>
-                    {client.quartier_principal && (
-                      <p className="text-xs text-muted-foreground">{client.quartier_principal}</p>
-                    )}
+                    <p className="text-xs font-medium">{client.numero_telephone || "non renseigné"}</p>
+                    <p className="text-xs text-muted-foreground">{client.email}</p>
+                    {client.quartier_principal && <p className="text-xs text-muted-foreground">{client.quartier_principal}</p>}
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-bold text-primary">{(client.nombre_total_courses || 0)} courses</p>
-                    <p className="text-xs text-muted-foreground">{(client.total_depense || 0).toLocaleString()} FCFA</p>
-                    {client.date_derniere_course && (
-                      <p className="text-[10px] text-muted-foreground">{moment(client.date_derniere_course).fromNow()}</p>
-                    )}
+                    <p className="text-xs text-muted-foreground">{(client.total_depense || 0).toLocaleString()} F</p>
+                    {client.date_derniere_course && <p className="text-[10px] text-muted-foreground">{moment(client.date_derniere_course).fromNow()}</p>}
                   </div>
+                </div>
+                <div className="flex gap-2">
+                  {client.numero_telephone ? (
+                    <a href={`tel:${client.numero_telephone}`} className="flex-1">
+                      <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/5">
+                        <Phone className="h-3.5 w-3.5" /> Appeler
+                      </button>
+                    </a>
+                  ) : <div className="flex-1" />}
+                  {client.numero_telephone ? (
+                    <a href={`https://wa.me/${client.numero_telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="flex-1">
+                      <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-green-300 text-green-700 text-xs font-medium hover:bg-green-50">
+                        <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                      </button>
+                    </a>
+                  ) : <div className="flex-1" />}
+                  <button onClick={() => setSelectedClient(client)} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted">
+                    Voir fiche
+                  </button>
                 </div>
               </CardContent>
             </Card>
