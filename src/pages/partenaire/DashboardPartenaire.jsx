@@ -246,10 +246,35 @@ export default function DashboardPartenaire({ user }) {
               </CardContent>
             </Card>
           )}
-          <Card className={(partenaire.statut_abonnement === "Expiré") ? "border-red-200" : "border-green-200"}>
-            <CardContent className="p-3 flex items-center justify-between">
-              <div><p className="text-xs font-semibold">Abonnement mensuel</p><p className="text-xs text-muted-foreground">Expire : {partenaire.date_expiration_abonnement ? moment(partenaire.date_expiration_abonnement).format("DD/MM/YYYY") : "—"}</p></div>
-              <span className={`text-xs px-2 py-1 rounded-full font-semibold ${partenaire.statut_abonnement === "Expiré" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{partenaire.statut_abonnement || "Actif"}</span>
+          <Card className={(partenaire.statut_abonnement === 'Expiré') ? 'border-red-300 bg-red-50' : 'border-green-200'}>
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold">Abonnement mensuel</p>
+                  <p className="text-xs text-muted-foreground">Expire : {partenaire.date_expiration_abonnement ? moment(partenaire.date_expiration_abonnement).format('DD/MM/YYYY') : '—'}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${partenaire.statut_abonnement === 'Expiré' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{partenaire.statut_abonnement || 'Actif'}</span>
+              </div>
+              {partenaire.statut_abonnement === 'Expiré' && (
+                <div className="p-3 rounded-xl bg-red-100 border border-red-300 text-sm text-red-800 font-medium">
+                  🚫 Votre boutique est masquée du marketplace. Renouvelez votre abonnement pour être visible.
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2 text-xs text-center pt-1">
+                <div className="p-2 rounded-lg bg-muted/50 border">
+                  <p className="font-bold text-primary">10 000 F</p>
+                  <p className="text-muted-foreground">1er mois</p>
+                </div>
+                <div className="p-2 rounded-lg bg-muted/50 border">
+                  <p className="font-bold text-primary">30 000 F</p>
+                  <p className="text-muted-foreground">Mois suivants</p>
+                </div>
+              </div>
+              <a href="https://wa.me/message/EH7SMNHNHL7RN1" target="_blank" rel="noopener noreferrer">
+                <button className="w-full py-2 mt-1 rounded-xl bg-green-600 text-white text-sm font-semibold">
+                  💬 Payer via WhatsApp CDL
+                </button>
+              </a>
             </CardContent>
           </Card>
           <Button variant="outline" className="w-full" onClick={() => navigate('/commandes-partenaire')}>

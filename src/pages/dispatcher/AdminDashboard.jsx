@@ -17,6 +17,9 @@ export default function AdminDashboard() {
     newUsers: 0,
     pendingRequests: 0,
     totalCourses: 0,
+    totalRevenuCDL: 0,
+    totalPartenairesActifs: 0,
+    revenuAbonnements: 0,
   });
   const [resetting, setResetting] = useState(false);
   const [alerts, setAlerts] = useState([]);
@@ -31,7 +34,7 @@ export default function AdminDashboard() {
         base44.entities.Course.list("-created_date", 100),
         base44.entities.User.filter({ user_type: "livreur", disponible: true }),
         base44.entities.User.list("-created_date", 100),
-        base44.entities.Partenaire.filter({ statut: "en_attente" }),
+        base44.entities.Partenaire.list('-created_date', 200),
         base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),
       ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
 
@@ -39,14 +42,27 @@ export default function AdminDashboard() {
       const coursesData = courses || [];
       const coursesToday = coursesData.filter(c => new Date(c.created_date).toDateString() === today).length;
       const revenueToday = coursesData
-        .filter(c => new Date(c.created_date).toDateString() === today && c.statut === "livree")
+        .filter(c => new Date(c.created_date).toDateString() === today && c.statut === 'livree')
         .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
       const livreursOnline = (livreurs || []).length;
       const newUsersData = (users || []).filter(u => new Date(u.created_date).toDateString() === today);
-      const pendingCount = (profiles || []).length; // Uniquement UserProfile en_attente
+      const pendingCount = (profiles || []).length;
       const totalCourses = coursesData.length;
-      console.log(`[AdminDashboard] Courses totales en base: ${totalCourses}`);
-      console.log(`[AdminDashboard] Demandes profils en attente (UserProfile): ${(profiles || []).length}`);
+
+      // Revenus CDL totaux (20% de chaque course livrée)
+      const totalRevenuCDL = coursesData
+        .filter(c => c.statut === 'livree')
+        .reduce((sum, c) => sum + (c.commission_cdl || Math.round((c.prix || 0) * 0.2)), 0);
+
+      // Partenaires actifs + revenus abonnements
+      const partenairesActifs = (partenaires || []).filter(p => p.statut === 'actif');
+      // Estimation: 1er mois = 10 000, mois suivants = 30 000 (on utilise chiffre_affaires si dispo)
+      const revenuAbonnements = partenairesActifs.reduce((sum, p) => {
+        const moisDepuis = p.date_paiement_abonnement
+          ? Math.max(1, Math.round((Date.now() - new Date(p.date_paiement_abonnement)) / (1000*60*60*24*30)))
+          : 1;
+        return sum + (moisDepuis <= 1 ? 10000 : 30000);
+      }, 0);
 
       setKpis({
         coursesToday,
@@ -55,6 +71,9 @@ export default function AdminDashboard() {
         newUsers: newUsersData.length,
         pendingRequests: pendingCount,
         totalCourses,
+        totalRevenuCDL: Math.round(totalRevenuCDL),
+        totalPartenairesActifs: partenairesActifs.length,
+        revenuAbonnements,
       });
 
       // Alertes
@@ -176,6 +195,24 @@ export default function AdminDashboard() {
           <CardContent className="p-4">
             <p className="text-3xl font-bold text-orange-600">{kpis.totalCourses}</p>
             <p className="text-xs text-muted-foreground mt-1">Total courses en base</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-green-700 col-span-2">
+          <CardContent className="p-4">
+            <p className="text-3xl font-bold text-green-700">{kpis.totalRevenuCDL.toLocaleString()} F</p>
+            <p className="text-xs text-muted-foreground mt-1">💰 Total gains CDL (commissions 20%)</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-purple-500">
+          <CardContent className="p-4">
+            <p className="text-3xl font-bold text-purple-600">{kpis.totalPartenairesActifs}</p>
+            <p className="text-xs text-muted-foreground mt-1">Partenaires actifs</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-pink-500">
+          <CardContent className="p-4">
+            <p className="text-xl font-bold text-pink-600">{kpis.revenuAbonnements.toLocaleString()} F</p>
+            <p className="text-xs text-muted-foreground mt-1">Revenus abonnements</p>
           </CardContent>
         </Card>
       </div>

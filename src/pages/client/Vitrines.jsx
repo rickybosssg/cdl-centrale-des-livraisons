@@ -23,7 +23,9 @@ export default function Vitrines() {
   const load = async () => {
     setLoading(true);
     const data = await base44.entities.Partenaire.filter({ statut: "actif" }, "-nombre_vues", 200);
-    setPartenaires(data);
+    // Masquer les partenaires dont l'abonnement est expiré ou suspendu
+    const visibles = data.filter(p => p.statut_abonnement !== 'Expiré' && !p.suspended);
+    setPartenaires(visibles);
     setLoading(false);
   };
 
