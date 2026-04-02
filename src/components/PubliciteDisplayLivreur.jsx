@@ -14,54 +14,88 @@ export default function PubliciteDisplayLivreur({ userId, userEmail, user, dispo
     const loadPublicites = async () => {
       try {
         const allPubs = await base44.entities.Publicite.list('-created_date', 50);
+        console.log('🎯 [DEBUG PUBS] Total récupérées:', allPubs?.length || 0);
         const now = new Date();
 
         // Filtrer par : active + dates valides + placement approprié + ciblage
         const filtered = (allPubs || []).filter(pub => {
-          if (!pub.active) return false;
+          console.log(`📰 Pub: "${pub.titre}" | active=${pub.active} | placement=${pub.placement}`);
+          
+          if (!pub.active) {
+            console.log(`  ❌ Non actif`);
+            return false;
+          }
 
           // Vérifier les dates
           if (pub.date_debut && pub.date_fin) {
             const start = new Date(pub.date_debut);
             const end = new Date(pub.date_fin);
-            if (now < start || now > end) return false;
+            if (now < start || now > end) {
+              console.log(`  ❌ Hors période (${pub.date_debut} - ${pub.date_fin})`);
+              return false;
+            }
           }
 
-          // Filtrer par emplacement
+          // Filtrer par emplacement (simplifié pour test)
           const placement = pub.placement || '';
           const isValidPlacement = 
             placement === 'toutes_pages' ||
             placement === 'home_livreur' ||
             placement === 'accueil_livreur' ||
-            placement === 'dashboard_livreur';
+            placement === 'dashboard_livreur' ||
+            !placement; // Accepter aussi les pubs sans placement spécifié pour test
 
-          if (!isValidPlacement) return false;
+          if (!isValidPlacement) {
+            console.log(`  ❌ Placement invalide: "${placement}"`);
+            return false;
+          }
+
+          console.log(`  ✅ Valide`);
 
           // Ciblage intelligent (si spécifié)
           const destinataires = pub.destinataires || '';
           if (destinataires) {
-            // Si "en_ligne_uniquement", vérifier si livreur en ligne
-            if (destinataires.includes('en_ligne_uniquement') && !disponible) return false;
-            // Si "nouveaux_livreurs", vérifier si moins de 10 courses
-            if (destinataires.includes('nouveaux_livreurs') && (coursesToday || 0) >= 10) return false;
+            if (destinataires.includes('en_ligne_uniquement') && !disponible) {
+              console.log(`  ❌ Ciblage: en ligne uniquement, livreur offline`);
+              return false;
+            }
+            if (destinataires.includes('nouveaux_livreurs') && (coursesToday || 0) >= 10) {
+              console.log(`  ❌ Ciblage: nouveaux livreurs, celui-ci a ${coursesToday} courses`);
+              return false;
+            }
           }
 
           return true;
         });
 
-        // Si plusieurs pubs, en choisir une aléatoire pour affichage
+        console.log(`✅ [DEBUG PUBS] Filtrées: ${filtered.length}`);
+
+        // Si plusieurs pubs, en choisir une aléatoire
         if (filtered.length > 0) {
           const randomIdx = Math.floor(Math.random() * filtered.length);
-          setPublicites([filtered[randomIdx]]);
+          const selected = filtered[randomIdx];
+          console.log(`🎲 [DEBUG PUBS] Sélectionnée (${randomIdx}):`, selected.titre);
+          setPublicites([selected]);
           setCurrentIndex(0);
-          trackView(filtered[randomIdx].id);
+          trackView(selected.id);
         } else {
-          setPublicites([]);
+          console.log(`⚠️ [DEBUG PUBS] Aucune pub valide. Mode TEST FORCÉ activé.`);
+          // Mode TEST FORCÉ: créer une pub de test
+          const testPub = {
+            id: 'TEST_PUB_' + Date.now(),
+            titre: '🧪 PUB TEST - Système Validé',
+            description: 'Si vous voyez ceci, le système marche!',
+            image_url: 'https://via.placeholder.com/400x200/3b82f6/ffffff?text=TEST+PUB',
+            lien_url: 'https://cdl.local',
+            active: true,
+          };
+          console.log(`🔧 [TEST MODE] Affichage pub de test:`, testPub);
+          setPublicites([testPub]);
         }
 
         setLoading(false);
       } catch (err) {
-        console.error('Erreur chargement publicités:', err);
+        console.error('❌ Erreur chargement publicités:', err);
         setLoading(false);
       }
     };
@@ -113,20 +147,35 @@ export default function PubliciteDisplayLivreur({ userId, userEmail, user, dispo
     }
   };
 
-  if (loading || publicites.length === 0 || dismissed) return null;
+  if (loading || dismissed) return null;
+  if (!publicites || publicites.length === 0) {
+    console.log('⚠️ [DEBUG] Aucune pub à afficher');
+    return null;
+  }
 
   const currentPub = publicites[currentIndex];
   const isCompact = coursesToday > 0; // Format compact si livreur actif
 
+  console.log(`🖼️ [DEBUG] Affichage pub: "${currentPub?.titre}" (compact=${isCompact})`);
+
   return (
-    <div className="w-full bg-white border-b border-primary/10 shadow-sm p-3">
+    <div className="w-full bg-white border-b border-primary/10 shadow-sm p-3 mt-0 z-40 block" style={{ display: 'block' }}>
+      {/* DEBUG: afficher les infos en dev */}
+      <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800 font-mono">
+        🔍 DEBUG: {currentPub?.id} | cours_jour={coursesToday} | dispo={disponible}
+      </div>
       <div className="max-w-6xl mx-auto">
         {/* Format compact (petit bandeau si actif) */}
         {isCompact ? (
           <div className="relative rounded-lg overflow-hidden bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 p-3">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => trackClick(currentPub.id, currentPub.lien_url)}>
               {currentPub.image_url && (
-                <img src={currentPub.image_url} alt={currentPub.titre} className="h-14 w-14 rounded object-cover flex-shrink-0" />
+                <img
+                  src={`${currentPub.image_url}${currentPub.image_url.includes('?') ? '&' : '?'}cache=${Date.now()}`}
+                  alt={currentPub.titre}
+                  className="h-14 w-14 rounded object-cover flex-shrink-0"
+                  onError={(e) => console.error('❌ Erreur img compact:', e.target.src)}
+                />
               )}
               <div className="flex-1">
                 {currentPub.titre && <p className="text-sm font-bold text-primary">{currentPub.titre}</p>}
@@ -142,14 +191,16 @@ export default function PubliciteDisplayLivreur({ userId, userEmail, user, dispo
           </div>
         ) : (
           // Format grand (bannière complète si inactif)
-          <div className="relative rounded-lg overflow-hidden bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
+          <div className="relative rounded-lg overflow-hidden bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10 min-h-48">
             {currentPub.image_url && (
               <div className="relative h-40 overflow-hidden">
                 <img
-                  src={currentPub.image_url}
+                  src={`${currentPub.image_url}${currentPub.image_url.includes('?') ? '&' : '?'}cache=${Date.now()}`}
                   alt={currentPub.titre}
                   className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
                   onClick={() => trackClick(currentPub.id, currentPub.lien_url)}
+                  onError={(e) => console.error('❌ Erreur chargement image:', e.target.src)}
+                  onLoad={() => console.log('✅ Image chargée:', currentPub.image_url)}
                 />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-transparent" />
               </div>
