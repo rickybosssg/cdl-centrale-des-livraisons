@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { User, Trash2 } from "lucide-react";
+import { User, Trash2, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import RoleSetup from "../components/RoleSetup";
 import LivreurDocuments from "../components/LivreurDocuments";
@@ -113,6 +113,20 @@ export default function Home() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Utilisateur non authentifié → afficher bouton login téléphone
+  if (!user) {
+    return (
+      <div className="fixed bottom-6 left-6 right-6 z-40">
+        <Link to="/phone-auth" className="block">
+          <button className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2">
+            <Phone className="h-5 w-5" />
+            Connexion par téléphone
+          </button>
+        </Link>
       </div>
     );
   }

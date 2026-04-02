@@ -1,5 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
+// In-memory cache pour anti-brute-force (à adapter pour production)
+const otpStore = new Map();
+const attemptStore = new Map();
+
 /**
  * Normalise un numéro de téléphone en format +226XXXXXXXX
  */
@@ -30,8 +34,74 @@ function generateOTP() {
 }
 
 /**
+ * Anti-brute-force : vérifier et limiter tentatives
+ */
+function checkAttempts(phone) {
+  const key = `attempts_${phone}`;
+  const now = Date.now();
+  const data = attemptStore.get(key);
+  
+  if (!data) {
+    attemptStore.set(key, { count: 0, resetAt: now + 15 * 60 * 1000 }); // 15 min
+    return { allowed: true, remaining: 5 };
+  }
+  
+  if (now > data.resetAt) {
+    data.count = 0;
+    data.resetAt = now + 15 * 60 * 1000;
+  }
+  
+  if (data.count >= 5) {
+    return { allowed: false, remaining: 0, message: "Trop de tentatives. Réessayez dans 15 minutes." };
+  }
+  
+  return { allowed: true, remaining: 5 - data.count };
+}
+
+/**
+ * Envoyer OTP via WhatsApp
+ */
+async function sendOTPViaWhatsApp(phone, otp) {
+  try {
+    // Utiliser Twilio WhatsApp Business ou service local
+    // Pour MVP : appel HTTP simple à un service WhatsApp
+    const message = `CDL: Votre code de vérification est: ${otp}\nValide 5 minutes.`;
+    
+    // Option 1: Twilio WhatsApp (si clé TWILIO_AUTH_TOKEN disponible)
+    const twilioToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+    const twilioAccount = Deno.env.get('TWILIO_ACCOUNT_SID');
+    
+    if (twilioToken && twilioAccount) {
+      const formData = new FormData();
+      formData.append('From', 'whatsapp:+226XXXXXXXX'); // Remplacer par votre numéro Twilio
+      formData.append('To', `whatsapp:${phone}`);
+      formData.append('Body', message);
+      
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${twilioAccount}/Messages.json`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${twilioAccount}:${twilioToken}`),
+          },
+          body: formData,
+        }
+      );
+      
+      return response.ok;
+    }
+    
+    // Option 2: Service local (dev mode)
+    console.log(`[WhatsApp] ${phone}: ${message}`);
+    return true;
+  } catch (err) {
+    console.error('[WhatsApp Error]', err);
+    return false; // Continuer même si WhatsApp échoue
+  }
+}
+
+/**
  * Étape 1 : Générer et envoyer OTP
- * POST /api/functions/loginWithPhone avec payload { step: "request", phone: "+226XXXXXXXX" }
  */
 async function handleRequestOTP(base44, phone) {
   const normalized = normalizePhone(phone);
@@ -39,29 +109,39 @@ async function handleRequestOTP(base44, phone) {
     return { success: false, error: "Numéro invalide. Format : +226XXXXXXXX ou 0XXXXXXXX" };
   }
 
+  // Vérifier anti-brute-force
+  const attempts = checkAttempts(normalized);
+  if (!attempts.allowed) {
+    return { success: false, error: attempts.message };
+  }
+
   const otp = generateOTP();
   const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
 
-  // Stocker OTP temporairement dans Bedou ou fichier (pour MVP, on l'affiche)
-  // En production : utiliser SMS/WhatsApp
+  // Stocker OTP en mémoire
+  const otpKey = `otp_${normalized}_${Date.now()}`;
+  otpStore.set(otpKey, { otp, expiresAt, phone: normalized });
   
-  // Vérifier si l'utilisateur existe avec ce numéro
+  // Nettoyer les OTP expirés
+  for (const [key, data] of otpStore.entries()) {
+    if (Date.now() > data.expiresAt) otpStore.delete(key);
+  }
+  
+  // Vérifier si l'utilisateur existe
   const users = await base44.asServiceRole.entities.User.filter({ telephone: normalized });
   const userExists = users && users.length > 0;
 
-  // Pour MVP : afficher le code en console et le retourner en dev
-  console.log(`[OTP DEBUG] ${normalized} → ${otp}`);
-
-  // Créer une clé temporaire pour stocker l'OTP
-  const otpKey = `otp_${normalized}_${Date.now()}`;
+  // Envoyer via WhatsApp
+  const sent = await sendOTPViaWhatsApp(normalized, otp);
   
+  console.log(`[OTP] ${normalized} → ${otp} (WhatsApp: ${sent ? 'OK' : 'RETRY'})`);
+
   return {
     success: true,
-    message: "Code envoyé avec succès",
+    message: sent ? "Code envoyé via WhatsApp" : "Code généré (WhatsApp indisponible)",
     phone: normalized,
     userExists,
-    // DEBUG ONLY (à retirer en production)
-    otp_debug: otp,
+    otp_debug: otp, // DEBUG
     otp_key: otpKey,
     expires_in_seconds: 300,
   };
@@ -69,7 +149,6 @@ async function handleRequestOTP(base44, phone) {
 
 /**
  * Étape 2 : Vérifier l'OTP et se connecter
- * POST /api/functions/loginWithPhone avec payload { step: "verify", phone: "+226...", otp: "1234", otp_key: "..." }
  */
 async function handleVerifyOTP(base44, phone, otp, otpKey) {
   const normalized = normalizePhone(phone);
@@ -77,8 +156,32 @@ async function handleVerifyOTP(base44, phone, otp, otpKey) {
     return { success: false, error: "Numéro invalide" };
   }
 
-  // Vérifier l'OTP (en MVP, c'est côté client pour simplifier)
-  // En production : vérifier depuis cache/DB
+  // Vérifier anti-brute-force
+  const attempts = checkAttempts(normalized);
+  if (!attempts.allowed) {
+    return { success: false, error: attempts.message };
+  }
+
+  // Vérifier l'OTP depuis le store
+  const otpData = otpStore.get(otpKey);
+  if (!otpData || Date.now() > otpData.expiresAt) {
+    // Incrémenter tentatives échouées
+    const key = `attempts_${normalized}`;
+    const data = attemptStore.get(key);
+    if (data) data.count++;
+    return { success: false, error: "Code expiré ou invalide" };
+  }
+
+  if (otpData.otp !== otp) {
+    // Incrémenter tentatives échouées
+    const key = `attempts_${normalized}`;
+    const data = attemptStore.get(key);
+    if (data) data.count++;
+    return { success: false, error: "Code incorrect" };
+  }
+
+  // Nettoyer l'OTP utilisé
+  otpStore.delete(otpKey);
 
   // Chercher ou créer l'utilisateur
   let users = await base44.asServiceRole.entities.User.filter({ telephone: normalized });

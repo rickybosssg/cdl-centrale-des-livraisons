@@ -148,7 +148,7 @@ export default function PhoneAuth() {
               </Button>
 
               <p className="text-[10px] text-muted-foreground text-center">
-                Vous recevrez un code par SMS ou WhatsApp
+                Vous recevrez un code par WhatsApp en quelques secondes
               </p>
             </div>
           )}
@@ -156,9 +156,9 @@ export default function PhoneAuth() {
           {/* ÉTAPE 2: ENTRER L'OTP */}
           {step === "otp" && (
             <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
-                <p className="text-xs text-blue-700">
-                  Code envoyé à <strong>+226 {phone.replace(/\D/g, "").slice(-8).slice(0, 3)} ••• {phone.replace(/\D/g, "").slice(-2)}</strong>
+              <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                <p className="text-xs text-green-700 flex items-center gap-1">
+                  <span>✓</span> Code envoyé via WhatsApp à <strong>+226 {phone.replace(/\D/g, "").slice(-8).slice(0, 3)} ••• {phone.replace(/\D/g, "").slice(-2)}</strong>
                 </p>
               </div>
 
