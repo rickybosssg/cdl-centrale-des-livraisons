@@ -150,9 +150,19 @@ export default function RoleSetup({ onComplete }) {
         });
       } catch (_) {}
     }
+    // Créer aussi un UserProfile pour le système multi-profils
+    try {
+      await base44.functions.invoke('addProfileToUser', {
+        profile_type: selectedRole,
+        data: {
+          telephone: form.telephone,
+          quartier: form.quartier,
+          ...(selectedRole === 'livreur' ? { moyen_deplacement: JSON.stringify(moyenDeplacement) } : {}),
+        },
+      });
+    } catch (_) {}
     setLoading(false);
     localStorage.removeItem('cdl_pending_role');
-    // Aller directement vers onComplete → Home détecte livreur+docs_envoyes=false → LivreurDocuments
     onComplete();
   };
 

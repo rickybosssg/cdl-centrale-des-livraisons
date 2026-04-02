@@ -146,36 +146,46 @@ export default function Home() {
     );
   }
 
-  // CODE UNREACHABLE - Si isAdmin, on retourne plus haut
-  // Mais juste au cas où...
-  let activeProfile = user?.active_profile_type || user?.user_type;
-  console.log('[Home] [UNREACHABLE] activeProfile:', activeProfile);
+  // Profil actif déterminé depuis les données user
+  const activeProfile = user?.active_profile_type || user?.user_type;
+  // Profil UserProfile correspondant au type actif
+  const activeUserProfile = allProfiles.find(p => p.profile_type === activeProfile);
+  // Profil livreur + détection docs
+  const livreurProfile = allProfiles.find(p => p.profile_type === 'livreur');
+  const livreurHasDocs = !!(livreurProfile?.documents_json && (() => {
+    try { const d = JSON.parse(livreurProfile.documents_json); return d.photo_profil && d.photo_identite_recto; } catch { return false; }
+  })());
 
   // 2. Pas encore de profil → inscription
   if (!activeProfile) {
     return <RoleSetup onComplete={loadUser} />;
   }
 
-  // 3. Livreur inscrit mais n'a pas encore envoyé ses documents
-  if (activeProfile === 'livreur' && !user.docs_envoyes) {
+  // 3. Livreur sans docs
+  if (activeProfile === 'livreur' && !user.docs_envoyes && !livreurHasDocs) {
     return <LivreurDocuments onComplete={loadUser} />;
   }
 
   // 4. Compte bloqué
-  if (user.livreur_bloque || user.statut_compte === 'bloque') {
-    return <AttentePage profile={activeProfile} isBlocked={true} blockReason={user.motif_blocage || ''} />;
+  const isAccountBlocked = activeUserProfile?.status === 'bloque' || user.livreur_bloque || user.statut_compte === 'bloque';
+  if (isAccountBlocked) {
+    return <AttentePage profile={activeProfile} isBlocked={true} blockReason={activeUserProfile?.blocked_reason || user.motif_blocage || ''} />;
   }
 
   // 5. En attente de validation du profil actif
   const needsValidation = ['livreur', 'partenaire', 'commercial'].includes(activeProfile);
   const isValidated =
+    activeUserProfile?.status === 'actif' ||
     user.profil_valide ||
     user.statut_validation_livreur === 'valide' ||
     user.statut_validation_commercial === 'valide' ||
     user.statut_validation_partenaire === 'valide';
 
+  const motifRefus = activeUserProfile?.refusal_reason || user.motif_refus;
+  const docsOk = livreurHasDocs || user.docs_envoyes;
+
   if (needsValidation && !isValidated) {
-    return <AttentePage profile={activeProfile} docsEnvoyes={user.docs_envoyes} motifRefus={user.motif_refus} />;
+    return <AttentePage profile={activeProfile} docsEnvoyes={docsOk} motifRefus={motifRefus} status={activeUserProfile?.status} />;
   }
 
   // 6. Dashboard selon le profil actif

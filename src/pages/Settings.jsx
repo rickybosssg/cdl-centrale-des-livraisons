@@ -443,7 +443,7 @@ export default function Settings() {
                   );
                 })()}
                 <div className="space-y-3 p-3 rounded-xl bg-muted/50">
-                  {Object.entries(PROFILES.find(p => p.type === selectedProfile)?.fields || {}).map(([key, label]) => (
+                  {Object.entries(PROFILES.find(p => p.type === selectedProfile)?.fields || {}).filter(([key]) => key !== 'code_promo').map(([key, label]) => (
                     <div key={key} className="space-y-1">
                       <Label className="text-xs font-semibold">{label} *</Label>
                       <Input

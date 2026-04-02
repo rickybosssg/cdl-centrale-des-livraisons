@@ -21,7 +21,7 @@ const PROFILE_REQUIREMENTS = {
   },
   commercial: {
     immediate: false,
-    fields: ['telephone', 'quartier', 'code_promo'],
+    fields: ['telephone', 'quartier'],
     documents: [],
     needsAdminValidation: true,
   },
