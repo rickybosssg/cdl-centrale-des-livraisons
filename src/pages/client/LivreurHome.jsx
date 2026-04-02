@@ -6,7 +6,6 @@ import PubliciteDisplayLivreur from "../../components/PubliciteDisplayLivreur";
 import LivreurBadges from "../../components/LivreurBadges";
 import LivreurGameStats from "../../components/LivreurGameStats";
 import ChatAdmin from "@/components/ChatAdmin";
-import BannierePublicitaire from "../../components/BannierePublicitaire";
 import BedouWidget from "../../components/BedouWidget";
 import { toast } from "sonner";
 import SoldeBlock from "../../components/SoldeBlock";
@@ -301,7 +300,7 @@ export default function LivreurHome({ user }) {
       <SoldeBlock user={user} />
 
       {/* Bannière publicitaire */}
-      <BannierePublicitaire placement="home_livreur" />
+      {user && <PubliciteDisplayLivreur userId={user.id} userEmail={user.email} />}
 
       {/* Zone chaude */}
       {disponible && zoneChaudeCount >= 3 && (
