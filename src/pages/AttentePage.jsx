@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
+import { useNavigate } from "react-router-dom";
+import { MessageCircle, FolderOpen } from "lucide-react";
 
 const PROFIL_LABELS = {
   livreur: { emoji: "🛵", label: "Livreur", color: "bg-blue-50 border-blue-200 text-blue-800" },
@@ -9,6 +11,7 @@ const PROFIL_LABELS = {
 
 export default function AttentePage({ profile, isBlocked = false, blockReason = "", docsEnvoyes = true, motifRefus = "" }) {
   const info = PROFIL_LABELS[profile] || { emoji: "⏳", label: profile, color: "bg-gray-50 border-gray-200 text-gray-800" };
+  const navigate = useNavigate();
 
   const handleLogout = () => base44.auth.logout(window.location.href);
 
@@ -98,6 +101,33 @@ export default function AttentePage({ profile, isBlocked = false, blockReason = 
             <li>Vous serez notifié par email ou WhatsApp</li>
             <li>Délai habituel : 24 à 48h</li>
           </ul>
+        </div>
+
+        {/* ✅ Messagerie accessible même avant validation */}
+        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 space-y-3">
+          <p className="text-sm font-semibold text-blue-900">📩 Messagerie administrative</p>
+          <p className="text-xs text-blue-700">
+            L'admin peut vous contacter pour compléter votre dossier. Consultez vos messages.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button
+              className="w-full gap-2"
+              onClick={() => navigate('/mes-discussions')}
+            >
+              <MessageCircle className="h-4 w-4" />
+              Voir mes messages
+            </Button>
+            {!docsEnvoyes && (
+              <Button
+                variant="outline"
+                className="w-full gap-2 border-blue-300 text-blue-700"
+                onClick={() => navigate('/settings')}
+              >
+                <FolderOpen className="h-4 w-4" />
+                Compléter mon dossier
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="p-4 rounded-xl bg-gray-50 border text-sm text-muted-foreground space-y-1">

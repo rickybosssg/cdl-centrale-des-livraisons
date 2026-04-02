@@ -20,10 +20,12 @@
       "type": "string",
       "enum": [
         "draft",
+        "incomplet",
         "en_attente",
         "actif",
         "refuse",
-        "suspendu"
+        "suspendu",
+        "bloque"
       ],
       "title": "Statut du profil",
       "default": "draft"

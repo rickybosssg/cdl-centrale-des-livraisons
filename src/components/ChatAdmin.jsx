@@ -5,12 +5,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import moment from "moment";
 
+const ROLE_LABELS = {
+  admin: "Administrateur",
+  livreur: "Livreur",
+  client: "Client",
+  partenaire: "Partenaire",
+  commercial: "Commercial",
+};
+
+const QUICK_MESSAGES = [
+  "Bonjour, votre dossier est en cours d'examen.",
+  "Merci d'ajouter votre CNIB (recto + verso).",
+  "Merci d'ajouter une photo de votre moto ou véhicule.",
+  "Votre photo est floue, veuillez la reprendre.",
+  "Veuillez compléter les informations manquantes.",
+  "Votre dossier a été validé ✅",
+  "Votre dossier a été refusé. Motif : ",
+];
+
 // Composant de messagerie admin générique (fonctionne avec livreur, client, partenaire, commercial)
 export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser: propUser }) {
   const [currentUser, setCurrentUser] = useState(propUser);
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
+  const [showQuick, setShowQuick] = useState(false);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -84,14 +103,7 @@ export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser
   };
 
   const isMe = (msg) => msg.sender_email === currentUser?.email;
-
-  const ROLE_LABELS = {
-    admin: "Administrateur",
-    livreur: "Livreur",
-    client: "Client",
-    partenaire: "Partenaire",
-    commercial: "Commercial",
-  };
+  const isAdmin = currentUser?.role === "admin";
 
   return (
     <div className="flex flex-col h-72">
@@ -113,7 +125,32 @@ export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser
         ))}
         <div ref={bottomRef} />
       </div>
+      {/* Messages rapides admin */}
+      {isAdmin && showQuick && (
+        <div className="mb-2 p-2 rounded-lg bg-muted/50 border space-y-1">
+          {QUICK_MESSAGES.map((msg, i) => (
+            <button
+              key={i}
+              onClick={() => { setNewMsg(msg); setShowQuick(false); }}
+              className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-primary/10 hover:text-primary transition-colors"
+            >
+              {msg}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2">
+        {isAdmin && (
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={() => setShowQuick(v => !v)}
+            title="Messages rapides"
+            className="flex-shrink-0"
+          >
+            <span className="text-xs font-bold">⚡</span>
+          </Button>
+        )}
         <Input
           placeholder="Écrire un message..."
           value={newMsg}
