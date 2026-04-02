@@ -31,8 +31,8 @@ function distanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function scoreDriver(driver, course) {
-  // ── SCORING INTELLIGENT (100 points max) ────────────────────────────────
+function scoreDriver(driver, course, zoneBoost = 0) {
+  // ── SCORING INTELLIGENT (100 pts base + bonus/pénalités) ─────────────────
   // 40% distance | 30% taux acceptation | 20% temps réponse | 10% activité
 
   // ── 1. DISTANCE (40 pts max) ─────────────────────────────────────────
@@ -45,7 +45,6 @@ function scoreDriver(driver, course) {
     else if (dist <= 10) distScore = 12;
     else                 distScore = 4;
   } else {
-    // Fallback quartier si pas de GPS
     if (driver.quartier === course.quartier_depart)                              distScore = 30;
     else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier))  distScore = 18;
     else                                                                          distScore = 8;
@@ -55,18 +54,19 @@ function scoreDriver(driver, course) {
   let acceptScore = 0;
   const proposees = driver.courses_proposees || 0;
   const acceptees = driver.courses_acceptees || (driver.total_courses_livrees || 0);
-  if (proposees > 0) {
-    const taux = Math.min(acceptees / proposees, 1); // 0→1
+  const taux = proposees > 0 ? Math.min(acceptees / proposees, 1) : null;
+
+  if (taux !== null) {
     acceptScore = Math.round(taux * 30);
   } else if (acceptees > 0) {
-    acceptScore = 20; // livreur avec historique mais pas encore de ratio connu
+    acceptScore = 20;
   } else {
     acceptScore = 15; // nouveau livreur : neutre
   }
 
   // ── 3. TEMPS DE RÉPONSE (20 pts max) ─────────────────────────────────
   let reponseScore = 0;
-  const tempsReponseMoyen = driver.temps_reponse_moyen_sec || null; // en secondes
+  const tempsReponseMoyen = driver.temps_reponse_moyen_sec || null;
   if (tempsReponseMoyen !== null) {
     if (tempsReponseMoyen <= 15)       reponseScore = 20;
     else if (tempsReponseMoyen <= 30)  reponseScore = 16;
@@ -74,29 +74,58 @@ function scoreDriver(driver, course) {
     else if (tempsReponseMoyen <= 60)  reponseScore = 8;
     else                               reponseScore = 4;
   } else {
-    reponseScore = 10; // neutre si pas de données
+    reponseScore = 10;
   }
 
-  // ── 4. ACTIVITÉ RÉCENTE (10 pts max) ──────────────────────────────────
+  // ── 4. ACTIVITÉ RÉCENTE + DISPONIBILITÉ (10 pts max) ───────────────────
   let activiteScore = 0;
   const derniereActivite = driver.derniere_course_attribuee_at || driver.updated_date;
   if (derniereActivite) {
     const heuresDepuis = (Date.now() - new Date(derniereActivite).getTime()) / 3600000;
-    if (heuresDepuis <= 1)       activiteScore = 10; // actif cette heure
+    if (heuresDepuis <= 1)       activiteScore = 10;
     else if (heuresDepuis <= 4)  activiteScore = 8;
     else if (heuresDepuis <= 12) activiteScore = 5;
     else if (heuresDepuis <= 24) activiteScore = 3;
     else                         activiteScore = 1;
   } else {
-    activiteScore = 5; // nouveau
+    activiteScore = 5;
   }
 
-  // ── BONUS urgence (hors pondération) ───────────────────────────────────
-  const urgence = course.urgence || course.niveau_urgence;
-  const urgenceBonus = urgence === 'tres_urgent' ? 20 : urgence === 'urgent' ? 10 : 0;
+  // Bonus disponibilité continue : livreur en ligne depuis longtemps sans course
+  if (driver.en_ligne_depuis) {
+    const heuresEnLigne = (Date.now() - new Date(driver.en_ligne_depuis).getTime()) / 3600000;
+    if (heuresEnLigne >= 1 && (driver.nombre_courses_actives || 0) === 0) {
+      activiteScore = Math.min(activiteScore + 3, 10); // attend depuis + de 1h sans course
+    }
+  }
 
-  const total = distScore + acceptScore + reponseScore + activiteScore + urgenceBonus;
-  return total;
+  let baseScore = distScore + acceptScore + reponseScore + activiteScore;
+
+  // ── BONUS PERFORMANCE (comportement excellent) ──────────────────────────
+  if (taux !== null && taux >= 0.8) baseScore += 15;          // taux acceptation > 80%
+  if (tempsReponseMoyen !== null && tempsReponseMoyen < 30) baseScore += 10; // réponse rapide
+  if ((driver.note_moyenne || 0) >= 4.5) baseScore += 8;      // excellente note
+
+  // ── PÉNALITÉS AUTOMATIQUES (mauvais comportement) ───────────────────────
+  if (tempsReponseMoyen !== null && tempsReponseMoyen > 60) {
+    baseScore = Math.round(baseScore * 0.90); // -10% si temps > 1 min
+  }
+  if (taux !== null && proposees >= 5 && taux < 0.5) {
+    baseScore = Math.round(baseScore * 0.80); // -20% si refus répétés
+  }
+  if ((driver.courses_refusees_consecutives || 0) >= 3) {
+    baseScore = Math.round(baseScore * 0.75); // -25% si 3 refus consécutifs
+  }
+
+  // ── BOOST DE ZONE (forte demande, peu de livreurs) ─────────────────────
+  baseScore += zoneBoost;
+
+  // ── BONUS URGENCE ────────────────────────────────────────────────────
+  const urgence = course.urgence || course.niveau_urgence;
+  if (urgence === 'tres_urgent') baseScore += 20;
+  else if (urgence === 'urgent') baseScore += 10;
+
+  return baseScore;
 }
 
 Deno.serve(async (req) => {
@@ -219,9 +248,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── CALCUL BOOST DE ZONE ─────────────────────────────────────────────────
+    // Zone boost : si forte demande (>3 courses en attente) et peu de livreurs (<3)
+    let zoneBoostValue = 0;
+    const zoneDepart = course.quartier_depart;
+    const livreursInZone = candidates.filter(d => d.quartier === zoneDepart || (
+      d.gps_latitude && d.gps_longitude && course.latitude_depart && course.longitude_depart &&
+      distanceKm(d.gps_latitude, d.gps_longitude, course.latitude_depart, course.longitude_depart) <= 3
+    )).length;
+    const coursesZone = 1; // la course actuelle, on pourrait charger les autres mais c'est suffisant
+    if (livreursInZone <= 2) zoneBoostValue = 20; // zone sous-couverte
+    else if (livreursInZone <= 4) zoneBoostValue = 10;
+    console.log(`[DISPATCH] Zone ${zoneDepart}: ${livreursInZone} livreur(s) → boost +${zoneBoostValue}`);
+
     // Scorer et trier les candidats
     const scored = candidates
-      .map(d => ({ driver: d, score: scoreDriver(d, course) }))
+      .map(d => ({ driver: d, score: scoreDriver(d, course, zoneBoostValue) }))
       .sort((a, b) => b.score - a.score);
 
     const best = scored[0].driver;
@@ -250,11 +292,13 @@ Deno.serve(async (req) => {
       livreur_note_semaine: best.note_semaine || null,
     });
 
-    // Mettre à jour le livreur
+    // Mettre à jour le livreur (métriques d'apprentissage)
     await base44.asServiceRole.entities.User.update(best.id, {
       nombre_courses_actives: (best.nombre_courses_actives || 0) + 1,
       derniere_course_attribuee_at: now,
       courses_proposees: (best.courses_proposees || 0) + 1,
+      // Réinitialiser le compteur de refus consécutifs à la prochaine proposition
+      derniere_proposition_at: now,
     });
 
     // Notifier le livreur (déclenche aussi la notification navigateur)

@@ -59,9 +59,19 @@ export default function CoursesDisponibles() {
       mode_assignation: "manuel",
       telephone_livreur: user.telephone || "",
     });
+    // Métriques d'apprentissage : incrémenter courses_acceptees + réinitialiser refus consécutifs
+    const now = new Date().toISOString();
+    const proposeeAt = course.heure_assignation ? new Date(course.heure_assignation).getTime() : null;
+    const tempsReponse = proposeeAt ? Math.round((Date.now() - proposeeAt) / 1000) : null;
+    const newMoyenne = tempsReponse && user.temps_reponse_moyen_sec
+      ? Math.round((user.temps_reponse_moyen_sec * 0.8) + (tempsReponse * 0.2)) // moyenne glissante
+      : tempsReponse || user.temps_reponse_moyen_sec;
     await base44.auth.updateMe({
       nombre_courses_actives: (user.nombre_courses_actives || 0) + 1,
-      derniere_course_attribuee_at: new Date().toISOString(),
+      derniere_course_attribuee_at: now,
+      courses_acceptees: (user.courses_acceptees || 0) + 1,
+      courses_refusees_consecutives: 0, // réinitialiser sur acceptation
+      ...(newMoyenne ? { temps_reponse_moyen_sec: newMoyenne } : {}),
     });
     vibrateSuccess();
     toast.success("🛥 Course acceptée ! Bonne livraison !");

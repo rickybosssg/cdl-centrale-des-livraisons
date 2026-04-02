@@ -53,13 +53,20 @@ Deno.serve(async (req) => {
           : h
       );
 
-      // Décrémenter le compteur du livreur actuel
+      // Décrémenter le compteur du livreur + mettre à jour métriques d'apprentissage
       if (course.livreur_email) {
         const drivers = await base44.asServiceRole.entities.User.filter({ email: course.livreur_email });
         if (drivers.length > 0) {
           const driver = drivers[0];
+          // Temps de non-réponse = temps écoulé depuis assignation (en secondes)
+          const tempsNonReponse = Math.round(elapsed / 1000);
+          const newMoyenne = driver.temps_reponse_moyen_sec
+            ? Math.round((driver.temps_reponse_moyen_sec * 0.8) + (tempsNonReponse * 0.2))
+            : tempsNonReponse;
           await base44.asServiceRole.entities.User.update(driver.id, {
             nombre_courses_actives: Math.max(0, (driver.nombre_courses_actives || 0) - 1),
+            courses_refusees_consecutives: (driver.courses_refusees_consecutives || 0) + 1,
+            temps_reponse_moyen_sec: newMoyenne,
           });
         }
       }
