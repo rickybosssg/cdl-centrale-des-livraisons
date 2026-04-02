@@ -68,6 +68,7 @@ import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
 import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
 import ProfilsAdmin from './pages/dispatcher/ProfilsAdmin';
 import TestUpload from './pages/TestUpload';
+import PhoneAuth from './pages/PhoneAuth';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -153,6 +154,7 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       {/* Routes publiques sans layout */}
+      <Route path="/phone-auth" element={<PhoneAuth />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />
