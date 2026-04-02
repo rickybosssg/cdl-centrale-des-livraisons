@@ -77,17 +77,48 @@ export default function ClientHome({ user }) {
 
       {/* Bouton principal Commander */}
       <Link to="/commander">
-        <div className="flex items-center gap-4 w-full p-5 rounded-2xl bg-primary text-white font-bold shadow-lg active:scale-[0.98] transition-all cursor-pointer">
-          <div className="h-14 w-14 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
-            <Plus className="h-8 w-8 text-white" />
+        <div className="relative overflow-hidden w-full p-6 rounded-3xl bg-gradient-to-br from-primary to-blue-700 text-white shadow-xl active:scale-[0.97] transition-all cursor-pointer">
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-4xl">🛵</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-2xl font-extrabold tracking-tight">Commander une course</p>
+              <p className="text-sm text-white/80 mt-0.5">Livreur disponible en quelques minutes</p>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
+              <span className="text-xl font-bold">→</span>
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="text-xl font-extrabold">Commander une course</p>
-            <p className="text-sm text-white/80">Livraison rapide · Livreur en quelques minutes</p>
+          <div className="flex items-center gap-4 mt-4 pt-3 border-t border-white/20">
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">⚡</span>
+              <span className="text-xs font-semibold text-white/90">Livraison rapide</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">🛡️</span>
+              <span className="text-xs font-semibold text-white/90">Livreurs vérifiés</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">📍</span>
+              <span className="text-xs font-semibold text-white/90">Partout à Ouaga</span>
+            </div>
           </div>
-          <span className="text-2xl">→</span>
         </div>
       </Link>
+
+      {/* Badges de confiance */}
+      <div className="flex items-center justify-center gap-6 py-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-green-500 font-bold text-sm">✓</span>
+          <span className="text-xs text-muted-foreground font-medium">+100 courses livrées</span>
+        </div>
+        <div className="h-3 w-px bg-border" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-green-500 font-bold text-sm">✓</span>
+          <span className="text-xs text-muted-foreground font-medium">Livreurs certifiés CDL</span>
+        </div>
+      </div>
 
       {/* Stats acquisition */}
       <div className="grid grid-cols-3 gap-3">
