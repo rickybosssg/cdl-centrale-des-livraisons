@@ -31,23 +31,56 @@ Deno.serve(async (req) => {
       return l.status === 'incomplet' || l.status === 'en_attente';
     }).length;
 
-    // Compter clients nouveaux (créés depuis 7 jours)
+    // Compter clients : User + UserProfile client
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const clients = await base44.asServiceRole.entities.User.filter({ user_type: "client" });
-    const clientsNouveaux = clients.filter(c => 
+    const [clientUsers, userProfileClients] = await Promise.all([
+      base44.asServiceRole.entities.User.filter({ user_type: "client" }),
+      base44.asServiceRole.entities.UserProfile.filter({ profile_type: "client", deleted: false }),
+    ]);
+    const mapClients = new Map();
+    clientUsers.forEach(u => mapClients.set(u.email, u));
+    userProfileClients.forEach(p => {
+      if (!mapClients.has(p.user_email)) {
+        mapClients.set(p.user_email, { email: p.user_email, created_date: p.created_date });
+      }
+    });
+    const tousClients = Array.from(mapClients.values());
+    const clientsNouveaux = tousClients.filter(c => 
       new Date(c.created_date) > new Date(sevenDaysAgo)
     ).length;
 
-    // Compter partenaires en attente
-    const partenaires = await base44.asServiceRole.entities.Partenaire.list("-created_date", 500);
-    const partenairesAttente = partenaires.filter(p => 
-      p.statut === "en_attente" || !p.statut
+    // Compter partenaires : Partenaire + UserProfile partenaire
+    const [partenairesData, userProfilePartenaires] = await Promise.all([
+      base44.asServiceRole.entities.Partenaire.list("-created_date", 500),
+      base44.asServiceRole.entities.UserProfile.filter({ profile_type: "partenaire", deleted: false }),
+    ]);
+    const mapPartenaires = new Map();
+    partenairesData.forEach(p => mapPartenaires.set(p.user_email, p));
+    userProfilePartenaires.forEach(p => {
+      if (!mapPartenaires.has(p.user_email)) {
+        mapPartenaires.set(p.user_email, { user_email: p.user_email, statut: p.status });
+      }
+    });
+    const tousPartenaires = Array.from(mapPartenaires.values());
+    const partenairesAttente = tousPartenaires.filter(p => 
+      p.statut === "en_attente" || !p.statut || p.status === "en_attente"
     ).length;
 
-    // Compter commerciaux en attente
-    const commerciaux = await base44.asServiceRole.entities.User.filter({ user_type: "commercial" });
-    const commerciauxAttente = commerciaux.filter(c => 
-      !c.statut_validation_commercial || c.statut_validation_commercial === "en_attente"
+    // Compter commerciaux : User + UserProfile commercial
+    const [commerciauxUsers, userProfileCommerciaux] = await Promise.all([
+      base44.asServiceRole.entities.User.filter({ user_type: "commercial" }),
+      base44.asServiceRole.entities.UserProfile.filter({ profile_type: "commercial", deleted: false }),
+    ]);
+    const mapCommerciaux = new Map();
+    commerciauxUsers.forEach(u => mapCommerciaux.set(u.email, u));
+    userProfileCommerciaux.forEach(p => {
+      if (!mapCommerciaux.has(p.user_email)) {
+        mapCommerciaux.set(p.user_email, { email: p.user_email, status: p.status });
+      }
+    });
+    const tousCommerciaux = Array.from(mapCommerciaux.values());
+    const commerciauxAttente = tousCommerciaux.filter(c => 
+      !c.statut_validation_commercial || c.statut_validation_commercial === "en_attente" || c.status === "en_attente"
     ).length;
 
     // Compter profils incomplets
@@ -61,15 +94,15 @@ Deno.serve(async (req) => {
       },
       clients: {
         new: clientsNouveaux,
-        count: clients.length,
+        count: tousClients.length,
       },
       partenaires: {
         pending: partenairesAttente,
-        count: partenaires.length,
+        count: tousPartenaires.length,
       },
       commerciaux: {
         pending: commerciauxAttente,
-        count: commerciaux.length,
+        count: tousCommerciaux.length,
       },
       profilesIncomplets: profilesIncomplets,
     });

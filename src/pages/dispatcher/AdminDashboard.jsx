@@ -111,13 +111,16 @@ export default function AdminDashboard() {
     loadData();
     const interval = setInterval(loadData, 30000);
 
-    // Subscribe à UserProfile pour détecter nouveaux profils livreur créés
+    // Subscribe à UserProfile pour détecter tous types de profils créés
     const unsubProfile = base44.entities.UserProfile.subscribe((event) => {
-      if (event.data?.profile_type === 'livreur' && !event.data?.deleted) {
-        // Rechargement immédiat des données à la création d'un profil livreur
+      // Rechargement à chaque création/update/delete de profil
+      if (!event.data?.deleted || event.type === 'delete') {
         loadData();
       }
     });
+    
+    // Subscribe à Partenaire pour détecte changements partenaires
+    const unsubPartenaire = base44.entities.Partenaire.subscribe(() => loadData());
 
     // Subscriptions temps réel
     const unsubs = [];
@@ -136,6 +139,7 @@ export default function AdminDashboard() {
       clearInterval(interval);
       unsubs.forEach(u => u?.());
       unsubProfile();
+      unsubPartenaire();
     };
   }, []);
 
