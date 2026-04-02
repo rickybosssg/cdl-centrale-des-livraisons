@@ -67,8 +67,23 @@ export default function AppLayoutWrapper({ user }) {
         if (me.email === "weezyh2@gmail.com" || me.role === 'admin') {
           setUserRole("admin");
         } else {
-          // Utiliser le profil actif du système multi-profils, sinon fallback sur user_type
-          setUserRole(me.active_profile_type || me.user_type || "client");
+          // SOURCE DE VÉRITÉ : activeProfileId dans localStorage
+          const storedId = localStorage.getItem('activeProfileId');
+          try {
+            const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
+            let activeProf = profs.find(p => p.id === storedId);
+            if (!activeProf) activeProf = profs.find(p => p.status === 'actif') || profs[0];
+            if (activeProf) {
+              if (!storedId || storedId !== activeProf.id) {
+                localStorage.setItem('activeProfileId', activeProf.id);
+              }
+              setUserRole(activeProf.profile_type);
+            } else {
+              setUserRole(me.user_type || "client");
+            }
+          } catch (_) {
+            setUserRole(me.active_profile_type || me.user_type || "client");
+          }
         }
         window.__cdl_user_email = me.email;
         const firstName = me.full_name?.split(" ")[0] || "";
