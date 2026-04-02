@@ -123,6 +123,10 @@ export default function GererLivreurs() {
   }, []);
 
   const valider = async (livreur) => {
+    if (!livreur.telephone) {
+      toast.error("❌ Impossible de valider : numéro de téléphone manquant");
+      return;
+    }
     await base44.entities.User.update(livreur.id, {
       statut_validation_livreur: "valide",
       profil_valide: true,

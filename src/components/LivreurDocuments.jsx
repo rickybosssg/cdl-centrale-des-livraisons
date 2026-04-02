@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera } from "lucide-react";
+import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 const DOCS = [
@@ -17,6 +18,39 @@ export default function LivreurDocuments({ onComplete }) {
   const [uploading, setUploading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [user, setUser] = useState(null);
+  const [telephone, setTelephone] = useState("");
+  const [savingTel, setSavingTel] = useState(false);
+  const [telSaved, setTelSaved] = useState(false);
+
+  useEffect(() => {
+    base44.auth.me().then(me => {
+      setUser(me);
+      if (me.telephone) { setTelephone(me.telephone); setTelSaved(true); }
+    });
+  }, []);
+
+  const validateTel = (t) => {
+    const cleaned = t.replace(/[\s\-\.\(\)]/g, "");
+    return /^(\+226|00226|0)?[0-9]{8,10}$/.test(cleaned);
+  };
+
+  const saveTelephone = async () => {
+    if (!telephone.trim()) { toast.error("Le numéro est obligatoire"); return; }
+    if (!validateTel(telephone)) { toast.error("Numéro invalide (ex: +22670000000)"); return; }
+    setSavingTel(true);
+    await base44.auth.updateMe({ telephone });
+    // Mettre à jour le UserProfile livreur aussi
+    const me = await base44.auth.me();
+    const profiles = await base44.entities.UserProfile.filter({ user_email: me.email, profile_type: 'livreur', deleted: false });
+    if (profiles.length > 0) {
+      const data = (() => { try { return JSON.parse(profiles[0].data_json || '{}'); } catch(_) { return {}; } })();
+      await base44.entities.UserProfile.update(profiles[0].id, { data_json: JSON.stringify({ ...data, telephone }) });
+    }
+    setTelSaved(true);
+    setSavingTel(false);
+    toast.success("✅ Numéro enregistré");
+  };
 
   const handleFile = (key, e) => {
     const file = e.target.files?.[0];
@@ -27,6 +61,7 @@ export default function LivreurDocuments({ onComplete }) {
 
   const completed = DOCS.filter(d => files[d.key]).length;
   const allDone   = completed === DOCS.length;
+  const canSubmit = allDone && termsAccepted && telSaved;
 
   const handleSubmit = async () => {
     if (!termsAccepted) { toast.error("Veuillez accepter les conditions d'engagement"); return; }
@@ -91,6 +126,38 @@ export default function LivreurDocuments({ onComplete }) {
           </div>
           <h1 className="text-xl font-bold">Complétez votre dossier</h1>
           <p className="text-sm text-muted-foreground">Envoyez vos documents pour activer votre compte livreur</p>
+        </div>
+
+        {/* Bloc téléphone obligatoire */}
+        <div className={`p-4 rounded-xl border-2 space-y-3 ${telSaved ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`}>
+          <div className="flex items-center gap-2">
+            <Phone className={`h-5 w-5 ${telSaved ? 'text-green-600' : 'text-red-600'}`} />
+            <p className={`text-sm font-bold ${telSaved ? 'text-green-800' : 'text-red-800'}`}>
+              Numéro de téléphone *
+            </p>
+            {!telSaved && <span className="text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold">OBLIGATOIRE</span>}
+          </div>
+          {!telSaved ? (
+            <>
+              <p className="text-xs text-red-700">Le numéro de téléphone est obligatoire pour devenir livreur. Il sera utilisé pour les courses et le contact client.</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="+226 XX XX XX XX"
+                  value={telephone}
+                  onChange={e => setTelephone(e.target.value)}
+                  className="flex-1 bg-white"
+                />
+                <Button size="sm" onClick={saveTelephone} disabled={savingTel}>
+                  {savingTel ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Valider'}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-green-700">✅ {telephone}</p>
+              <button onClick={() => setTelSaved(false)} className="text-xs text-muted-foreground underline">Modifier</button>
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -175,9 +242,15 @@ export default function LivreurDocuments({ onComplete }) {
           })}
         </div>
 
+        {!telSaved && (
+          <div className="p-3 rounded-xl bg-red-50 border border-red-300 text-sm text-red-700 text-center font-medium">
+            ⚠️ Renseignez votre numéro de téléphone avant de continuer
+          </div>
+        )}
+
         <Button
           className="w-full h-12 text-base font-semibold"
-          disabled={!allDone || !termsAccepted || uploading}
+          disabled={!canSubmit || uploading}
           onClick={handleSubmit}
         >
           {uploading

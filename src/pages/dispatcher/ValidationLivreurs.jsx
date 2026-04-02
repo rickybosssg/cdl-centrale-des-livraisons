@@ -54,6 +54,10 @@ export default function ValidationLivreurs() {
   }, []);
 
   const valider = async (livreur) => {
+    if (!livreur.telephone) {
+      toast.error("❌ Validation impossible : numéro de téléphone manquant");
+      return;
+    }
     setProcessing(true);
     await base44.entities.User.update(livreur.id, {
       statut_validation_livreur: "valide",
