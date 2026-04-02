@@ -64,7 +64,6 @@ import GestionAcces from './pages/dispatcher/GestionAcces';
 import DiffusionGlobale from './pages/dispatcher/DiffusionGlobale';
 import PendingProfileRequests from './pages/dispatcher/PendingProfileRequests';
 import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
-import WhatsAppOrders from './pages/dispatcher/WhatsAppOrders';
 import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
 import TestUpload from './pages/TestUpload';
 
@@ -225,7 +224,6 @@ const AuthenticatedApp = () => {
           <Route path="/livreurs-incomplets" element={<LivreursIncompletsList />} />
           <Route path="/test-upload" element={<TestUpload />} />
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
-          <Route path="/whatsapp-orders" element={<WhatsAppOrders />} />
         </Route>
       </Route>
 
