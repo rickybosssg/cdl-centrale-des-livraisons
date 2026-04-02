@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Bell, Check, User, Truck, Megaphone, ShieldCheck, AlertTriangle, Info, CheckCircle2, XCircle, Package } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import moment from "moment";
 
 moment.locale("fr");
