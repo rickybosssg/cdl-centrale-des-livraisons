@@ -82,28 +82,29 @@ export default function Suppression() {
       const email = member.email || member.numero_telephone;
       const userId = member.id;
       
-      console.log(`[Suppression] Suppression complète - userId: ${userId}, email: ${email}, type: ${selectedProfile}`);
+      console.log(`[Suppression] ▶️ DÉBUT SUPPRESSION - userId: ${userId}, email: ${email}`);
       
       // Appeler la fonction backend qui supprime complètement l'utilisateur et ses données
       const res = await base44.functions.invoke('deleteUserComplete', {
         user_id: userId,
         user_email: email,
-        profile_type: selectedProfile,
       });
       
-      console.log(`[Suppression] Résultat:`, res.data);
+      console.log(`[Suppression] ✅ RÉSULTAT BACKEND:`, res.data);
       
       if (res.data?.success) {
         const name = member.nom_complet || member.full_name || email;
-        toast.success(`✅ ${name} supprimé définitivement (${res.data.deleted_count} entité(s))`);
-        // Retirer de la liste locale
-        setMembers(members.filter(m => m.id !== member.id));
+        toast.success(`✅ ${name} supprimé définitivement`);
+        // Retirer de la liste locale en utilisant une fonction setState pour éviter les problèmes de stale state
+        setMembers(prev => prev.filter(m => m.id !== member.id));
         setConfirmDelete(null);
+        console.log(`[Suppression] ✅ UTILISATEUR RETIRÉ DE LA LISTE`);
       } else {
+        console.error('[Suppression] ❌ ERREUR BACKEND:', res.data?.error);
         toast.error(res.data?.error || "Erreur lors de la suppression");
       }
     } catch (err) {
-      console.error('[Suppression] Exception:', err);
+      console.error('[Suppression] ❌ EXCEPTION:', err);
       toast.error("Erreur: " + (err.message || err));
     } finally {
       setDeleting(null);
