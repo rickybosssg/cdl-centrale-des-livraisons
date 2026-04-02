@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import moment from "moment";
+import BeDouHistory from "@/components/BeDouHistory";
 
 const METHODES = [
   { value: "orange_money", label: "Orange Money" },
@@ -344,13 +345,10 @@ export default function MonBedou() {
         </div>
       )}
 
-      {/* Historique */}
+      {/* Historique avec BeDouHistory */}
       {tab === "historique" && (
-        <div className="space-y-2">
-          {transactions.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">Aucune transaction pour le moment</p>
-          )}
-          {transactions.map(tx => <TransactionRow key={tx.id} tx={tx} />)}
+        <div className="space-y-4">
+          <BeDouHistory userEmail={user?.email} userRole={user?.user_type} />
         </div>
       )}
     </div>

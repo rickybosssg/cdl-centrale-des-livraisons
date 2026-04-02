@@ -126,10 +126,23 @@ export default function GestionBedou() {
       destinataire_email: request.user_email,
       destinataire_role: request.role,
       titre: `✅ ${type === "recharge" ? "Recharge" : "Retrait"} Bedou validé`,
-      message: `Votre ${type === "recharge" ? "recharge" : "retrait"} de ${montant.toLocaleString()} FCFA a été validé par l'admin CDL.`,
+      message: type === "recharge"
+        ? `✅ Recharge réussie ! Votre compte Bedou a été crédité de ${montant.toLocaleString()} FCFA.`
+        : `✅ Retrait effectué ! Vous avez reçu ${montant.toLocaleString()} FCFA.`,
       type: "success",
       lue: false,
     });
+
+    // Envoyer aussi une notification push
+    try {
+      await base44.functions.invoke('sendFcmNotification', {
+        user_email: request.user_email,
+        title: `✅ ${type === "recharge" ? "Recharge" : "Retrait"} validé`,
+        body: type === "recharge"
+          ? `Votre recharge de ${montant.toLocaleString()} FCFA est validée`
+          : `Votre retrait de ${montant.toLocaleString()} FCFA a été effectué`,
+      });
+    } catch (_) {}
 
     toast.success("✅ Demande validée");
     setDialogOpen(false);
@@ -159,10 +172,21 @@ export default function GestionBedou() {
       destinataire_email: request.user_email,
       destinataire_role: request.role,
       titre: `❌ ${type === "recharge" ? "Recharge" : "Retrait"} Bedou refusé`,
-      message: `Votre ${type === "recharge" ? "recharge" : "retrait"} de ${request.montant?.toLocaleString()} FCFA a été refusé. Motif : ${comment}`,
+      message: type === "recharge"
+        ? `❌ Votre rechargement de ${request.montant?.toLocaleString()} FCFA a été refusé. Motif: ${comment}`
+        : `❌ Votre demande de retrait a été refusée. Motif: ${comment}`,
       type: "danger",
       lue: false,
     });
+
+    // Envoyer aussi une notification push
+    try {
+      await base44.functions.invoke('sendFcmNotification', {
+        user_email: request.user_email,
+        title: `❌ ${type === "recharge" ? "Recharge" : "Retrait"} refusé`,
+        body: `Motif: ${comment}`,
+      });
+    } catch (_) {}
 
     toast.success("❌ Demande refusée");
     setDialogOpen(false);
