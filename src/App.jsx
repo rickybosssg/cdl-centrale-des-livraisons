@@ -77,6 +77,7 @@ import PhoneAuth from './pages/PhoneAuth';
 import HealthDashboard from './pages/dispatcher/HealthDashboard';
 import AuditComplet from './pages/dispatcher/AuditComplet';
 import TestPublicitesVisibilite from './pages/dispatcher/TestPublicitesVisibilite';
+import BedouAudit from './pages/dispatcher/BedouAudit';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -248,6 +249,7 @@ const AuthenticatedApp = () => {
           <Route path="/health-dashboard" element={<HealthDashboard />} />
           <Route path="/audit-complet" element={<AuditComplet />} />
           <Route path="/test-publicites" element={<TestPublicitesVisibilite />} />
+          <Route path="/bedou-audit" element={<BedouAudit />} />
         </Route>
       </Route>
 
