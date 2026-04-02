@@ -108,13 +108,19 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
     images = pub.image_url ? [pub.image_url] : [];
   }
 
-  if (images.length === 0) return null;
+  // Vérifier si c'est une vidéo
+  const isVideo = pub.type === 'Vidéo' || pub.type === 'video';
+
+  if (!isVideo && images.length === 0) return null;
+  if (isVideo && !pub.image_url) return null;
 
   return (
     <div className="w-full">
       <PubliciteCarousel
-        images={images}
+        images={isVideo ? [] : images}
         titre={pub.titre}
+        isVideo={isVideo}
+        videoUrl={isVideo ? pub.image_url : ''}
         onClose={handleDismiss}
         onImageClick={() => trackClick(pub.id, pub.lien_url)}
       />

@@ -67,10 +67,24 @@ export default function GererPublicites() {
   const handleFileChange = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 5 * 1024 * 1024) {
-      toast.error("Fichier trop volumineux (max 5MB)");
+
+    // Limite selon type: vidéo 15MB, image 5MB
+    const MAX_VIDEO = 15 * 1024 * 1024;
+    const MAX_IMAGE = 5 * 1024 * 1024;
+    const isVideo = form.type === 'Vidéo';
+    const maxSize = isVideo ? MAX_VIDEO : MAX_IMAGE;
+
+    if (f.size > maxSize) {
+      toast.error(`Fichier trop volumineux (max ${isVideo ? '15MB' : '5MB'})`);
       return;
     }
+
+    // Validation format vidéo
+    if (isVideo && f.type !== 'video/mp4') {
+      toast.error('Format vidéo non supporté. Veuillez utiliser MP4.');
+      return;
+    }
+
     setFile(f);
   };
 
@@ -378,7 +392,7 @@ export default function GererPublicites() {
                   <label className="cursor-pointer">
                     <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
                     <p className="text-sm font-medium">Cliquez pour sélectionner</p>
-                    <p className="text-[10px] text-muted-foreground">Max 5MB</p>
+                    <p className="text-[10px] text-muted-foreground">Max {form.type === 'Vidéo' ? '15MB (MP4)' : '5MB'}</p>
                     <input
                       type="file"
                       onChange={handleFileChange}

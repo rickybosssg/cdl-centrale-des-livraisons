@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-export default function PubliciteCarousel({ images = [], titre = '', onClose, onImageClick }) {
+export default function PubliciteCarousel({ images = [], titre = '', isVideo = false, videoUrl = '', onClose, onImageClick }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlay, setIsAutoPlay] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
 
   // Validar images
   const validImages = Array.isArray(images) ? images.filter(img => img && typeof img === 'string') : [];
   if (validImages.length === 0) return null;
 
   const currentImage = validImages[currentIndex];
-  const hasMultiple = validImages.length > 1;
+  const hasMultiple = validImages.length > 1 && !isVideo; // No carousel for video
 
   const next = () => setCurrentIndex((currentIndex + 1) % validImages.length);
   const prev = () => setCurrentIndex((currentIndex - 1 + validImages.length) % validImages.length);
@@ -24,18 +25,31 @@ export default function PubliciteCarousel({ images = [], titre = '', onClose, on
 
   return (
     <div className="relative w-full bg-black rounded-2xl overflow-hidden group">
-      {/* Image */}
+      {/* Media (image ou vidéo) */}
       <div
         className="relative aspect-video bg-black cursor-pointer"
-        onClick={onImageClick}
+        onClick={isVideo ? null : onImageClick}
         onMouseEnter={() => hasMultiple && setIsAutoPlay(false)}
       >
-        <img
-          src={currentImage}
-          alt={titre || 'Publicité'}
-          className="w-full h-full object-cover group-hover:opacity-95 transition-opacity"
-          loading="lazy"
-        />
+        {isVideo && videoUrl ? (
+          <video
+            src={videoUrl}
+            className="w-full h-full object-cover"
+            autoPlay
+            muted
+            loop
+            onCanPlayThrough={() => setVideoReady(true)}
+            onLoadedMetadata={() => setVideoReady(true)}
+          />
+        ) : (
+          <img
+            src={currentImage}
+            alt={titre || 'Publicité'}
+            className="w-full h-full object-cover group-hover:opacity-95 transition-opacity"
+            loading="lazy"
+            onClick={onImageClick}
+          />
+        )}
 
         {/* Fermer discret */}
         {onClose && (
