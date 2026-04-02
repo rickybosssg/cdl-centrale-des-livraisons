@@ -474,6 +474,14 @@ export default function DispatcherDashboard() {
             </CardContent>
           </Card>
         </Link>
+        <Link to="/gestion-profils">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary bg-primary/5">
+            <CardContent className="p-4 text-center space-y-2">
+              <AlertCircle className="h-8 w-8 text-primary mx-auto" />
+              <p className="text-sm font-medium text-primary">Gestion des profils</p>
+            </CardContent>
+          </Card>
+        </Link>
         <Link to="/suppression">
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
             <CardContent className="p-4 text-center space-y-2">
