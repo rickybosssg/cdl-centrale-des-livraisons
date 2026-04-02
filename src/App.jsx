@@ -46,6 +46,7 @@ import AdminRoleCorrection from './pages/AdminRoleCorrection';
 import DebugAdmin from './pages/DebugAdmin';
 import CreerBoutiqueAdmin from './pages/dispatcher/CreerBoutiqueAdmin';
 import AdminTrash from './pages/dispatcher/AdminTrash';
+import GererPublicites from './pages/dispatcher/GererPublicites';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
 import DashboardPartenaire from './pages/partenaire/DashboardPartenaire';
 import MesCommandesMarketplace from './pages/client/MesCommandesMarketplace';
@@ -225,6 +226,7 @@ const AuthenticatedApp = () => {
           <Route path="/audit-utilisateurs" element={<AuditUtilisateurs />} />
           <Route path="/admin-trash" element={<AdminTrash />} />
           <Route path="/creer-boutique" element={<CreerBoutiqueAdmin />} />
+          <Route path="/gerer-publicites" element={<GererPublicites />} />
           <Route path="/messages-admin" element={<MessagesAdmin />} />
           <Route path="/gestion-transactions" element={<GestionTransactions />} />
           <Route path="/gestion-profils" element={<GestionProfils />} />

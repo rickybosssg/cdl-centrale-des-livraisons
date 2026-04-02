@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, TrendingUp, Calendar, CheckCircle2, Package } from "lucide-react";
+import AdCarousel from "@/components/AdCarousel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
@@ -58,6 +59,9 @@ export default function GainsLivreur() {
         </Button>
         <h1 className="text-xl font-bold">Mes gains</h1>
       </div>
+
+      {/* Publicité */}
+      <AdCarousel placement="dashboard_livreur" userRole="livreur" />
 
       {/* Résumé financier */}
       <div className="grid grid-cols-2 gap-3">

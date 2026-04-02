@@ -5,7 +5,7 @@ import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User, 
 import BedouWidget from "../../components/BedouWidget";
 import EffectuerDeplacement from "./EffectuerDeplacement";
 import ChatAdmin from "@/components/ChatAdmin";
-import BannierePublicitaire from "../../components/BannierePublicitaire";
+import AdCarousel from "@/components/AdCarousel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
@@ -72,8 +72,8 @@ export default function ClientHome({ user }) {
       {/* Bedou */}
       <BedouWidget user={user} />
 
-      {/* Bannière publicitaire */}
-      <BannierePublicitaire placement="home_client" />
+      {/* Carousel publicités */}
+      <AdCarousel placement="accueil" userRole="client" />
 
       {/* Bouton principal Commander */}
       <Link to="/commander">
