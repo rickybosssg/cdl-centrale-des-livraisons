@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import PubliciteTracker from './PubliciteTracker';
 
 export default function PubliciteDisplay({ userRole = 'client', userId, userEmail }) {
   const [pub, setPub] = useState(null);
@@ -64,22 +65,24 @@ export default function PubliciteDisplay({ userRole = 'client', userId, userEmai
   if (dismissed || !pub || !pub.image_url) return null;
 
   return (
-    <div className="relative w-full rounded-lg overflow-hidden bg-gray-100">
-      <img
-        src={pub.image_url}
-        alt={pub.titre || 'Publicité'}
-        className="w-full h-auto display-block cursor-pointer hover:opacity-95 transition-opacity"
-        onClick={() => trackClick(pub.id, pub.lien_url)}
-        loading="lazy"
-      />
-      
-      <button
-        onClick={() => setDismissed(true)}
-        className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg leading-none transition-colors z-10"
-        title="Fermer"
-      >
-        ×
-      </button>
-    </div>
+    <PubliciteTracker publiciteId={pub.id} userRole={userRole}>
+      <div className="relative w-full rounded-lg overflow-hidden bg-gray-100">
+        <img
+          src={pub.image_url}
+          alt={pub.titre || 'Publicité'}
+          className="w-full h-auto display-block cursor-pointer hover:opacity-95 transition-opacity"
+          onClick={() => trackClick(pub.id, pub.lien_url)}
+          loading="lazy"
+        />
+        
+        <button
+          onClick={() => setDismissed(true)}
+          className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg leading-none transition-colors z-10"
+          title="Fermer"
+        >
+          ×
+        </button>
+      </div>
+    </PubliciteTracker>
   );
 }

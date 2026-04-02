@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import PubliciteCarousel from './PubliciteCarousel';
+import PubliciteTracker from './PubliciteTracker';
 
 export default function PubliciteHomeBanner({ userRole = 'client', userId, userEmail }) {
   const [pub, setPub] = useState(null);
@@ -83,7 +84,7 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
         user_email: userEmail,
         user_role: userRole,
       })
-      .catch(() => {});
+      .catch((err) => console.error('[PubliciteHomeBanner] Click tracking error:', err));
 
     if (pubUrl) window.open(pubUrl, '_blank');
   };
@@ -115,15 +116,17 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
   if (isVideo && !pub.image_url) return null;
 
   return (
-    <div className="w-full">
-      <PubliciteCarousel
-        images={isVideo ? [] : images}
-        titre={pub.titre}
-        isVideo={isVideo}
-        videoUrl={isVideo ? pub.image_url : ''}
-        onClose={handleDismiss}
-        onImageClick={() => trackClick(pub.id, pub.lien_url)}
-      />
-    </div>
+    <PubliciteTracker publiciteId={pub.id} userRole={userRole}>
+      <div className="w-full">
+        <PubliciteCarousel
+          images={isVideo ? [] : images}
+          titre={pub.titre}
+          isVideo={isVideo}
+          videoUrl={isVideo ? pub.image_url : ''}
+          onClose={handleDismiss}
+          onImageClick={() => trackClick(pub.id, pub.lien_url)}
+        />
+      </div>
+    </PubliciteTracker>
   );
 }
