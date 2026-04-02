@@ -19,6 +19,9 @@ export default function GererCourses() {
   const [assignDialog, setAssignDialog] = useState(false);
   const [detailDialog, setDetailDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('courses');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatut, setFilterStatut] = useState('tous');
+  const [filterTypeColis, setFilterTypeColis] = useState('tous');
 
   const loadData = async () => {
     const [coursesData, livreursData] = await Promise.all([
@@ -125,10 +128,27 @@ export default function GererCourses() {
     return new Date(a.created_date) - new Date(b.created_date);
   });
 
-  const enAttente = sortByUrgence(courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport));
-  const assignees = courses.filter(c => c.statut === "assignee_attente" && !c.moyen_transport);
-  const enCours = courses.filter(c => ["acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport);
-  const terminees = courses.filter(c => ["livree", "annulee"].includes(c.statut) && !c.moyen_transport);
+  const filterCourses = (list) => {
+    return list.filter(c => {
+      const search = searchQuery.toLowerCase();
+      const matchesSearch = !search || 
+        c.id?.toLowerCase().includes(search) ||
+        c.client_name?.toLowerCase().includes(search) ||
+        c.livreur_name?.toLowerCase().includes(search) ||
+        c.telephone_expediteur?.includes(search) ||
+        c.telephone_destinataire?.includes(search) ||
+        c.quartier_depart?.toLowerCase().includes(search) ||
+        c.quartier_arrivee?.toLowerCase().includes(search);
+      const matchesStatut = filterStatut === 'tous' || c.statut === filterStatut;
+      const matchesType = filterTypeColis === 'tous' || c.type_colis === filterTypeColis;
+      return matchesSearch && matchesStatut && matchesType;
+    });
+  };
+
+  const enAttente = sortByUrgence(filterCourses(courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport)));
+  const assignees = filterCourses(courses.filter(c => c.statut === "assignee_attente" && !c.moyen_transport));
+  const enCours = filterCourses(courses.filter(c => ["acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport));
+  const terminees = filterCourses(courses.filter(c => ["livree", "annulee"].includes(c.statut) && !c.moyen_transport));
 
   const deplacementsMoto = courses.filter(c => c.moyen_transport === "moto");
   const deplotementsVehicule = courses.filter(c => c.moyen_transport === "vehicule");
@@ -223,6 +243,53 @@ export default function GererCourses() {
         <Button variant="outline" size="sm" onClick={loadData}>
           <RefreshCw className="h-4 w-4" />
         </Button>
+      </div>
+
+      {/* RECHERCHE ET FILTRES */}
+      <div className="space-y-3 p-4 rounded-xl bg-muted/40 border">
+        <input
+          type="text"
+          placeholder="Rechercher par nom, numéro, téléphone, quartier..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <select
+            value={filterStatut}
+            onChange={(e) => setFilterStatut(e.target.value)}
+            className="px-3 py-2 rounded-lg border bg-white text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="tous">Tous les statuts</option>
+            <option value="en_attente">En attente</option>
+            <option value="assignee_attente">Assignées</option>
+            <option value="acceptee">Acceptées</option>
+            <option value="en_cours">En cours</option>
+            <option value="livree">Livrées</option>
+            <option value="annulee">Annulées</option>
+          </select>
+          <select
+            value={filterTypeColis}
+            onChange={(e) => setFilterTypeColis(e.target.value)}
+            className="px-3 py-2 rounded-lg border bg-white text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="tous">Tous les types</option>
+            <option value="Documents">Documents</option>
+            <option value="Petit colis">Petit colis</option>
+            <option value="Colis moyen">Colis moyen</option>
+            <option value="Gros colis">Gros colis</option>
+            <option value="Nourriture">Nourriture</option>
+            <option value="Autre">Autre</option>
+          </select>
+        </div>
+        {(searchQuery || filterStatut !== 'tous' || filterTypeColis !== 'tous') && (
+          <button
+            onClick={() => { setSearchQuery(''); setFilterStatut('tous'); setFilterTypeColis('tous'); }}
+            className="w-full text-xs font-medium text-primary hover:underline"
+          >
+            ↻ Réinitialiser les filtres
+          </button>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

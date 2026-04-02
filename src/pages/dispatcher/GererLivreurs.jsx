@@ -72,6 +72,7 @@ export default function GererLivreurs() {
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [activeTab, setActiveTab] = useState("profil");
   const newMsg = useMessageNotification(selectedLivreur?.email);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const loadData = async () => {
     const [livreursPurs, livreursAttente, livreursValides, livreursRefuses, paiementsData, me] = await Promise.all([
@@ -246,6 +247,13 @@ export default function GererLivreurs() {
   };
 
   const livreursFiltres = livreurs.filter(l => {
+    const search = searchQuery.toLowerCase();
+    const matchesSearch = !search || 
+      l.full_name?.toLowerCase().includes(search) ||
+      l.telephone?.includes(search) ||
+      l.quartier?.toLowerCase().includes(search) ||
+      l.email?.toLowerCase().includes(search);
+    if (!matchesSearch) return false;
     if (filtre === "en_ligne") return l.disponible;
     if (filtre === "hors_ligne") return !l.disponible;
     if (filtre === "bloques") return l.livreur_bloque;
@@ -297,27 +305,44 @@ export default function GererLivreurs() {
         <span className="text-red-600">{livreurs.filter(l => l.livreur_bloque).length} bloqués</span>
       </div>
 
-      {/* Filtres */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {[
-          { val: "tous", label: "Tous" },
-          { val: "en_ligne", label: "🟢 En ligne" },
-          { val: "hors_ligne", label: "⚪ Hors ligne" },
-          { val: "en_attente", label: "⏳ À valider" },
-          { val: "valides", label: "✅ Validés" },
-          { val: "refuses", label: "❌ Refusés" },
-          { val: "bloques", label: "🔒 Bloqués" },
-        ].map(f => (
+      {/* RECHERCHE ET FILTRES */}
+      <div className="space-y-3 p-3 rounded-xl bg-muted/40 border">
+        <input
+          type="text"
+          placeholder="Rechercher par nom, téléphone, zone..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {[
+            { val: "tous", label: "Tous" },
+            { val: "en_ligne", label: "🟢 En ligne" },
+            { val: "hors_ligne", label: "⚪ Hors ligne" },
+            { val: "en_attente", label: "⏳ À valider" },
+            { val: "valides", label: "✅ Validés" },
+            { val: "refuses", label: "❌ Refusés" },
+            { val: "bloques", label: "🔒 Bloqués" },
+          ].map(f => (
+            <button
+              key={f.val}
+              onClick={() => setFiltre(f.val)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
+                filtre === f.val ? "bg-primary text-primary-foreground border-primary" : "border-border"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {searchQuery && (
           <button
-            key={f.val}
-            onClick={() => setFiltre(f.val)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
-              filtre === f.val ? "bg-primary text-primary-foreground border-primary" : "border-border"
-            }`}
+            onClick={() => setSearchQuery('')}
+            className="w-full text-xs font-medium text-primary hover:underline"
           >
-            {f.label}
+            ↻ Réinitialiser recherche
           </button>
-        ))}
+        )}
       </div>
 
       {/* Liste */}

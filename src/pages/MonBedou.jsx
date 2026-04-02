@@ -54,6 +54,8 @@ export default function MonBedou() {
   const [form, setForm] = useState({ montant: "", methode: "orange_money", numero_transaction: "", preuve: null });
   const [retraitForm, setRetraitForm] = useState({ montant: "", methode: "orange_money", numero_reception: "", nom_compte: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatut, setFilterStatut] = useState('tous');
 
   const load = async () => {
     const me = await base44.auth.me();
@@ -115,6 +117,15 @@ export default function MonBedou() {
 
   const canRetrait = user && ['livreur', 'partenaire', 'commercial'].includes(user.user_type);
   const bonus = parseInt(form.montant) >= 100 ? getBonus(parseInt(form.montant)) : 0;
+
+  const transactionsFiltrees = transactions.filter(tx => {
+    const search = searchQuery.toLowerCase();
+    const matchesSearch = !search || 
+      tx.description?.toLowerCase().includes(search) ||
+      tx.montant?.toString().includes(search);
+    const matchesStatut = filterStatut === 'tous' || tx.statut === filterStatut;
+    return matchesSearch && matchesStatut;
+  });
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -348,7 +359,42 @@ export default function MonBedou() {
       {/* Historique avec BeDouHistory */}
       {tab === "historique" && (
         <div className="space-y-4">
+          <div className="space-y-3 p-3 rounded-xl bg-muted/40 border">
+            <input
+              type="text"
+              placeholder="Rechercher par montant ou description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <select
+              value={filterStatut}
+              onChange={(e) => setFilterStatut(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border bg-white text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="tous">Tous les statuts</option>
+              <option value="valide">Validées</option>
+              <option value="paye">Payées</option>
+              <option value="en_attente">En attente</option>
+              <option value="refuse">Refusées</option>
+            </select>
+            {(searchQuery || filterStatut !== 'tous') && (
+              <button
+                onClick={() => { setSearchQuery(''); setFilterStatut('tous'); }}
+                className="w-full text-xs font-medium text-primary hover:underline"
+              >
+                ↻ Réinitialiser
+              </button>
+            )}
+          </div>
           <BeDouHistory userEmail={user?.email} userRole={user?.user_type} />
+          <div className="space-y-2">
+            {transactionsFiltrees.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-4">Aucune transaction</p>
+            ) : (
+              transactionsFiltrees.slice(0, 10).map(tx => <TransactionRow key={tx.id} tx={tx} />)
+            )}
+          </div>
         </div>
       )}
     </div>
