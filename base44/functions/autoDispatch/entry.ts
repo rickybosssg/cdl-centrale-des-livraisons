@@ -32,47 +32,71 @@ function distanceKm(lat1, lng1, lat2, lng2) {
 }
 
 function scoreDriver(driver, course) {
-  let score = 0;
-  const quartierDepart = course.quartier_depart;
+  // ── SCORING INTELLIGENT (100 points max) ────────────────────────────────
+  // 40% distance | 30% taux acceptation | 20% temps réponse | 10% activité
 
-  // Proximité par quartier
-  if (driver.quartier === quartierDepart) score += 100;
-  else if (ZONES_PROCHES[quartierDepart]?.includes(driver.quartier)) score += 60;
-
-  // Proximité GPS (poids augmenté)
+  // ── 1. DISTANCE (40 pts max) ─────────────────────────────────────────
+  let distScore = 0;
   if (driver.gps_latitude && driver.gps_longitude && course.latitude_depart && course.longitude_depart) {
     const dist = distanceKm(driver.gps_latitude, driver.gps_longitude, course.latitude_depart, course.longitude_depart);
-    if (dist < 1) score += 80;
-    else if (dist < 3) score += 50;
-    else if (dist < 7) score += 20;
-  }
-
-  // Moins de courses actives = meilleur score
-  const actives = driver.nombre_courses_actives || 0;
-  score += Math.max(0, (5 - actives) * 15);
-
-  // Taux d'acceptation du livreur
-  const totalCourses = driver.total_courses_livrees || 0;
-  if (totalCourses > 10) score += 20;
-  else if (totalCourses > 5) score += 10;
-
-  // Note moyenne
-  if (driver.note_moyenne) score += (driver.note_moyenne - 3) * 10;
-
-  // Bonus urgence : les courses urgentes favorisent les livreurs les mieux placés
-  const urgence = course.urgence || course.niveau_urgence;
-  if (urgence === 'tres_urgent') score += 200;
-  else if (urgence === 'urgent') score += 100;
-
-  // Attend depuis longtemps = priorité
-  if (driver.derniere_course_attribuee_at) {
-    const heuresAttente = (Date.now() - new Date(driver.derniere_course_attribuee_at).getTime()) / 3600000;
-    score += Math.min(heuresAttente * 5, 30);
+    if (dist <= 1)       distScore = 40;
+    else if (dist <= 3)  distScore = 32;
+    else if (dist <= 5)  distScore = 22;
+    else if (dist <= 10) distScore = 12;
+    else                 distScore = 4;
   } else {
-    score += 30;
+    // Fallback quartier si pas de GPS
+    if (driver.quartier === course.quartier_depart)                              distScore = 30;
+    else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier))  distScore = 18;
+    else                                                                          distScore = 8;
   }
 
-  return score;
+  // ── 2. TAUX D'ACCEPTATION (30 pts max) ───────────────────────────────
+  let acceptScore = 0;
+  const proposees = driver.courses_proposees || 0;
+  const acceptees = driver.courses_acceptees || (driver.total_courses_livrees || 0);
+  if (proposees > 0) {
+    const taux = Math.min(acceptees / proposees, 1); // 0→1
+    acceptScore = Math.round(taux * 30);
+  } else if (acceptees > 0) {
+    acceptScore = 20; // livreur avec historique mais pas encore de ratio connu
+  } else {
+    acceptScore = 15; // nouveau livreur : neutre
+  }
+
+  // ── 3. TEMPS DE RÉPONSE (20 pts max) ─────────────────────────────────
+  let reponseScore = 0;
+  const tempsReponseMoyen = driver.temps_reponse_moyen_sec || null; // en secondes
+  if (tempsReponseMoyen !== null) {
+    if (tempsReponseMoyen <= 15)       reponseScore = 20;
+    else if (tempsReponseMoyen <= 30)  reponseScore = 16;
+    else if (tempsReponseMoyen <= 45)  reponseScore = 12;
+    else if (tempsReponseMoyen <= 60)  reponseScore = 8;
+    else                               reponseScore = 4;
+  } else {
+    reponseScore = 10; // neutre si pas de données
+  }
+
+  // ── 4. ACTIVITÉ RÉCENTE (10 pts max) ──────────────────────────────────
+  let activiteScore = 0;
+  const derniereActivite = driver.derniere_course_attribuee_at || driver.updated_date;
+  if (derniereActivite) {
+    const heuresDepuis = (Date.now() - new Date(derniereActivite).getTime()) / 3600000;
+    if (heuresDepuis <= 1)       activiteScore = 10; // actif cette heure
+    else if (heuresDepuis <= 4)  activiteScore = 8;
+    else if (heuresDepuis <= 12) activiteScore = 5;
+    else if (heuresDepuis <= 24) activiteScore = 3;
+    else                         activiteScore = 1;
+  } else {
+    activiteScore = 5; // nouveau
+  }
+
+  // ── BONUS urgence (hors pondération) ───────────────────────────────────
+  const urgence = course.urgence || course.niveau_urgence;
+  const urgenceBonus = urgence === 'tres_urgent' ? 20 : urgence === 'urgent' ? 10 : 0;
+
+  const total = distScore + acceptScore + reponseScore + activiteScore + urgenceBonus;
+  return total;
 }
 
 Deno.serve(async (req) => {
@@ -120,16 +144,20 @@ Deno.serve(async (req) => {
     // Récupérer tous les livreurs
     const allDrivers = await base44.asServiceRole.entities.User.filter({ user_type: 'livreur' });
 
-    // Filtrer les livreurs éligibles (profil actif + en ligne + non bloqué)
-    const eligibles = allDrivers.filter(d =>
-      d.disponible === true &&
-      d.actif !== false &&
-      activeLibvreurEmails.has(d.email) &&
-      !d.livreur_bloque &&
-      (d.nombre_courses_actives || 0) < 5 &&
-      !excludeEmails.includes(d.email) &&
-      (d.quartier || d.gps_latitude)
-    );
+    // Filtrer les livreurs éligibles (profil actif + en ligne + non bloqué + taux refus acceptable)
+    const eligibles = allDrivers.filter(d => {
+      if (!d.disponible || d.actif === false) return false;
+      if (!activeLibvreurEmails.has(d.email)) return false;
+      if (d.livreur_bloque) return false;
+      if ((d.nombre_courses_actives || 0) >= 5) return false;
+      if (excludeEmails.includes(d.email)) return false;
+      if (!(d.quartier || d.gps_latitude)) return false;
+      // Exclure livreurs avec taux de refus > 70% (si suffisamment de données)
+      const proposees = d.courses_proposees || 0;
+      const acceptees = d.courses_acceptees || (d.total_courses_livrees || 0);
+      if (proposees >= 5 && acceptees / proposees < 0.3) return false;
+      return true;
+    });
 
     const now = new Date().toISOString();
     const historique = [];
@@ -226,6 +254,7 @@ Deno.serve(async (req) => {
     await base44.asServiceRole.entities.User.update(best.id, {
       nombre_courses_actives: (best.nombre_courses_actives || 0) + 1,
       derniere_course_attribuee_at: now,
+      courses_proposees: (best.courses_proposees || 0) + 1,
     });
 
     // Notifier le livreur (déclenche aussi la notification navigateur)
