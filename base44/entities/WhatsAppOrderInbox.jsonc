@@ -1,0 +1,82 @@
+{
+  "name": "WhatsAppOrderInbox",
+  "type": "object",
+  "properties": {
+    "whatsapp_message_id": {
+      "type": "string",
+      "title": "ID message WhatsApp"
+    },
+    "phone_number": {
+      "type": "string",
+      "title": "Num\u00e9ro client"
+    },
+    "client_name": {
+      "type": "string",
+      "title": "Nom client"
+    },
+    "raw_message": {
+      "type": "string",
+      "title": "Message brut"
+    },
+    "extracted_depart": {
+      "type": "string",
+      "title": "D\u00e9part extrait"
+    },
+    "extracted_destination": {
+      "type": "string",
+      "title": "Destination extraite"
+    },
+    "extracted_phone": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone extrait"
+    },
+    "extracted_package_details": {
+      "type": "string",
+      "title": "D\u00e9tails colis"
+    },
+    "extracted_pickup_type": {
+      "type": "string",
+      "enum": [
+        "envoyer",
+        "recuperer",
+        "deplacement",
+        "inconnu"
+      ],
+      "title": "Type de demande"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "recu",
+        "incomplet",
+        "pret_a_convertir",
+        "converti_en_course",
+        "erreur"
+      ],
+      "title": "Statut",
+      "default": "recu"
+    },
+    "linked_course_id": {
+      "type": "string",
+      "title": "ID Course CDL li\u00e9e"
+    },
+    "auto_mode": {
+      "type": "boolean",
+      "title": "Converti automatiquement",
+      "default": false
+    },
+    "missing_fields": {
+      "type": "string",
+      "title": "Champs manquants (JSON)"
+    },
+    "notes_admin": {
+      "type": "string",
+      "title": "Notes admin"
+    }
+  },
+  "required": [
+    "phone_number",
+    "raw_message",
+    "status"
+  ]
+}

@@ -243,6 +243,12 @@ export default function AdminDashboard() {
             ⚡ Dispatch Monitor (temps réel)
           </Button>
         </Link>
+        <Link to="/whatsapp-orders">
+          <Button className="w-full justify-start gap-2 border-green-400 hover:bg-green-50 text-green-900" variant="outline">
+            <span className="text-base">📲</span>
+            Commandes WhatsApp
+          </Button>
+        </Link>
       </div>
 
       {/* Info rapide */}

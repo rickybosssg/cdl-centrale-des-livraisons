@@ -77,7 +77,7 @@ export default function ClientHome({ user }) {
 
       {/* Bouton WhatsApp Commander */}
       <a
-        href="https://wa.me/22600000000?text=Bonjour%20CDL%20!%20Je%20voudrais%20commander%20une%20livraison."
+        href={`https://wa.me/22600000000?text=${encodeURIComponent('\ud83d\udce6 Nouvelle commande CDL\nType : envoyer un colis / r\u00e9cup\u00e9rer un colis / d\u00e9placement\n\ud83d\udccd D\u00e9part : \n\ud83d\udccd Destination : \n\ud83d\udcde T\u00e9l\u00e9phone : \n\ud83d\udcdd D\u00e9tails : ')}`}
         target="_blank"
         rel="noopener noreferrer"
         className="flex items-center gap-3 w-full p-4 rounded-2xl bg-green-500 text-white font-bold shadow-lg hover:bg-green-600 active:scale-[0.98] transition-all"
@@ -85,7 +85,7 @@ export default function ClientHome({ user }) {
         <span className="text-3xl">💬</span>
         <div className="flex-1">
           <p className="text-base font-extrabold">Commander via WhatsApp</p>
-          <p className="text-xs text-white/80">Rapide · Direct · Sans app</p>
+          <p className="text-xs text-white/80">Remplissez le message et envoyez pour lancer votre commande</p>
         </div>
         <span className="text-xl">→</span>
       </a>
