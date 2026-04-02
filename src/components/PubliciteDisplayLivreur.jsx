@@ -13,83 +13,66 @@ export default function PubliciteDisplayLivreur({ userId, userEmail, user, dispo
   useEffect(() => {
     const loadPublicites = async () => {
       try {
+        // ÉTAPE 1: Charger TOUTES les pubs sans filtre
         const allPubs = await base44.entities.Publicite.list('-created_date', 50);
-        console.log('🎯 [DEBUG PUBS] Total récupérées:', allPubs?.length || 0);
+        console.log('🎯 [ÉTAPE 1] TOUTES les pubs:', allPubs?.length || 0);
+        allPubs?.forEach((p, i) => {
+          console.log(`  [${i}] "${p.titre}" | active=${p.active} | placement=${p.placement} | date_debut=${p.date_debut} | date_fin=${p.date_fin}`);
+        });
+
         const now = new Date();
 
-        // Filtrer par : active + dates valides + placement approprié + ciblage
+        // ÉTAPE 2: Filtrer par critères
+        console.log('🎯 [ÉTAPE 2] Filtrage en cours...');
         const filtered = (allPubs || []).filter(pub => {
-          console.log(`📰 Pub: "${pub.titre}" | active=${pub.active} | placement=${pub.placement}`);
-          
+          // Filtre 1: Actif
           if (!pub.active) {
-            console.log(`  ❌ Non actif`);
+            console.log(`  ❌ "${pub.titre}" inactive`);
             return false;
           }
-
-          // Vérifier les dates
+          
+          // Filtre 2: Dates valides
           if (pub.date_debut && pub.date_fin) {
             const start = new Date(pub.date_debut);
             const end = new Date(pub.date_fin);
             if (now < start || now > end) {
-              console.log(`  ❌ Hors période (${pub.date_debut} - ${pub.date_fin})`);
+              console.log(`  ❌ "${pub.titre}" hors_periode`);
               return false;
             }
           }
-
-          // Filtrer par emplacement (simplifié pour test)
+          
+          // Filtre 3: Placement (accepter tous ou dashboard_livreur)
           const placement = pub.placement || '';
-          const isValidPlacement = 
-            placement === 'toutes_pages' ||
-            placement === 'home_livreur' ||
-            placement === 'accueil_livreur' ||
-            placement === 'dashboard_livreur' ||
-            !placement; // Accepter aussi les pubs sans placement spécifié pour test
-
-          if (!isValidPlacement) {
-            console.log(`  ❌ Placement invalide: "${placement}"`);
+          const acceptedPlacements = ['toutes_pages', 'home_livreur', 'accueil_livreur', 'dashboard_livreur', ''];
+          if (placement && !acceptedPlacements.includes(placement)) {
+            console.log(`  ❌ "${pub.titre}" placement=${placement}`);
             return false;
           }
-
-          console.log(`  ✅ Valide`);
-
-          // Ciblage intelligent (si spécifié)
-          const destinataires = pub.destinataires || '';
-          if (destinataires) {
-            if (destinataires.includes('en_ligne_uniquement') && !disponible) {
-              console.log(`  ❌ Ciblage: en ligne uniquement, livreur offline`);
-              return false;
-            }
-            if (destinataires.includes('nouveaux_livreurs') && (coursesToday || 0) >= 10) {
-              console.log(`  ❌ Ciblage: nouveaux livreurs, celui-ci a ${coursesToday} courses`);
-              return false;
-            }
-          }
-
+          
+          console.log(`  ✅ "${pub.titre}" VALIDE`);
           return true;
         });
 
-        console.log(`✅ [DEBUG PUBS] Filtrées: ${filtered.length}`);
-
-        // Si plusieurs pubs, en choisir une aléatoire
+        // ÉTAPE 3: Sélectionner et afficher
+        console.log(`✅ [ÉTAPE 3] Filtrées: ${filtered.length}`);
         if (filtered.length > 0) {
           const randomIdx = Math.floor(Math.random() * filtered.length);
           const selected = filtered[randomIdx];
-          console.log(`🎲 [DEBUG PUBS] Sélectionnée (${randomIdx}):`, selected.titre);
+          console.log(`🎲 Sélectionnée (${randomIdx}/${filtered.length}):`, selected.titre);
           setPublicites([selected]);
           setCurrentIndex(0);
           trackView(selected.id);
         } else {
-          console.log(`⚠️ [DEBUG PUBS] Aucune pub valide. Mode TEST FORCÉ activé.`);
-          // Mode TEST FORCÉ: créer une pub de test
+          console.log(`⚠️ Zéro pub valide. Affichage TEST FALLBACK.`);
           const testPub = {
-            id: 'TEST_PUB_' + Date.now(),
-            titre: '🧪 PUB TEST - Système Validé',
-            description: 'Si vous voyez ceci, le système marche!',
-            image_url: 'https://via.placeholder.com/400x200/3b82f6/ffffff?text=TEST+PUB',
-            lien_url: 'https://cdl.local',
+            id: 'TEST_' + Date.now(),
+            titre: '🧪 PUBLICITÉ TEST',
+            description: 'Système en cours de test. Créez une pub en admin.',
+            image_url: 'https://images.unsplash.com/photo-1460925895917-adf4ee868993?w=400&h=200&fit=crop',
+            lien_url: '#',
             active: true,
           };
-          console.log(`🔧 [TEST MODE] Affichage pub de test:`, testPub);
+          console.log(`🔧 FALLBACK TEST:`, testPub);
           setPublicites([testPub]);
         }
 
