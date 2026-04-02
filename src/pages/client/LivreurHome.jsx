@@ -23,10 +23,15 @@ export default function LivreurHome({ user }) {
   const [showMessages, setShowMessages] = useState(false);
   const [classement, setClassement] = useState(null);
 
+  const [zoneChaudeCount, setZoneChaudeCount] = useState(0);
+
   const reloadCourses = async () => {
     const data = await base44.entities.Course.filter({ livreur_email: user.email }, "-created_date", 10);
     setCourses(data);
     setLoading(false);
+    // Vérifier zone chaude
+    const pending = await base44.entities.Course.filter({ statut: 'en_attente' }, '-created_date', 20);
+    setZoneChaudeCount(pending.length);
   };
   const [gpsBloque, setGpsBloque] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -121,6 +126,13 @@ export default function LivreurHome({ user }) {
   const activeCourse = courses.find(c => ["acceptee", "en_cours"].includes(c.statut));
   const coursePendante = courses.find(c => c.statut === "assignee_attente" && c.livreur_email === user.email);
 
+  // Message inactivité si hors ligne
+  const inactivityMsg = !disponible ? (
+    <div className="mx-4 mb-2 p-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-sm font-bold text-center shadow">
+      💰 Gagne de l'argent maintenant — mets-toi en ligne !
+    </div>
+  ) : null;
+
   // GPS bloqué
   if (gpsBloque) {
     return (
@@ -213,6 +225,9 @@ export default function LivreurHome({ user }) {
 
   return (
     <div className="space-y-5">
+      {/* Message inactivité */}
+      {inactivityMsg}
+
       {/* Course pendante (dispatch auto) */}
       {coursePendante && (
         <CoursePendante course={coursePendante} onRespond={reloadCourses} />
@@ -273,12 +288,28 @@ export default function LivreurHome({ user }) {
       {/* Bannière publicitaire */}
       <BannierePublicitaire placement="home_livreur" />
 
+      {/* Zone chaude */}
+      {disponible && zoneChaudeCount >= 3 && (
+        <div className="rounded-2xl p-4 bg-gradient-to-r from-orange-500 to-red-500 text-white text-center shadow-lg">
+          <p className="text-lg font-extrabold">🔥 ZONE CHAUDE 🔥</p>
+          <p className="text-sm font-medium mt-0.5">{zoneChaudeCount} courses en attente — fonce !</p>
+        </div>
+      )}
+
       {/* Message motivation */}
       <div className={`rounded-xl p-3 text-sm font-medium text-center ${
         disponible ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
       }`}>
         {motivationMsg}
       </div>
+
+      {/* Classement top 3 */}
+      {classement && classement.rank <= 3 && (
+        <div className="rounded-2xl p-4 bg-gradient-to-r from-yellow-400 to-amber-500 text-white text-center shadow">
+          <p className="text-2xl font-black">🏆 Tu es TOP {classement.rank} aujourd'hui !</p>
+          <p className="text-sm text-white/90 mt-0.5">Continue comme ça — tu écrases la concurrence 🔥</p>
+        </div>
+      )}
 
       {/* Badges & Classement */}
       <LivreurBadges user={user} classement={classement} />

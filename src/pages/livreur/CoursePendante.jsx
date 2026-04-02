@@ -10,6 +10,7 @@ export default function CoursePendante({ course, onRespond }) {
   const TIMER = 60;
   const [remaining, setRemaining] = useState(TIMER);
   const [responding, setResponding] = useState(false);
+  const [refused, setRefused] = useState(false);
 
   const accepter = async () => {
     setResponding(true);
@@ -29,14 +30,21 @@ export default function CoursePendante({ course, onRespond }) {
   };
 
   const refuser = async () => {
+    setRefused(true);
     setResponding(true);
     await base44.functions.invoke('reDispatch', { course_id: course.id });
     const user = await base44.auth.me();
+    const newRefusals = (user.nombre_refus_consecutifs || 0) + 1;
     await base44.auth.updateMe({
       nombre_courses_actives: Math.max(0, (user.nombre_courses_actives || 0) - 1),
+      nombre_refus_consecutifs: newRefusals,
+      // Pénalité score si 3+ refus consécutifs
+      score_performance: newRefusals >= 3 ? Math.max(0, (user.score_performance || 80) - 5) : (user.score_performance || 80),
     });
-    toast.info("Course refusée");
-    onRespond?.('refused');
+    // Pas de toast immédiat — on affiche l'écran de pression
+    setTimeout(() => {
+      onRespond?.('refused');
+    }, 2500);
     setResponding(false);
   };
 
@@ -46,8 +54,25 @@ export default function CoursePendante({ course, onRespond }) {
   };
 
   useEffect(() => {
-    // Vibration à l'arrivée
-    if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+    // Vibration + son à l'arrivée
+    if (navigator.vibrate) navigator.vibrate([400, 100, 400, 100, 400]);
+    // Son de notification
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const playBeep = (freq, start, dur) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0.4, ctx.currentTime + start);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+        o.start(ctx.currentTime + start);
+        o.stop(ctx.currentTime + start + dur);
+      };
+      playBeep(880, 0, 0.15);
+      playBeep(1100, 0.2, 0.15);
+      playBeep(880, 0.4, 0.2);
+    } catch (_) {}
   }, []);
 
   useEffect(() => {
@@ -65,6 +90,23 @@ export default function CoursePendante({ course, onRespond }) {
   }, []);
 
   const gainLivreur = Math.round((course.prix || 0) * 0.8);
+
+  // Écran de pression après refus
+  if (refused) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" style={{backdropFilter:'blur(4px)'}}>
+        <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center space-y-4 shadow-2xl">
+          <div className="text-5xl">⚠️</div>
+          <p className="text-xl font-extrabold text-red-600">Tu risques de perdre des courses !</p>
+          <p className="text-sm text-muted-foreground">Les livreurs qui refusent trop souvent perdent des points et reçoivent moins de courses.</p>
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800 font-medium">
+            💡 Reste en ligne pour maintenir ton score et tes gains.
+          </div>
+          <p className="text-xs text-muted-foreground">Redirection en cours...</p>
+        </div>
+      </div>
+    );
+  }
   const pct = (remaining / TIMER) * 100;
   const urgent = remaining <= 10;
 
