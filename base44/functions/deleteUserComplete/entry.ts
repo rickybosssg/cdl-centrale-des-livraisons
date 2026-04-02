@@ -1,144 +1,175 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
+/**
+ * Suppression totale d'un utilisateur et de tous ses profils liés
+ * Action irreversible - requiert confirmation admin
+ */
 Deno.serve(async (req) => {
+  if (req.method !== 'POST') {
+    return Response.json({ error: 'Method not allowed' }, { status: 405 });
+  }
+
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    // Vérifier si admin
-    if (user?.role !== 'admin' && user?.user_type !== 'admin') {
+    // Vérifier que c'est un admin
+    if (user?.role !== 'admin') {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
-    const { user_id, user_email, profile_type } = await req.json();
+    const { user_id, user_email } = await req.json();
 
-    if (!user_id && !user_email) {
-      return Response.json({ error: 'user_id or user_email required' }, { status: 400 });
+    if (!user_id || !user_email) {
+      return Response.json({ error: 'Missing user_id or user_email' }, { status: 400 });
     }
 
-    console.log(`[deleteUserComplete] Suppression par ${user.email} - userId: ${user_id}, email: ${user_email}, type: ${profile_type}`);
+    // Étape 1: Récupérer l'utilisateur à supprimer
+    const targetUser = await base44.entities.User.filter({ id: user_id });
+    if (!targetUser || targetUser.length === 0) {
+      return Response.json({ error: 'User not found' }, { status: 404 });
+    }
 
-    let deletedCount = 0;
-    const email = user_email;
+    const deletingUser = targetUser[0];
 
-    // 1. Supprimer les UserProfile liés
-    const profiles = await base44.asServiceRole.entities.UserProfile.filter({ user_email: email });
-    console.log(`[deleteUserComplete] ${profiles.length} profil(s) UserProfile trouvé(s)`);
-    for (const profile of profiles) {
+    // Étape 2: Récupérer tous les profils liés
+    const profiles = await base44.entities.UserProfile.filter({ user_email: deletingUser.email });
+    const profileIds = (profiles || []).map(p => p.id);
+
+    // Étape 3: Supprimer les données associées aux profils
+    // - Notifications
+    // - Messages
+    // - etc.
+    try {
+      const notifications = await base44.entities.Notification.filter({ destinataire_email: deletingUser.email });
+      for (const notif of notifications || []) {
+        await base44.entities.Notification.delete(notif.id);
+      }
+    } catch (_) {}
+
+    try {
+      const messages = await base44.entities.Message.filter({ livreur_email: deletingUser.email });
+      for (const msg of messages || []) {
+        await base44.entities.Message.delete(msg.id);
+      }
+    } catch (_) {}
+
+    try {
+      const messagesAdmin = await base44.entities.MessageAdmin.filter({ livreur_email: deletingUser.email });
+      for (const msg of messagesAdmin || []) {
+        await base44.entities.MessageAdmin.delete(msg.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les données Bedou/Transactions
+    try {
+      const bedou = await base44.entities.Bedou.filter({ user_email: deletingUser.email });
+      for (const b of bedou || []) {
+        await base44.entities.Bedou.delete(b.id);
+      }
+    } catch (_) {}
+
+    try {
+      const transactions = await base44.entities.Transaction.filter({ user_email: deletingUser.email });
+      for (const tx of transactions || []) {
+        await base44.entities.Transaction.delete(tx.id);
+      }
+    } catch (_) {}
+
+    try {
+      const demandes = await base44.entities.DemandeRecharge.filter({ user_email: deletingUser.email });
+      for (const d of demandes || []) {
+        await base44.entities.DemandeRecharge.delete(d.id);
+      }
+    } catch (_) {}
+
+    try {
+      const retraits = await base44.entities.DemandeRetrait.filter({ user_email: deletingUser.email });
+      for (const r of retraits || []) {
+        await base44.entities.DemandeRetrait.delete(r.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les courses liées
+    try {
+      const coursesClient = await base44.entities.Course.filter({ client_email: deletingUser.email });
+      for (const c of coursesClient || []) {
+        await base44.entities.Course.delete(c.id);
+      }
+    } catch (_) {}
+
+    try {
+      const coursesLivreur = await base44.entities.Course.filter({ livreur_email: deletingUser.email });
+      for (const c of coursesLivreur || []) {
+        await base44.entities.Course.delete(c.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les commandes partenaire
+    try {
+      const commandes = await base44.entities.CommandePartenaire.filter({ partenaire_email: deletingUser.email });
+      for (const cmd of commandes || []) {
+        await base44.entities.CommandePartenaire.delete(cmd.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les fiches partenaire
+    try {
+      const partenaires = await base44.entities.Partenaire.filter({ user_email: deletingUser.email });
+      for (const p of partenaires || []) {
+        await base44.entities.Partenaire.delete(p.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les codes promo commerciaux
+    try {
+      const codes = await base44.entities.CodePromo.filter({ commercial_email: deletingUser.email });
+      for (const c of codes || []) {
+        await base44.entities.CodePromo.delete(c.id);
+      }
+    } catch (_) {}
+
+    // Supprimer les profils liés
+    for (const profileId of profileIds) {
       try {
-        await base44.asServiceRole.entities.UserProfile.delete(profile.id);
-        deletedCount++;
-      } catch (err) {
-        console.error(`[deleteUserComplete] Erreur suppression profil ${profile.id}:`, err.message);
-      }
+        await base44.entities.UserProfile.delete(profileId);
+      } catch (_) {}
     }
 
-    // 2. Supprimer les données Partenaire si commercial
-    if (profile_type === 'partenaire') {
-      const partners = await base44.asServiceRole.entities.Partenaire.filter({ user_email: email });
-      console.log(`[deleteUserComplete] ${partners.length} partenaire(s) trouvé(s)`);
-      for (const partner of partners) {
-        try {
-          await base44.asServiceRole.entities.Partenaire.delete(partner.id);
-          deletedCount++;
-        } catch (err) {
-          console.error(`[deleteUserComplete] Erreur suppression partenaire ${partner.id}:`, err.message);
-        }
-      }
-    }
+    // Étape 4: Supprimer l'utilisateur
+    await base44.entities.User.delete(user_id);
 
-    // 3. Supprimer les transactions liées
-    const transactions = await base44.asServiceRole.entities.Transaction.filter({ user_email: email });
-    console.log(`[deleteUserComplete] ${transactions.length} transaction(s) trouvée(s)`);
-    for (const tx of transactions) {
-      try {
-        await base44.asServiceRole.entities.Transaction.delete(tx.id);
-        deletedCount++;
-      } catch (err) {
-        console.error(`[deleteUserComplete] Erreur suppression transaction ${tx.id}:`, err.message);
-      }
-    }
-
-    // 4. Supprimer les Bedou
-    const bedous = await base44.asServiceRole.entities.Bedou.filter({ user_email: email });
-    console.log(`[deleteUserComplete] ${bedous.length} bedou trouvé(s)`);
-    for (const bedou of bedous) {
-      try {
-        await base44.asServiceRole.entities.Bedou.delete(bedou.id);
-        deletedCount++;
-      } catch (err) {
-        console.error(`[deleteUserComplete] Erreur suppression bedou ${bedou.id}:`, err.message);
-      }
-    }
-
-    // 5. Supprimer les notifications
-    const notifications = await base44.asServiceRole.entities.Notification.filter({ destinataire_email: email });
-    console.log(`[deleteUserComplete] ${notifications.length} notification(s) trouvée(s)`);
-    for (const notif of notifications) {
-      try {
-        await base44.asServiceRole.entities.Notification.delete(notif.id);
-        deletedCount++;
-      } catch (err) {
-        console.error(`[deleteUserComplete] Erreur suppression notification ${notif.id}:`, err.message);
-      }
-    }
-
-    // 6. Supprimer les demandes de recharge/retrait
-    const recharges = await base44.asServiceRole.entities.DemandeRecharge.filter({ user_email: email });
-    console.log(`[deleteUserComplete] ${recharges.length} recharge(s) trouvée(s)`);
-    for (const r of recharges) {
-      try {
-        await base44.asServiceRole.entities.DemandeRecharge.delete(r.id);
-        deletedCount++;
-      } catch (err) {
-        console.error(`[deleteUserComplete] Erreur suppression recharge ${r.id}:`, err.message);
-      }
-    }
-
-    const retraits = await base44.asServiceRole.entities.DemandeRetrait.filter({ user_email: email });
-    console.log(`[deleteUserComplete] ${retraits.length} retrait(s) trouvé(s)`);
-    for (const r of retraits) {
-      try {
-        await base44.asServiceRole.entities.DemandeRetrait.delete(r.id);
-        deletedCount++;
-      } catch (err) {
-        console.error(`[deleteUserComplete] Erreur suppression retrait ${r.id}:`, err.message);
-      }
-    }
-
-    // 7. Supprimer les Admin Permissions liées
-    const perms = await base44.asServiceRole.entities.AdminPermission.filter({ user_email: email });
-    console.log(`[deleteUserComplete] ${perms.length} permission(s) admin trouvée(s)`);
-    for (const perm of perms) {
-      try {
-        await base44.asServiceRole.entities.AdminPermission.delete(perm.id);
-        deletedCount++;
-      } catch (err) {
-        console.error(`[deleteUserComplete] Erreur suppression permission ${perm.id}:`, err.message);
-      }
-    }
-
-    // 8. Supprimer l'utilisateur User lui-même (en dernier)
-    if (user_id) {
-      try {
-        await base44.asServiceRole.entities.User.delete(user_id);
-        console.log(`[deleteUserComplete] ✅ User ${user_id} supprimé`);
-        deletedCount++;
-      } catch (err) {
-        console.error(`[deleteUserComplete] Erreur suppression User ${user_id}:`, err.message);
-      }
-    }
-
-    console.log(`[deleteUserComplete] ✅ Suppression complète - ${deletedCount} entité(s) supprimée(s)`);
+    // Étape 5: Logger l'action
+    try {
+      await base44.entities.AdminActionLog.create({
+        admin_email: user.email,
+        object_type: 'utilisateur',
+        object_id: user_id,
+        object_name: deletingUser.full_name || deletingUser.email,
+        action: 'delete',
+        reason: 'Suppression complète du compte utilisateur et de tous les profils',
+        target_email: deletingUser.email,
+        old_data: JSON.stringify({
+          id: deletingUser.id,
+          email: deletingUser.email,
+          full_name: deletingUser.full_name,
+          user_type: deletingUser.user_type,
+          profiles_deleted: profileIds.length,
+        }),
+      });
+    } catch (_) {}
 
     return Response.json({
       success: true,
-      user_email: email,
-      deleted_count: deletedCount,
-      message: `Utilisateur ${email} et ses ${deletedCount} donnée(s) supprimé(s)`,
+      message: `Utilisateur ${deletingUser.full_name} et ${profileIds.length} profil(s) supprimés avec succès`,
+      deleted: {
+        user_id,
+        user_email: deletingUser.email,
+        profiles_count: profileIds.length,
+      },
     });
   } catch (error) {
-    console.error('[deleteUserComplete] Erreur:', error.message);
+    console.error('[deleteUserComplete] Error:', error);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });

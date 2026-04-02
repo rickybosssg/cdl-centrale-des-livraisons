@@ -192,10 +192,24 @@ export default function GererLivreurs() {
   };
 
   const supprimerLivreur = async (livreur) => {
-    if (!window.confirm(`Supprimer définitivement ${livreur.full_name} ? Cette action est irréversible.`)) return;
-    await base44.entities.User.delete(livreur.id);
-    toast.success("Livreur supprimé");
-    loadData();
+    const confirmed = window.confirm(
+      `⚠️ SUPPRESSION TOTALE\n\n` +
+      `Cette action est IRRÉVERSIBLE et supprimera :\n` +
+      `• Le compte ${livreur.full_name}\n` +
+      `• Tous les profils liés (livreur, client, partenaire, commercial)\n` +
+      `• Toutes les données associées\n` +
+      `• L'accès à l'application\n\n` +
+      `${livreur.full_name} devra recréer un nouveau compte pour revenir.\n\n` +
+      `Confirmer la suppression ?`
+    );
+    if (!confirmed) return;
+    try {
+      await base44.functions.invoke('deleteUserComplete', { user_id: livreur.id, user_email: livreur.email });
+      toast.success(`✅ ${livreur.full_name} supprimé complètement avec tous ses profils`);
+      loadData();
+    } catch (err) {
+      toast.error('Erreur: ' + err.message);
+    }
   };
 
   const reactiver = async (livreur) => {
