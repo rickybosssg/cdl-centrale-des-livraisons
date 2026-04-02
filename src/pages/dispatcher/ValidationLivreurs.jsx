@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, CheckCircle2, XCircle, User, Eye, MessageCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, User, Eye, MessageCircle, Phone, Mail } from "lucide-react";
 import ChatLivreur from "@/components/ChatLivreur";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -129,7 +129,7 @@ export default function ValidationLivreurs() {
 
   const LivreurCard = ({ livreur }) => (
     <Card>
-      <CardContent className="p-4">
+      <CardContent className="p-4 space-y-3">
         <div className="flex items-start gap-3">
           {livreur.photo_profil ? (
             <img src={livreur.photo_profil} alt="Photo" className="h-12 w-12 rounded-full object-cover border" />
@@ -143,19 +143,32 @@ export default function ValidationLivreurs() {
               <p className="font-semibold text-sm">{livreur.full_name}</p>
               <StatutBadge statut={livreur.statut_validation_livreur} />
             </div>
-            <p className="text-xs text-muted-foreground">{livreur.telephone}</p>
-            <p className="text-xs text-muted-foreground">{livreur.quartier}</p>
-            <p className="text-xs text-muted-foreground">Inscrit le {moment(livreur.created_date).format("DD/MM/YYYY")}</p>
+            <p className="text-xs font-medium text-foreground">{livreur.telephone || <span className="text-muted-foreground">non renseigné</span>}</p>
+            <p className="text-xs text-muted-foreground">{livreur.email}</p>
+            <p className="text-xs text-muted-foreground">{livreur.quartier || "—"} · Inscrit le {moment(livreur.created_date).format("DD/MM/YYYY")}</p>
+            {livreur.date_validation && <p className="text-xs text-green-600">Validé le {moment(livreur.date_validation).format("DD/MM/YYYY")}</p>}
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs flex-shrink-0"
-            onClick={() => { setSelectedLivreur(livreur); setDialogOpen(true); }}
-          >
-            <Eye className="h-3 w-3 mr-1" />
-            Voir
+          <Button size="sm" variant="outline" className="h-8 text-xs flex-shrink-0"
+            onClick={() => { setSelectedLivreur(livreur); setDialogOpen(true); }}>
+            <Eye className="h-3 w-3 mr-1" />Voir
           </Button>
+        </div>
+        {/* Boutons contact rapide */}
+        <div className="flex gap-2">
+          {livreur.telephone ? (
+            <a href={`tel:${livreur.telephone}`} className="flex-1">
+              <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/5">
+                <Phone className="h-3.5 w-3.5" /> Appeler
+              </button>
+            </a>
+          ) : <div className="flex-1" />}
+          {livreur.telephone ? (
+            <a href={`https://wa.me/${livreur.telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="flex-1">
+              <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-green-300 text-green-700 text-xs font-medium hover:bg-green-50">
+                <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+              </button>
+            </a>
+          ) : <div className="flex-1" />}
         </div>
       </CardContent>
     </Card>
@@ -248,9 +261,33 @@ export default function ValidationLivreurs() {
                     )}
                     <div>
                       <p className="font-bold">{selectedLivreur.full_name}</p>
-                      <p className="text-sm text-muted-foreground">{selectedLivreur.telephone}</p>
-                      <p className="text-sm text-muted-foreground">{selectedLivreur.quartier}</p>
                       <StatutBadge statut={selectedLivreur.statut_validation_livreur} />
+                    </div>
+                  </div>
+                  {/* Bloc contacts */}
+                  <div className="p-3 rounded-xl bg-muted/50 border space-y-2">
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Contacts</p>
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span className="text-sm font-medium">{selectedLivreur.telephone || "non renseigné"}</span>
+                      {selectedLivreur.telephone && (
+                        <a href={`tel:${selectedLivreur.telephone}`} className="ml-auto text-xs text-primary underline">Appeler</a>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span className="text-sm">{selectedLivreur.email || "non renseigné"}</span>
+                    </div>
+                    {selectedLivreur.telephone && (
+                      <a href={`https://wa.me/${selectedLivreur.telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 p-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm font-medium hover:bg-green-100">
+                        <MessageCircle className="h-4 w-4" /> Ouvrir WhatsApp
+                      </a>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      <span>Quartier : {selectedLivreur.quartier || "—"}</span>
+                      {selectedLivreur.date_validation && <span className="ml-3">Validé le {moment(selectedLivreur.date_validation).format("DD/MM/YYYY")}</span>}
+                      <span className="ml-3">Inscrit le {moment(selectedLivreur.created_date).format("DD/MM/YYYY")}</span>
                     </div>
                   </div>
 

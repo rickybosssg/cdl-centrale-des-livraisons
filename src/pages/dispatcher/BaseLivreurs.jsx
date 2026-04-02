@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Search, Truck, RefreshCw } from "lucide-react";
+import { ArrowLeft, Search, Truck, RefreshCw, Phone, MessageCircle, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,7 @@ export default function BaseLivreurs() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedLivreur, setSelectedLivreur] = useState(null);
+  const [filtre, setFiltre] = useState("tous");
 
   const loadLivreurs = async () => {
     setLoading(true);
@@ -32,7 +33,14 @@ export default function BaseLivreurs() {
 
   const filtered = livreurs.filter(l => {
     const q = search.toLowerCase();
-    return !q || l.full_name?.toLowerCase().includes(q) || l.telephone?.includes(q) || l.email?.toLowerCase().includes(q);
+    const matchSearch = !q || l.full_name?.toLowerCase().includes(q) || l.telephone?.includes(q) || l.email?.toLowerCase().includes(q);
+    const statut = l.statut_validation_livreur || "en_attente";
+    let matchFiltre = true;
+    if (filtre === "valides") matchFiltre = statut === "valide";
+    else if (filtre === "en_attente") matchFiltre = statut === "en_attente";
+    else if (filtre === "refuses") matchFiltre = statut === "refuse";
+    else if (filtre === "bloques") matchFiltre = !!l.livreur_bloque;
+    return matchSearch && matchFiltre;
   });
 
   const stats = {
@@ -81,27 +89,66 @@ export default function BaseLivreurs() {
         <Input className="pl-9" placeholder="Rechercher par nom, téléphone..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {[
+          { val: "tous", label: "Tous" },
+          { val: "valides", label: "✅ Validés" },
+          { val: "en_attente", label: "⏳ En attente" },
+          { val: "refuses", label: "❌ Refusés" },
+          { val: "bloques", label: "🔒 Bloqués" },
+        ].map(f => (
+          <button key={f.val} onClick={() => setFiltre(f.val)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
+              filtre === f.val ? "bg-primary text-primary-foreground border-primary" : "border-border"
+            }`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <p className="text-xs text-muted-foreground">{filtered.length} livreur(s)</p>
       <div className="space-y-2">
         {filtered.map(livreur => {
           const statut = livreur.statut_validation_livreur || "en_attente";
           const cfg = STATUT_CONFIG[statut] || STATUT_CONFIG.en_attente;
           return (
-            <Card key={livreur.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedLivreur(livreur)}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
+            <Card key={livreur.id} className={`hover:shadow-md transition-shadow ${livreur.livreur_bloque ? 'border-red-200 bg-red-50/30' : ''}`}>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2" onClick={() => setSelectedLivreur(livreur)}>
+                  <div className="flex-1 min-w-0 cursor-pointer">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-sm truncate">{livreur.full_name}</p>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg.color}`}>{statut === "en_attente" ? "En attente" : statut === "valide" ? "Validé" : "Refusé"}</span>
+                      {livreur.livreur_bloque && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">Bloqué</span>}
                     </div>
-                    <p className="text-xs text-muted-foreground">{livreur.telephone}</p>
-                    <p className="text-xs text-muted-foreground">{livreur.quartier || "—"}</p>
+                    <p className="text-xs text-muted-foreground">{livreur.telephone || "non renseigné"}</p>
+                    <p className="text-xs text-muted-foreground">{livreur.email}</p>
+                    <p className="text-xs text-muted-foreground">{livreur.quartier || "—"} · {moment(livreur.created_date).fromNow()}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className={`text-xs font-medium ${livreur.disponible ? "text-green-600" : "text-gray-500"}`}>{livreur.disponible ? "🟢 Actif" : "⚪ Inactif"}</p>
-                    <p className="text-[10px] text-muted-foreground">{moment(livreur.created_date).fromNow()}</p>
+                    <p className={`text-xs font-medium ${livreur.disponible ? "text-green-600" : "text-gray-500"}`}>{livreur.disponible ? "🟢 En ligne" : "⚪ Hors ligne"}</p>
+                    {livreur.date_validation && <p className="text-[10px] text-green-600">Validé le {moment(livreur.date_validation).format("DD/MM/YY")}</p>}
                   </div>
+                </div>
+                {/* Boutons contact */}
+                <div className="flex gap-2">
+                  {livreur.telephone && (
+                    <a href={`tel:${livreur.telephone}`} className="flex-1">
+                      <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/5">
+                        <Phone className="h-3.5 w-3.5" /> Appeler
+                      </button>
+                    </a>
+                  )}
+                  {livreur.telephone && (
+                    <a href={`https://wa.me/${livreur.telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="flex-1">
+                      <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-green-300 text-green-700 text-xs font-medium hover:bg-green-50">
+                        <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                      </button>
+                    </a>
+                  )}
+                  <button onClick={() => setSelectedLivreur(livreur)} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted">
+                    Voir fiche
+                  </button>
                 </div>
               </CardContent>
             </Card>

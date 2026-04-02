@@ -218,6 +218,8 @@ export default function GererLivreurs() {
     if (filtre === "hors_ligne") return !l.disponible;
     if (filtre === "bloques") return l.livreur_bloque;
     if (filtre === "en_attente") return !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente";
+    if (filtre === "valides") return l.statut_validation_livreur === "valide";
+    if (filtre === "refuses") return l.statut_validation_livreur === "refuse";
     return true;
   });
 
@@ -267,10 +269,12 @@ export default function GererLivreurs() {
       <div className="flex gap-2 overflow-x-auto pb-1">
         {[
           { val: "tous", label: "Tous" },
-          { val: "en_ligne", label: "En ligne" },
-          { val: "hors_ligne", label: "Hors ligne" },
-          { val: "en_attente", label: "À valider" },
-          { val: "bloques", label: "Bloqués" },
+          { val: "en_ligne", label: "🟢 En ligne" },
+          { val: "hors_ligne", label: "⚪ Hors ligne" },
+          { val: "en_attente", label: "⏳ À valider" },
+          { val: "valides", label: "✅ Validés" },
+          { val: "refuses", label: "❌ Refusés" },
+          { val: "bloques", label: "🔒 Bloqués" },
         ].map(f => (
           <button
             key={f.val}
@@ -359,6 +363,23 @@ export default function GererLivreurs() {
               </div>
               </div>
 
+              {/* Contacts rapides */}
+              <div className="flex gap-2">
+                {livreur.telephone ? (
+                  <a href={`tel:${livreur.telephone}`} className="flex-1">
+                    <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/5">
+                      <Phone className="h-3.5 w-3.5" /> Appeler
+                    </button>
+                  </a>
+                ) : <div className="flex-1" />}
+                {livreur.telephone ? (
+                  <a href={`https://wa.me/${livreur.telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="flex-1">
+                    <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-green-300 text-green-700 text-xs font-medium hover:bg-green-50">
+                      <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                    </button>
+                  </a>
+                ) : <div className="flex-1" />}
+              </div>
               {/* Actions rapides */}
               <div className="flex flex-wrap gap-1.5">
                 <Button
@@ -460,9 +481,46 @@ export default function GererLivreurs() {
                   )}
                   <div>
                     <p className="font-bold">{selectedLivreur.full_name}</p>
-                    <p className="text-sm text-muted-foreground">{selectedLivreur.telephone}</p>
-                    <p className="text-sm text-muted-foreground">{selectedLivreur.quartier}</p>
                     <p className="text-xs text-muted-foreground">Inscrit le {moment(selectedLivreur.created_date).format("DD/MM/YYYY")}</p>
+                    {selectedLivreur.date_validation && <p className="text-xs text-green-600">Validé le {moment(selectedLivreur.date_validation).format("DD/MM/YYYY")}</p>}
+                  </div>
+                </div>
+                {/* Bloc contacts toujours visible */}
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">📞 Contacts</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Téléphone</p>
+                      <p className="text-sm font-semibold">{selectedLivreur.telephone || "non renseigné"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Email</p>
+                      <p className="text-xs">{selectedLivreur.email || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Quartier</p>
+                      <p className="text-sm">{selectedLivreur.quartier || "non renseigné"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Date inscription</p>
+                      <p className="text-xs">{moment(selectedLivreur.created_date).format("DD/MM/YYYY")}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    {selectedLivreur.telephone && (
+                      <a href={`tel:${selectedLivreur.telephone}`} className="flex-1">
+                        <button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-white text-xs font-semibold">
+                          <Phone className="h-3.5 w-3.5" /> Appeler
+                        </button>
+                      </a>
+                    )}
+                    {selectedLivreur.telephone && (
+                      <a href={`https://wa.me/${selectedLivreur.telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="flex-1">
+                        <button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold">
+                          <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                        </button>
+                      </a>
+                    )}
                   </div>
                 </div>
 
