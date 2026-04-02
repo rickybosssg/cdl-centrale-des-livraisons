@@ -297,9 +297,6 @@ export default function LivreurHome({ user }) {
       {/* Bedou */}
       <BedouWidget user={user} />
 
-      {/* Publicités actives */}
-      {user && <PubliciteDisplayLivreur userId={user.id} userEmail={user.email} />}
-
       {/* Solde commission */}
       <SoldeBlock user={user} />
 
