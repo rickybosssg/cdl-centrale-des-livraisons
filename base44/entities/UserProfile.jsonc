@@ -80,6 +80,15 @@
     "refusal_reason": {
       "type": "string",
       "title": "Motif de refus"
+    },
+    "relance_count": {
+      "type": "number",
+      "title": "Nombre de relances envoy\u00e9es",
+      "default": 0
+    },
+    "derniere_relance": {
+      "type": "string",
+      "title": "Date derni\u00e8re relance"
     }
   },
   "required": [

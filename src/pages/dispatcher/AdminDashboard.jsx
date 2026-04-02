@@ -202,9 +202,15 @@ export default function AdminDashboard() {
           </Button>
         </Link>
         <Link to="/pending-profiles">
-          <Button className="w-full justify-start gap-2" variant="outline" className="border-amber-300 hover:bg-amber-50">
+          <Button className="w-full justify-start gap-2" variant="outline">
             <AlertCircle className="h-4 w-4" />
             📋 Demandes de profils ({kpis.pendingRequests})
+          </Button>
+        </Link>
+        <Link to="/livreurs-incomplets">
+          <Button className="w-full justify-start gap-2 border-amber-300 hover:bg-amber-50 text-amber-800" variant="outline">
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+            ⚠️ Livreurs incomplets
           </Button>
         </Link>
         <Link to="/gerer-courses">
