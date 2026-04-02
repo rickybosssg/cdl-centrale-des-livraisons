@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation, Map } from "lucide-react";
 import NotationCourse from "../../components/NotationCourse";
 import MiniChat from "../../components/MiniChat";
 import MapSuivi from "../../components/MapSuivi";
@@ -179,15 +179,21 @@ export default function CourseDetail() {
         </CardContent>
       </Card>
 
-      {/* Suivi GPS */}
+      {/* Suivi GPS avec bouton accès carte interactive */}
       {course.livreur_lat && course.livreur_lng && (
         <Card>
-          <CardContent className="p-4 space-y-2">
+          <CardContent className="p-4 space-y-3">
             <p className="text-sm font-semibold flex items-center gap-2">
               <Navigation className="h-4 w-4 text-primary" />
               Suivi en temps réel
             </p>
             <MapSuivi livreurLat={course.livreur_lat} livreurLng={course.livreur_lng} />
+            <Button
+              className="w-full bg-primary hover:bg-primary/90 gap-2"
+              onClick={() => navigate(`/course/${id}/track`)}
+            >
+              <Map className="h-4 w-4" /> Suivre en direct sur la carte
+            </Button>
           </CardContent>
         </Card>
       )}
