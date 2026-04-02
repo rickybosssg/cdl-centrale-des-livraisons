@@ -6,6 +6,8 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import { TopNotificationProvider, useTopNotification } from '@/context/TopNotificationContext';
+import TopNotificationBanner from '@/components/TopNotificationBanner';
 import AppLayoutWrapper from './components/AppLayoutWrapper';
 import DispatcherGuard from './components/DispatcherGuard';
 import { base44 as b44 } from '@/api/base44Client';
@@ -96,6 +98,7 @@ function AppLayoutWithUser() {
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
+  const { notification, closeNotification } = useTopNotification();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -155,9 +158,11 @@ const AuthenticatedApp = () => {
   }
 
   return (
-    <Routes>
-      {/* Routes publiques sans layout */}
-      <Route path="/phone-auth" element={<PhoneAuth />} />
+    <>
+      <TopNotificationBanner notification={notification} onClose={closeNotification} />
+      <Routes>
+        {/* Routes publiques sans layout */}
+        <Route path="/phone-auth" element={<PhoneAuth />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />
@@ -241,7 +246,8 @@ const AuthenticatedApp = () => {
       </Route>
 
       <Route path="*" element={<PageNotFound />} />
-    </Routes>
+      </Routes>
+    </>
   );
 };
 
@@ -249,10 +255,12 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
+        <TopNotificationProvider>
+          <Router>
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </TopNotificationProvider>
       </QueryClientProvider>
     </AuthProvider>
   );
