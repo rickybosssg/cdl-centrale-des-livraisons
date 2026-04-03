@@ -1,0 +1,44 @@
+{
+  "name": "Annonceur",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "nom_entreprise": {
+      "type": "string",
+      "title": "Nom de l'entreprise / activit\u00e9"
+    },
+    "telephone": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "actif",
+        "suspendu"
+      ],
+      "title": "Statut",
+      "default": "actif"
+    },
+    "nombre_pubs_creees": {
+      "type": "number",
+      "title": "Nombre de pubs cr\u00e9\u00e9es",
+      "default": 0
+    },
+    "budget_total_depense": {
+      "type": "number",
+      "title": "Budget total d\u00e9pens\u00e9 (FCFA)",
+      "default": 0
+    },
+    "date_inscription": {
+      "type": "string",
+      "title": "Date d'inscription"
+    }
+  },
+  "required": [
+    "user_email"
+  ]
+}

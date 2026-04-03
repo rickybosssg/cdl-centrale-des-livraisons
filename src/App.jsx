@@ -80,6 +80,8 @@ import TestPublicitesVisibilite from './pages/dispatcher/TestPublicitesVisibilit
 import BedouAudit from './pages/dispatcher/BedouAudit';
 import AdminProfilUnifie from './pages/dispatcher/AdminProfilUnifie';
 import Mall from './pages/Mall';
+import DashboardAnnonceur from './pages/annonceur/DashboardAnnonceur';
+import CreerPublicite from './pages/annonceur/CreerPublicite';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -190,6 +192,10 @@ const AuthenticatedApp = () => {
         <Route path="/commande-marketplace/:id" element={<CommandeMarketplaceDetail />} />
         <Route path="/commerce/:id" element={<PagePartenaire />} />
         <Route path="/mall" element={<Mall />} />
+
+        {/* Annonceur */}
+        <Route path="/dashboard-annonceur" element={<DashboardAnnonceur />} />
+        <Route path="/creer-publicite" element={<CreerPublicite />} />
 
         {/* Livreur */}
         <Route path="/courses-disponibles" element={<CoursesDisponibles />} />
