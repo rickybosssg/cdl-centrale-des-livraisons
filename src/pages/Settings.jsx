@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft, Plus, Trash2, CheckCircle2, XCircle, Shield, FileText,
-  LogOut, User, Truck, Store, Megaphone, RefreshCw, Lock,
+  LogOut, User, Truck, Store, Megaphone, RefreshCw, Lock, Megaphone as MegaphoneAlt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,13 @@ const PROFILES = [
     type: 'commercial', label: 'Commercial', emoji: '📣',
     icon: Megaphone, color: 'bg-orange-100 text-orange-700',
     desc: 'Recrutez des clients via votre code promo — soumis à validation',
+    immediate: false,
+    fields: { telephone: 'Téléphone', quartier: 'Zone' },
+  },
+  {
+    type: 'annonceur', label: 'Annonceur', emoji: '📢',
+    icon: Megaphone, color: 'bg-pink-100 text-pink-700',
+    desc: 'Publiez vos annonces sur CDL — soumis à validation',
     immediate: false,
     fields: { telephone: 'Téléphone', quartier: 'Zone' },
   },
