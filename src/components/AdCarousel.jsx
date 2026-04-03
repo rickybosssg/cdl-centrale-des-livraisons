@@ -65,12 +65,29 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
   if (loading || ads.length === 0) return null;
 
   const current = ads[currentIndex];
-  const next = () => setCurrentIndex((currentIndex + 1) % ads.length);
-  const prev = () => setCurrentIndex((currentIndex - 1 + ads.length) % ads.length);
+  const goNext = () => setCurrentIndex((currentIndex + 1) % ads.length);
+  const goPrev = () => setCurrentIndex((currentIndex - 1 + ads.length) % ads.length);
+
+  // Extraire les images de la pub courante
+  const getCurrentImages = (ad) => {
+    if (ad.images) {
+      try {
+        const parsed = JSON.parse(ad.images);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return ad.image_url ? [ad.image_url] : [];
+  };
+
+  const [subIndex, setSubIndex] = useState(0);
+  useEffect(() => { setSubIndex(0); }, [currentIndex]);
+
+  const currentImages = getCurrentImages(current);
+  const currentImage = currentImages[subIndex] || currentImages[0];
 
   // Auto-rotate toutes les 8 secondes
   useEffect(() => {
-    const timer = setInterval(next, 8000);
+    const timer = setInterval(goNext, 8000);
     return () => clearInterval(timer);
   }, [currentIndex, ads.length]);
 
@@ -79,53 +96,47 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
       <div className="relative w-full bg-gray-900 rounded-lg overflow-hidden group">
         {/* Pub */}
         <div className="relative aspect-video bg-black">
-        {current.type === "video" ? (
-          <video
-            src={current.image_url}
-            autoPlay
-            muted
-            loop
-            className="w-full h-full object-cover"
-          />
-        ) : (
           <img
-            src={current.image_url}
+            src={currentImage}
             alt={current.titre}
             className="w-full h-full object-cover"
+            loading="lazy"
           />
-        )}
 
-        {/* Navigation */}
-        {ads.length > 1 && (
-          <>
-            <button
-              onClick={prev}
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all"
-            >
-              <ChevronLeft className="h-5 w-5 text-white" />
-            </button>
-            <button
-              onClick={next}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all"
-            >
-              <ChevronRight className="h-5 w-5 text-white" />
-            </button>
-
-            {/* Dots */}
+          {/* Navigation images internes (multi-images) */}
+          {currentImages.length > 1 && (
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-              {ads.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentIndex(i)}
-                  className={`h-2 rounded-full transition-all ${
-                    i === currentIndex ? "bg-white w-6" : "bg-white/40 w-2"
-                  }`}
+              {currentImages.map((_, i) => (
+                <button key={i} onClick={() => setSubIndex(i)}
+                  className={`h-1.5 rounded-full transition-all ${i === subIndex ? 'bg-white w-4' : 'bg-white/50 w-1.5'}`}
                 />
               ))}
             </div>
-          </>
-        )}
-      </div>
+          )}
+
+          {/* Navigation entre pubs */}
+          {ads.length > 1 && (
+            <>
+              <button onClick={goPrev} className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all">
+                <ChevronLeft className="h-5 w-5 text-white" />
+              </button>
+              <button onClick={goNext} className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all">
+                <ChevronRight className="h-5 w-5 text-white" />
+              </button>
+            </>
+          )}
+
+          {/* Dots pubs */}
+          {ads.length > 1 && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+              {ads.map((_, i) => (
+                <button key={i} onClick={() => setCurrentIndex(i)}
+                  className={`h-1.5 rounded-full transition-all ${i === currentIndex ? 'bg-white w-4' : 'bg-white/40 w-1.5'}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Info overlay */}
         {current.titre && (

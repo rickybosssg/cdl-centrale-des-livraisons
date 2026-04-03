@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import MultiImageUploader from "@/components/MultiImageUploader";
 import { ArrowLeft, Upload, Eye, Edit, Trash2, BarChart3, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,7 @@ export default function GererPublicites() {
     lien_url: "",
     active: true,
   });
-  const [file, setFile] = useState(null);
+  const [formImages, setFormImages] = useState([]);
 
   const loadPubs = async () => {
     try {
@@ -64,29 +65,7 @@ export default function GererPublicites() {
     return unsub;
   }, []);
 
-  const handleFileChange = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
 
-    // Limite selon type: vidéo 15MB, image 5MB
-    const MAX_VIDEO = 15 * 1024 * 1024;
-    const MAX_IMAGE = 5 * 1024 * 1024;
-    const isVideo = form.type === 'Vidéo';
-    const maxSize = isVideo ? MAX_VIDEO : MAX_IMAGE;
-
-    if (f.size > maxSize) {
-      toast.error(`Fichier trop volumineux (max ${isVideo ? '15MB' : '5MB'})`);
-      return;
-    }
-
-    // Validation format vidéo
-    if (isVideo && f.type !== 'video/mp4') {
-      toast.error('Format vidéo non supporté. Veuillez utiliser MP4.');
-      return;
-    }
-
-    setFile(f);
-  };
 
   const handleSubmit = async () => {
     if (!form.titre || !form.type || !form.placement || !form.date_debut || !form.date_fin) {
@@ -96,34 +75,29 @@ export default function GererPublicites() {
 
     setUploading(true);
     try {
-      let imageUrl = editing?.image_url || "";
-
-      // Upload fichier si fourni
-      if (file) {
-        const uploadRes = await base44.integrations.Core.UploadFile({ file });
-        imageUrl = uploadRes.file_url;
-      }
-
-      if (!imageUrl) {
-        toast.error("Veuillez fournir un fichier");
+      if (formImages.length === 0) {
+        toast.error("Veuillez ajouter au moins une image");
         setUploading(false);
         return;
       }
 
+      const imagesJson = JSON.stringify(formImages);
+      const primaryImage = formImages[0];
+
       if (editing) {
-        // Update
         await base44.entities.Publicite.update(editing.id, {
           ...form,
-          image_url: imageUrl,
+          image_url: primaryImage,
+          images: imagesJson,
           impressions: editing.impressions || 0,
           clics: editing.clics || 0,
         });
         toast.success("Publicité mise à jour");
       } else {
-        // Create
         await base44.entities.Publicite.create({
           ...form,
-          image_url: imageUrl,
+          image_url: primaryImage,
+          images: imagesJson,
           impressions: 0,
           clics: 0,
         });
@@ -132,7 +106,7 @@ export default function GererPublicites() {
 
       setDialogOpen(false);
       setEditing(null);
-      setFile(null);
+      setFormImages([]);
       setForm({
         titre: "",
         description: "",
@@ -166,14 +140,22 @@ export default function GererPublicites() {
 
   const handleEdit = (pub) => {
     setEditing(pub);
+    // Charger les images existantes
+    let existingImages = [];
+    if (pub.images) {
+      try { existingImages = JSON.parse(pub.images); } catch { existingImages = pub.image_url ? [pub.image_url] : []; }
+    } else if (pub.image_url) {
+      existingImages = [pub.image_url];
+    }
+    setFormImages(existingImages);
     setForm({
       titre: pub.titre,
-      description: pub.description,
-      type: pub.type,
+      description: pub.description || "",
+      type: pub.type || "Image",
       placement: pub.placement,
-      destinataires: pub.destinataires,
-      date_debut: pub.date_debut.split("T")[0],
-      date_fin: pub.date_fin.split("T")[0],
+      destinataires: pub.destinataires || "tous",
+      date_debut: (pub.date_debut || "").split("T")[0],
+      date_fin: (pub.date_fin || "").split("T")[0],
       lien_url: pub.lien_url || "",
       active: pub.active,
     });
@@ -213,7 +195,7 @@ export default function GererPublicites() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-xl font-bold flex-1">Gestion des publicités</h1>
-        <Button onClick={() => { setEditing(null); setFile(null); setForm({
+        <Button onClick={() => { setEditing(null); setFormImages([]); setForm({
           titre: "", description: "", type: "Image", placement: "accueil",
           destinataires: "tous", date_debut: new Date().toISOString().split("T")[0],
           date_fin: new Date(Date.now() + 7*24*60*60*1000).toISOString().split("T")[0],
@@ -379,29 +361,10 @@ export default function GererPublicites() {
               </Select>
             </div>
 
-            {/* Upload */}
+            {/* Upload multi-images */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold">Fichier ({form.type}) *</label>
-              <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                {file ? (
-                  <div className="text-sm">
-                    <p className="font-medium text-green-600">✓ {file.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)}MB</p>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer">
-                    <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm font-medium">Cliquez pour sélectionner</p>
-                    <p className="text-[10px] text-muted-foreground">Max {form.type === 'Vidéo' ? '15MB (MP4)' : '5MB'}</p>
-                    <input
-                      type="file"
-                      onChange={handleFileChange}
-                      accept={form.type === "Vidéo" ? "video/mp4" : "image/jpg,image/png"}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-              </div>
+              <label className="text-xs font-semibold">Images * (1 à 5)</label>
+              <MultiImageUploader images={formImages} onChange={setFormImages} />
             </div>
 
             {/* Lien */}

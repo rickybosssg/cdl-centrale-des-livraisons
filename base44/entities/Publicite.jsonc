@@ -8,7 +8,11 @@
     },
     "image_url": {
       "type": "string",
-      "title": "Image URL"
+      "title": "Image URL (principale)"
+    },
+    "images": {
+      "type": "string",
+      "title": "Images (JSON array URLs)"
     },
     "lien_url": {
       "type": "string",
@@ -21,11 +25,23 @@
     "placement": {
       "type": "string",
       "enum": [
-        "home_client",
-        "home_livreur",
+        "dashboard_client",
+        "dashboard_livreur",
+        "dashboard_partenaire",
+        "dashboard_commercial",
+        "dashboard_admin",
+        "accueil",
         "toutes_pages"
       ],
       "title": "Emplacement"
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "title": "Profils cibl\u00e9s",
+      "description": "Ex: ['client'], ['livreur', 'client'], ['all']"
     },
     "date_debut": {
       "type": "string",
@@ -41,11 +57,13 @@
     },
     "impressions": {
       "type": "number",
-      "title": "Impressions"
+      "title": "Impressions",
+      "default": 0
     },
     "clics": {
       "type": "number",
-      "title": "Clics"
+      "title": "Clics",
+      "default": 0
     },
     "nom_annonceur": {
       "type": "string",
@@ -72,7 +90,6 @@
   },
   "required": [
     "titre",
-    "image_url",
     "placement"
   ]
 }

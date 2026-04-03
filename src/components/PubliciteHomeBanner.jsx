@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import PubliciteCarousel from './PubliciteCarousel';
+import PubliciteCarouselDisplay from './PubliciteCarouselDisplay';
 import PubliciteTracker from './PubliciteTracker';
 
 export default function PubliciteHomeBanner({ userRole = 'client', userId, userEmail }) {
@@ -106,33 +106,27 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
 
   if (loading || dismissed || !pub) return null;
 
-  // Parser images : field 'galerie_photos' (JSON array) ou 'image_url' (single)
+  // Parser images : 'images' (JSON array), fallback sur 'image_url'
   let images = [];
-  if (pub.galerie_photos) {
+  if (pub.images) {
     try {
-      const parsed = JSON.parse(pub.galerie_photos);
+      const parsed = JSON.parse(pub.images);
       images = Array.isArray(parsed) ? parsed : [pub.image_url];
     } catch {
-      images = [pub.image_url];
+      images = pub.image_url ? [pub.image_url] : [];
     }
   } else {
     images = pub.image_url ? [pub.image_url] : [];
   }
 
-  // Vérifier si c'est une vidéo
-  const isVideo = pub.type === 'Vidéo' || pub.type === 'video';
-
-  if (!isVideo && images.length === 0) return null;
-  if (isVideo && !pub.image_url) return null;
+  if (images.length === 0) return null;
 
   return (
     <PubliciteTracker publiciteId={pub.id} userRole={userRole}>
       <div className="w-full">
-        <PubliciteCarousel
-          images={isVideo ? [] : images}
+        <PubliciteCarouselDisplay
+          images={images}
           titre={pub.titre}
-          isVideo={isVideo}
-          videoUrl={isVideo ? pub.image_url : ''}
           onClose={handleDismiss}
           onImageClick={() => trackClick(pub.id, pub.lien_url)}
         />
