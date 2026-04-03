@@ -53,7 +53,7 @@ export default function AppLayout({ userRole, userEmail }) {
   const navigate = useNavigate();
   const { scrollContainerRef, isRootTab } = useTabNavigation();
   const items = NAV_ITEMS[userRole] || NAV_ITEMS.client;
-  const hasUnread = useMessageCount(userEmail, userRole);
+  const hasUnread = useMessageCount(userEmail, userRole) || false;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

@@ -24,6 +24,15 @@ const TABS = [
 ];
 
 export default function DashboardPartenaire({ user }) {
+  // Guard immédiate
+  if (!user?.email) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-sm text-muted-foreground">Profil non chargé</p>
+      </div>
+    );
+  }
+
   const navigate = useNavigate();
   const [partenaire, setPartenaire] = useState(null);
   const [produits, setProduits] = useState([]);
@@ -35,11 +44,12 @@ export default function DashboardPartenaire({ user }) {
   const [photoFile, setPhotoFile] = useState(null);
   const [savingProduit, setSavingProduit] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const newMsg = useMessageNotification(user.email);
+  const newMsg = useMessageNotification(user?.email);
   const hasUnreadMessages = useMessageCount(user?.email, "partenaire");
 
   useEffect(() => {
     const load = async () => {
+      if (!user?.email) return;
       const parts = await base44.entities.Partenaire.filter({ user_email: user.email });
       if (parts.length > 0) {
         const p = parts[0];
@@ -54,7 +64,7 @@ export default function DashboardPartenaire({ user }) {
       setLoading(false);
     };
     load();
-  }, [user.email]);
+  }, [user?.email]);
 
   const toggleOuvert = async () => {
     vibrateLight();

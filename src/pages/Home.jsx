@@ -111,14 +111,12 @@ export default function Home() {
 
   // Sync localStorage quand le profil change
   useEffect(() => {
-    const activeProfile = resolveActiveProfile(
-      Array.isArray(allProfiles) ? allProfiles : [],
-      activeProfileId
-    );
+    if (!Array.isArray(allProfiles) || allProfiles.length === 0) return;
+    const activeProfile = resolveActiveProfile(allProfiles, activeProfileId);
     if (activeProfile?.id && activeProfile.id !== activeProfileId) {
       setActiveProfileId(activeProfile.id);
     }
-  }, [allProfiles?.length]);
+  }, [allProfiles?.length, activeProfileId]);
 
   const switchProfile = (profileId) => {
     localStorage.setItem('activeProfileId', profileId);
