@@ -57,8 +57,9 @@ export default function ClientHome({ user }) {
     return unsub;
   }, [user.email]);
 
-  const activeCourses = courses.filter(c => !["livree", "annulee"].includes(c.statut));
-  const completedCount = courses.filter(c => c.statut === "livree").length;
+  const safeCourses = Array.isArray(courses) ? courses : [];
+  const activeCourses = safeCourses.filter(c => !["livree", "annulee"].includes(c.statut));
+  const completedCount = safeCourses.filter(c => c.statut === "livree").length;
 
   const navigate = useNavigate();
 
@@ -143,7 +144,7 @@ export default function ClientHome({ user }) {
             <CardContent className="p-3 text-center">
               <TrendingUp className="h-5 w-5 text-primary mx-auto mb-1" />
               <p className="text-xl font-bold text-primary">
-                {courses.length > 0 ? Math.round((completedCount / courses.length) * 100) : 0}%
+                {safeCourses.length > 0 ? Math.round((completedCount / safeCourses.length) * 100) : 0}%
               </p>
               <p className="text-[10px] text-primary/70">Conversion</p>
             </CardContent>
@@ -217,7 +218,7 @@ export default function ClientHome({ user }) {
           <Card>
             <CardContent className="p-3 text-center">
               <Package className="h-5 w-5 text-primary mx-auto mb-1" />
-              <p className="text-xl font-bold">{courses.length}</p>
+              <p className="text-xl font-bold">{safeCourses.length}</p>
               <p className="text-[10px] text-muted-foreground">Total</p>
             </CardContent>
           </Card>
@@ -261,7 +262,7 @@ export default function ClientHome({ user }) {
           </Card>
         )}
 
-        {courses.length === 0 && !loading && (
+        {safeCourses.length === 0 && !loading && (
           <div className="text-center py-8 space-y-2">
             <Truck className="h-12 w-12 text-muted-foreground/40 mx-auto" />
             <p className="text-muted-foreground text-sm">Aucune course pour le moment</p>

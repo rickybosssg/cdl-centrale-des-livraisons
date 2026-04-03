@@ -5,6 +5,7 @@ import StatusBadge from "./StatusBadge";
 import moment from "moment";
 
 export default function CourseCard({ course, onClick, children }) {
+  if (!course) return null;
   return (
     <motion.div
       whileTap={onClick ? { scale: 0.97 } : {}}

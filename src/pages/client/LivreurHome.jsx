@@ -135,8 +135,8 @@ export default function LivreurHome({ user }) {
     }
   };
 
-  const activeCourse = courses.find(c => ["acceptee", "en_cours"].includes(c.statut));
-  const coursePendante = courses.find(c => c.statut === "assignee_attente" && c.livreur_email === user.email);
+  const activeCourse = (Array.isArray(courses) ? courses : []).find(c => ["acceptee", "en_cours"].includes(c.statut));
+  const coursePendante = (Array.isArray(courses) ? courses : []).find(c => c.statut === "assignee_attente" && c.livreur_email === user.email);
 
   // Message inactivité si hors ligne
   const inactivityMsg = !disponible ? (
@@ -218,13 +218,13 @@ export default function LivreurHome({ user }) {
       </div>
     );
   }
-  const completedToday = courses.filter(c => {
+  const completedToday = (Array.isArray(courses) ? courses : []).filter(c => {
     if (c.statut !== "livree") return false;
     const today = new Date().toDateString();
     return new Date(c.date_livraison).toDateString() === today;
   });
 
-  const gainsJour = completedToday.reduce((sum, c) => sum + (c.gain_livreur || 0), 0);
+  const gainsJour = (Array.isArray(completedToday) ? completedToday : []).reduce((sum, c) => sum + (c.gain_livreur || 0), 0);
   const completedTodayCount = completedToday.length;
 
   const motivationMsg = !disponible
