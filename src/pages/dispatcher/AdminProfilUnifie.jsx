@@ -495,39 +495,11 @@ export default function AdminProfilUnifie() {
         </TabsContent>
 
         {/* ── DOCUMENTS ── */}
-        <TabsContent value="docs" className="mt-4 space-y-3">
-          {/* Documents directs sur User (livreur legacy) */}
-          <div className="space-y-2">
-            <p className="text-sm font-semibold">Documents</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "CNIB Recto", url: user.photo_identite_recto },
-                { label: "CNIB Verso", url: user.photo_identite_verso },
-                { label: "Photo véhicule", url: user.photo_moto || user.photo_moyen_deplacement },
-                { label: "Photo profil", url: user.photo_profil },
-              ].map(doc => (
-                <div key={doc.label} className="border rounded-lg overflow-hidden">
-                  {doc.url ? (
-                    <a href={doc.url} target="_blank" rel="noreferrer">
-                      <img src={doc.url} alt={doc.label} className="w-full h-24 object-cover hover:opacity-80 transition-opacity" />
-                    </a>
-                  ) : (
-                    <div className="h-24 bg-muted flex items-center justify-center">
-                      <p className="text-xs text-muted-foreground">Non fourni</p>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-center py-1 text-muted-foreground">{doc.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Documents via UserProfile */}
-          {profiles.filter(p => p.documents_json).map(profile => (
-            <div key={profile.id}>
-              <p className="text-xs font-semibold mb-2">{PROFILES.find(b => b.key === profile.profile_type)?.emoji} Documents {profile.profile_type}</p>
-              <DocumentViewer profileData={profile.documents_json} profileType={profile.profile_type} />
-            </div>
-          ))}
+        <TabsContent value="docs" className="mt-4">
+          <DocumentViewer user={user} profiles={profiles} profileType="livreur" />
+          {!profiles.some(p => p.profile_type === 'livreur') && !user.photo_identite_recto && !user.photo_profil && (
+            <p className="text-center text-sm text-muted-foreground py-8">Aucun document disponible</p>
+          )}
         </TabsContent>
 
         {/* ── COURSES ── */}
