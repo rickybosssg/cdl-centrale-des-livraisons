@@ -113,10 +113,17 @@ export default function Home() {
   useEffect(() => {
     if (!Array.isArray(allProfiles) || allProfiles.length === 0) return;
     const activeProfile = resolveActiveProfile(allProfiles, activeProfileId);
-    if (activeProfile?.id && activeProfile.id !== activeProfileId) {
-      setActiveProfileId(activeProfile.id);
+    // Vérifier si le profil actif actuel est valide. Ne jamais recalculer automatiquement.
+    // La seule source de vérité : ce qui est dans localStorage + activeProfileId state
+    if (!activeProfile || !activeProfile?.id) {
+      // Si pas de profil actif valide, et on a des profils disponibles, résoudre une seule fois
+      const resolved = allProfiles.find(p => p?.id === activeProfileId) || allProfiles[0];
+      if (resolved?.id && resolved.id !== activeProfileId) {
+        setActiveProfileId(resolved.id);
+        localStorage.setItem('activeProfileId', resolved.id);
+      }
     }
-  }, [allProfiles?.length]); // ⭐ REMOVED activeProfileId — empêche boucle infinie
+  }, [allProfiles.length, activeProfileId]); // ✅ Dépendances correctes
 
   const switchProfile = (profileId) => {
     localStorage.setItem('activeProfileId', profileId);

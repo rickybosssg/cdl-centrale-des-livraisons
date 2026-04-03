@@ -44,6 +44,7 @@ export default function DispatcherDashboard() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     const load = async () => {
       try {
         const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses, partenairesAttente, profilesAttente] = await Promise.allSettled([
@@ -63,16 +64,20 @@ export default function DispatcherDashboard() {
         if (u.user_roles) { try { return JSON.parse(u.user_roles).includes('livreur'); } catch (_) {} }
         return false;
       });
-      setCourses(coursesData);
-      setLivreurs(tousLivreurs);
-      setPartenairesEnAttente((partenairesAttente || []).filter(p => !p.deleted));
-      setProfilesEnAttente(profilesAttente || []);
+      if (isMounted) {
+        setCourses(coursesData);
+        setLivreurs(tousLivreurs);
+        setPartenairesEnAttente((partenairesAttente || []).filter(p => !p.deleted));
+        setProfilesEnAttente(profilesAttente || []);
+      }
       } catch (err) {
         console.error('Erreur lors du chargement:', err);
-        setCourses([]);
-        setLivreurs([]);
+        if (isMounted) {
+          setCourses([]);
+          setLivreurs([]);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     load();
@@ -81,11 +86,13 @@ export default function DispatcherDashboard() {
     const interval = setInterval(load, 30000);
 
     const unsubCourse = base44.entities.Course.subscribe((event) => {
+      if (!isMounted) return;
       if (event.type === 'create') setCourses(prev => [event.data, ...prev]);
       else if (event.type === 'update') setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
       else if (event.type === 'delete') setCourses(prev => prev.filter(c => c.id !== event.id));
     });
     const unsubUser = base44.entities.User.subscribe((event) => {
+      if (!isMounted) return;
       const isLivreur = event.data?.user_type === 'livreur' || event.data?.statut_validation_livreur;
       if (!isLivreur) return;
       if (event.type === 'create') setLivreurs(prev => [...prev, event.data]);
@@ -97,6 +104,7 @@ export default function DispatcherDashboard() {
       else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
     });
     const unsubPartenaire = base44.entities.Partenaire.subscribe((event) => {
+      if (!isMounted) return;
       if (event.type === 'create' && event.data?.statut === 'en_attente') {
         setPartenairesEnAttente(prev => [...prev, event.data]);
       } else if (event.type === 'update') {
@@ -110,6 +118,7 @@ export default function DispatcherDashboard() {
       }
     });
     const unsubUserProfile = base44.entities.UserProfile.subscribe((event) => {
+      if (!isMounted) return;
       if (event.type === 'create' && event.data?.status === 'en_attente') {
         setProfilesEnAttente(prev => [...prev, event.data]);
       } else if (event.type === 'update') {
@@ -122,7 +131,14 @@ export default function DispatcherDashboard() {
         setProfilesEnAttente(prev => prev.filter(p => p.id !== event.id));
       }
     });
-    return () => { unsubCourse(); unsubUser(); unsubPartenaire(); unsubUserProfile(); clearInterval(interval); };
+    return () => { 
+      isMounted = false;
+      unsubCourse(); 
+      unsubUser(); 
+      unsubPartenaire(); 
+      unsubUserProfile(); 
+      clearInterval(interval); 
+    };
   }, []);
 
   const today = new Date().toDateString();

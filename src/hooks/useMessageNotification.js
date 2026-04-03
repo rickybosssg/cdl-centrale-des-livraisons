@@ -9,25 +9,34 @@ export function useMessageNotification(userEmail) {
   useEffect(() => {
     if (!userEmail) return;
 
+    let isMounted = true;
+
     const unsub = base44.entities.MessageAdmin.subscribe((event) => {
+      if (!isMounted) return;
       if (event.type === "create" && event.data?.livreur_email === userEmail) {
-        // Notifier si c'est un message entrant (pas de l'admin)
         if (event.data?.sender_role !== "admin") {
           playNotificationSound();
           vibrateNotif();
-          setNewMsg({
-            role: event.data.sender_role,
-            contenu: event.data.contenu,
-            sender: event.data.sender_email,
-          });
+          if (isMounted) {
+            setNewMsg({
+              role: event.data.sender_role,
+              contenu: event.data.contenu,
+              sender: event.data.sender_email,
+            });
+          }
           if (timeout.current) clearTimeout(timeout.current);
-          timeout.current = setTimeout(() => setNewMsg(null), 6000);
+          if (isMounted) {
+            timeout.current = setTimeout(() => {
+              if (isMounted) setNewMsg(null);
+            }, 6000);
+          }
         }
       }
     });
 
     return () => {
-      unsub();
+      isMounted = false;
+      if (unsub) unsub();
       if (timeout.current) clearTimeout(timeout.current);
     };
   }, [userEmail]);
