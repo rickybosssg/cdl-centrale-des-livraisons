@@ -18,9 +18,12 @@ export default function AppLayoutWrapper({ user }) {
   useEffect(() => {
     if (initialized) return;
     
+    let isMounted = true;
     const load = async () => {
       try {
+        console.log('[AppLayoutWrapper] Starting load');
         const me = await base44.auth.me();
+        if (!isMounted) { console.log('[AppLayoutWrapper] Unmounted, skipping setState'); return; }
         if (!me) {
           setLoading(false);
           return;
@@ -32,6 +35,7 @@ export default function AppLayoutWrapper({ user }) {
         if (!isAdmin && (!me.user_type && !me.active_profile_type)) {
           try {
             const existingProfiles = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
+            if (!isMounted) return;
             if (existingProfiles.length === 0) {
               setNeedsRole(true);
               setLoading(false);
@@ -52,6 +56,7 @@ export default function AppLayoutWrapper({ user }) {
           const storedId = localStorage.getItem('activeProfileId');
           try {
             const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
+            if (!isMounted) return;
             const activeProf = profs.find(p => p.id === storedId) || profs.find(p => p.status === 'actif') || profs[0];
             if (activeProf) {
               setUserRole(activeProf.profile_type);
@@ -64,6 +69,7 @@ export default function AppLayoutWrapper({ user }) {
           }
         }
 
+        if (!isMounted) return;
         setUserEmail(me.email);
         const firstName = me.full_name?.split(" ")[0] || "";
         setPrenom(firstName);
@@ -76,12 +82,15 @@ export default function AppLayoutWrapper({ user }) {
       } catch (error) {
         console.error('[AppLayoutWrapper] Load error:', error);
       } finally {
-        setLoading(false);
-        setInitialized(true);
+        if (isMounted) {
+          setLoading(false);
+          setInitialized(true);
+        }
       }
     };
 
     load();
+    return () => { isMounted = false; };
   }, [initialized]);
 
   // FCM — séparé et sans dépendance
