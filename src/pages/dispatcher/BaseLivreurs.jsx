@@ -117,9 +117,10 @@ export default function BaseLivreurs() {
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-sm truncate">{livreur.full_name}</p>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg.color}`}>{statut === "en_attente" ? "En attente" : statut === "valide" ? "Validé" : "Refusé"}</span>
+                      {!livreur.telephone && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">❌ Pas de tél</span>}
                       {livreur.livreur_bloque && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">Bloqué</span>}
                     </div>
-                    <p className="text-xs text-muted-foreground">{livreur.telephone || "non renseigné"}</p>
+                    <p className="text-xs font-medium" style={{ color: livreur.telephone ? '#6b7280' : '#dc2626' }}>{livreur.telephone ? livreur.telephone : "❌ Téléphone manquant"}</p>
                     <p className="text-xs text-muted-foreground">{livreur.email}</p>
                     <p className="text-xs text-muted-foreground">{livreur.quartier || "—"} · {moment(livreur.created_date).fromNow()}</p>
                   </div>

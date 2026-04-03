@@ -65,6 +65,15 @@ Deno.serve(async (req) => {
     const missingFields = requirements.fields.filter(f => !data[f]);
     console.log('[addProfileToUser] Champs manquants:', missingFields);
 
+    // 🔴 DURCI : Téléphone obligatoire pour TOUS
+    if (!data.telephone || !data.telephone.trim()) {
+      console.log('[addProfileToUser] ERROR: Téléphone manquant ou vide');
+      return Response.json({
+        error: 'Phone number is mandatory for all profiles',
+        code: 'PHONE_REQUIRED',
+      }, { status: 400 });
+    }
+
     // ❌ Refuser si champs obligatoires manquent
     if (missingFields.length > 0) {
       return Response.json({

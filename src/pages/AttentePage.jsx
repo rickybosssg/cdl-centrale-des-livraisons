@@ -9,7 +9,7 @@ const PROFIL_LABELS = {
   commercial: { emoji: "📣", label: "Commercial", color: "bg-purple-50 border-purple-200 text-purple-800" },
 };
 
-export default function AttentePage({ profile, isBlocked = false, blockReason = "", docsEnvoyes = true, motifRefus = "" }) {
+export default function AttentePage({ profile, isBlocked = false, blockReason = "", docsEnvoyes = true, motifRefus = "", phoneManquant = false }) {
   const info = PROFIL_LABELS[profile] || { emoji: "⏳", label: profile, color: "bg-gray-50 border-gray-200 text-gray-800" };
   const navigate = useNavigate();
 
@@ -44,6 +44,31 @@ export default function AttentePage({ profile, isBlocked = false, blockReason = 
               WhatsApp CDL Support
             </a>
           </div>
+          <Button variant="outline" className="w-full" onClick={handleLogout}>
+            Se déconnecter
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔴 Téléphone manquant = incomplet
+  if (phoneManquant) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <div className="text-6xl">📱</div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-amber-600">Numéro de téléphone requis</h2>
+            <p className="text-sm text-muted-foreground">Votre profil ne peut pas être validé sans numéro de téléphone.</p>
+          </div>
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-left">
+            <p className="text-sm font-semibold text-amber-700">Étape manquante :</p>
+            <p className="text-sm text-amber-600 mt-1">Enregistrez votre numéro de téléphone dans vos paramètres pour continuer.</p>
+          </div>
+          <Button className="w-full" onClick={() => navigate('/settings')}>
+            Compléter mon profil
+          </Button>
           <Button variant="outline" className="w-full" onClick={handleLogout}>
             Se déconnecter
           </Button>

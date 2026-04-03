@@ -33,9 +33,9 @@ export default function RoleSetup({ onComplete }) {
   const [telError, setTelError] = useState("");
 
   const validateTelephone = (tel) => {
-    if (!tel || !tel.trim()) return "Le numéro de téléphone est obligatoire pour devenir livreur";
+    if (!tel || !tel.trim()) return "Le numéro de téléphone est obligatoire";
     const cleaned = tel.replace(/[\s\-\.\(\)]/g, "");
-    if (!/^(\+226|00226|0)?[0-9]{8,10}$/.test(cleaned)) return "Numéro de téléphone invalide (ex: +22670000000)";
+    if (!/^(\+226|00226|0)?[0-9]{8,10}$/.test(cleaned)) return "Numéro invalide (ex: +22670000000 ou 70000000)";
     return "";
   };
   const [showLivreurBienvenue, setShowLivreurBienvenue] = useState(false);
@@ -307,16 +307,17 @@ export default function RoleSetup({ onComplete }) {
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Numéro de téléphone {selectedRole === "livreur" ? "* (obligatoire)" : "*"}</Label>
+            <Label>📱 Numéro de téléphone * (obligatoire pour tous)</Label>
             <Input
-              placeholder="+226 XX XX XX XX"
+              placeholder="+226 70000000"
               value={form.telephone}
               onChange={(e) => { setForm({ ...form, telephone: e.target.value }); if (telError) setTelError(""); }}
               className={telError ? "border-red-500 focus-visible:ring-red-500" : ""}
+              disabled={loading}
             />
-            {telError && <p className="text-xs text-red-600 font-medium">{telError}</p>}
-            {selectedRole === "livreur" && !telError && form.telephone && (
-              <p className="text-xs text-green-600">✅ Numéro renseigné</p>
+            {telError && <p className="text-xs text-red-600 font-bold">❌ {telError}</p>}
+            {!telError && form.telephone && (
+              <p className="text-xs text-green-600 font-medium">✅ Numéro valide</p>
             )}
           </div>
 
@@ -415,7 +416,11 @@ export default function RoleSetup({ onComplete }) {
             Retour
           </Button>
           <Button
-            onClick={handleSubmit}
+            onClick={() => {
+              const err = validateTelephone(form.telephone);
+              if (err) { setTelError(err); toast.error(err); return; }
+              handleSubmit();
+            }}
             disabled={!form.telephone || !form.quartier || loading || (selectedRole === "livreur" && moyenDeplacement.length === 0)}
             className="flex-1 h-11 font-semibold"
           >
