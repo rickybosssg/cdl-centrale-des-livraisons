@@ -96,6 +96,7 @@ export default function CommandesPartenaire({ user }) {
       type_colis: "Petit colis",
       description: `Commande chez ${partenaire.nom_commerce}`,
       statut: "en_attente",
+      source: "mall",
       statut_paiement: "paiement_livraison",
       mode_paiement: "Paiement à la livraison",
       client_email: cmd.client_email,

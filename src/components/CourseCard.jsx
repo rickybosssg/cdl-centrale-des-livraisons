@@ -20,6 +20,11 @@ export default function CourseCard({ course, onClick, children }) {
     >
       <CardContent className="p-4">
         <div className="flex items-center gap-2 flex-wrap mb-3">
+          {course.source === 'mall' && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+              🏪 MALL
+            </span>
+          )}
           {course.type_mission === 'envoyer' && (
             <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
               <Send className="h-2.5 w-2.5" />ENVOYER

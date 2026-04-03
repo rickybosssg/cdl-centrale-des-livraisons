@@ -11,6 +11,100 @@ import moment from "moment";
 
 const CATEGORIES = ["Tous", "Restaurant", "Pharmacie", "Boutique", "Alimentation", "Boissons", "Vitrine"];
 
+const STATUT_COLORS = {
+  en_attente_partenaire: "bg-amber-100 text-amber-700",
+  acceptee: "bg-blue-100 text-blue-700",
+  en_preparation: "bg-purple-100 text-purple-700",
+  prete: "bg-indigo-100 text-indigo-700",
+  en_livraison: "bg-cyan-100 text-cyan-700",
+  livree: "bg-green-100 text-green-700",
+  annulee: "bg-red-100 text-red-700",
+  refusee: "bg-red-100 text-red-700",
+};
+
+const STATUT_LABELS = {
+  en_attente_partenaire: "En attente",
+  acceptee: "Acceptée",
+  en_preparation: "En préparation",
+  prete: "Prête",
+  en_livraison: "En livraison",
+  livree: "Livrée ✅",
+  annulee: "Annulée",
+  refusee: "Refusée",
+};
+
+// ─── Mes commandes Mall (client / livreur / commercial) ─────────────────────
+function MesCommandesMall({ userEmail }) {
+  const [commandes, setCommandes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filtre, setFiltre] = useState("tous");
+
+  useEffect(() => {
+    base44.entities.CommandePartenaire.filter({ client_email: userEmail }, "-created_date", 100)
+      .then(d => { setCommandes(d || []); setLoading(false); });
+  }, [userEmail]);
+
+  const FILTRES = [
+    { val: "tous", label: "Toutes" },
+    { val: "en_cours", label: "🔄 En cours" },
+    { val: "livree", label: "✅ Livrées" },
+    { val: "annulee", label: "❌ Annulées" },
+  ];
+
+  const filtered = commandes.filter(c => {
+    if (filtre === "tous") return true;
+    if (filtre === "en_cours") return !["livree", "annulee", "refusee"].includes(c.statut);
+    return c.statut === filtre;
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {FILTRES.map(f => (
+          <button key={f.val} onClick={() => setFiltre(f.val)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${filtre === f.val ? "bg-primary text-white border-primary" : "border-border"}`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+      {loading && <div className="flex justify-center py-8"><div className="w-6 h-6 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>}
+      {!loading && filtered.length === 0 && (
+        <div className="text-center py-12 space-y-2">
+          <ShoppingBag className="h-10 w-10 text-muted-foreground/30 mx-auto" />
+          <p className="text-sm text-muted-foreground">Aucune commande Mall</p>
+        </div>
+      )}
+      <div className="space-y-2">
+        {filtered.map(cmd => (
+          <Card key={cmd.id}>
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold">🏪</span>
+                    <p className="font-semibold text-sm">{cmd.partenaire_nom}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">📍 {cmd.quartier_livraison}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${STATUT_COLORS[cmd.statut] || "bg-muted text-muted-foreground"}`}>
+                  {STATUT_LABELS[cmd.statut] || cmd.statut}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">{moment(cmd.created_date).format("DD/MM/YY HH:mm")}</span>
+                <span className="font-bold text-primary">{(cmd.total_commande || 0).toLocaleString()} FCFA</span>
+              </div>
+              {cmd.course_id && (
+                <div className="text-[10px] text-blue-600 font-medium">🛵 Course CDL en cours · ID: {cmd.course_id.slice(0,8)}…</div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Vue boutiques ──────────────────────────────────────────────────────────
 function MallBoutiques({ isAdmin }) {
   const navigate = useNavigate();
@@ -356,7 +450,14 @@ export default function Mall() {
           <p className="text-xs text-muted-foreground">Boutiques & livraisons</p>
         </div>
       </div>
-      <MallBoutiques isAdmin={false} />
+      <Tabs defaultValue="boutiques">
+        <TabsList className="w-full grid grid-cols-2">
+          <TabsTrigger value="boutiques"><Store className="h-3.5 w-3.5 mr-1.5" />Boutiques</TabsTrigger>
+          <TabsTrigger value="commandes"><ShoppingBag className="h-3.5 w-3.5 mr-1.5" />Mes commandes</TabsTrigger>
+        </TabsList>
+        <TabsContent value="boutiques" className="mt-4"><MallBoutiques isAdmin={false} /></TabsContent>
+        <TabsContent value="commandes" className="mt-4"><MesCommandesMall userEmail={user?.email} /></TabsContent>
+      </Tabs>
     </div>
   );
 }
