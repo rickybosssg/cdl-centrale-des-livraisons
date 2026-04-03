@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Search, UserPlus, User, Shield, RefreshCw, CheckCircle2, XCircle, Eye, Plus } from "lucide-react";
@@ -272,7 +273,7 @@ export default function GestionProfils() {
     await base44.entities.UserProfile.delete(profile.id);
 
     if (profile.profile_type === "admin" || profile.profile_type === "dispatcher") {
-      const remaining = userProfiles.filter(p => p.id !== profile.id && (p.profile_type === "admin" || p.profile_type === "dispatcher"));
+      const remaining = selectedUserProfiles.filter(p => p.id !== profile.id && (p.profile_type === "admin" || p.profile_type === "dispatcher"));
       if (remaining.length === 0) {
         await base44.entities.User.update(selectedUser.id, { role: "user" });
       }
