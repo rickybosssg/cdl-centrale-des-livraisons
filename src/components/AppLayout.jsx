@@ -20,18 +20,19 @@ const NAV_ITEMS = {
     { path: "/", icon: Home, label: "Accueil" },
     { path: "/courses-disponibles", icon: Package, label: "Disponibles" },
     { path: "/mes-livraisons", icon: Truck, label: "Livraisons" },
-    { path: "/mes-gains", icon: TrendingUp, label: "Gains" },
+    { path: "/mall", icon: Store, label: "MALL" },
     { path: "/mes-discussions", icon: MessageCircle, label: "Messages" },
   ],
   admin: [
     { path: "/", icon: Home, label: "Accueil" },
     { path: "/gerer-courses", icon: Package, label: "Courses" },
     { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
-    { path: "/audit-utilisateurs", icon: ShieldCheck, label: "Audit" },
+    { path: "/mall", icon: Store, label: "MALL" },
     { path: "/messages-admin", icon: MessageCircle, label: "Messages" },
   ],
   commercial: [
     { path: "/", icon: Home, label: "Accueil" },
+    { path: "/mall", icon: Store, label: "MALL" },
     { path: "/mes-messages", icon: MessageCircle, label: "Messages" },
   ],
   partenaire: [
