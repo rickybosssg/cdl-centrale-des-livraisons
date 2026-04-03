@@ -12,56 +12,70 @@ import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
 
 export default function ClientHome({ user }) {
+  // Guard immédiate
+  if (!user?.email) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-sm text-muted-foreground">Profil non chargé</p>
+      </div>
+    );
+  }
+
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showMessages, setShowMessages] = useState(false);
-  const [showDeplacement, setShowDeplacement] = useState(false);
+  const navigate = useNavigate();
 
-  // Demande géolocalisation à la première connexion
+  // Demande géolocalisation
   useEffect(() => {
-    if (!user.gps_latitude && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          base44.auth.updateMe({
-            gps_latitude: pos.coords.latitude,
-            gps_longitude: pos.coords.longitude,
-          });
-        },
-        () => {} // silencieux si refusé
-      );
-    }
-  }, [user.id]);
+    if (user?.gps_latitude || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        base44.auth.updateMe({
+          gps_latitude: pos.coords.latitude,
+          gps_longitude: pos.coords.longitude,
+        });
+      },
+      () => {}
+    );
+  }, [user?.id]);
 
+  // Charger courses
   useEffect(() => {
     const load = async () => {
-      const data = await base44.entities.Course.filter(
-        { client_email: user.email },
-        "-created_date",
-        20
-      );
-      setCourses(data);
-      setLoading(false);
+      try {
+        const data = await base44.entities.Course.filter(
+          { client_email: user.email },
+          "-created_date",
+          20
+        );
+        setCourses(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('[ClientHome] Load error:', err);
+        setCourses([]);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
 
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (!event.data || event.data.client_email !== user.email) return;
+      if (!event?.data?.client_email || event.data.client_email !== user.email) return;
       if (event.type === "create") {
         setCourses(prev => [event.data, ...prev]);
       } else if (event.type === "update") {
-        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+        setCourses(prev => prev.map(c => c?.id === event.id ? event.data : c));
       } else if (event.type === "delete") {
-        setCourses(prev => prev.filter(c => c.id !== event.id));
+        setCourses(prev => prev.filter(c => c?.id !== event.id));
       }
     });
-    return unsub;
-  }, [user.email]);
+
+    return () => { if (unsub) unsub(); };
+  }, [user?.email]);
 
   const safeCourses = Array.isArray(courses) ? courses : [];
-  const activeCourses = safeCourses.filter(c => !["livree", "annulee"].includes(c.statut));
-  const completedCount = safeCourses.filter(c => c.statut === "livree").length;
-
-  const navigate = useNavigate();
+  const activeCourses = safeCourses.filter(c => !['livree', 'annulee'].includes(c?.statut));
+  const completedCount = safeCourses.filter(c => c?.statut === 'livree').length;
 
   return (
     <div className="space-y-0">
@@ -69,17 +83,17 @@ export default function ClientHome({ user }) {
       <div className="space-y-6 mt-4">
         {/* Welcome */}
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Bonjour, {user.full_name?.split(" ")[0]} 👋</h1>
-          <p className="text-sm text-muted-foreground">Bienvenue sur CDL - Centrale des Livraisons</p>
+          <h1 className="text-2xl font-bold">Bonjour, {user.full_name?.split(" ")[0] || "Client"} 👋</h1>
+          <p className="text-sm text-muted-foreground">Bienvenue sur CDL</p>
         </div>
 
         {/* Bedou */}
         <BedouWidget user={user} />
 
-        {/* Carousel publicités */}
+        {/* Carousel */}
         <AdCarousel placement="accueil" userRole="client" />
 
-        {/* Bouton principal Commander */}
+        {/* Commander */}
         <Link to="/commander">
           <div className="relative overflow-hidden w-full p-6 rounded-3xl bg-gradient-to-br from-primary to-blue-700 text-white shadow-xl active:scale-[0.97] transition-all cursor-pointer">
             <div className="flex items-center gap-4">
@@ -88,43 +102,13 @@ export default function ClientHome({ user }) {
               </div>
               <div className="flex-1">
                 <p className="text-2xl font-extrabold tracking-tight">Commander une course</p>
-                <p className="text-sm text-white/80 mt-0.5">Livreur disponible en quelques minutes</p>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
-                <span className="text-xl font-bold">→</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-white/20">
-              <div className="flex items-center gap-1.5">
-                <span className="text-base">⚡</span>
-                <span className="text-xs font-semibold text-white/90">Livraison rapide</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-base">🛡️</span>
-                <span className="text-xs font-semibold text-white/90">Livreurs vérifiés</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-base">📍</span>
-                <span className="text-xs font-semibold text-white/90">Partout à Ouaga</span>
+                <p className="text-sm text-white/80 mt-0.5">Livreur en quelques minutes</p>
               </div>
             </div>
           </div>
         </Link>
 
-        {/* Badges de confiance */}
-        <div className="flex items-center justify-center gap-6 py-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-green-500 font-bold text-sm">✓</span>
-            <span className="text-xs text-muted-foreground font-medium">+100 courses livrées</span>
-          </div>
-          <div className="h-3 w-px bg-border" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-green-500 font-bold text-sm">✓</span>
-            <span className="text-xs text-muted-foreground font-medium">Livreurs certifiés CDL</span>
-          </div>
-        </div>
-
-        {/* Stats acquisition */}
+        {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
           <Card className="border-amber-200 bg-amber-50">
             <CardContent className="p-3 text-center">
@@ -151,7 +135,7 @@ export default function ClientHome({ user }) {
           </Card>
         </div>
 
-        {/* Quick actions */}
+        {/* Actions */}
         <div className="grid grid-cols-2 gap-3">
           <Link to="/commander">
             <Card className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer h-full">
@@ -199,31 +183,6 @@ export default function ClientHome({ user }) {
           </Link>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <Card>
-            <CardContent className="p-3 text-center">
-              <Clock className="h-5 w-5 text-amber-500 mx-auto mb-1" />
-              <p className="text-xl font-bold">{activeCourses.length}</p>
-              <p className="text-[10px] text-muted-foreground">En cours</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3 text-center">
-              <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto mb-1" />
-              <p className="text-xl font-bold">{completedCount}</p>
-              <p className="text-[10px] text-muted-foreground">Livrées</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3 text-center">
-              <Package className="h-5 w-5 text-primary mx-auto mb-1" />
-              <p className="text-xl font-bold">{safeCourses.length}</p>
-              <p className="text-[10px] text-muted-foreground">Total</p>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Active courses */}
         {activeCourses.length > 0 && (
           <div className="space-y-3">
@@ -232,14 +191,14 @@ export default function ClientHome({ user }) {
               <Link to="/mes-courses" className="text-xs text-primary font-medium">Voir tout</Link>
             </div>
             {activeCourses.map((course) => (
-              <Link key={course.id} to={`/course/${course.id}`}>
+              <Link key={course?.id} to={`/course/${course?.id}`}>
                 <CourseCard course={course} />
               </Link>
             ))}
           </div>
         )}
 
-        {/* Messages CDL */}
+        {/* Messages */}
         <button
           onClick={() => setShowMessages(!showMessages)}
           className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
@@ -256,7 +215,7 @@ export default function ClientHome({ user }) {
         {showMessages && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-sm font-semibold mb-3">💬 Discussion avec l'Administration CDL</p>
+              <p className="text-sm font-semibold mb-3">💬 Discussion</p>
               <ChatAdmin userEmail={user.email} userRole="client" currentUser={user} />
             </CardContent>
           </Card>
@@ -265,7 +224,7 @@ export default function ClientHome({ user }) {
         {safeCourses.length === 0 && !loading && (
           <div className="text-center py-8 space-y-2">
             <Truck className="h-12 w-12 text-muted-foreground/40 mx-auto" />
-            <p className="text-muted-foreground text-sm">Aucune course pour le moment</p>
+            <p className="text-muted-foreground text-sm">Aucune course</p>
             <p className="text-xs text-muted-foreground">Commandez votre première livraison !</p>
           </div>
         )}

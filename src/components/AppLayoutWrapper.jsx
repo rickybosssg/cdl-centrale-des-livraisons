@@ -12,99 +12,79 @@ export default function AppLayoutWrapper({ user }) {
   const [prenom, setPrenom] = useState("");
   const [showSplash, setShowSplash] = useState(false);
   const [needsRole, setNeedsRole] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
+  // LOAD USER — une seule fois
   useEffect(() => {
+    if (initialized) return;
+    
     const load = async () => {
       try {
         const me = await base44.auth.me();
+        if (!me) {
+          setLoading(false);
+          return;
+        }
+
         const ADMIN_EMAILS = ['weezyh2@gmail.com'];
         const isAdmin = me.role === 'admin' || ADMIN_EMAILS.includes(me.email);
 
-        if (!isAdmin) {
-          // CAS 1 : pas de rôle → vérifier d'abord si un UserProfile existe
-          if (!me.user_type && !me.active_profile_type) {
-            // Vérifier si l'utilisateur a déjà des profils dans UserProfile
-            try {
-              const existingProfiles = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
-              if (existingProfiles.length > 0) {
-                // Il a des profils, auto-réparer user_type depuis le premier profil actif
-                const actif = existingProfiles.find(p => p.status === 'actif') || existingProfiles[0];
-                await base44.auth.updateMe({ user_type: actif.profile_type, active_profile_type: actif.profile_type, onboarding_completed: true });
-              } else {
-                setNeedsRole(true);
-                setLoading(false);
-                return;
-              }
-            } catch (_) {
-              setNeedsRole(true);
-              setLoading(false);
-              return;
-            }
-          }
-
-          // CAS 2 : rôle présent mais onboarding non terminé OU fiche métier potentiellement absente
-          // → appeler ensureUserProfile qui créera la fiche si elle manque
-          // Forcer onboarding_completed=true pour réparer les anciens comptes sans bloquer
+        if (!isAdmin && (!me.user_type && !me.active_profile_type)) {
           try {
-            const result = await base44.functions.invoke('ensureUserProfile', {
-              user_type: me.user_type,
-              onboarding_completed: true,
-              context: 'login',
-            });
-            // Si le serveur répond needs_onboarding ET qu'il n'y a vraiment pas de user_type → bloquer
-            if (result?.data?.needs_onboarding && !me.user_type) {
+            const existingProfiles = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
+            if (existingProfiles.length === 0) {
               setNeedsRole(true);
               setLoading(false);
+              setInitialized(true);
               return;
             }
-          } catch (_) {}
-
-          // Marquer onboarding terminé si nécessaire (réparation silencieuse)
-          if (!me.onboarding_completed) {
-            try { await base44.entities.User.update(me.id, { onboarding_completed: true }); } catch (_) {}
+          } catch (_) {
+            setNeedsRole(true);
+            setLoading(false);
+            setInitialized(true);
+            return;
           }
         }
 
         if (me.email === "weezyh2@gmail.com" || me.role === 'admin') {
           setUserRole("admin");
         } else {
-          // SOURCE DE VÉRITÉ : activeProfileId dans localStorage
           const storedId = localStorage.getItem('activeProfileId');
           try {
             const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
-            let activeProf = profs.find(p => p.id === storedId);
-            if (!activeProf) activeProf = profs.find(p => p.status === 'actif') || profs[0];
+            const activeProf = profs.find(p => p.id === storedId) || profs.find(p => p.status === 'actif') || profs[0];
             if (activeProf) {
-              if (!storedId || storedId !== activeProf.id) {
-                localStorage.setItem('activeProfileId', activeProf.id);
-              }
               setUserRole(activeProf.profile_type);
+              localStorage.setItem('activeProfileId', activeProf.id);
             } else {
               setUserRole(me.user_type || "client");
             }
           } catch (_) {
-            setUserRole(me.active_profile_type || me.user_type || "client");
+            setUserRole(me.user_type || "client");
           }
         }
-        window.__cdl_user_email = me.email;
+
+        setUserEmail(me.email);
         const firstName = me.full_name?.split(" ")[0] || "";
         setPrenom(firstName);
-        setUserEmail(me.email);
+
         const key = `splash_shown_${me.id}`;
         if (!sessionStorage.getItem(key)) {
           sessionStorage.setItem(key, '1');
           setShowSplash(true);
         }
       } catch (error) {
+        console.error('[AppLayoutWrapper] Load error:', error);
+      } finally {
         setLoading(false);
-        return;
+        setInitialized(true);
       }
-      setLoading(false);
     };
-    load();
-  }, []);
 
-  // FCM initialisé en arrière-plan (optionnel)
+    load();
+  }, [initialized]);
+
+  // FCM — séparé et sans dépendance
   useEffect(() => {
     const initFcm = async () => {
       try {
@@ -113,20 +93,12 @@ export default function AppLayoutWrapper({ user }) {
         if (!mod?.requestNotificationPermission) return;
         const permitted = await mod.requestNotificationPermission();
         if (!permitted) return;
-        if (!mod?.registerFcmToken) return;
         const token = await mod.registerFcmToken();
         if (token) {
           base44.functions.invoke('saveFcmToken', { token }).catch(() => {});
-          if (mod?.onForegroundMessage) {
-            mod.onForegroundMessage((payload) => {
-              if (payload?.notification?.title) {
-                new Notification(payload.notification.title, { body: payload.notification?.body });
-              }
-            });
-          }
         }
       } catch (err) {
-        console.debug('[FCM] Erreur initialisation (non-critique):', err?.message);
+        console.debug('[FCM] Init error:', err?.message);
       }
     };
     initFcm();
@@ -141,7 +113,7 @@ export default function AppLayoutWrapper({ user }) {
   }
 
   if (needsRole) {
-    return <RoleSetup onComplete={() => { setNeedsRole(false); window.location.reload(); }} />;
+    return <RoleSetup onComplete={() => { window.location.reload(); }} />;
   }
 
   return (
