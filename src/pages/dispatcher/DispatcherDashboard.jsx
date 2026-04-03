@@ -490,11 +490,6 @@ export default function DispatcherDashboard() {
             </CardContent>
           </Card>
         </Link>
-        {/* TEST ROUGE - SI VISIBLE = BON COMPOSANT */}
-        <div style={{background: 'red', color: 'white', padding: '20px', borderRadius: '8px'}}>
-          <p style={{fontSize: '14px', fontWeight: 'bold'}}>🔴 TEST PUBLICITÉS ADMIN</p>
-        </div>
-        {/* VRAIE CARTE PUBLICITÉS ADMIN */}
         <Link to="/gerer-publicites">
           <Card className="hover:shadow-md transition-shadow cursor-pointer bg-gradient-to-br from-orange-500 to-amber-600 border-0">
             <CardContent className="p-4 text-center space-y-2">
