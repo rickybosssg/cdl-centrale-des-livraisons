@@ -12,7 +12,7 @@ import moment from "moment";
 
 const STATUT_CONFIG = {
   "en_attente": "bg-amber-100 text-amber-700",
-  "valide": "bg-green-100 text-green-700",
+  "actif": "bg-green-100 text-green-700",
   "refuse": "bg-red-100 text-red-700",
 };
 
@@ -29,24 +29,50 @@ export default function GererCommerciaux() {
   const [filtre, setFiltre] = useState("tous");
 
   const loadData = async () => {
-    const [dataCommerciaux, dataCodes, me] = await Promise.all([
-      base44.entities.User.filter({ user_type: "commercial" }),
-      base44.entities.CodePromo.list("-created_date", 200),
-      base44.auth.me(),
-    ]);
-    setCommerciaux(dataCommerciaux);
-    setCodes(dataCodes);
-    setAdmin(me);
-    setLoading(false);
+    try {
+      // Récupérer TOUS les profils commerciaux (y compris supplémentaires via multi-profil)
+      const allProfiles = await base44.entities.UserProfile.filter({ profile_type: "commercial", deleted: false });
+      // Récupérer les users pour avoir les infos complètes
+      const allUsers = await base44.entities.User.list("-created_date", 1000);
+      
+      // Mapper profiles -> users pour affichage complet
+      const commerciaux = (allProfiles || []).map(profile => {
+        const user = allUsers.find(u => u.email === profile.user_email);
+        return {
+          id: profile.id,
+          profile_id: profile.id,
+          user_email: profile.user_email,
+          full_name: user?.full_name || profile.user_email,
+          email: profile.user_email,
+          telephone: user?.telephone,
+          quartier: user?.quartier,
+          created_date: profile.created_date,
+          statut_validation_commercial: profile.status,
+        };
+      });
+
+      const [dataCodes, me] = await Promise.all([
+        base44.entities.CodePromo.list("-created_date", 200),
+        base44.auth.me(),
+      ]);
+      
+      setCommerciaux(commerciaux);
+      setCodes(dataCodes);
+      setAdmin(me);
+    } catch (err) {
+      console.error('[GererCommerciaux] Erreur loadData:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const unsub = base44.entities.User.subscribe((event) => {
-      if (event.data?.user_type === 'commercial') {
-        if (event.type === 'create') setCommerciaux(prev => [...prev, event.data]);
-        else if (event.type === 'update') setCommerciaux(prev => prev.map(c => c.id === event.id ? event.data : c));
-        else if (event.type === 'delete') setCommerciaux(prev => prev.filter(c => c.id !== event.id));
+    // Écouter les changements sur UserProfile (profils supplémentaires)
+    const unsub = base44.entities.UserProfile.subscribe((event) => {
+      if (event.data?.profile_type === 'commercial') {
+        console.log('[GererCommerciaux] Changement détecté sur profil commercial:', event.type);
+        loadData();
       }
     });
     return unsub;
@@ -64,74 +90,93 @@ export default function GererCommerciaux() {
   };
 
   const validerCommercial = async (commercial) => {
-    await base44.entities.User.update(commercial.id, { statut_validation_commercial: "valide" });
-    const code = codes.find(c => c.commercial_email === commercial.email);
-    if (!code) {
-      const newCode = "COM" + Math.floor(1000 + Math.random() * 9000);
-      await base44.entities.CodePromo.create({
-        commercial_email: commercial.email,
-        commercial_name: commercial.full_name,
-        code: newCode,
-        statut: "valide",
-        actif: true,
+    try {
+      // Mettre à jour le profil commercial (pas le user principal)
+      await base44.entities.UserProfile.update(commercial.profile_id, { status: "actif" });
+      
+      const code = codes.find(c => c.commercial_email === commercial.email);
+      if (!code) {
+        const newCode = "COM" + Math.floor(1000 + Math.random() * 9000);
+        await base44.entities.CodePromo.create({
+          commercial_email: commercial.email,
+          commercial_name: commercial.full_name,
+          code: newCode,
+          statut: "valide",
+          actif: true,
+        });
+      }
+      
+      await base44.entities.AdminActionLog.create({
+        admin_email: admin.email,
+        object_type: "commercial",
+        object_id: commercial.profile_id,
+        object_name: commercial.full_name,
+        action: "validate",
+        reason: "Validation profil commercial",
+        target_email: commercial.email,
       });
+      
+      toast.success("Commercial validé");
+      setDialog(false);
+      loadData();
+    } catch (err) {
+      console.error('[GererCommerciaux] Erreur validation:', err);
+      toast.error('Erreur validation: ' + err.message);
     }
-    await base44.entities.AdminActionLog.create({
-      admin_email: admin.email,
-      object_type: "commercial",
-      object_id: commercial.id,
-      object_name: commercial.full_name,
-      action: "validate",
-      reason: "Validation commercial",
-      target_email: commercial.email,
-    });
-    toast.success("Commercial validé");
-    setDialog(false);
-    loadData();
   };
 
   const refuserCommercial = async (commercial) => {
-    await base44.entities.User.update(commercial.id, { statut_validation_commercial: "refuse" });
-    await base44.entities.AdminActionLog.create({
-      admin_email: admin.email,
-      object_type: "commercial",
-      object_id: commercial.id,
-      object_name: commercial.full_name,
-      action: "refuse",
-      reason: "Refus commercial",
-      target_email: commercial.email,
-    });
-    toast.success("Commercial refusé");
-    setDialog(false);
-    loadData();
+    try {
+      // Mettre à jour le profil commercial (pas le user principal)
+      await base44.entities.UserProfile.update(commercial.profile_id, { status: "refuse" });
+      
+      await base44.entities.AdminActionLog.create({
+        admin_email: admin.email,
+        object_type: "commercial",
+        object_id: commercial.profile_id,
+        object_name: commercial.full_name,
+        action: "refuse",
+        reason: "Refus profil commercial",
+        target_email: commercial.email,
+      });
+      
+      toast.success("Commercial refusé");
+      setDialog(false);
+      loadData();
+    } catch (err) {
+      console.error('[GererCommerciaux] Erreur refus:', err);
+      toast.error('Erreur refus: ' + err.message);
+    }
   };
 
   const supprimerCommercial = async (commercial) => {
     const confirmed = window.confirm(
-      `⚠️ SUPPRESSION COMPLÈTE\n\n` +
+      `⚠️ SUPPRESSION DU PROFIL COMMERCIAL\n\n` +
       `Cela supprimera :\n` +
-      `• Le compte ${commercial.full_name}\n` +
-      `• Tous les profils liés\n` +
-      `• Code promo et toutes les données associées\n\n` +
+      `• Le profil commercial de ${commercial.full_name}\n` +
+      `• Code promo et données associées\n\n` +
+      `L'utilisateur conservera ses autres profils.\n` +
       `Cette action est IRRÉVERSIBLE.\n` +
       `Confirmer ?"`
     );
     if (!confirmed) return;
 
     try {
-      const res = await base44.functions.invoke('deleteUserComplete', {
-        user_id: commercial.id,
-        user_email: commercial.email,
-      });
-      if (res.data?.success) {
-        toast.success(`✅ ${commercial.full_name} supprimé complètement`);
-        setDialog(false);
-        setCommerciaux(prev => prev.filter(c => c.id !== commercial.id));
-        setSelected(null);
-      } else {
-        toast.error(`Erreur : ${res.data?.error || 'Suppression échouée'}`);
+      // Supprimer le profil commercial
+      await base44.entities.UserProfile.delete(commercial.profile_id);
+      
+      // Supprimer le code promo si existe
+      const code = codes.find(c => c.commercial_email === commercial.email);
+      if (code) {
+        await base44.entities.CodePromo.delete(code.id);
       }
+      
+      toast.success(`✅ Profil commercial de ${commercial.full_name} supprimé`);
+      setDialog(false);
+      setCommerciaux(prev => prev.filter(c => c.profile_id !== commercial.profile_id));
+      setSelected(null);
     } catch (err) {
+      console.error('[GererCommerciaux] Erreur suppression:', err);
       toast.error(`Erreur suppression : ${err.message}`);
     }
   };
@@ -141,9 +186,10 @@ export default function GererCommerciaux() {
     const code = codes.find(cp => cp.commercial_email === c.email);
     const match = !q || c.full_name?.toLowerCase().includes(q) || c.telephone?.includes(q) || c.email?.toLowerCase().includes(q) || code?.code?.toLowerCase().includes(q);
     let filtre_match = true;
-    if (filtre === "valides") filtre_match = c.statut_validation_commercial === "valide";
-    else if (filtre === "en_attente") filtre_match = !c.statut_validation_commercial || c.statut_validation_commercial === "en_attente";
-    else if (filtre === "refuses") filtre_match = c.statut_validation_commercial === "refuse";
+    const statut = c.statut_validation_commercial || "en_attente";
+    if (filtre === "valides") filtre_match = statut === "actif";
+    else if (filtre === "en_attente") filtre_match = statut === "en_attente";
+    else if (filtre === "refuses") filtre_match = statut === "refuse";
     return match && filtre_match;
   });
 
@@ -158,7 +204,7 @@ export default function GererCommerciaux() {
 
       <div className="grid grid-cols-3 gap-2">
         <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold">{commerciaux.length}</p><p className="text-[10px] text-muted-foreground">Total</p></CardContent></Card>
-        <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-green-600">{commerciaux.filter(c => c.statut_validation_commercial === "valide").length}</p><p className="text-[10px] text-muted-foreground">Validés</p></CardContent></Card>
+        <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-green-600">{commerciaux.filter(c => c.statut_validation_commercial === "actif").length}</p><p className="text-[10px] text-muted-foreground">Validés</p></CardContent></Card>
         <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-amber-600">{commerciaux.filter(c => !c.statut_validation_commercial || c.statut_validation_commercial === "en_attente").length}</p><p className="text-[10px] text-muted-foreground">En attente</p></CardContent></Card>
       </div>
 
@@ -194,14 +240,15 @@ export default function GererCommerciaux() {
           const statut = commercial.statut_validation_commercial || "en_attente";
           const cfg = STATUT_CONFIG[statut] || "bg-gray-100 text-gray-700";
           const code = codes.find(c => c.commercial_email === commercial.email);
+          const displayStatut = statut === "actif" ? "Validé" : statut === "en_attente" ? "En attente" : "Refusé";
           return (
-            <Card key={commercial.id} className="hover:shadow-md transition-shadow">
+            <Card key={commercial.profile_id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-sm truncate">{commercial.full_name}</p>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg}`}>{statut === "en_attente" ? "En attente" : statut === "valide" ? "Validé" : "Refusé"}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg}`}>{displayStatut}</span>
                     </div>
                     <p className="text-xs font-medium">{commercial.telephone || "non renseigné"}</p>
                     <p className="text-xs text-muted-foreground">{commercial.email}</p>
@@ -258,7 +305,7 @@ export default function GererCommerciaux() {
                 </div>
 
                 <div className="p-3 rounded-lg border text-sm space-y-1">
-                  <div className="flex justify-between"><span>Statut</span><span className="font-bold">{selected.statut_validation_commercial || "en_attente"}</span></div>
+                  <div className="flex justify-between"><span>Statut</span><span className="font-bold">{selected.statut_validation_commercial === "actif" ? "Validé" : selected.statut_validation_commercial || "En attente"}</span></div>
                   <div className="flex justify-between"><span>Inscrit</span><span>{moment(selected.created_date).format("DD/MM/YYYY")}</span></div>
                 </div>
 
@@ -270,6 +317,8 @@ export default function GererCommerciaux() {
                     </>
                   ) : selected.statut_validation_commercial === "refuse" ? (
                     <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => validerCommercial(selected)}>✅ Valider quand même</Button>
+                  ) : selected.statut_validation_commercial === "actif" ? (
+                    <Button variant="outline" className="flex-1 text-muted-foreground" disabled>✅ Validé</Button>
                   ) : null}
                   {admin?.role === "admin" && (
                     <Button variant="outline" className="flex-1 border-red-400 text-red-700 hover:bg-red-50" onClick={() => supprimerCommercial(selected)}><Trash2 className="h-3 w-3" /></Button>
