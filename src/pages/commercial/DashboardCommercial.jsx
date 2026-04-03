@@ -23,57 +23,11 @@ export default function DashboardCommercial({ user }) {
   const [clientStats, setClientStats] = useState({});
   const [loadingPerf, setLoadingPerf] = useState(false);
   const [error, setError] = useState(null);
-  const [activeProfile, setActiveProfile] = useState(null);
 
   useEffect(() => {
     console.log('[DashboardCommercial] Mount, user:', user?.email);
-    loadProfileAndCode();
+    loadCode();
   }, [user?.email]);
-
-  const loadProfileAndCode = async () => {
-    try {
-      setError(null);
-      console.log('[DashboardCommercial] loadProfileAndCode start for:', user?.email);
-      
-      if (!user?.email) {
-        console.error('[DashboardCommercial] Pas de user.email');
-        setError('Utilisateur non identifié');
-        setLoading(false);
-        return;
-      }
-
-      // Vérifier que le profil actif est commercial
-      const userProfiles = await base44.entities.UserProfile.filter({ user_email: user.email, deleted: false });
-      console.log('[DashboardCommercial] Profiles found:', userProfiles?.length || 0);
-      
-      const activeProfileId = localStorage.getItem('activeProfileId');
-      let commercialProfile = null;
-      
-      if (activeProfileId) {
-        commercialProfile = userProfiles?.find(p => p.id === activeProfileId && p.profile_type === 'commercial');
-      }
-      
-      if (!commercialProfile && userProfiles?.length > 0) {
-        commercialProfile = userProfiles.find(p => p.profile_type === 'commercial' && p.status === 'actif');
-      }
-      
-      if (!commercialProfile) {
-        console.warn('[DashboardCommercial] Aucun profil commercial actif');
-        setError('Aucun profil commercial actif');
-        setLoading(false);
-        return;
-      }
-      
-      setActiveProfile(commercialProfile);
-      console.log('[DashboardCommercial] Commercial profile found:', commercialProfile.id);
-      
-      await loadCode();
-    } catch (err) {
-      console.error('[DashboardCommercial] loadProfileAndCode error:', err);
-      setError('Erreur lors du chargement: ' + err.message);
-      setLoading(false);
-    }
-  };
 
   const loadCode = async () => {
     try {
@@ -248,7 +202,7 @@ export default function DashboardCommercial({ user }) {
       )}
 
       {/* Profil en attente de validation */}
-      {activeProfile?.status !== 'actif' && (
+      {!user?.profil_valide && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-600" />
