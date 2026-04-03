@@ -24,51 +24,68 @@ export default function GererCourses() {
   const [filterTypeColis, setFilterTypeColis] = useState('tous');
 
   const loadData = async () => {
-    const [coursesData, livreursData] = await Promise.all([
-      base44.entities.Course.list("-created_date", 200),
-      base44.entities.User.filter({ user_type: "livreur" }),
-    ]);
-    setCourses(coursesData);
-    setLivreurs(livreursData);
-    setLoading(false);
+    try {
+      // Charger les courses d'abord
+      const coursesData = await base44.entities.Course.list("-created_date", 200);
+      setCourses(coursesData);
+      
+      // Petite pause avant de charger les livreurs (évite rate limit)
+      await new Promise(r => setTimeout(r, 300));
+      
+      const livreursData = await base44.entities.User.filter({ user_type: "livreur" });
+      setLivreurs(livreursData);
+    } catch (err) {
+      console.error('[GererCourses] Load error:', err);
+      toast.error('Erreur lors du chargement: ' + (err?.message || ''));
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
+    
     const unsub = base44.entities.Course.subscribe((event) => {
       if (event.type === 'create') {
         setCourses(prev => [event.data, ...prev]);
-        toast.info('Nouvelle course créée !');
       } else if (event.type === 'update') {
         setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
       } else if (event.type === 'delete') {
         setCourses(prev => prev.filter(c => c.id !== event.id));
       }
     });
-    return unsub;
+    
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   const assignerLivreur = async (livreur) => {
-    const now = new Date().toISOString();
-    const hist = selectedCourse.historique_assignation ? JSON.parse(selectedCourse.historique_assignation) : [];
-    hist.push({ livreur_email: livreur.email, livreur_nom: livreur.full_name, heure: now, statut: "manuel" });
-    await base44.entities.Course.update(selectedCourse.id, {
-      statut: "acceptee",
-      livreur_email: livreur.email,
-      livreur_name: livreur.full_name,
-      date_acceptation: now,
-      telephone_livreur: livreur.telephone || "",
-      heure_assignation: now,
-      mode_assignation: "manuel",
-      historique_assignation: JSON.stringify(hist),
-      livreur_photo: livreur.photo_profil || null,
-      livreur_note_moyenne: livreur.note_moyenne || null,
-      livreur_note_semaine: livreur.note_semaine || null,
-    });
-    toast.success(`Course assignée à ${livreur.full_name}`);
-    setAssignDialog(false);
-    setSelectedCourse(null);
-    loadData();
+    try {
+      const now = new Date().toISOString();
+      const hist = selectedCourse.historique_assignation ? JSON.parse(selectedCourse.historique_assignation) : [];
+      hist.push({ livreur_email: livreur.email, livreur_nom: livreur.full_name, heure: now, statut: "manuel" });
+      await base44.entities.Course.update(selectedCourse.id, {
+        statut: "acceptee",
+        livreur_email: livreur.email,
+        livreur_name: livreur.full_name,
+        date_acceptation: now,
+        telephone_livreur: livreur.telephone || "",
+        heure_assignation: now,
+        mode_assignation: "manuel",
+        historique_assignation: JSON.stringify(hist),
+        livreur_photo: livreur.photo_profil || null,
+        livreur_note_moyenne: livreur.note_moyenne || null,
+        livreur_note_semaine: livreur.note_semaine || null,
+      });
+      toast.success(`Course assignée à ${livreur.full_name}`);
+      setAssignDialog(false);
+      setSelectedCourse(null);
+      setTimeout(loadData, 500);
+    } catch (err) {
+      console.error('[assignerLivreur]', err);
+      toast.error('Erreur assignation: ' + (err?.message || ''));
+    }
   };
 
   const relancerDispatch = async (course) => {
@@ -81,43 +98,48 @@ export default function GererCourses() {
         toast.error("Aucun livreur disponible");
       }
     } catch (e) {
+      console.error('[relancerDispatch]', e);
       toast.error("Erreur lors du dispatch");
     }
-    loadData();
+    setTimeout(loadData, 500);
   };
 
   const changerStatut = async (courseId, newStatut) => {
-    const updateData = { statut: newStatut };
-    if (newStatut === "livree") {
-      updateData.date_livraison = new Date().toISOString();
-      const course = courses.find(c => c.id === courseId);
-      if (course) {
-        // Si code promo : pas de commission CDL
-        const avecPromo = !!course.code_promo_utilise;
-        const commissionCdl = avecPromo ? 0 : (course.prix || 0) * 0.2;
-        const gainLivreur = avecPromo ? (course.prix || 0) : (course.prix || 0) * 0.8;
-        updateData.commission_cdl = commissionCdl;
-        updateData.gain_livreur = gainLivreur;
-        updateData.statut_paiement_livreur = avecPromo ? "Payé" : "Commission due";
-        const livreursData = await base44.entities.User.filter({ email: course.livreur_email });
-        if (livreursData.length > 0) {
-          const l = livreursData[0];
-          const nouveauSolde = (l.solde_commission_du || 0) + commissionCdl;
-          await base44.entities.User.update(l.id, {
-            solde_commission_du: nouveauSolde,
-            total_courses_livrees: (l.total_courses_livrees || 0) + 1,
-            total_commissions_generees: (l.total_commissions_generees || 0) + commissionCdl,
-            statut_financier_livreur: nouveauSolde > 0 ? "Doit une commission" : "À jour",
-            nombre_courses_actives: Math.max(0, (l.nombre_courses_actives || 0) - 1),
-          });
+    try {
+      const updateData = { statut: newStatut };
+      if (newStatut === "livree") {
+        updateData.date_livraison = new Date().toISOString();
+        const course = courses.find(c => c.id === courseId);
+        if (course) {
+          const avecPromo = !!course.code_promo_utilise;
+          const commissionCdl = avecPromo ? 0 : (course.prix || 0) * 0.2;
+          const gainLivreur = avecPromo ? (course.prix || 0) : (course.prix || 0) * 0.8;
+          updateData.commission_cdl = commissionCdl;
+          updateData.gain_livreur = gainLivreur;
+          updateData.statut_paiement_livreur = avecPromo ? "Payé" : "Commission due";
+          const livreursData = await base44.entities.User.filter({ email: course.livreur_email });
+          if (livreursData.length > 0) {
+            const l = livreursData[0];
+            const nouveauSolde = (l.solde_commission_du || 0) + commissionCdl;
+            await base44.entities.User.update(l.id, {
+              solde_commission_du: nouveauSolde,
+              total_courses_livrees: (l.total_courses_livrees || 0) + 1,
+              total_commissions_generees: (l.total_commissions_generees || 0) + commissionCdl,
+              statut_financier_livreur: nouveauSolde > 0 ? "Doit une commission" : "À jour",
+              nombre_courses_actives: Math.max(0, (l.nombre_courses_actives || 0) - 1),
+            });
+          }
         }
       }
+      if (newStatut === "en_cours") updateData.date_recuperation = new Date().toISOString();
+      if (newStatut === "annulee") updateData.date_livraison = new Date().toISOString();
+      await base44.entities.Course.update(courseId, updateData);
+      toast.success("Statut mis à jour");
+      setTimeout(loadData, 500);
+    } catch (err) {
+      console.error('[changerStatut]', err);
+      toast.error('Erreur: ' + (err?.message || ''));
     }
-    if (newStatut === "en_cours") updateData.date_recuperation = new Date().toISOString();
-    if (newStatut === "annulee") updateData.date_livraison = new Date().toISOString();
-    await base44.entities.Course.update(courseId, updateData);
-    toast.success("Statut mis à jour");
-    loadData();
   };
 
   const URGENCE_SCORE = { tres_urgent: 3, urgent: 2, normal: 1 };
