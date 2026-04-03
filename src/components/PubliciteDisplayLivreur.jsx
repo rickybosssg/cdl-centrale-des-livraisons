@@ -71,22 +71,39 @@ export default function PubliciteDisplayLivreur({ userId, userEmail }) {
 
   return (
     <PubliciteTracker publiciteId={pub.id} userRole="livreur">
-      <div className="relative w-full rounded-lg overflow-hidden bg-gray-100">
-        <img
-          src={pub.image_url}
-          alt={pub.titre || 'Publicité'}
-          className="w-full h-auto display-block cursor-pointer hover:opacity-95 transition-opacity"
-          onClick={() => trackClick(pub.id, pub.lien_url)}
-          loading="lazy"
-        />
-        
-        <button
-          onClick={() => setDismissed(true)}
-          className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg leading-none transition-colors z-10"
-          title="Fermer"
-        >
-          ×
-        </button>
+      <div className="relative w-full rounded-2xl overflow-hidden bg-gray-100 shadow-md">
+        {/* Container avec aspect ratio 4/3 */}
+        <div className="relative" style={{ aspectRatio: '4/3' }}>
+          <img
+            src={pub.image_url}
+            alt={pub.titre || 'Publicité'}
+            className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => trackClick(pub.id, pub.lien_url)}
+            loading="lazy"
+          />
+          
+          {/* Overlay gradient pour lisibilité texte */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+          
+          {/* Titre texte sur image */}
+          {pub.titre && (
+            <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+              <p className="font-bold text-base line-clamp-2">{pub.titre}</p>
+              {pub.lien_url && (
+                <p className="text-xs text-white/80 mt-1">Cliquez pour en savoir plus →</p>
+              )}
+            </div>
+          )}
+          
+          {/* Bouton fermer */}
+          <button
+            onClick={() => setDismissed(true)}
+            className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg leading-none transition-colors z-10"
+            title="Fermer"
+          >
+            ×
+          </button>
+        </div>
       </div>
     </PubliciteTracker>
   );

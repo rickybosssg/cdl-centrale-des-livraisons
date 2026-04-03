@@ -106,15 +106,18 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
 
   return (
     <PubliciteTracker publiciteId={current.id} userRole={userRole}>
-      <div className="relative w-full bg-gray-900 rounded-lg overflow-hidden group">
-        {/* Pub */}
-        <div className="relative aspect-video bg-black">
+      <div className="relative w-full rounded-2xl overflow-hidden group shadow-lg">
+        {/* Pub — aspect ratio 16/9 */}
+        <div className="relative bg-black" style={{ aspectRatio: '16/9' }}>
           <img
             src={currentImage}
             alt={current.titre}
             className="w-full h-full object-cover"
             loading="lazy"
           />
+          
+          {/* Overlay gradient pour lisibilité texte */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent pointer-events-none" />
 
           {/* Navigation images internes (multi-images) */}
           {currentImages.length > 1 && (
@@ -149,24 +152,25 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
               ))}
             </div>
           )}
-        </div>
 
-        {/* Info overlay */}
-        {current.titre && (
-          <div className="p-3 bg-gradient-to-t from-black/80 to-transparent">
-            <p className="text-white font-semibold text-sm truncate">{current.titre}</p>
-            {current.lien_url && (
-              <a
-                href={current.lien_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary text-xs font-medium mt-1 inline-block hover:underline"
-              >
-                En savoir plus →
-              </a>
-            )}
-          </div>
-        )}
+          {/* Texte + CTA overlay */}
+          {current.titre && (
+            <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+              <p className="font-bold text-lg line-clamp-2">{current.titre}</p>
+              {current.lien_url && (
+                <a
+                  href={current.lien_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => trackClick(current.id, current.lien_url)}
+                  className="text-white/90 text-xs font-medium mt-2 inline-block underline hover:text-white transition-colors"
+                >
+                  En savoir plus →
+                </a>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </PubliciteTracker>
   );
