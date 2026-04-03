@@ -15,6 +15,7 @@ const PROFILES = [
   { key: "livreur", label: "Livreur", emoji: "🛵", color: "bg-green-100 text-green-700" },
   { key: "partenaire", label: "Partenaire", emoji: "🏪", color: "bg-purple-100 text-purple-700" },
   { key: "commercial", label: "Commercial", emoji: "💼", color: "bg-amber-100 text-amber-700" },
+  { key: "annonceur", label: "Annonceur", emoji: "📢", color: "bg-pink-100 text-pink-700" },
   { key: "dispatcher", label: "Dispatcher", emoji: "🎯", color: "bg-cyan-100 text-cyan-700" },
   { key: "admin", label: "Administrateur", emoji: "🔐", color: "bg-red-100 text-red-700" },
 ];

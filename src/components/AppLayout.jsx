@@ -40,6 +40,12 @@ const NAV_ITEMS = {
     { path: "/commandes-partenaire", icon: Package, label: "Commandes" },
     { path: "/mes-messages", icon: MessageCircle, label: "Messages" },
   ],
+  annonceur: [
+    { path: "/", icon: Home, label: "Accueil" },
+    { path: "/dashboard-annonceur", icon: Megaphone, label: "Pubs" },
+    { path: "/creer-publicite", icon: Plus, label: "Créer" },
+    { path: "/mes-messages", icon: MessageCircle, label: "Messages" },
+  ],
 };
 
 export default function AppLayout({ userRole, userEmail }) {
