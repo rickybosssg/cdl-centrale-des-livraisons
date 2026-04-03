@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle, User, BarChart2 } from "lucide-react";
+import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle, User, BarChart2, AlertCircle } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
 import PromoShare from "@/components/PromoShare";
 import { toast } from "sonner";
@@ -19,44 +19,93 @@ export default function DashboardCommercial({ user }) {
   const [creating, setCreating] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [tab, setTab] = useState("apercu");
-  const [clients, setClients] = useState([]); // users who used the code
-  const [clientStats, setClientStats] = useState({}); // email -> { firstCourseValidated, firstCourseDate }
+  const [clients, setClients] = useState([]);
+  const [clientStats, setClientStats] = useState({});
   const [loadingPerf, setLoadingPerf] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
+    console.log('[DashboardCommercial] Mount, user:', user?.email);
     loadCode();
-  }, []);
+  }, [user?.email]);
 
   const loadCode = async () => {
-    const codes = await base44.entities.CodePromo.filter({ commercial_email: user.email });
-    if (codes.length > 0) {
-      setCode(codes[0]);
-      await loadPerformances(codes[0].code);
+    try {
+      setError(null);
+      console.log('[DashboardCommercial] loadCode start for:', user?.email);
+      
+      if (!user?.email) {
+        console.error('[DashboardCommercial] Pas de user.email');
+        setError('Utilisateur non identifié');
+        setLoading(false);
+        return;
+      }
+
+      const codes = await base44.entities.CodePromo.filter({ commercial_email: user.email });
+      console.log('[DashboardCommercial] Codes found:', codes?.length || 0);
+      
+      if (codes && codes.length > 0) {
+        setCode(codes[0]);
+        console.log('[DashboardCommercial] Code detected:', codes[0].code);
+        await loadPerformances(codes[0].code);
+      } else {
+        console.log('[DashboardCommercial] Aucun code promo');
+        setCode(null);
+        setClients([]);
+        setClientStats({});
+        setLoadingPerf(false);
+      }
+    } catch (err) {
+      console.error('[DashboardCommercial] loadCode error:', err);
+      setError('Erreur lors du chargement des données: ' + err.message);
+      setCode(null);
+      setClients([]);
+      setClientStats({});
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const loadPerformances = async (codeValue) => {
-    setLoadingPerf(true);
-    // Get all users who used this promo code
-    const usersWithCode = await base44.entities.User.filter({ code_promo_utilise: codeValue });
-    setClients(usersWithCode);
-    if (usersWithCode.length === 0) { setLoadingPerf(false); return; }
-    // Fetch all completed courses and cross-reference
-    const allCourses = await base44.entities.Course.filter({ statut: "livree" }, "-date_livraison", 500);
-    const stats = {};
-    for (const u of usersWithCode) {
-      const userCourses = allCourses.filter(c => c.client_email === u.email);
-      if (userCourses.length > 0) {
-        // Sort by created_date to find the first course
-        const sorted = [...userCourses].sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
-        stats[u.email] = { firstCourseValidated: true, firstCourseDate: sorted[0].date_livraison || sorted[0].created_date };
-      } else {
-        stats[u.email] = { firstCourseValidated: false, firstCourseDate: null };
+    try {
+      console.log('[DashboardCommercial] loadPerformances start:', codeValue);
+      setLoadingPerf(true);
+      
+      const usersWithCode = await base44.entities.User.filter({ code_promo_utilise: codeValue });
+      console.log('[DashboardCommercial] Clients with code:', usersWithCode?.length || 0);
+      setClients(usersWithCode || []);
+      
+      if (!usersWithCode || usersWithCode.length === 0) {
+        console.log('[DashboardCommercial] No clients, setting empty stats');
+        setClientStats({});
+        return;
       }
+      
+      const allCourses = await base44.entities.Course.filter({ statut: "livree" }, "-date_livraison", 500);
+      console.log('[DashboardCommercial] Courses found:', allCourses?.length || 0);
+      
+      const stats = {};
+      for (const u of (usersWithCode || [])) {
+        const userCourses = (allCourses || []).filter(c => c.client_email === u.email);
+        if (userCourses.length > 0) {
+          const sorted = [...userCourses].sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+          stats[u.email] = { 
+            firstCourseValidated: true, 
+            firstCourseDate: sorted[0].date_livraison || sorted[0].created_date 
+          };
+        } else {
+          stats[u.email] = { firstCourseValidated: false, firstCourseDate: null };
+        }
+      }
+      setClientStats(stats);
+      console.log('[DashboardCommercial] Stats calculated:', Object.keys(stats).length);
+    } catch (err) {
+      console.error('[DashboardCommercial] loadPerformances error:', err);
+      setClients([]);
+      setClientStats({});
+    } finally {
+      setLoadingPerf(false);
     }
-    setClientStats(stats);
-    setLoadingPerf(false);
   };
 
   const creerCode = async () => {
@@ -65,27 +114,33 @@ export default function DashboardCommercial({ user }) {
       return;
     }
     setCreating(true);
-    // Vérifier si le code existe déjà
-    const existing = await base44.entities.CodePromo.filter({ code: newCode.toUpperCase() });
-    if (existing.length > 0) {
-      toast.error("Ce code est déjà utilisé, choisissez-en un autre");
+    try {
+      const existing = await base44.entities.CodePromo.filter({ code: newCode.toUpperCase() });
+      if (existing && existing.length > 0) {
+        toast.error("Ce code est déjà utilisé, choisissez-en un autre");
+        setCreating(false);
+        return;
+      }
+      const created = await base44.entities.CodePromo.create({
+        commercial_email: user.email,
+        commercial_name: user.full_name,
+        code: newCode.toUpperCase(),
+        statut: "en_attente",
+        actif: false,
+        nombre_utilisations: 0,
+        commission_due: 0,
+        commission_payee: 0,
+        statut_paiement: "À jour",
+      });
+      setCode(created);
+      toast.success("Code créé ! En attente de validation par l'administration.");
+      setNewCode("");
       setCreating(false);
-      return;
+    } catch (err) {
+      console.error('[DashboardCommercial] creerCode error:', err);
+      toast.error('Erreur création code');
+      setCreating(false);
     }
-    const created = await base44.entities.CodePromo.create({
-      commercial_email: user.email,
-      commercial_name: user.full_name,
-      code: newCode.toUpperCase(),
-      statut: "en_attente",
-      actif: false,
-      nombre_utilisations: 0,
-      commission_due: 0,
-      commission_payee: 0,
-      statut_paiement: "À jour",
-    });
-    setCode(created);
-    toast.success("Code créé ! En attente de validation par l'administration.");
-    setCreating(false);
   };
 
   const statutConfig = {
@@ -97,14 +152,34 @@ export default function DashboardCommercial({ user }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <div className="text-center space-y-2">
+          <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-muted-foreground">Chargement du profil commercial...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4 pb-10">
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+            <p className="font-semibold text-red-700">Erreur de chargement</p>
+          </div>
+          <p className="text-sm text-red-600">{error}</p>
+          <Button size="sm" onClick={() => { setError(null); setLoading(true); loadCode(); }}>
+            Réessayer
+          </Button>
+        </div>
       </div>
     );
   }
 
   const commissionRestante = (code?.commission_due || 0) - (code?.commission_payee || 0);
-  const nbInscriptions = clients.length;
-  const nbPremieresCoursesValidees = Object.values(clientStats).filter(s => s.firstCourseValidated).length;
+  const nbInscriptions = (clients || []).length;
+  const nbPremieresCoursesValidees = Object.values(clientStats || {}).filter(s => s?.firstCourseValidated).length;
   const gainReel = nbPremieresCoursesValidees * 50;
 
   return (
@@ -112,7 +187,7 @@ export default function DashboardCommercial({ user }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Mon espace commercial</h1>
-          <p className="text-sm text-muted-foreground">Bienvenue, {user.full_name}</p>
+          <p className="text-sm text-muted-foreground">Bienvenue, {user?.full_name}</p>
         </div>
         <button
           onClick={() => setShowMessages(!showMessages)}
@@ -129,13 +204,13 @@ export default function DashboardCommercial({ user }) {
         <Card>
           <CardContent className="p-4">
             <p className="text-sm font-semibold mb-3">💬 Discussion avec l'Administration</p>
-            <ChatAdmin userEmail={user.email} userRole="commercial" currentUser={user} />
+            <ChatAdmin userEmail={user?.email} userRole="commercial" currentUser={user} />
           </CardContent>
         </Card>
       )}
 
       {/* Profil en attente de validation */}
-      {!user.profil_valide && (
+      {!user?.profil_valide && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-600" />
@@ -183,17 +258,17 @@ export default function DashboardCommercial({ user }) {
         <>
           {/* Statut du code */}
           {(() => {
-            const cfg = statutConfig[code.statut] || statutConfig.en_attente;
+            const cfg = statutConfig[code?.statut] || statutConfig.en_attente;
             const Icon = cfg.icon;
             return (
               <div className={`p-4 rounded-xl border ${cfg.bg} flex items-center gap-3`}>
                 <Icon className={`h-5 w-5 ${cfg.color} flex-shrink-0`} />
                 <div className="flex-1">
                   <p className={`font-semibold text-sm ${cfg.color}`}>{cfg.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Code : <strong className="font-mono text-base tracking-widest">{code.code}</strong></p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Code : <strong className="font-mono text-base tracking-widest">{code?.code}</strong></p>
                 </div>
                 <button
-                  onClick={() => { navigator.clipboard.writeText(code.code); toast.success('Code copié !'); }}
+                  onClick={() => { navigator.clipboard.writeText(code?.code); toast.success('Code copié !'); }}
                   className="px-3 py-1.5 rounded-lg bg-white border text-xs font-bold hover:bg-primary hover:text-white hover:border-primary transition-colors"
                 >
                   📋 Copier
@@ -208,8 +283,8 @@ export default function DashboardCommercial({ user }) {
           </div>
 
           {/* PROMO SHARE - WhatsApp + Copy link */}
-          {code.statut === 'valide' && (
-            <PromoShare code={code.code} commercialEmail={user.email} commercialName={user.full_name} />
+          {code?.statut === 'valide' && (
+            <PromoShare code={code?.code} commercialEmail={user?.email} commercialName={user?.full_name} />
           )}
 
           {/* Onglet Aperçu */}
@@ -245,7 +320,7 @@ export default function DashboardCommercial({ user }) {
                       <p className="text-muted-foreground">Gagné réel</p>
                     </div>
                     <div className="p-2 rounded-lg bg-green-50">
-                      <p className="font-bold text-base text-green-600">{code.commission_payee || 0} F</p>
+                      <p className="font-bold text-base text-green-600">{code?.commission_payee || 0} F</p>
                       <p className="text-muted-foreground">Payé</p>
                     </div>
                     <div className={`p-2 rounded-lg ${commissionRestante > 0 ? "bg-amber-50" : "bg-green-50"}`}>
@@ -256,9 +331,9 @@ export default function DashboardCommercial({ user }) {
                     </div>
                   </div>
                   <div className={`p-3 rounded-lg border text-center text-sm font-medium ${
-                    code.statut_paiement === "À jour" ? "bg-green-50 border-green-200 text-green-700" : "bg-amber-50 border-amber-200 text-amber-700"
+                    code?.statut_paiement === "À jour" ? "bg-green-50 border-green-200 text-green-700" : "bg-amber-50 border-amber-200 text-amber-700"
                   }`}>
-                    {code.statut_paiement === "À jour" ? "✅ Vous êtes à jour" : "⏳ Paiement en attente"}
+                    {code?.statut_paiement === "À jour" ? "✅ Vous êtes à jour" : "⏳ Paiement en attente"}
                   </div>
                   <p className="text-[10px] text-muted-foreground text-center">50 F CFA par client ayant effectué sa 1ère course validée</p>
                 </CardContent>
@@ -307,19 +382,19 @@ export default function DashboardCommercial({ user }) {
             <div className="space-y-3">
               <p className="text-sm font-semibold">Clients inscrits avec votre code</p>
               {loadingPerf && <div className="flex justify-center py-4"><div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" /></div>}
-              {!loadingPerf && clients.length === 0 && (
+              {!loadingPerf && (!clients || clients.length === 0) && (
                 <p className="text-center text-sm text-muted-foreground py-6">Aucun client n'a encore utilisé votre code</p>
               )}
-              {!loadingPerf && clients.map(client => {
-                const stat = clientStats[client.email] || {};
-                const isValidated = stat.firstCourseValidated;
+              {!loadingPerf && clients && clients.map(client => {
+                const stat = clientStats?.[client?.email] || {};
+                const isValidated = stat?.firstCourseValidated;
                 return (
-                  <div key={client.id} className="p-3 rounded-xl border bg-card space-y-2">
+                  <div key={client?.id} className="p-3 rounded-xl border bg-card space-y-2">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="text-sm font-semibold">{client.full_name || client.email}</p>
-                        <p className="text-xs text-muted-foreground">Inscrit le {moment(client.created_date).format("DD/MM/YYYY")}</p>
-                        {stat.firstCourseDate && (
+                        <p className="text-sm font-semibold">{client?.full_name || client?.email}</p>
+                        <p className="text-xs text-muted-foreground">Inscrit le {moment(client?.created_date).format("DD/MM/YYYY")}</p>
+                        {stat?.firstCourseDate && (
                           <p className="text-xs text-muted-foreground">1ère course : {moment(stat.firstCourseDate).format("DD/MM/YYYY")}</p>
                         )}
                       </div>
