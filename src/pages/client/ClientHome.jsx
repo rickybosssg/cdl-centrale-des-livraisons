@@ -12,8 +12,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
 
 export default function ClientHome({ user }) {
-  // Guard immédiate
-  if (!user?.email) {
+  // ⚠️ GUARD STRICTE : Aucun state/effect ne doit s'exécuter si user pas complet
+  if (!user || !user?.email || !user?.id) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <p className="text-sm text-muted-foreground">Profil non chargé</p>
@@ -21,14 +21,14 @@ export default function ClientHome({ user }) {
     );
   }
 
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showMessages, setShowMessages] = useState(false);
-  const navigate = useNavigate();
 
   // Demande géolocalisation
   useEffect(() => {
-    if (user?.gps_latitude || !navigator.geolocation) return;
+    if (!user?.email || user?.gps_latitude || !navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         base44.auth.updateMe({
@@ -38,10 +38,11 @@ export default function ClientHome({ user }) {
       },
       () => {}
     );
-  }, [user?.id]);
+  }, [user?.email, user?.id]);
 
-  // Charger courses
+  // Charger courses — Guard stricte sur user.email
   useEffect(() => {
+    if (!user?.email) return; // ⚠️ GUARD AVANT TOUT
     let isMounted = true;
 
     const load = async () => {

@@ -6,6 +6,9 @@ import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 
 export default function AppLayoutWrapper({ user }) {
+  // ⚠️ GUARD STRICTE : pas de user = pas de render
+  if (!user?.email) return null;
+
   const [userRole, setUserRole] = useState("client");
   const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -81,6 +84,8 @@ export default function AppLayoutWrapper({ user }) {
         }
       } catch (error) {
         console.error('[AppLayoutWrapper] Load error:', error);
+        if (isMounted) setLoading(false);
+        return;
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -124,6 +129,9 @@ export default function AppLayoutWrapper({ user }) {
   if (needsRole) {
     return <RoleSetup onComplete={() => { window.location.reload(); }} />;
   }
+
+  // ⚠️ Double-check : userEmail et userRole prêts avant render
+  if (!userEmail || !userRole) return null;
 
   return (
     <>

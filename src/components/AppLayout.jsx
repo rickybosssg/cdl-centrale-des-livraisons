@@ -49,6 +49,9 @@ const NAV_ITEMS = {
 };
 
 export default function AppLayout({ userRole, userEmail }) {
+  // ⚠️ Guard : si pas d'email ou rôle, pas de render
+  if (!userEmail || !userRole) return null;
+
   const location = useLocation();
   const navigate = useNavigate();
   const { scrollContainerRef, isRootTab } = useTabNavigation();
