@@ -12,6 +12,7 @@ import CourseCard from "../../components/CourseCard";
 import moment from "moment";
 
 export default function DispatcherDashboard() {
+  console.log('[DISPATCHER] Render start');
   const [courses, setCourses] = useState([]);
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,11 +24,17 @@ export default function DispatcherDashboard() {
   const [profilesEnAttente, setProfilesEnAttente] = useState([]);
   
   useEffect(() => {
-    base44.auth.me().then(me => setAdminEmail(me?.email));
+    console.log('[DISPATCHER] useEffect auth');
+    base44.auth.me().then(me => {
+      console.log('[DISPATCHER] admin email:', me?.email);
+      setAdminEmail(me?.email);
+    });
   }, []);
   
+  console.log('[DISPATCHER] useMessageCount/Notification');
   const hasUnreadMessages = useMessageCount(adminEmail, "admin");
   const newMsg = useMessageNotification(adminEmail);
+  console.log('[DISPATCHER] hasUnreadMessages:', hasUnreadMessages, 'newMsg:', newMsg?.id);
 
   const syncNotifications = async () => {
     setSyncingNotifs(true);
@@ -44,8 +51,10 @@ export default function DispatcherDashboard() {
   };
 
   useEffect(() => {
+    console.log('[DISPATCHER] useEffect LOAD START');
     let isMounted = true;
     const load = async () => {
+      console.log('[DISPATCHER] Load function START');
       try {
         const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses, partenairesAttente, profilesAttente] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 50),
@@ -65,28 +74,39 @@ export default function DispatcherDashboard() {
         return false;
       });
       if (isMounted) {
+        console.log('[DISPATCHER] setState courses/livreurs/partenaires/profiles');
         setCourses(coursesData);
         setLivreurs(tousLivreurs);
         setPartenairesEnAttente((partenairesAttente || []).filter(p => !p.deleted));
         setProfilesEnAttente(profilesAttente || []);
       }
       } catch (err) {
+        console.error('[DISPATCHER] Load error:', err);
         console.error('Erreur lors du chargement:', err);
         if (isMounted) {
           setCourses([]);
           setLivreurs([]);
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          console.log('[DISPATCHER] setLoading false');
+          setLoading(false);
+        }
       }
     };
     load();
 
     // Rafraîchissement automatique toutes les 30 secondes
+    console.log('[DISPATCHER] Setting interval for auto-refresh');
     const interval = setInterval(load, 30000);
 
+    console.log('[DISPATCHER] Setting up Course subscription');
     const unsubCourse = base44.entities.Course.subscribe((event) => {
-      if (!isMounted) return;
+      if (!isMounted) {
+        console.log('[DISPATCHER] Course event after unmount, ignoring');
+        return;
+      }
+      console.log('[DISPATCHER] Course event:', event.type);
       if (event.type === 'create') setCourses(prev => [event.data, ...prev]);
       else if (event.type === 'update') setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
       else if (event.type === 'delete') setCourses(prev => prev.filter(c => c.id !== event.id));
@@ -132,6 +152,7 @@ export default function DispatcherDashboard() {
       }
     });
     return () => { 
+      console.log('[DISPATCHER] CLEANUP');
       isMounted = false;
       unsubCourse(); 
       unsubUser(); 
@@ -155,13 +176,16 @@ export default function DispatcherDashboard() {
     .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
   const totalImpaye = livreurs.reduce((sum, l) => sum + (l.solde_commission_du || 0), 0);
 
+  console.log('[DISPATCHER] loading:', loading, 'courses:', courses.length, 'livreurs:', livreurs.length);
   if (loading) {
+    console.log('[DISPATCHER] STILL LOADING');
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
+  console.log('[DISPATCHER] READY TO RENDER');
 
   return (
     <div className="space-y-6">

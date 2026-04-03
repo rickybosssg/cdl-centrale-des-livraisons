@@ -39,6 +39,7 @@ const PROFILE_CFG = {
 };
 
 export default function Home() {
+  console.log('[HOME] Render start');
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [user, setUser] = useState(null);
@@ -49,8 +50,10 @@ export default function Home() {
   const [cancelingProfile, setCancelingProfile] = useState(null);
 
   const loadUser = async () => {
+    console.log('[HOME] loadUser START');
     try {
       const me = await base44.auth.me();
+      console.log('[HOME] ME loaded:', me?.email);
       if (!me) {
         setUser(null);
         setAllProfiles([]);
@@ -59,26 +62,32 @@ export default function Home() {
       }
       
       setUser(me);
+      console.log('[HOME] setUser done');
       const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
       const profsArray = Array.isArray(profs) ? profs : [];
+      console.log('[HOME] profiles loaded:', profsArray.length);
       setAllProfiles(profsArray);
       
       const storedId = localStorage.getItem('activeProfileId');
       const resolved = resolveActiveProfile(profsArray, storedId);
+      console.log('[HOME] resolved profile:', resolved?.id);
       if (resolved?.id) {
         setActiveProfileId(resolved.id);
+        console.log('[HOME] setActiveProfileId done');
       }
     } catch (err) {
       console.error('[Home] Erreur chargement:', err);
       setUser(null);
       setAllProfiles([]);
     } finally {
+      console.log('[HOME] loadUser DONE');
       setLoading(false);
     }
   };
 
   // Mount: charger user si authentifié
   useEffect(() => {
+    console.log('[HOME] useEffect MOUNT - isAuth:', isAuthenticated);
     if (isAuthenticated) {
       loadUser();
     } else {
@@ -88,10 +97,13 @@ export default function Home() {
 
   // Souscription temps réel
   useEffect(() => {
+    console.log('[HOME] useEffect SUBSCRIBE - user:', user?.email);
     if (!user?.email) return;
     
     const unsubscribe = base44.entities.UserProfile.subscribe((event) => {
+      console.log('[HOME] UserProfile event:', event.type, event?.data?.id);
       if (event?.data?.user_email === user.email) {
+        console.log('[HOME] setAllProfiles mutation triggered');
         setAllProfiles(prev => {
           const arr = Array.isArray(prev) ? prev : [];
           if (event.type === 'delete') {
@@ -136,15 +148,18 @@ export default function Home() {
   };
 
   if (loading) {
+    console.log('[HOME] Still loading...');
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
+  console.log('[HOME] Loading done, user:', user?.email, 'profiles:', allProfiles.length);
 
   // Pas authentifié
   if (!user) {
+    console.log('[HOME] NOT AUTHENTICATED - rendering login');
     return (
       <div className="fixed bottom-6 left-6 right-6 z-40">
         <Link to="/phone-auth" className="block">
@@ -159,7 +174,9 @@ export default function Home() {
 
   // Admin
   const isAdmin = user?.role === 'admin' || user?.user_type === 'admin' || ADMIN_EMAILS.includes(user?.email);
+  console.log('[HOME] IS ADMIN?', isAdmin);
   if (isAdmin) {
+    console.log('[HOME] Rendering DispatcherDashboard');
     return (
       <div className="space-y-0">
         <div className="flex justify-end items-center pb-3 px-4 pt-4">
@@ -173,13 +190,16 @@ export default function Home() {
   }
 
   // Multi-profil
+  console.log('[HOME] MULTI-PROFILE - allProfiles:', allProfiles.length, 'activeId:', activeProfileId);
   const activeUserProfile = resolveActiveProfile(
     Array.isArray(allProfiles) ? allProfiles : [],
     activeProfileId
   );
+  console.log('[HOME] activeUserProfile:', activeUserProfile?.profile_type, activeUserProfile?.id);
 
   // Pas de profil
   if (!activeUserProfile) {
+    console.log('[HOME] NO ACTIVE PROFILE - rendering RoleSetup');
     return <RoleSetup onComplete={loadUser} />;
   }
 
@@ -218,7 +238,9 @@ export default function Home() {
   }
 
   // Render dashboard selon profil
+  console.log('[HOME] renderDashboard called for:', activeProfileType);
   const renderDashboard = () => {
+    console.log('[HOME] Dashboard switch:', activeProfileType);
     switch (activeProfileType) {
       case 'client':     return <ClientHome user={user} />;
       case 'livreur':    return <LivreurHome user={user} />;
@@ -232,6 +254,7 @@ export default function Home() {
   const activeProfiles = profilesArray.filter(p => p?.status === 'actif');
   const pendingProfiles = profilesArray.filter(p => p?.status === 'en_attente');
   const incompleteProfiles = profilesArray.filter(p => p?.status === 'incomplet');
+  console.log('[HOME] FINAL RENDER - active:', activeProfiles.length, 'pending:', pendingProfiles.length, 'incomplete:', incompleteProfiles.length);
 
   return (
     <div className="space-y-0">
