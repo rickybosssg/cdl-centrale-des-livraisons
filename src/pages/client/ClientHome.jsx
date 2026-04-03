@@ -175,7 +175,7 @@ export default function ClientHome({ user }) {
               </CardContent>
             </Card>
           </Link>
-          <Link to="/vitrines">
+          <Link to="/mall">
             <Card className="hover:opacity-90 transition-opacity cursor-pointer h-full border-primary/30">
               <CardContent className="p-4 flex flex-col items-center gap-2 text-center">
                 <Store className="h-6 w-6 text-primary" />
