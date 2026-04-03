@@ -15,6 +15,7 @@ const PUBLIC_ROLES = [
   { value: "client", label: "Client", icon: User, desc: "Envoyer un colis rapidement" },
   { value: "partenaire", label: "Partenaire", icon: Store, desc: "Vendre plus grâce à CDL" },
   { value: "commercial", label: "Commercial", icon: Megaphone, desc: "Promouvoir CDL et gagner des commissions" },
+  { value: "annonceur", label: "Annonceur 📢", icon: Megaphone, desc: "Publier des publicités et promouvoir votre activité" },
 ];
 
 export default function RoleSetup({ onComplete }) {
@@ -146,6 +147,20 @@ export default function RoleSetup({ onComplete }) {
         const meData = await base44.auth.me();
         await base44.functions.invoke('notifyAdminNewSignup', {
           entity_name: 'CodePromo',
+          entity_data: {
+            full_name: meData.full_name,
+            telephone: form.telephone,
+            quartier: form.quartier,
+          },
+        });
+      } catch (_) {}
+    }
+    // Notifier les admins pour annonceur
+    if (selectedRole === "annonceur") {
+      try {
+        const meData = await base44.auth.me();
+        await base44.functions.invoke('notifyAdminNewSignup', {
+          entity_name: 'Annonceur',
           entity_data: {
             full_name: meData.full_name,
             telephone: form.telephone,
