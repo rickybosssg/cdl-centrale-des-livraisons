@@ -66,24 +66,31 @@ export default function AdminProfilUnifie() {
 
 
   const loadAll = async () => {
-    const [me, allUsers] = await Promise.all([
-      base44.auth.me(),
-      base44.entities.User.list("-created_date", 500),
-    ]);
-    setAdmin(me);
-    const found = allUsers.find(u => u.id === userId);
-    if (!found) { toast.error("Utilisateur introuvable"); return; }
-    setUser(found);
+    try {
+      const me = await base44.auth.me();
+      setAdmin(me);
+      const found = (await base44.entities.User.filter({ id: userId }))?.find(u => u.id === userId);
+      if (!found) { toast.error("Utilisateur introuvable"); setLoading(false); return; }
+      setUser(found);
 
-    const [profs, hist, coursesData] = await Promise.all([
-      base44.entities.UserProfile.filter({ user_email: found.email }),
-      base44.entities.AdminActionLog.filter({ target_email: found.email }, "-created_date", 30),
-      base44.entities.Course.filter({ livreur_email: found.email }, "-created_date", 50),
-    ]);
-    setProfiles(profs || []);
-    setLogs(hist || []);
-    setCourses(coursesData || []);
-    setLoading(false);
+      await new Promise(r => setTimeout(r, 300));
+      const profs = await base44.entities.UserProfile.filter({ user_email: found.email });
+      setProfiles(profs || []);
+
+      await new Promise(r => setTimeout(r, 300));
+      const hist = await base44.entities.AdminActionLog.filter({ target_email: found.email }, "-created_date", 30);
+      setLogs(hist || []);
+
+      await new Promise(r => setTimeout(r, 300));
+      const coursesData = await base44.entities.Course.filter({ livreur_email: found.email }, "-created_date", 50);
+      setCourses(coursesData || []);
+
+      setLoading(false);
+    } catch (err) {
+      console.error('[AdminProfilUnifie] loadAll error:', err);
+      toast.error('Erreur chargement: ' + (err?.message || ''));
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadAll(); }, [userId]);
