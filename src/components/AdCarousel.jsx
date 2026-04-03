@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import PubliciteTracker from "./PubliciteTracker";
-import MediaGallery from "./MediaGallery";
+import PubliciteCard from "./PubliciteCard";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function AdCarousel({ placement = "accueil", userRole = "client" }) {
@@ -78,43 +78,16 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
   const current = ads?.[currentIndex];
   if (!current) return null;
 
-  // Parser images
-  let allImages = [];
-  if (current.image_url) allImages.push(current.image_url);
-  if (current.images) {
-    try {
-      const parsed = JSON.parse(current.images);
-      if (Array.isArray(parsed)) allImages.push(...parsed);
-    } catch {}
-  }
-  allImages = allImages.filter(Boolean);
-
   // Auto-rotate
   useEffect(() => {
     const timer = setInterval(goNext, 8000);
     return () => clearInterval(timer);
   }, [currentIndex, ads.length]);
 
-  const trackClick = (pubId, pubUrl) => {
-    base44.functions
-      .invoke('trackPubliciteInteraction', {
-        publicite_id: pubId,
-        interaction_type: 'click',
-        user_role: userRole,
-      })
-      .catch(() => {});
-    if (pubUrl) window.open(pubUrl, '_blank');
-  };
-
   return (
     <PubliciteTracker publiciteId={current.id} userRole={userRole}>
-      <div className="relative w-full rounded-2xl overflow-hidden group shadow-lg">
-        {/* Galerie média unifiée */}
-        <MediaGallery
-          images={allImages}
-          videoUrl={current?.video_url}
-          videoTitle={current?.video_title}
-        />
+      <div className="relative w-full group">
+        <PubliciteCard publicite={current} userRole={userRole} />
 
         {/* Navigation entre pubs */}
         {ads.length > 1 && (
@@ -145,24 +118,6 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
               ))}
             </div>
           </>
-        )}
-
-        {/* Titre + CTA overlay */}
-        {current.titre && (
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 z-10">
-            <p className="font-bold text-base text-white line-clamp-2">{current.titre}</p>
-            {current.lien_url && (
-              <a
-                href={current.lien_url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => trackClick(current.id, current.lien_url)}
-                className="text-white/90 text-xs font-medium mt-2 inline-block underline hover:text-white transition-colors"
-              >
-                En savoir plus →
-              </a>
-            )}
-          </div>
         )}
       </div>
     </PubliciteTracker>
