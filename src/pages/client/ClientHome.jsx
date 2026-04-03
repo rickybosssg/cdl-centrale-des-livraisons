@@ -86,7 +86,8 @@ export default function ClientHome({ user }) {
 
   return (
     <div className="space-y-0">
-      {user && <PubliciteHomeBanner userRole="client" userId={user.id} userEmail={user.email} />}
+      {/* TEMP DEBUG: Disabled PubliciteHomeBanner */}
+      {/* {user && <PubliciteHomeBanner userRole="client" userId={user.id} userEmail={user.email} />} */}
       <div className="space-y-6 mt-4">
         {/* Welcome */}
         <div className="space-y-1">
@@ -94,11 +95,11 @@ export default function ClientHome({ user }) {
           <p className="text-sm text-muted-foreground">Bienvenue sur CDL</p>
         </div>
 
-        {/* Bedou */}
-        <BedouWidget user={user} />
+        {/* TEMP DEBUG: Disabled BedouWidget */}
+        {/* <BedouWidget user={user} /> */}
 
-        {/* Carousel */}
-        <AdCarousel placement="accueil" userRole="client" />
+        {/* TEMP DEBUG: Disabled AdCarousel */}
+        {/* <AdCarousel placement="accueil" userRole="client" /> */}
 
         {/* Commander */}
         <Link to="/commander">
