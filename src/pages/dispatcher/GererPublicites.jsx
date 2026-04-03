@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Check, X, Eye } from "lucide-react";
+import { Check, X, Eye } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,9 +30,13 @@ export default function GererPublicites() {
     };
     load();
 
-    // Real-time
-    const unsub = base44.entities.Publicite.subscribe(load);
-    return unsub;
+    try {
+      const unsub = base44.entities.Publicite.subscribe(load);
+      return unsub;
+    } catch (e) {
+      console.error('[GererPublicites] Subscribe error:', e);
+      return () => {};
+    }
   }, []);
 
   const safePubs = Array.isArray(pubs) ? pubs : [];
@@ -43,55 +47,19 @@ export default function GererPublicites() {
   const validerPub = async (pub) => {
     setProcessing(true);
     try {
-      // 1. Vérifier le Bedou de l'annonceur
-      const me = await base44.auth.me();
-      const res = await base44.functions.invoke("bedouEngine", {
-        action: "get_bedou_user",
-        user_email: pub.created_by,
+      // FIX #5: Utiliser fonction atomique pour validation + débit
+      const res = await base44.functions.invoke('validateAndChargeAdAtomic', {
+        pub_id: pub.id,
+        pub_title: pub.titre,
+        advertiser_email: pub.created_by,
+        amount: TARIF,
       });
-
-      const bedou = res.data?.bedou;
-      if (!bedou || (bedou.solde_disponible || 0) < TARIF) {
-        toast.error(`Solde insuffisant pour l'annonceur ${pub.created_by}`);
+      
+      if (!res.data?.success) {
+        toast.error(res.data?.error || 'Erreur validation');
         setProcessing(false);
         return;
       }
-
-      // 2. Débiter du Bedou
-      await base44.functions.invoke("bedouEngine", {
-        action: "debit",
-        user_email: pub.created_by,
-        montant: TARIF,
-        raison: `Paiement publicité: ${pub.titre}`,
-      });
-
-      // 3. Créditer CDL (CDL Email)
-      await base44.functions.invoke("bedouEngine", {
-        action: "credit",
-        user_email: "cdl@app.local",
-        montant: TARIF,
-        raison: `Publicité validée: ${pub.titre}`,
-      });
-
-      // 4. Mettre à jour la pub
-      const dateFin = new Date();
-      dateFin.setDate(dateFin.getDate() + 7);
-      await base44.entities.Publicite.update(pub.id, {
-        statut: "validée",
-        active: true,
-        date_fin: dateFin.toISOString(),
-        cout: TARIF,
-      });
-
-      // 5. Notifier l'annonceur
-      await base44.entities.Notification.create({
-        destinataire_email: pub.created_by,
-        destinataire_role: "annonceur",
-        titre: "✅ Publicité validée",
-        message: `Votre publicité "${pub.titre}" a été validée et est maintenant active pour 7 jours.`,
-        type: "success",
-        lue: false,
-      });
 
       toast.success(`Publicité "${pub.titre}" validée et débitée (${TARIF.toLocaleString()}F)`);
       setPubs(prev => prev.map(p => p.id === pub.id ? { ...p, statut: "validée", active: true } : p));
@@ -112,6 +80,14 @@ export default function GererPublicites() {
 
     setProcessing(true);
     try {
+      // FIX #4: Rembourser automatiquement si pub refusée
+      await base44.functions.invoke("bedouEngine", {
+        action: "credit",
+        user_email: pub.created_by,
+        montant: TARIF,
+        raison: `Remboursement publicité refusée: ${pub.titre}`,
+      });
+
       await base44.entities.Publicite.update(pub.id, {
         statut: "refusée",
         motif_refus: motifRefus,
@@ -121,13 +97,13 @@ export default function GererPublicites() {
       await base44.entities.Notification.create({
         destinataire_email: pub.created_by,
         destinataire_role: "annonceur",
-        titre: "❌ Publicité refusée",
-        message: `Votre publicité "${pub.titre}" a été refusée. Motif: ${motifRefus}`,
-        type: "danger",
+        titre: "❌ Publicité refusée (remboursée)",
+        message: `Votre publicité "${pub.titre}" a été refusée. Motif: ${motifRefus}. ${TARIF.toLocaleString()}F remboursés.`,
+        type: "warning",
         lue: false,
       });
 
-      toast.success("Publicité refusée");
+      toast.success("Publicité refusée et remboursée");
       setPubs(prev => prev.map(p => p.id === pub.id ? { ...p, statut: "refusée" } : p));
       setSelectedPub(null);
       setMotifRefus("");

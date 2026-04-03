@@ -40,8 +40,20 @@ export default function MesCommandesMarketplace() {
     if (!user) return;
     const unsub = base44.entities.CommandePartenaire.subscribe((event) => {
       if (!event.data || event.data.client_email !== user.email) return;
-      if (event.type === "create") setCommandes(prev => [event.data, ...prev]);
-      else if (event.type === "update") setCommandes(prev => prev.map(c => c.id === event.id ? event.data : c));
+      if (event.type === "create") {
+        // FIX #1: Notifier le partenaire automatiquement
+        base44.entities.Notification.create({
+          destinataire_email: event.data.partenaire_email,
+          destinataire_role: 'partenaire',
+          titre: '🛒 Nouvelle commande reçue',
+          message: `Nouvelle commande de ${event.data.client_nom}: ${(event.data.total_commande || 0).toLocaleString()} FCFA. Livraison à ${event.data.quartier_livraison || 'non spécifié'}.`,
+          type: 'info',
+          lue: false,
+        }).catch(err => console.error('[MesCommandesMarketplace] Notification error:', err));
+        setCommandes(prev => [event.data, ...prev]);
+      } else if (event.type === "update") {
+        setCommandes(prev => prev.map(c => c.id === event.id ? event.data : c));
+      }
     });
     return unsub;
   }, [user]);
