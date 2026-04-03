@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 export default function BedouWidget({ user, compact = false }) {
   const [bedou, setBedou] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -23,8 +24,9 @@ export default function BedouWidget({ user, compact = false }) {
     <div className="rounded-2xl bg-gradient-to-br from-primary to-blue-700 p-4 animate-pulse h-24" />
   );
 
-  if (!bedou) return null;
+  if (error || !bedou) return null;
 
+  if (!user?.email) return null;
   const role = user?.user_type;
   const canRetrait = ['livreur', 'partenaire', 'commercial'].includes(role);
 

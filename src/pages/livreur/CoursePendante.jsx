@@ -76,9 +76,10 @@ export default function CoursePendante({ course, onRespond }) {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
     const interval = setInterval(() => {
       setRemaining(r => {
-        if (r <= 1) {
+        if (r <= 1 && isMounted) {
           clearInterval(interval);
           handleTimeout();
           return 0;
@@ -86,7 +87,7 @@ export default function CoursePendante({ course, onRespond }) {
         return r - 1;
       });
     }, 1000);
-    return () => clearInterval(interval);
+    return () => { isMounted = false; clearInterval(interval); };
   }, []);
 
   const gainLivreur = Math.round((course.prix || 0) * 0.8);

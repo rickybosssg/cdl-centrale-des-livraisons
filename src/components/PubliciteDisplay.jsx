@@ -5,15 +5,18 @@ import PubliciteTracker from './PubliciteTracker';
 export default function PubliciteDisplay({ userRole = 'client', userId, userEmail }) {
   const [pub, setPub] = useState(null);
   const [dismissed, setDismissed] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
+    let isMounted = true;
     const loadPublicite = async () => {
       try {
         const now = new Date();
         const allPubs = await base44.entities.Publicite.list('-created_date', 50);
+        if (!isMounted) return;
 
         const filtered = (allPubs || []).filter(p => {
-          if (!p.active) return false;
+          if (!p?.active) return false;
           // Accueil or tous_pages
           if (p.placement !== 'accueil' && p.placement !== 'toutes_pages') return false;
           if (p.date_debut && new Date(p.date_debut) > now) return false;
@@ -27,17 +30,20 @@ export default function PubliciteDisplay({ userRole = 'client', userId, userEmai
           const selected = filtered[Math.floor(Math.random() * filtered.length)];
           setPub(selected);
           trackView(selected.id);
-        } else {
+        } else if (isMounted) {
           setPub(null);
         }
       } catch (err) {
         console.error('[Publicite] Error:', err);
+        if (isMounted) setError(err.message);
       }
     };
 
     loadPublicite();
-    const unsub = base44.entities.Publicite.subscribe(loadPublicite);
-    return unsub;
+    const unsub = base44.entities.Publicite.subscribe(() => {
+      if (isMounted) loadPublicite();
+    });
+    return () => { isMounted = false; unsub?.(); };
   }, [userRole]);
 
   const trackView = (pubId) => {
@@ -62,7 +68,7 @@ export default function PubliciteDisplay({ userRole = 'client', userId, userEmai
     if (pubUrl) window.open(pubUrl, '_blank');
   };
 
-  if (dismissed || !pub || !pub.image_url) return null;
+  if (error || dismissed || !pub || !pub?.image_url) return null;
 
   return (
     <PubliciteTracker publiciteId={pub.id} userRole={userRole}>

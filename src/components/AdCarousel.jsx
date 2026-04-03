@@ -9,6 +9,7 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
   const [subIndex, setSubIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -18,9 +19,10 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
         const allAds = await base44.entities.Publicite.list('-created_date', 50);
         if (!isMounted) return;
 
-        const active = (allAds || []).filter(ad => {
-          if (!ad.active) return false;
-          if (!ad.date_debut || !ad.date_fin) return true;
+        const safeAds = Array.isArray(allAds) ? allAds : [];
+        const active = safeAds.filter(ad => {
+          if (!ad?.active) return false;
+          if (!ad?.date_debut || !ad?.date_fin) return true;
           const start = new Date(ad.date_debut);
           const end = new Date(ad.date_fin);
           return start <= new Date(now) && new Date(now) <= end;
@@ -46,6 +48,7 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
         if (isMounted) setAds(targeted);
       } catch (err) {
         console.error("[AdCarousel] Error:", err);
+        if (isMounted) setError(err.message);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -72,9 +75,10 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
 
   useEffect(() => { setSubIndex(0); }, [currentIndex]);
 
-  if (loading || ads.length === 0) return null;
+  if (loading || ads.length === 0 || error) return null;
 
-  const current = ads[currentIndex];
+  const current = ads?.[currentIndex];
+  if (!current) return null;
   const goNext = () => setCurrentIndex((currentIndex + 1) % ads.length);
   const goPrev = () => setCurrentIndex((currentIndex - 1 + ads.length) % ads.length);
 
