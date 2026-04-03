@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 export default function AdCarousel({ placement = "accueil", userRole = "client" }) {
   const [ads, setAds] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [subIndex, setSubIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -62,6 +63,8 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
     };
   }, [placement, userRole, refreshTrigger]);
 
+  useEffect(() => { setSubIndex(0); }, [currentIndex]);
+
   if (loading || ads.length === 0) return null;
 
   const current = ads[currentIndex];
@@ -79,8 +82,7 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
     return ad.image_url ? [ad.image_url] : [];
   };
 
-  const [subIndex, setSubIndex] = useState(0);
-  useEffect(() => { setSubIndex(0); }, [currentIndex]);
+
 
   const currentImages = getCurrentImages(current);
   const currentImage = currentImages[subIndex] || currentImages[0];
