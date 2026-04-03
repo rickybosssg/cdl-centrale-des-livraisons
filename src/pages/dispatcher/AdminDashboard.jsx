@@ -111,12 +111,9 @@ export default function AdminDashboard() {
     loadData();
     const interval = setInterval(loadData, 30000);
 
-    // Subscribe à UserProfile pour détecter tous types de profils créés
-    const unsubProfile = base44.entities.UserProfile.subscribe((event) => {
-      // Rechargement à chaque création/update/delete de profil
-      if (!event.data?.deleted || event.type === 'delete') {
-        loadData();
-      }
+    // ✅ Subscribe à UserProfile pour TOUT changement profil
+    const unsubProfile = base44.entities.UserProfile.subscribe(() => {
+      loadData();
     });
     
     // Subscribe à Partenaire pour détecte changements partenaires

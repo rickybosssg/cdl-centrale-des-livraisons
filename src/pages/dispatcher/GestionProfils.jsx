@@ -208,6 +208,11 @@ export default function GestionProfils() {
       new_data: JSON.stringify({ added_profile: assignProfile }),
     });
 
+    // ✅ Recalculer les compteurs après création
+    try {
+      await base44.functions.invoke('recalculateProfileCounters', {});
+    } catch (_) {}
+    
     toast.success(`Profil ${assignProfile} attribué avec succès !`);
     setAssignDialog(false);
     setAssignProfile(null);
@@ -224,6 +229,10 @@ export default function GestionProfils() {
         action: 'approve',
       });
       if (res.data?.success) {
+        // ✅ Recalculer les compteurs après validation
+        try {
+          await base44.functions.invoke('recalculateProfileCounters', {});
+        } catch (_) {}
         toast.success(`✅ Profil ${profile.profile_type} validé`);
         await openUser(selectedUser);
       }
@@ -243,6 +252,10 @@ export default function GestionProfils() {
         refusal_reason: reason || 'Documents insuffisants',
       });
       if (res.data?.success) {
+        // ✅ Recalculer les compteurs après refus
+        try {
+          await base44.functions.invoke('recalculateProfileCounters', {});
+        } catch (_) {}
         toast.success(`❌ Profil ${profile.profile_type} refusé`);
         await openUser(selectedUser);
       }
@@ -275,6 +288,11 @@ export default function GestionProfils() {
       target_email: selectedUser.email,
     });
 
+    // ✅ Recalculer les compteurs après suppression
+    try {
+      await base44.functions.invoke('recalculateProfileCounters', {});
+    } catch (_) {}
+    
     toast.success("Profil retiré");
     await openUser(selectedUser);
     setProcessing(false);
@@ -294,6 +312,11 @@ export default function GestionProfils() {
       target_email: selectedUser.email,
     });
 
+    // ✅ Recalculer les compteurs après changement de statut
+    try {
+      await base44.functions.invoke('recalculateProfileCounters', {});
+    } catch (_) {}
+    
     toast.success(`Profil ${newStatus === "actif" ? "activé" : "suspendu"}`);
     await openUser(selectedUser);
   };
