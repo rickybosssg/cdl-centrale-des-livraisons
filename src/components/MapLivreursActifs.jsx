@@ -11,29 +11,15 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-const livreurIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+const scooterIcon = new L.Icon({
+  iconUrl: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a3038b25e_generated_image.png",
+  iconSize: [40, 40],
+  iconAnchor: [20, 20],
+  popupAnchor: [0, -20],
+  className: "scooter-marker",
 });
 
-const departIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-});
 
-const arriveeIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-});
 
 // Ouagadougou center
 const CENTER = [12.3714, -1.5197];
@@ -43,6 +29,29 @@ export default function MapLivreursActifs({ livreurs = [], courses = [], height 
   const coursesEnCours = courses.filter(c =>
     ["acceptee", "en_cours"].includes(c.statut) && c.livreur_lat && c.livreur_lng
   );
+
+  // Créer icône scooter avec rotation basée sur la direction
+  const createRotatedScooterIcon = (heading = 0) => {
+    const svgString = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+        <style>
+          .scooter { transform: rotate(${heading}deg); transform-origin: center; }
+        </style>
+        <g class="scooter">
+          <image href="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a3038b25e_generated_image.png" x="0" y="0" width="40" height="40" />
+        </g>
+      </svg>
+    `;
+    const encoded = btoa(svgString);
+    return `data:image/svg+xml;base64,${encoded}`;
+  };
+
+  const createScooterIconWithRotation = (heading = 0) => new L.Icon({
+    iconUrl: createRotatedScooterIcon(heading),
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20],
+  });
 
   return (
     <div style={{ height, width: "100%", borderRadius: "12px", overflow: "hidden" }}>
@@ -57,42 +66,50 @@ export default function MapLivreursActifs({ livreurs = [], courses = [], height 
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* Livreurs disponibles */}
-        {livreursAvecGPS.map((livreur) => (
-          <Marker
-            key={livreur.id}
-            position={[livreur.gps_latitude, livreur.gps_longitude]}
-            icon={livreurIcon}
-          >
-            <Popup>
-              <div className="text-xs">
-                <p className="font-bold">🛵 {livreur.full_name}</p>
-                <p className="text-muted-foreground">{livreur.quartier}</p>
-                {livreur.note_moyenne > 0 && (
-                  <p>⭐ {livreur.note_moyenne?.toFixed(1)}/5</p>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Courses en cours - trajet */}
-        {coursesEnCours.map((course) => (
-          <div key={course.id}>
+        {/* Livreurs disponibles avec icône scooter */}
+        {livreursAvecGPS.map((livreur) => {
+          const heading = livreur.heading || 0;
+          const icon = createScooterIconWithRotation(heading);
+          return (
             <Marker
-              position={[course.livreur_lat, course.livreur_lng]}
-              icon={livreurIcon}
+              key={livreur.id}
+              position={[livreur.gps_latitude, livreur.gps_longitude]}
+              icon={icon}
             >
               <Popup>
-                <div className="text-xs">
-                  <p className="font-bold">🚚 En cours</p>
-                  <p>{course.quartier_depart} → {course.quartier_arrivee}</p>
-                  <p className="text-muted-foreground">{course.livreur_name}</p>
+                <div className="text-xs space-y-0.5">
+                  <p className="font-bold">🛵 {livreur.full_name}</p>
+                  <p className="text-muted-foreground">{livreur.quartier}</p>
+                  <p className="text-green-600 font-medium">🟢 En ligne</p>
+                  {livreur.note_moyenne > 0 && (
+                    <p>⭐ {livreur.note_moyenne?.toFixed(1)}/5</p>
+                  )}
                 </div>
               </Popup>
             </Marker>
-          </div>
-        ))}
+          );
+        })}
+
+        {/* Courses en cours avec icône scooter */}
+        {coursesEnCours.map((course) => {
+          const heading = course.heading || 0;
+          const icon = createScooterIconWithRotation(heading);
+          return (
+            <Marker
+              key={course.id}
+              position={[course.livreur_lat, course.livreur_lng]}
+              icon={icon}
+            >
+              <Popup>
+                <div className="text-xs space-y-0.5">
+                  <p className="font-bold">🚚 En livraison</p>
+                  <p className="text-muted-foreground">{course.quartier_depart} → {course.quartier_arrivee}</p>
+                  <p className="font-medium">{course.livreur_name}</p>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
     </div>
   );
