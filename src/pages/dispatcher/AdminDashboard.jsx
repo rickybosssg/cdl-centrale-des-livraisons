@@ -172,6 +172,12 @@ export default function AdminDashboard() {
   console.log('[AdminDashboard] Affichage du JSX');
   return (
     <div className="pb-24 space-y-4" key="dashboard-root-div">
+      {/* 🔥 TEST RADICAL - CARTE ULTRA VISIBLE */}
+      <div className="mx-4 mt-4 p-6 border-8 border-red-800 bg-orange-300 rounded-2xl">
+        <p className="text-2xl font-black text-red-900">🚀 TEST PUBLICITÉS ADMIN</p>
+        <p className="text-base font-bold text-red-800 mt-2">Si tu vois ça = dashboard charge bien!</p>
+        <p className="text-sm text-red-700 mt-1">Sinon = mauvais composant ou cache</p>
+      </div>
       <div className="sticky top-0 bg-background/95 backdrop-blur p-4 border-b z-10">
         <div className="flex items-center justify-between">
           <div>
@@ -345,13 +351,21 @@ export default function AdminDashboard() {
         </Link>
 
         <Link to="/gerer-publicites" key="pub-admin-card">
-          <Button className="w-full justify-start gap-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-bold" title="Ouvrir la gestion des publicités admin">
+          <Button 
+            className="w-full justify-start gap-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-bold border-4 border-white shadow-2xl hover:shadow-3xl" 
+            title="Ouvrir la gestion des publicités admin"
+            style={{
+              visibility: 'visible',
+              display: 'flex',
+              opacity: 1,
+              zIndex: 50
+            }}
+          >
             <Megaphone className="h-4 w-4" />
             📢 PUBLICITÉS ADMIN
           </Button>
         </Link>
       </div>
-      {console.log('[AdminDashboard] Carte PUBLICITÉS ADMIN rendue')}
 
       <div className="px-4 pb-4">
         <Card className="bg-primary/5">
@@ -361,6 +375,10 @@ export default function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
+      </div>
+      {/* DEBUG - Confirmation fin du dashboard */}
+      <div className="mx-4 mb-4 p-2 text-xs text-center text-muted-foreground border border-dashed">
+        Dashboard complet chargé ✓
       </div>
     </div>
   );
