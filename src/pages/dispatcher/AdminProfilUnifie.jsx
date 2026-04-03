@@ -62,6 +62,7 @@ export default function AdminProfilUnifie() {
   const [assignDialog, setAssignDialog] = useState(false);
   const [assignProfile, setAssignProfile] = useState(null);
   const [blocageDialog, setBlocageDialog] = useState(false);
+  const [refusingProfileType, setRefusingProfileType] = useState(null);
 
 
   const loadAll = async () => {
@@ -88,6 +89,113 @@ export default function AdminProfilUnifie() {
   useEffect(() => { loadAll(); }, [userId]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
+
+  const validerCommercial = async () => {
+    setProcessing(true);
+    const commercialProf = profiles.find(p => p.profile_type === "commercial");
+    if (commercialProf) {
+      await base44.entities.UserProfile.update(commercialProf.id, {
+        status: 'actif',
+        validated_at: new Date().toISOString(),
+        validated_by: admin.email,
+      });
+      // Créer ou mettre à jour CodePromo si nécessaire
+      const existingCode = await base44.entities.CodePromo.filter({ commercial_email: user.email });
+      if (existingCode.length === 0) {
+        await base44.entities.CodePromo.create({
+          commercial_email: user.email,
+          commercial_name: user.full_name,
+          code: generateCode(user.full_name),
+          statut: 'valide',
+          actif: true,
+          nombre_utilisations: 0,
+          commission_due: 0,
+          commission_payee: 0,
+        });
+      }
+      await base44.entities.Notification.create({
+        destinataire_email: user.email,
+        destinataire_role: 'commercial',
+        titre: '✅ Profil commercial validé !',
+        message: `Félicitations ${user.full_name} ! Votre profil commercial a été validé. Vous pouvez maintenant créer des codes promos et partager sur WhatsApp 🎉`,
+        type: 'success',
+        lue: false,
+      });
+      toast.success('Commercial validé !');
+      await loadAll();
+    }
+    setProcessing(false);
+  };
+
+  const refuserCommercial = async () => {
+    setProcessing(true);
+    const commercialProf = profiles.find(p => p.profile_type === "commercial");
+    if (commercialProf) {
+      const motif = motifRefus || 'Documents insuffisants';
+      await base44.entities.UserProfile.update(commercialProf.id, {
+        status: 'refuse',
+        refusal_reason: motif,
+      });
+      await base44.entities.Notification.create({
+        destinataire_email: user.email,
+        destinataire_role: 'commercial',
+        titre: '❌ Dossier commercial refusé',
+        message: `Votre demande de profil commercial a été refusée. Motif : ${motif}. Contactez-nous pour corriger votre dossier.`,
+        type: 'danger',
+        lue: false,
+      });
+      toast.success('Commercial refusé');
+      setMotifRefus('');
+      await loadAll();
+    }
+    setProcessing(false);
+  };
+
+  const bloquerCommercial = async () => {
+    setProcessing(true);
+    const commercialProf = profiles.find(p => p.profile_type === "commercial");
+    if (commercialProf) {
+      await base44.entities.UserProfile.update(commercialProf.id, {
+        status: 'bloque',
+        blocked_reason: motifBlocage,
+      });
+      await base44.entities.Notification.create({
+        destinataire_email: user.email,
+        destinataire_role: 'commercial',
+        titre: '🔒 Profil commercial bloqué',
+        message: `Votre profil commercial a été bloqué. Raison : ${motifBlocage}. Contactez l'administrateur.`,
+        type: 'danger',
+        lue: false,
+      });
+      toast.success('Commercial bloqué');
+      setBlocageDialog(false);
+      setMotifBlocage('');
+      await loadAll();
+    }
+    setProcessing(false);
+  };
+
+  const revoquerCommercial = async () => {
+    setProcessing(true);
+    const commercialProf = profiles.find(p => p.profile_type === "commercial");
+    if (commercialProf) {
+      await base44.entities.UserProfile.update(commercialProf.id, {
+        status: 'en_attente',
+      });
+      await base44.entities.AdminActionLog.create({
+        admin_email: admin.email,
+        object_type: 'commercial',
+        object_id: user.id,
+        object_name: user.full_name,
+        action: 'unsuspend',
+        reason: 'Révocation validation commercial',
+        target_email: user.email,
+      });
+      toast.success('Validation révoquée');
+      await loadAll();
+    }
+    setProcessing(false);
+  };
 
   const validerLivreur = async () => {
     if (!user.telephone) { toast.error("Téléphone manquant, validation impossible"); return; }
@@ -274,6 +382,7 @@ export default function AdminProfilUnifie() {
 
   const statutValidation = user.statut_validation_livreur || "en_attente";
   const isLivreur = user.user_type === "livreur" || profiles.some(p => p.profile_type === "livreur");
+  const isCommercial = profiles.some(p => p.profile_type === "commercial");
   const livreurDelivered = courses.filter(c => c.statut === "livree").length;
   const livreurGains = courses.filter(c => c.statut === "livree").reduce((s, c) => s + (c.gain_livreur || 0), 0);
 
@@ -368,6 +477,80 @@ export default function AdminProfilUnifie() {
 
         {/* ── PROFILS ── */}
         <TabsContent value="profils" className="mt-4 space-y-3">
+          {/* Validation commercial */}
+          {isCommercial && (() => {
+            const commercialProf = profiles.find(p => p.profile_type === 'commercial');
+            if (!commercialProf) return null;
+            return (
+              <Card className="border-pink-300/30">
+                <CardContent className="p-4 space-y-3">
+                  <p className="text-sm font-semibold flex items-center gap-2">💼 Validation commercial</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Statut actuel :</span>
+                    <StatutBadge status={commercialProf.status} />
+                  </div>
+                  {commercialProf.refusal_reason && (
+                    <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                      Motif refus : {commercialProf.refusal_reason}
+                    </div>
+                  )}
+                  {commercialProf.blocked_reason && (
+                    <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                      Motif blocage : {commercialProf.blocked_reason}
+                    </div>
+                  )}
+                  {(commercialProf.status === 'en_attente' || commercialProf.status === 'refuse') && (
+                    <>
+                      <input
+                        className="w-full border rounded-md px-3 py-1.5 text-sm"
+                        placeholder="Motif de refus (optionnel)..."
+                        value={motifRefus}
+                        onChange={e => setMotifRefus(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1 border-red-300 text-red-600"
+                          onClick={refuserCommercial}
+                          disabled={processing}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" /> Refuser
+                        </Button>
+                        <Button
+                          className="flex-1 bg-green-600 hover:bg-green-700"
+                          onClick={validerCommercial}
+                          disabled={processing}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1" /> Valider
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                  {commercialProf.status === 'actif' && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 text-amber-600 border-amber-300"
+                        onClick={revoquerCommercial}
+                        disabled={processing}
+                      >
+                        Révoquer
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 text-red-600 border-red-300"
+                        onClick={() => setBlocageDialog(true)}
+                        disabled={processing}
+                      >
+                        <Lock className="h-4 w-4 mr-1" /> Bloquer
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Validation livreur rapide */}
           {isLivreur && (
             <Card className="border-primary/30">
@@ -551,16 +734,16 @@ export default function AdminProfilUnifie() {
       {/* Dialog blocage */}
       <Dialog open={blocageDialog} onOpenChange={setBlocageDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Bloquer le livreur</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Bloquer {isCommercial ? 'le commercial' : 'le livreur'}</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Bloquer <strong>{user.full_name}</strong> l'empêchera de recevoir des courses.</p>
+            <p className="text-sm text-muted-foreground">Bloquer <strong>{user.full_name}</strong> {isCommercial ? 'lui interdira l\'accès commercial' : 'l\'empêchera de recevoir des courses'}.</p>
             <Select value={motifBlocage} onValueChange={setMotifBlocage}>
               <SelectTrigger><SelectValue placeholder="Choisir un motif..." /></SelectTrigger>
               <SelectContent>{MOTIFS_BLOCAGE.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
             </Select>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => setBlocageDialog(false)}>Annuler</Button>
-              <Button variant="destructive" className="flex-1" onClick={bloquer} disabled={processing}>Confirmer</Button>
+              <Button variant="destructive" className="flex-1" onClick={() => { if (isCommercial) blocquerCommercial(); else bloquer(); }} disabled={processing}>Confirmer</Button>
             </div>
           </div>
         </DialogContent>
