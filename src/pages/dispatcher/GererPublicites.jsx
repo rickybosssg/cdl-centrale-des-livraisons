@@ -21,7 +21,7 @@ export default function GererPublicites() {
     const load = async () => {
       try {
         const data = await base44.entities.Publicite.list("-created_date", 100);
-        setPubs(data || []);
+        setPubs(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error("[GererPublicites] Error:", e);
       } finally {
@@ -35,9 +35,10 @@ export default function GererPublicites() {
     return unsub;
   }, []);
 
-  const pubsEnAttente = pubs.filter(p => p.statut === "en_attente");
-  const pubsValidees = pubs.filter(p => p.statut === "validée");
-  const pubsRefusees = pubs.filter(p => p.statut === "refusée");
+  const safePubs = Array.isArray(pubs) ? pubs : [];
+  const pubsEnAttente = safePubs.filter(p => p && p.statut === "en_attente");
+  const pubsValidees = safePubs.filter(p => p && p.statut === "validée");
+  const pubsRefusees = safePubs.filter(p => p && p.statut === "refusée");
 
   const validerPub = async (pub) => {
     setProcessing(true);
