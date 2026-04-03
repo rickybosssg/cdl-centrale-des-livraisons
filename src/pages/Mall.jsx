@@ -33,7 +33,7 @@ const STATUT_LABELS = {
   refusee: "Refusée",
 };
 
-// ─── ErrorBoundary local ─────────────────────────────────────────────────────
+// ErrorBoundary local au Mall
 class MallErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -48,7 +48,6 @@ class MallErrorBoundary extends Component {
         <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 px-4">
           <Store className="h-12 w-12 text-muted-foreground/30" />
           <p className="text-base font-semibold text-center">Le Mall est temporairement indisponible</p>
-          <p className="text-sm text-muted-foreground text-center">Une erreur inattendue s'est produite.</p>
           <Button onClick={() => this.setState({ hasError: false })}>Réessayer</Button>
         </div>
       );
@@ -57,28 +56,40 @@ class MallErrorBoundary extends Component {
   }
 }
 
-// ─── Mes commandes Mall ──────────────────────────────────────────────────────
+// Mes commandes Mall
 function MesCommandesMall({ userEmail }) {
+  // Guard strict sur userEmail AVANT tout rendu
+  const safeUserEmail = userEmail ? String(userEmail).trim() : "";
+  if (!safeUserEmail || !safeUserEmail.includes("@")) {
+    return (
+      <div className="text-center py-12 text-sm text-muted-foreground">
+        Connexion requise pour voir vos commandes.
+      </div>
+    );
+  }
+
   const [commandes, setCommandes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState("tous");
 
   useEffect(() => {
-    if (!userEmail) {
-      setLoading(false);
-      return;
-    }
-    base44.entities.CommandePartenaire
-      .filter({ client_email: userEmail }, "-created_date", 100)
-      .then(d => {
+    const load = async () => {
+      try {
+        const d = await base44.entities.CommandePartenaire.filter(
+          { client_email: safeUserEmail },
+          "-created_date",
+          100
+        );
         setCommandes(Array.isArray(d) ? d : []);
-        setLoading(false);
-      })
-      .catch(() => {
+      } catch (e) {
+        console.error("[MesCommandesMall] Error:", e);
         setCommandes([]);
+      } finally {
         setLoading(false);
-      });
-  }, [userEmail]);
+      }
+    };
+    load();
+  }, [safeUserEmail]);
 
   const FILTRES = [
     { val: "tous", label: "Toutes" },
@@ -88,29 +99,24 @@ function MesCommandesMall({ userEmail }) {
   ];
 
   const safeCommandes = Array.isArray(commandes) ? commandes : [];
-  const filtered = safeCommandes.filter(c => {
-    if (!c || typeof c !== "object") return false;
-    if (filtre === "tous") return true;
-    if (filtre === "en_cours") return !["livree", "annulee", "refusee"].includes(c.statut);
-    return c.statut === filtre;
-  });
-
-  if (!userEmail) {
-    return (
-      <div className="text-center py-12 text-sm text-muted-foreground">
-        Connexion requise pour voir vos commandes.
-      </div>
-    );
-  }
+  const filtered = safeCommandes
+    .filter((c) => c && typeof c === "object" && c.id && c.id.trim && c.id.trim().length > 0)
+    .filter((c) => {
+      if (filtre === "tous") return true;
+      if (filtre === "en_cours") return !["livree", "annulee", "refusee"].includes(c.statut);
+      return c.statut === filtre;
+    });
 
   return (
     <div className="space-y-3">
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {FILTRES.map(f => (
+        {FILTRES.map((f) => (
           <button
             key={f.val}
             onClick={() => setFiltre(f.val)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${filtre === f.val ? "bg-primary text-white border-primary" : "border-border"}`}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
+              filtre === f.val ? "bg-primary text-white border-primary" : "border-border"
+            }`}
           >
             {f.label}
           </button>
@@ -129,8 +135,8 @@ function MesCommandesMall({ userEmail }) {
       )}
       {!loading && (
         <div className="space-y-2">
-          {filtered.map(cmd => (
-            <Card key={cmd.id || Math.random()}>
+          {filtered.map((cmd) => (
+            <Card key={cmd.id}>
               <CardContent className="p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -140,12 +146,18 @@ function MesCommandesMall({ userEmail }) {
                     </div>
                     <p className="text-xs text-muted-foreground">📍 {cmd.quartier_livraison || "—"}</p>
                   </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${STATUT_COLORS[cmd.statut] || "bg-muted text-muted-foreground"}`}>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                      STATUT_COLORS[cmd.statut] || "bg-muted text-muted-foreground"
+                    }`}
+                  >
                     {STATUT_LABELS[cmd.statut] || cmd.statut || "—"}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted-foreground">{cmd.created_date ? moment(cmd.created_date).format("DD/MM/YY HH:mm") : "—"}</span>
+                  <span className="text-muted-foreground">
+                    {cmd.created_date ? moment(cmd.created_date).format("DD/MM/YY HH:mm") : "—"}
+                  </span>
                   <span className="font-bold text-primary">{(cmd.total_commande || 0).toLocaleString()} FCFA</span>
                 </div>
                 {cmd.course_id && (
@@ -162,8 +174,10 @@ function MesCommandesMall({ userEmail }) {
   );
 }
 
-// ─── Vue boutiques ───────────────────────────────────────────────────────────
+// Vue boutiques
 function MallBoutiques({ isAdmin }) {
+  if (typeof isAdmin !== "boolean") return null;
+
   const navigate = useNavigate();
   const [partenaires, setPartenaires] = useState([]);
   const [search, setSearch] = useState("");
@@ -171,46 +185,65 @@ function MallBoutiques({ isAdmin }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    base44.entities.Partenaire.filter({ deleted: false })
-      .then(d => {
+    const load = async () => {
+      try {
+        const d = await base44.entities.Partenaire.filter({ deleted: false });
         setPartenaires(Array.isArray(d) ? d : []);
-        setLoading(false);
-      })
-      .catch(() => {
+      } catch (e) {
+        console.error("[MallBoutiques] Error:", e);
         setPartenaires([]);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    load();
   }, []);
 
   const safePartenaires = Array.isArray(partenaires) ? partenaires : [];
-  const filtered = safePartenaires.filter(p => {
-    if (!p || typeof p !== "object") return false;
-    const q = (search || "").toLowerCase();
-    const matchSearch = !q || (p.nom_commerce || "").toLowerCase().includes(q) || (p.quartier || "").toLowerCase().includes(q);
-    const matchCat = categorie === "Tous" || p.type_commerce === categorie;
-    const matchStatus = isAdmin ? true : p.statut === "actif";
-    return matchSearch && matchCat && matchStatus;
-  });
+  const filtered = safePartenaires
+    .filter((p) => p && typeof p === "object" && p.id && p.nom_commerce)
+    .filter((p) => {
+      const q = (search || "").toLowerCase();
+      const matchSearch =
+        !q || (p.nom_commerce || "").toLowerCase().includes(q) || (p.quartier || "").toLowerCase().includes(q);
+      const matchCat = categorie === "Tous" || p.type_commerce === categorie;
+      const matchStatus = isAdmin ? true : p.statut === "actif";
+      return matchSearch && matchCat && matchStatus;
+    });
 
   const toggleActif = async (p) => {
-    const newStatut = p.statut === "actif" ? "suspendu" : "actif";
-    await base44.entities.Partenaire.update(p.id, { statut: newStatut });
-    setPartenaires(prev => (Array.isArray(prev) ? prev : []).map(x => x.id === p.id ? { ...x, statut: newStatut } : x));
-    toast.success(`Boutique ${newStatut === "actif" ? "activée" : "suspendue"}`);
+    try {
+      const newStatut = p.statut === "actif" ? "suspendu" : "actif";
+      await base44.entities.Partenaire.update(p.id, { statut: newStatut });
+      setPartenaires((prev) =>
+        Array.isArray(prev) ? prev.map((x) => (x.id === p.id ? { ...x, statut: newStatut } : x)) : []
+      );
+      toast.success(`Boutique ${newStatut === "actif" ? "activée" : "suspendue"}`);
+    } catch (e) {
+      console.error("[MallBoutiques] toggleActif error:", e);
+      toast.error("Erreur lors de la mise à jour");
+    }
   };
 
   return (
     <div className="space-y-3">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Rechercher une boutique..." value={search} onChange={e => setSearch(e.target.value)} />
+        <Input
+          className="pl-9"
+          placeholder="Rechercher une boutique..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {CATEGORIES.map(c => (
+        {CATEGORIES.map((c) => (
           <button
             key={c}
             onClick={() => setCategorie(c)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${categorie === c ? "bg-primary text-white border-primary" : "border-border"}`}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
+              categorie === c ? "bg-primary text-white border-primary" : "border-border"
+            }`}
           >
             {c}
           </button>
@@ -226,14 +259,20 @@ function MallBoutiques({ isAdmin }) {
       )}
       {!loading && (
         <div className="grid grid-cols-2 gap-3">
-          {filtered.map(p => (
+          {filtered.map((p) => (
             <Card
-              key={p.id || Math.random()}
-              className={`overflow-hidden cursor-pointer hover:shadow-md transition-all ${p.statut !== "actif" && isAdmin ? "opacity-60 border-dashed" : ""}`}
+              key={p.id}
+              className={`overflow-hidden cursor-pointer hover:shadow-md transition-all ${
+                p.statut !== "actif" && isAdmin ? "opacity-60 border-dashed" : ""
+              }`}
             >
               <div className="relative" onClick={() => navigate(`/commerce/${p.id}`)}>
                 {p.photo_principale || p.photo_couverture ? (
-                  <img src={p.photo_principale || p.photo_couverture} alt={p.nom_commerce || ""} className="w-full h-24 object-cover" />
+                  <img
+                    src={p.photo_principale || p.photo_couverture}
+                    alt={p.nom_commerce || ""}
+                    className="w-full h-24 object-cover"
+                  />
                 ) : (
                   <div className="h-24 bg-gradient-to-br from-primary/10 to-primary/20 flex items-center justify-center">
                     <Store className="h-10 w-10 text-primary/40" />
@@ -251,7 +290,9 @@ function MallBoutiques({ isAdmin }) {
                   <MapPin className="h-2.5 w-2.5" />
                   <span className="truncate">{p.quartier || "—"}</span>
                 </div>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{p.type_commerce || "—"}</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                  {p.type_commerce || "—"}
+                </span>
                 {isAdmin && (
                   <div className="flex gap-1 pt-1">
                     <button
@@ -262,7 +303,9 @@ function MallBoutiques({ isAdmin }) {
                     </button>
                     <button
                       onClick={() => toggleActif(p)}
-                      className={`flex-1 text-[10px] py-1 rounded border text-center ${p.statut === "actif" ? "text-amber-600 border-amber-300" : "text-green-600 border-green-300"}`}
+                      className={`flex-1 text-[10px] py-1 rounded border text-center ${
+                        p.statut === "actif" ? "text-amber-600 border-amber-300" : "text-green-600 border-green-300"
+                      }`}
                     >
                       {p.statut === "actif" ? "Suspendre" : "Activer"}
                     </button>
@@ -277,50 +320,69 @@ function MallBoutiques({ isAdmin }) {
   );
 }
 
-// ─── Admin : produits ────────────────────────────────────────────────────────
+// Admin : produits
 function AdminProduits() {
   const [produits, setProduits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    base44.entities.ProduitPartenaire.list("-created_date", 200)
-      .then(d => {
+    const load = async () => {
+      try {
+        const d = await base44.entities.ProduitPartenaire.list("-created_date", 200);
         setProduits(Array.isArray(d) ? d : []);
-        setLoading(false);
-      })
-      .catch(() => {
+      } catch (e) {
+        console.error("[AdminProduits] Error:", e);
         setProduits([]);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    load();
   }, []);
 
   const safeProduits = Array.isArray(produits) ? produits : [];
-  const filtered = safeProduits.filter(p => {
-    if (!p || typeof p !== "object") return false;
-    const q = (search || "").toLowerCase();
-    return !q || (p.nom || "").toLowerCase().includes(q) || (p.categorie || "").toLowerCase().includes(q);
-  });
+  const filtered = safeProduits
+    .filter((p) => p && typeof p === "object" && p.id && p.nom)
+    .filter((p) => {
+      const q = (search || "").toLowerCase();
+      return !q || (p.nom || "").toLowerCase().includes(q) || (p.categorie || "").toLowerCase().includes(q);
+    });
 
   const toggleDispo = async (prod) => {
-    const newVal = !prod.disponible;
-    await base44.entities.ProduitPartenaire.update(prod.id, { disponible: newVal });
-    setProduits(prev => (Array.isArray(prev) ? prev : []).map(x => x.id === prod.id ? { ...x, disponible: newVal } : x));
-    toast.success(`Produit ${newVal ? "activé" : "désactivé"}`);
+    try {
+      const newVal = !prod.disponible;
+      await base44.entities.ProduitPartenaire.update(prod.id, { disponible: newVal });
+      setProduits((prev) =>
+        Array.isArray(prev) ? prev.map((x) => (x.id === prod.id ? { ...x, disponible: newVal } : x)) : []
+      );
+      toast.success(`Produit ${newVal ? "activé" : "désactivé"}`);
+    } catch (e) {
+      console.error("[AdminProduits] toggleDispo error:", e);
+    }
   };
 
   const supprimerProduit = async (prod) => {
     if (!window.confirm(`Supprimer "${prod.nom || "ce produit"}" ?`)) return;
-    await base44.entities.ProduitPartenaire.delete(prod.id);
-    setProduits(prev => (Array.isArray(prev) ? prev : []).filter(x => x.id !== prod.id));
-    toast.success("Produit supprimé");
+    try {
+      await base44.entities.ProduitPartenaire.delete(prod.id);
+      setProduits((prev) => (Array.isArray(prev) ? prev : []).filter((x) => x.id !== prod.id));
+      toast.success("Produit supprimé");
+    } catch (e) {
+      console.error("[AdminProduits] supprimerProduit error:", e);
+    }
   };
 
   return (
     <div className="space-y-3">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Rechercher un produit..." value={search} onChange={e => setSearch(e.target.value)} />
+        <Input
+          className="pl-9"
+          placeholder="Rechercher un produit..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
       <p className="text-xs text-muted-foreground">{filtered.length} produit(s)</p>
       {loading && (
@@ -333,8 +395,8 @@ function AdminProduits() {
       )}
       {!loading && (
         <div className="space-y-2">
-          {filtered.map(prod => (
-            <Card key={prod.id || Math.random()}>
+          {filtered.map((prod) => (
+            <Card key={prod.id}>
               <CardContent className="p-3 flex items-center gap-3">
                 {prod.image_url ? (
                   <img src={prod.image_url} alt={prod.nom || ""} className="h-12 w-12 rounded-lg object-cover flex-shrink-0" />
@@ -345,12 +407,16 @@ function AdminProduits() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">{prod.nom || "—"}</p>
-                  <p className="text-xs text-muted-foreground">{prod.categorie || "—"} · {(prod.prix || 0).toLocaleString()} FCFA</p>
+                  <p className="text-xs text-muted-foreground">
+                    {prod.categorie || "—"} · {(prod.prix || 0).toLocaleString()} FCFA
+                  </p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
                   <button
                     onClick={() => toggleDispo(prod)}
-                    className={`text-[10px] px-2 py-1 rounded-full font-medium ${prod.disponible ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}
+                    className={`text-[10px] px-2 py-1 rounded-full font-medium ${
+                      prod.disponible ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                    }`}
                   >
                     {prod.disponible ? "✅" : "❌"}
                   </button>
@@ -370,22 +436,25 @@ function AdminProduits() {
   );
 }
 
-// ─── Admin : commandes ───────────────────────────────────────────────────────
+// Admin : commandes
 function AdminCommandes() {
   const [commandes, setCommandes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState("tous");
 
   useEffect(() => {
-    base44.entities.CommandePartenaire.list("-created_date", 200)
-      .then(d => {
+    const load = async () => {
+      try {
+        const d = await base44.entities.CommandePartenaire.list("-created_date", 200);
         setCommandes(Array.isArray(d) ? d : []);
-        setLoading(false);
-      })
-      .catch(() => {
+      } catch (e) {
+        console.error("[AdminCommandes] Error:", e);
         setCommandes([]);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    load();
   }, []);
 
   const STATUTS = [
@@ -408,26 +477,33 @@ function AdminCommandes() {
   };
 
   const safeCommandes = Array.isArray(commandes) ? commandes : [];
-  const filtered = safeCommandes.filter(c => {
-    if (!c || typeof c !== "object") return false;
-    return filtre === "tous" || c.statut === filtre;
-  });
+  const filtered = safeCommandes
+    .filter((c) => c && typeof c === "object" && c.id)
+    .filter((c) => (filtre === "tous" ? true : c.statut === filtre));
 
   const annulerCommande = async (cmd) => {
     if (!window.confirm("Annuler cette commande ?")) return;
-    await base44.entities.CommandePartenaire.update(cmd.id, { statut: "annulee" });
-    setCommandes(prev => (Array.isArray(prev) ? prev : []).map(x => x.id === cmd.id ? { ...x, statut: "annulee" } : x));
-    toast.success("Commande annulée");
+    try {
+      await base44.entities.CommandePartenaire.update(cmd.id, { statut: "annulee" });
+      setCommandes((prev) =>
+        Array.isArray(prev) ? prev.map((x) => (x.id === cmd.id ? { ...x, statut: "annulee" } : x)) : []
+      );
+      toast.success("Commande annulée");
+    } catch (e) {
+      console.error("[AdminCommandes] annulerCommande error:", e);
+    }
   };
 
   return (
     <div className="space-y-3">
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {STATUTS.map(s => (
+        {STATUTS.map((s) => (
           <button
             key={s.val}
             onClick={() => setFiltre(s.val)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${filtre === s.val ? "bg-primary text-white border-primary" : "border-border"}`}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
+              filtre === s.val ? "bg-primary text-white border-primary" : "border-border"
+            }`}
           >
             {s.label}
           </button>
@@ -444,23 +520,36 @@ function AdminCommandes() {
       )}
       {!loading && (
         <div className="space-y-2">
-          {filtered.map(cmd => (
-            <Card key={cmd.id || Math.random()}>
+          {filtered.map((cmd) => (
+            <Card key={cmd.id}>
               <CardContent className="p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-sm">{cmd.partenaire_nom || "—"}</p>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${CMD_COLORS[cmd.statut] || "bg-muted text-muted-foreground"}`}>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                      CMD_COLORS[cmd.statut] || "bg-muted text-muted-foreground"
+                    }`}
+                  >
                     {STATUT_LABELS[cmd.statut] || cmd.statut || "—"}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">Client : {cmd.client_nom || "—"} · {cmd.client_telephone || "—"}</p>
+                <p className="text-xs text-muted-foreground">
+                  Client : {cmd.client_nom || "—"} · {cmd.client_telephone || "—"}
+                </p>
                 <p className="text-xs text-muted-foreground">Zone : {cmd.quartier_livraison || "—"}</p>
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-semibold text-primary">{(cmd.total_commande || 0).toLocaleString()} FCFA</span>
-                  <span className="text-[10px] text-muted-foreground">{cmd.created_date ? moment(cmd.created_date).format("DD/MM/YY HH:mm") : "—"}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {cmd.created_date ? moment(cmd.created_date).format("DD/MM/YY HH:mm") : "—"}
+                  </span>
                 </div>
                 {!["livree", "annulee", "refusee"].includes(cmd.statut) && (
-                  <Button size="sm" variant="outline" className="w-full h-7 text-xs border-red-300 text-red-600" onClick={() => annulerCommande(cmd)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full h-7 text-xs border-red-300 text-red-600"
+                    onClick={() => annulerCommande(cmd)}
+                  >
                     Annuler la commande
                   </Button>
                 )}
@@ -473,24 +562,28 @@ function AdminCommandes() {
   );
 }
 
-// ─── Admin : statistiques ────────────────────────────────────────────────────
+// Admin : statistiques
 function AdminStats() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      base44.entities.Partenaire.filter({ deleted: false }),
-      base44.entities.ProduitPartenaire.list("-created_date", 500),
-      base44.entities.CommandePartenaire.list("-created_date", 500),
-    ])
-      .then(([partenaires, produits, commandes]) => {
+    const load = async () => {
+      try {
+        const [partenaires, produits, commandes] = await Promise.all([
+          base44.entities.Partenaire.filter({ deleted: false }),
+          base44.entities.ProduitPartenaire.list("-created_date", 500),
+          base44.entities.CommandePartenaire.list("-created_date", 500),
+        ]);
+
         const safeP = Array.isArray(partenaires) ? partenaires : [];
         const safeProd = Array.isArray(produits) ? produits : [];
         const safeC = Array.isArray(commandes) ? commandes : [];
-        const actifs = safeP.filter(p => p.statut === "actif").length;
-        const livrees = safeC.filter(c => c.statut === "livree");
-        const caTotal = livrees.reduce((s, c) => s + (c.total_commande || 0), 0);
+
+        const actifs = safeP.filter((p) => p && p.statut === "actif").length;
+        const livrees = safeC.filter((c) => c && c.statut === "livree");
+        const caTotal = livrees.reduce((s, c) => s + (c?.total_commande || 0), 0);
+
         setStats({
           boutiques: safeP.length,
           boutiquesActives: actifs,
@@ -500,31 +593,62 @@ function AdminStats() {
           caTotal,
         });
         setLoading(false);
-      })
-      .catch(() => {
-        setStats({ boutiques: 0, boutiquesActives: 0, produits: 0, commandes: 0, commandesLivrees: 0, caTotal: 0 });
+      } catch (e) {
+        console.error("[AdminStats] Error:", e);
+        setStats({
+          boutiques: 0,
+          boutiquesActives: 0,
+          produits: 0,
+          commandes: 0,
+          commandesLivrees: 0,
+          caTotal: 0,
+        });
         setLoading(false);
-      });
+      }
+    };
+    load();
   }, []);
 
-  if (loading) return (
-    <div className="flex justify-center py-8">
-      <div className="w-6 h-6 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-    </div>
-  );
+  if (loading)
+    return (
+      <div className="flex justify-center py-8">
+        <div className="w-6 h-6 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
 
-  if (!stats) return <div className="text-center py-8 text-sm text-muted-foreground">Données indisponibles</div>;
+  if (!stats)
+    return (
+      <div className="text-center py-8 text-sm text-muted-foreground">Données indisponibles</div>
+    );
 
   const CARDS = [
-    { label: "Boutiques", value: stats.boutiques, sub: `${stats.boutiquesActives} actives`, color: "text-primary", bg: "bg-primary/10" },
+    {
+      label: "Boutiques",
+      value: stats.boutiques,
+      sub: `${stats.boutiquesActives} actives`,
+      color: "text-primary",
+      bg: "bg-primary/10",
+    },
     { label: "Produits", value: stats.produits, sub: "référencés", color: "text-purple-600", bg: "bg-purple-50" },
-    { label: "Commandes", value: stats.commandes, sub: `${stats.commandesLivrees} livrées`, color: "text-green-600", bg: "bg-green-50" },
-    { label: "CA Total", value: `${Math.round((stats.caTotal || 0) / 1000)}K F`, sub: "commandes livrées", color: "text-amber-600", bg: "bg-amber-50" },
+    {
+      label: "Commandes",
+      value: stats.commandes,
+      sub: `${stats.commandesLivrees} livrées`,
+      color: "text-green-600",
+      bg: "bg-green-50",
+    },
+    {
+      label: "CA Total",
+      value: `${Math.round((stats.caTotal || 0) / 1000)}K F`,
+      sub: "commandes livrées",
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+    },
   ];
 
   return (
     <div className="grid grid-cols-2 gap-3">
-      {CARDS.map(c => (
+      {CARDS.map((c) => (
         <Card key={c.label}>
           <CardContent className={`p-4 ${c.bg} rounded-xl`}>
             <p className={`text-2xl font-bold ${c.color}`}>{c.value}</p>
@@ -537,42 +661,43 @@ function AdminStats() {
   );
 }
 
-// ─── Page principale Mall ────────────────────────────────────────────────────
+// Composant main du Mall
 function MallContent() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    base44.auth.me()
-      .then(u => {
+    const load = async () => {
+      try {
+        const u = await base44.auth.me();
         setUser(u || null);
-        setLoading(false);
-      })
-      .catch(() => {
+      } catch (e) {
+        console.error("[Mall] auth.me error:", e);
         setUser(null);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    load();
   }, []);
 
-  if (loading) {
+  if (loading)
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
-  }
 
-  if (!user) {
+  if (!user)
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3">
         <Store className="h-12 w-12 text-muted-foreground/30" />
         <p className="text-sm text-muted-foreground">Connexion requise pour accéder au Mall.</p>
       </div>
     );
-  }
 
   const isAdmin = user.role === "admin";
-  const userEmail = user.email || "";
+  const userEmail = user.email ? String(user.email).trim() : "";
 
   if (isAdmin) {
     return (
@@ -594,10 +719,18 @@ function MallContent() {
             <TabsTrigger value="commandes">Commandes</TabsTrigger>
             <TabsTrigger value="stats">Stats</TabsTrigger>
           </TabsList>
-          <TabsContent value="boutiques" className="mt-4"><MallBoutiques isAdmin={true} /></TabsContent>
-          <TabsContent value="produits" className="mt-4"><AdminProduits /></TabsContent>
-          <TabsContent value="commandes" className="mt-4"><AdminCommandes /></TabsContent>
-          <TabsContent value="stats" className="mt-4"><AdminStats /></TabsContent>
+          <TabsContent value="boutiques" className="mt-4">
+            <MallBoutiques isAdmin={true} />
+          </TabsContent>
+          <TabsContent value="produits" className="mt-4">
+            <AdminProduits />
+          </TabsContent>
+          <TabsContent value="commandes" className="mt-4">
+            <AdminCommandes />
+          </TabsContent>
+          <TabsContent value="stats" className="mt-4">
+            <AdminStats />
+          </TabsContent>
         </Tabs>
       </div>
     );
@@ -617,13 +750,17 @@ function MallContent() {
       <Tabs defaultValue="boutiques">
         <TabsList className="w-full grid grid-cols-2">
           <TabsTrigger value="boutiques">
-            <Store className="h-3.5 w-3.5 mr-1.5" />Boutiques
+            <Store className="h-3.5 w-3.5 mr-1.5" />
+            Boutiques
           </TabsTrigger>
           <TabsTrigger value="commandes">
-            <ShoppingBag className="h-3.5 w-3.5 mr-1.5" />Mes commandes
+            <ShoppingBag className="h-3.5 w-3.5 mr-1.5" />
+            Mes commandes
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="boutiques" className="mt-4"><MallBoutiques isAdmin={false} /></TabsContent>
+        <TabsContent value="boutiques" className="mt-4">
+          <MallBoutiques isAdmin={false} />
+        </TabsContent>
         <TabsContent value="commandes" className="mt-4">
           <MesCommandesMall userEmail={userEmail} />
         </TabsContent>
@@ -632,6 +769,7 @@ function MallContent() {
   );
 }
 
+// Export avec ErrorBoundary
 export default function Mall() {
   return (
     <MallErrorBoundary>
