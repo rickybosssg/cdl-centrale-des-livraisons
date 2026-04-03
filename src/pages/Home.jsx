@@ -14,6 +14,7 @@ import LivreurHome from "./client/LivreurHome";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
 import DashboardPartenaire from "./partenaire/DashboardPartenaire";
 import DashboardCommercial from "./commercial/DashboardCommercial";
+import DashboardAnnonceur from "./annonceur/DashboardAnnonceur";
 import AttentePage from "./AttentePage";
 
 const ADMIN_EMAILS = ["weezyh2@gmail.com", "admin@cdl.local"];
@@ -252,6 +253,7 @@ export default function Home() {
       case 'livreur':    return <LivreurHome user={user} />;
       case 'partenaire': return <DashboardPartenaire user={user} />;
       case 'commercial': return <DashboardCommercial user={user} />;
+      case 'annonceur':  return <DashboardAnnonceur user={user} />;
       default:           return <ClientHome user={user} />;
     }
   };
