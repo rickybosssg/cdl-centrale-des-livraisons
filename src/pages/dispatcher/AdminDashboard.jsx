@@ -108,27 +108,17 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    console.log('[AdminDashboard] Dashboard mounted');
+    console.log('[AdminDashboard] Component mounted');
+    console.log('[AdminDashboard] Admin dashboard loaded');
     loadData();
     const interval = setInterval(loadData, 30000);
 
-    // ✅ Subscribe à UserProfile pour TOUT changement profil
-    const unsubProfile = base44.entities.UserProfile.subscribe(() => {
-      loadData();
-    });
-    
-    // Subscribe à Partenaire pour détecte changements partenaires
+    const unsubProfile = base44.entities.UserProfile.subscribe(() => { loadData(); });
     const unsubPartenaire = base44.entities.Partenaire.subscribe(() => loadData());
-
-    // Subscriptions temps réel
     const unsubs = [];
-    
     unsubs.push(base44.entities.User.subscribe((event) => {
-      if (['livreur', 'client', 'commercial'].includes(event.data?.user_type)) {
-        loadData();
-      }
+      if (['livreur', 'client', 'commercial'].includes(event.data?.user_type)) { loadData(); }
     }));
-
     unsubs.push(base44.entities.Partenaire.subscribe(() => loadData()));
     unsubs.push(base44.entities.UserProfile.subscribe(() => loadData()));
     unsubs.push(base44.entities.Course.subscribe(() => loadData()));
@@ -169,7 +159,7 @@ export default function AdminDashboard() {
     );
   }
 
-  console.log('[AdminDashboard] Rendering dashboard - loading complete');
+  console.log('[AdminDashboard] Dashboard rendered - visible to admin');
 
   const alertConfig = {
     livreurs: { icon: Truck, text: '📋 ' + counts.livreurs?.pending + ' livreurs à valider' },
@@ -208,39 +198,6 @@ export default function AdminDashboard() {
           })}
         </div>
       )}
-
-      {/* PUBLICITÉS ADMIN - Carte principale en haut */}
-      <div className="px-4">
-        <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl blur opacity-30 group-hover:opacity-40 transition-opacity" />
-          <div className="relative bg-gradient-to-br from-orange-500 to-amber-600 text-white rounded-2xl p-6 space-y-4 shadow-lg">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="font-bold text-xl">📢 PUBLICITÉS ADMIN</p>
-                <p className="text-sm text-white/85 mt-1">Créez et gérez vos campagnes publicitaires</p>
-              </div>
-              <span className="text-4xl">✨</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <Link to="/admin-creer-publicite">
-                <Button size="sm" className="w-full bg-white text-orange-600 hover:bg-orange-50 font-bold">
-                  + Créer
-                </Button>
-              </Link>
-              <Link to="/admin-mes-publicites">
-                <Button size="sm" className="w-full bg-white/20 text-white hover:bg-white/30 font-semibold border border-white/40">
-                  Mes pubs
-                </Button>
-              </Link>
-              <Link to="/gerer-publicites">
-                <Button size="sm" className="w-full bg-white/20 text-white hover:bg-white/30 font-semibold border border-white/40">
-                  Toutes
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* KPIs */}
       <div className="px-4 grid grid-cols-2 gap-3">
@@ -291,6 +248,39 @@ export default function AdminDashboard() {
         >
           {resetting ? "Réinitialisation..." : "🔄 Réinitialiser"}
         </Button>
+      </div>
+
+      {/* PUBLICITÉS ADMIN - Carte principale visible SANS conditions */}
+      <div className="px-4">
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl blur opacity-25" />
+          <div className="relative bg-gradient-to-br from-orange-500 to-amber-600 text-white rounded-2xl p-5 space-y-3">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="font-bold text-lg">📢 PUBLICITÉS ADMIN</p>
+                <p className="text-sm text-white/80 mt-0.5">Créer et gérer vos campagnes publicitaires</p>
+              </div>
+              <span className="text-3xl flex-shrink-0">✨</span>
+            </div>
+            <div className="flex gap-2">
+              <Link to="/admin-creer-publicite" className="flex-1">
+                <Button size="sm" className="w-full bg-white text-orange-600 hover:bg-orange-50 font-bold">
+                  + Créer
+                </Button>
+              </Link>
+              <Link to="/admin-mes-publicites" className="flex-1">
+                <Button size="sm" className="w-full bg-white/20 text-white hover:bg-white/30 font-semibold border border-white/30">
+                  Mes pubs
+                </Button>
+              </Link>
+              <Link to="/gerer-publicites" className="flex-1">
+                <Button size="sm" className="w-full bg-white/20 text-white hover:bg-white/30 font-semibold border border-white/30">
+                  Toutes
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Actions rapides avec badges */}
@@ -384,28 +374,6 @@ export default function AdminDashboard() {
             <AdminBadge count={demandeBedouCount} />
           </div>
         </Link>
-
-        <div className="border-t pt-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">📢 Publicités</p>
-          <Link to="/admin-creer-publicite">
-            <Button className="w-full justify-start gap-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-semibold">
-              <Sparkles className="h-4 w-4" />
-              ✨ Créer une publicité
-            </Button>
-          </Link>
-          <Link to="/admin-mes-publicites">
-            <Button variant="outline" className="w-full justify-start gap-2 mt-2">
-              <Megaphone className="h-4 w-4" />
-              📢 Mes publicités
-            </Button>
-          </Link>
-          <Link to="/gerer-publicites">
-            <Button variant="outline" className="w-full justify-start gap-2 mt-2">
-              <Megaphone className="h-4 w-4" />
-              🎯 Gérer toutes les pubs
-            </Button>
-          </Link>
-        </div>
       </div>
 
       <div className="px-4 pb-4">
