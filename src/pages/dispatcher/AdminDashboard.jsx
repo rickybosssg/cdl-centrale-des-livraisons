@@ -250,39 +250,6 @@ export default function AdminDashboard() {
         </Button>
       </div>
 
-      {/* PUBLICITÉS ADMIN - Carte principale visible SANS conditions */}
-      <div className="px-4">
-        <div className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl blur opacity-25" />
-          <div className="relative bg-gradient-to-br from-orange-500 to-amber-600 text-white rounded-2xl p-5 space-y-3">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="font-bold text-lg">📢 PUBLICITÉS ADMIN</p>
-                <p className="text-sm text-white/80 mt-0.5">Créer et gérer vos campagnes publicitaires</p>
-              </div>
-              <span className="text-3xl flex-shrink-0">✨</span>
-            </div>
-            <div className="flex gap-2">
-              <Link to="/admin-creer-publicite" className="flex-1">
-                <Button size="sm" className="w-full bg-white text-orange-600 hover:bg-orange-50 font-bold">
-                  + Créer
-                </Button>
-              </Link>
-              <Link to="/admin-mes-publicites" className="flex-1">
-                <Button size="sm" className="w-full bg-white/20 text-white hover:bg-white/30 font-semibold border border-white/30">
-                  Mes pubs
-                </Button>
-              </Link>
-              <Link to="/gerer-publicites" className="flex-1">
-                <Button size="sm" className="w-full bg-white/20 text-white hover:bg-white/30 font-semibold border border-white/30">
-                  Toutes
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Actions rapides avec badges */}
       <div className="px-4 space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Autres accès</p>
