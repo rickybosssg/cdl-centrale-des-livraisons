@@ -109,14 +109,14 @@ export default function Home() {
     return () => { if (unsubscribe) unsubscribe(); };
   }, [user?.email]);
 
-  // Sync localStorage quand le profil change
+  // Sync localStorage quand le profil change — une seule fois après chargement
   useEffect(() => {
     if (!Array.isArray(allProfiles) || allProfiles.length === 0) return;
     const activeProfile = resolveActiveProfile(allProfiles, activeProfileId);
     if (activeProfile?.id && activeProfile.id !== activeProfileId) {
       setActiveProfileId(activeProfile.id);
     }
-  }, [allProfiles?.length, activeProfileId]);
+  }, [allProfiles?.length]); // ⭐ REMOVED activeProfileId — empêche boucle infinie
 
   const switchProfile = (profileId) => {
     localStorage.setItem('activeProfileId', profileId);
