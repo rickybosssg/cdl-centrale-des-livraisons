@@ -87,8 +87,9 @@ export default function GestionProfils() {
   };
 
   // Récupérer les profils en attente pour un utilisateur (depuis allProfiles)
+  // Inclut 'en_attente' ET 'incomplet' (livreurs sans docs) — les deux nécessitent une action admin
   const getPendingProfiles = (user) => {
-    return allProfiles.filter(p => p.user_email === user.email && p.status === 'en_attente');
+    return allProfiles.filter(p => p.user_email === user.email && ['en_attente', 'incomplet'].includes(p.status));
   };
 
   const getValidatedProfiles = (user) => {
@@ -383,7 +384,8 @@ export default function GestionProfils() {
           <p>Total profils chargés : <strong>{allProfiles.length}</strong></p>
           <p>Statuts présents : <strong>{[...new Set(allProfiles.map(p => p.status))].join(', ') || 'aucun'}</strong></p>
           <p>Profils "en_attente" : <strong className="text-amber-700">{allProfiles.filter(p => p.status === 'en_attente').length}</strong></p>
-          <p>Utilisateurs avec profil en_attente : <strong className="text-amber-700">{filteredUsers.filter(u => getPendingProfiles(u).length > 0).length}</strong></p>
+          <p>Profils "incomplet" : <strong className="text-orange-700">{allProfiles.filter(p => p.status === 'incomplet').length}</strong></p>
+          <p>Utilisateurs visibles dans "Nouvelles demandes" (en_attente + incomplet) : <strong className="text-amber-700">{filteredUsers.filter(u => getPendingProfiles(u).length > 0).length}</strong></p>
         </div>
       )}
 
