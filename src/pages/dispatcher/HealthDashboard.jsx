@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { ArrowLeft, AlertTriangle, CheckCircle2, Clock, TrendingUp, RefreshCw, Info, Wrench, Eye } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, CheckCircle2, Clock, RefreshCw, Info, Wrench, Eye, Monitor } from 'lucide-react';
+import { runFrontendAudit } from '@/lib/isProd';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,6 +13,8 @@ export default function HealthDashboard() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [runningFrontend, setRunningFrontend] = useState(false);
+  const [frontendResult, setFrontendResult] = useState(null);
   const [selectedReport, setSelectedReport] = useState(null);
 
   useEffect(() => {
@@ -40,12 +43,20 @@ export default function HealthDashboard() {
     setRunning(true);
     try {
       await base44.functions.invoke('systemHealthCheck', {});
-      // Le nouveau rapport sera reçu via subscribe
     } catch (err) {
       console.error('[HealthDashboard] Check failed:', err);
     } finally {
       setRunning(false);
     }
+  };
+
+  const runFrontendCheck = () => {
+    setRunningFrontend(true);
+    setTimeout(() => {
+      const result = runFrontendAudit();
+      setFrontendResult(result);
+      setRunningFrontend(false);
+    }, 800);
   };
 
   const getStatusColor = (status) => {
@@ -90,13 +101,70 @@ export default function HealthDashboard() {
         </Button>
       </div>
 
+      {/* 2 boutons : backend + frontend */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={runHealthCheck}
+          disabled={running}
+          className="flex items-center justify-center gap-2 p-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
+        >
+          {running ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {running ? 'Backend...' : 'Check Backend'}
+        </button>
+        <button
+          onClick={runFrontendCheck}
+          disabled={runningFrontend}
+          className="flex items-center justify-center gap-2 p-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
+        >
+          {runningFrontend ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Monitor className="h-4 w-4" />}
+          {runningFrontend ? 'Analyse...' : 'Check Frontend'}
+        </button>
+      </div>
+
+      {/* Résultat audit frontend */}
+      {frontendResult && (
+        <div className={`p-3 rounded-xl border-2 space-y-2 ${
+          frontendResult.status === 'healthy' ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'
+        }`}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold flex items-center gap-1.5">
+              <Monitor className="h-3.5 w-3.5" />
+              Audit Frontend — {new Date(frontendResult.timestamp).toLocaleTimeString('fr-FR')}
+            </p>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              frontendResult.status === 'healthy' ? 'bg-green-200 text-green-800' : 'bg-amber-200 text-amber-800'
+            }`}>
+              {frontendResult.status === 'healthy' ? '✅ OK' : '⚠️ ANOMALIE'}
+            </span>
+          </div>
+          {frontendResult.anomalies.length === 0 ? (
+            <p className="text-xs text-green-700">✅ Aucun élément debug détecté dans le DOM</p>
+          ) : (
+            <div className="space-y-1">
+              {frontendResult.anomalies.map((a, i) => (
+                <p key={i} className="text-xs text-amber-800">{a}</p>
+              ))}
+            </div>
+          )}
+          {frontendResult.fixes.length > 0 && (
+            <div className="space-y-1 pt-1 border-t border-amber-200">
+              {frontendResult.fixes.map((f, i) => (
+                <p key={i} className="text-xs text-green-700">{f}</p>
+              ))}
+            </div>
+          )}
+          <p className="text-[10px] text-muted-foreground">Périmètre : textes debug · éléments data-debug · erreurs console · header navigation</p>
+        </div>
+      )}
+
       {/* Note périmètre */}
       <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 flex gap-2">
         <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-xs text-blue-800">
-          <p className="font-semibold">Périmètre du check-up automatique :</p>
+          <p className="font-semibold">Périmètre check backend (automatique minuit) :</p>
           <p className="mt-0.5">Base de données · Courses bloquées · Profils orphelins · Notifications dupliquées · Tokens FCM · Portefeuilles</p>
-          <p className="mt-1 text-blue-600 font-medium">⚠️ Les problèmes d'affichage UI (bannières, composants) ne sont pas dans le périmètre — ils relèvent du déploiement frontend.</p>
+          <p className="mt-1 font-semibold">Périmètre check frontend (manuel) :</p>
+          <p>Textes debug · Éléments non autorisés · Erreurs console · Présence header</p>
         </div>
       </div>
 

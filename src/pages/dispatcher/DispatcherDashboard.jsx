@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { useMessageCount } from "@/hooks/useMessageCount";
 import { useMessageNotification } from "@/hooks/useMessageNotification";
 import MessageAlert from "@/components/MessageAlert";
-import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck, Trash2, Wallet, Radio, AlertCircle } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck, Trash2, Wallet, Radio, AlertCircle, Activity } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
 import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
 import { Card, CardContent } from "@/components/ui/card";
@@ -487,6 +487,17 @@ export default function DispatcherDashboard() {
             <CardContent className="p-4 text-center space-y-2">
               <Trash2 className="h-8 w-8 text-red-600 mx-auto" />
               <p className="text-sm font-medium">Suppression</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/health-dashboard" className="col-span-2">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-teal-500 bg-teal-50">
+            <CardContent className="p-4 flex items-center gap-4">
+              <Activity className="h-8 w-8 text-teal-600 flex-shrink-0" />
+              <div className="text-left">
+                <p className="text-sm font-bold text-teal-700">Journal Santé Système</p>
+                <p className="text-xs text-teal-600">Check-up backend · Logs automatiques · Historique des anomalies</p>
+              </div>
             </CardContent>
           </Card>
         </Link>
