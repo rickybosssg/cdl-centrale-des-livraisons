@@ -374,6 +374,13 @@ export default function AdminDashboard() {
             <AdminBadge count={demandeBedouCount} />
           </div>
         </Link>
+
+        <Link to="/gerer-publicites">
+          <Button className="w-full justify-start gap-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-bold">
+            <Megaphone className="h-4 w-4" />
+            📢 PUBLICITÉS ADMIN
+          </Button>
+        </Link>
       </div>
 
       <div className="px-4 pb-4">
