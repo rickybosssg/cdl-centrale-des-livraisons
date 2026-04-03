@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Truck, CheckCircle2, Clock, MapPin, MessageCircle } from "lucide-react";
 import PubliciteHomeBanner from "../../components/PubliciteHomeBanner";
+import PubliciteDisplayLivreur from "../../components/PubliciteDisplayLivreur";
 import LivreurBadges from "../../components/LivreurBadges";
 import LivreurGameStats from "../../components/LivreurGameStats";
 import ChatAdmin from "@/components/ChatAdmin";
