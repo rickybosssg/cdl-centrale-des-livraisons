@@ -5,8 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { useNavigate } from "react-router-dom";
-import FicheLivreur from "../../components/FicheLivreur";
 import moment from "moment";
 
 const STATUT_CONFIG = {
