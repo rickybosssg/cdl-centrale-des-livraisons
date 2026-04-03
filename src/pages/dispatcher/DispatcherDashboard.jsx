@@ -405,6 +405,37 @@ export default function DispatcherDashboard() {
         </div>
       )}
 
+      {/* AUDIT & DIAGNOSTICS - TOUJOURS VISIBLE */}
+      <div className="space-y-3">
+        <h2 className="font-semibold text-base">🔍 Audit & Diagnostics</h2>
+        <div className="grid grid-cols-3 gap-2">
+          <Link to="/audit-utilisateurs">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-2 border-l-blue-500">
+              <CardContent className="p-3 text-center space-y-1">
+                <Users className="h-5 w-5 text-blue-600 mx-auto" />
+                <p className="text-[10px] font-medium">Utilisateurs</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link to="/audit-complet">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-2 border-l-purple-500">
+              <CardContent className="p-3 text-center space-y-1">
+                <Database className="h-5 w-5 text-purple-600 mx-auto" />
+                <p className="text-[10px] font-medium">Complet</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link to="/bedou-audit">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-2 border-l-green-500">
+              <CardContent className="p-3 text-center space-y-1">
+                <Wallet className="h-5 w-5 text-green-600 mx-auto" />
+                <p className="text-[10px] font-medium">Bedou</p>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+      </div>
+
       {/* Bases de données */}
       <div className="space-y-3">
         <h2 className="font-semibold text-base">📊 Bases de données</h2>
@@ -573,18 +604,55 @@ export default function DispatcherDashboard() {
             </CardContent>
           </Card>
         </Link>
-        <Link to="/health-dashboard" className="col-span-2">
+        <Link to="/health-dashboard">
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-teal-500 bg-teal-50">
             <CardContent className="p-4 flex items-center gap-4">
               <Activity className="h-8 w-8 text-teal-600 flex-shrink-0" />
               <div className="text-left">
-                <p className="text-sm font-bold text-teal-700">Journal Santé Système</p>
-                <p className="text-xs text-teal-600">Check-up backend · Logs automatiques · Historique des anomalies</p>
+                <p className="text-sm font-bold text-teal-700">Santé Système</p>
+                <p className="text-xs text-teal-600">Check-up backend et logs</p>
               </div>
             </CardContent>
           </Card>
         </Link>
         </div>
+
+      {/* AUDIT AVANCÉ - SECTION DÉDIÉE */}
+      <h2 className="font-semibold text-sm text-muted-foreground mt-6">Outils Diagnostic Avancés</h2>
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/test-publicites">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <Megaphone className="h-6 w-6 text-accent mx-auto" />
+              <p className="text-xs font-medium">Test Publicités</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/test-mall-e2e">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 text-center space-y-2">
+              <Store className="h-6 w-6 text-purple-600 mx-auto" />
+              <p className="text-xs font-medium">Test Mall E2E</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/livreurs-incomplets">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-2 border-l-amber-500">
+            <CardContent className="p-4 text-center space-y-2">
+              <AlertCircle className="h-6 w-6 text-amber-600 mx-auto" />
+              <p className="text-xs font-medium">Livreurs Incomplets</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/profils-admin">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-2 border-l-indigo-500">
+            <CardContent className="p-4 text-center space-y-2">
+              <Users className="h-6 w-6 text-indigo-600 mx-auto" />
+              <p className="text-xs font-medium">Profils Admin</p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
         </div>
         );
         }
