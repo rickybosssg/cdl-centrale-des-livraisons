@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, AlertCircle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import DocumentUploader from "@/components/DocumentUploader";
 
@@ -171,6 +171,10 @@ export default function CompleteProfile() {
     );
   }
 
+  const isLivreur = analysis?.profileType === "livreur";
+  const missingCount = analysis?.missing?.length || 0;
+  const canSubmit = analysis?.isComplete;
+
   return (
     <div className="space-y-4 pb-20">
       {/* Header */}
@@ -178,12 +182,15 @@ export default function CompleteProfile() {
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-lg font-bold">Compléter mon profil</h1>
           <p className="text-xs text-muted-foreground">
             {analysis.completionPercentage}% complété
           </p>
         </div>
+        {canSubmit && (
+          <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">✅ Prêt</span>
+        )}
       </div>
 
       <div className="px-4 space-y-4">
@@ -204,16 +211,30 @@ export default function CompleteProfile() {
 
         {/* Barre progression */}
         <div className="space-y-2">
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="font-medium text-foreground">{analysis.received.length} / {analysis.received.length + analysis.missing.length} documents</span>
+            <span className={`font-semibold ${canSubmit ? 'text-green-600' : 'text-amber-600'}`}>
+              {canSubmit ? '✅ Complet' : `⚠️ ${missingCount} manquant${missingCount > 1 ? 's' : ''}`}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
             <div
-              className="bg-primary h-2 rounded-full transition-all"
+              className={`h-3 rounded-full transition-all ${canSubmit ? 'bg-green-500' : 'bg-primary'}`}
               style={{ width: `${analysis.completionPercentage}%` }}
             />
           </div>
-          <p className="text-xs text-center text-muted-foreground">
-            {analysis.received.length}/{analysis.received.length + analysis.missing.length} documents
-          </p>
         </div>
+
+        {/* Alerte documents manquants */}
+        {!canSubmit && (
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-300">
+            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800">
+              <span className="font-semibold">Veuillez ajouter tous les documents obligatoires avant de soumettre.</span><br />
+              Il vous reste <strong>{missingCount} document{missingCount > 1 ? 's' : ''}</strong> à fournir.
+            </p>
+          </div>
+        )}
 
         {/* Documents reçus */}
         {analysis.received.length > 0 && (
@@ -245,9 +266,9 @@ export default function CompleteProfile() {
         {/* Documents manquants */}
         {analysis.missing.length > 0 && (
           <div className="space-y-3">
-            <p className="text-sm font-semibold flex items-center gap-2">
+            <p className="text-sm font-semibold flex items-center gap-2 text-red-700">
               <AlertCircle className="h-5 w-5 text-red-600" />
-              Pièces manquantes ({analysis.missing.length})
+              Documents obligatoires manquants ({analysis.missing.length})
             </p>
             {analysis.missing.map(doc => {
               if (doc.type === "checkbox") {
@@ -292,33 +313,28 @@ export default function CompleteProfile() {
           </div>
         )}
 
-        {/* Message complétude */}
-        {analysis.isComplete && (
-          <Card className="border-green-200 bg-green-50">
-            <CardContent className="p-4 space-y-3">
-              <p className="font-semibold text-green-900">✅ Dossier complet !</p>
-              <p className="text-xs text-green-800">
-                Tous les documents obligatoires ont été fournis. Vous pouvez envoyer votre dossier pour validation par l'équipe CDL.
-              </p>
-              <Button
-                className="w-full bg-green-600 hover:bg-green-700"
-                onClick={handleSubmitForValidation}
-              >
-                {profileRecord?.status === "refuse" ? "🔄 Renvoyer ma demande" : "📩 Envoyer pour validation"}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {!analysis.isComplete && (
-          <Card className="border-amber-200 bg-amber-50">
-            <CardContent className="p-4">
-              <p className="text-xs text-amber-800">
-                ⏳ Complétez tous les documents manquants pour envoyer votre dossier
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Bouton soumission — toujours visible */}
+        <div className="pt-2 space-y-2">
+          {canSubmit && (
+            <p className="text-xs text-center text-green-700 font-medium">✅ Tous les documents sont fournis. Votre dossier est prêt !</p>
+          )}
+          <Button
+            className={`w-full font-semibold h-12 ${canSubmit ? 'bg-green-600 hover:bg-green-700' : 'bg-muted text-muted-foreground cursor-not-allowed'}`}
+            disabled={!canSubmit}
+            onClick={handleSubmitForValidation}
+          >
+            {!canSubmit && <Lock className="h-4 w-4 mr-2" />}
+            {canSubmit
+              ? (profileRecord?.status === "refuse" ? "🔄 Renvoyer ma demande" : "📩 Envoyer pour validation")
+              : `Compléter les documents (${missingCount} manquant${missingCount > 1 ? 's' : ''})`
+            }
+          </Button>
+          {!canSubmit && (
+            <p className="text-[11px] text-center text-muted-foreground">
+              Le bouton se débloquera automatiquement quand tous les documents seront ajoutés.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
