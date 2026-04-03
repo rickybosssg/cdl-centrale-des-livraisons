@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { requestNotificationPermission, registerFcmToken, onForegroundMessage } from "@/lib/pushNotifications";
 import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
@@ -101,6 +103,33 @@ export default function AppLayoutWrapper({ user }) {
       setLoading(false);
     };
     load();
+  }, []);
+
+  // Initialiser FCM et demander permissions
+  useEffect(() => {
+    const initFcm = async () => {
+      try {
+        const permitted = await requestNotificationPermission();
+        if (permitted) {
+          const token = await registerFcmToken();
+          if (token) {
+            // Sauvegarder le token
+            await base44.functions.invoke('saveFcmToken', { token });
+            // Écouter les messages en avant-plan
+            onForegroundMessage((payload) => {
+              console.log('[FCM] Message reçu en avant-plan:', payload);
+              new Notification(payload.notification?.title || 'CDL', {
+                body: payload.notification?.body,
+                icon: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
+              });
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[FCM] Erreur initialisation:', err);
+      }
+    };
+    initFcm();
   }, []);
 
   if (loading) {
