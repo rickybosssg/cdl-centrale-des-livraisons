@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -348,6 +348,28 @@ export default function AdminDashboard() {
             <AdminBadge count={demandeBedouCount} />
           </div>
         </Link>
+
+        <div className="border-t pt-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">📢 Publicités</p>
+          <Link to="/admin-creer-publicite">
+            <Button className="w-full justify-start gap-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-semibold">
+              <Sparkles className="h-4 w-4" />
+              ✨ Créer une publicité
+            </Button>
+          </Link>
+          <Link to="/admin-mes-publicites">
+            <Button variant="outline" className="w-full justify-start gap-2 mt-2">
+              <Megaphone className="h-4 w-4" />
+              📢 Mes publicités
+            </Button>
+          </Link>
+          <Link to="/gerer-publicites">
+            <Button variant="outline" className="w-full justify-start gap-2 mt-2">
+              <Megaphone className="h-4 w-4" />
+              🎯 Gérer toutes les pubs
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="px-4 pb-4">

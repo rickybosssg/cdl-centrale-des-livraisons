@@ -49,6 +49,8 @@ import DebugAdmin from './pages/DebugAdmin';
 import CreerBoutiqueAdmin from './pages/dispatcher/CreerBoutiqueAdmin';
 import AdminTrash from './pages/dispatcher/AdminTrash';
 import MessagesAdmin from './pages/dispatcher/MessagesAdmin';
+import AdminCreerPublicite from './pages/dispatcher/AdminCreerPublicite';
+import AdminMesPublicites from './pages/dispatcher/AdminMesPublicites';
 import DashboardPartenaire from './pages/partenaire/DashboardPartenaire';
 import MesCommandesMarketplace from './pages/client/MesCommandesMarketplace';
 import CommandeMarketplaceDetail from './pages/client/CommandeMarketplaceDetail';
@@ -248,6 +250,8 @@ const AuthenticatedApp = () => {
           <Route path="/admin-trash" element={<AdminTrash />} />
           <Route path="/creer-boutique" element={<CreerBoutiqueAdmin />} />
           <Route path="/messages-admin" element={<MessagesAdmin />} />
+          <Route path="/admin-creer-publicite" element={<AdminCreerPublicite />} />
+          <Route path="/admin-mes-publicites" element={<AdminMesPublicites />} />
           <Route path="/gestion-transactions" element={<GestionTransactions />} />
           <Route path="/gestion-profils" element={<GestionProfils />} />
           <Route path="/gestion-acces" element={<GestionAcces />} />
