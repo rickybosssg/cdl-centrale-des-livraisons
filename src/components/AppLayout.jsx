@@ -13,7 +13,7 @@ const NAV_ITEMS = {
     { path: "/", icon: Home, label: "Accueil" },
     { path: "/commander", icon: Plus, label: "Commander" },
     { path: "/mes-courses", icon: Clock, label: "Courses" },
-    { path: "/vitrines", icon: Store, label: "MALL" },
+    { path: "/mall", icon: Store, label: "MALL" },
     { path: "/mes-messages", icon: MessageCircle, label: "Messages" },
   ],
   livreur: [

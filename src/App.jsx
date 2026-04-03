@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Component } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
@@ -263,8 +263,29 @@ const AuthenticatedApp = () => {
   );
 };
 
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-background">
+          <div className="text-center space-y-4 max-w-sm">
+            <div className="text-4xl">⚠️</div>
+            <h2 className="text-lg font-bold">Une erreur est survenue</h2>
+            <p className="text-sm text-muted-foreground">{this.state.error?.message || "Erreur inconnue"}</p>
+            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Recharger l'application</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <TopNotificationProvider>
@@ -275,6 +296,7 @@ function App() {
         </TopNotificationProvider>
       </QueryClientProvider>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
