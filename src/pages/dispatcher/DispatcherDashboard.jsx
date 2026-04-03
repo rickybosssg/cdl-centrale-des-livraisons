@@ -22,6 +22,7 @@ export default function DispatcherDashboard() {
   const [adminEmail, setAdminEmail] = useState(null);
   const [partenairesEnAttente, setPartenairesEnAttente] = useState([]);
   const [profilesEnAttente, setProfilesEnAttente] = useState([]);
+  const [profilesIncomplets, setProfilesIncomplets] = useState([]);
   
   useEffect(() => {
     console.log('[DISPATCHER] useEffect auth');
@@ -56,7 +57,7 @@ export default function DispatcherDashboard() {
     const load = async () => {
       console.log('[DISPATCHER] Load function START');
       try {
-        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses, partenairesAttente, profilesAttente] = await Promise.allSettled([
+        const [coursesData, livreursPurs, livreursMultiAttente, livreursMultiValides, livreursMultiRefuses, partenairesAttente, profilesAttente, profilesInc] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 50),
         base44.entities.User.filter({ user_type: "livreur" }),
         base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
@@ -64,6 +65,7 @@ export default function DispatcherDashboard() {
         base44.entities.User.filter({ statut_validation_livreur: "refuse" }),
         base44.entities.Partenaire.filter({ statut: "en_attente" }),
         base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),
+        base44.entities.UserProfile.filter({ status: "incomplet", deleted: false }),
        ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
       const map = new Map();
       const allLivreurs = [...(livreursPurs || []), ...(livreursMultiAttente || []), ...(livreursMultiValides || []), ...(livreursMultiRefuses || [])];
@@ -79,6 +81,7 @@ export default function DispatcherDashboard() {
         setLivreurs(tousLivreurs);
         setPartenairesEnAttente((partenairesAttente || []).filter(p => !p.deleted));
         setProfilesEnAttente(profilesAttente || []);
+        setProfilesIncomplets(profilesInc || []);
       }
       } catch (err) {
         console.error('[DISPATCHER] Load error:', err);
@@ -139,16 +142,26 @@ export default function DispatcherDashboard() {
     });
     const unsubUserProfile = base44.entities.UserProfile.subscribe((event) => {
       if (!isMounted) return;
-      if (event.type === 'create' && event.data?.status === 'en_attente') {
-        setProfilesEnAttente(prev => [...prev, event.data]);
+      if (event.type === 'create') {
+        if (event.data?.status === 'en_attente') {
+          setProfilesEnAttente(prev => [...prev, event.data]);
+        } else if (event.data?.status === 'incomplet') {
+          setProfilesIncomplets(prev => [...prev, event.data]);
+        }
       } else if (event.type === 'update') {
         setProfilesEnAttente(prev => {
           const filtered = prev.filter(p => p.id !== event.id);
           if (event.data?.status === 'en_attente' && !event.data?.deleted) return [...filtered, event.data];
           return filtered;
         });
+        setProfilesIncomplets(prev => {
+          const filtered = prev.filter(p => p.id !== event.id);
+          if (event.data?.status === 'incomplet' && !event.data?.deleted) return [...filtered, event.data];
+          return filtered;
+        });
       } else if (event.type === 'delete') {
         setProfilesEnAttente(prev => prev.filter(p => p.id !== event.id));
+        setProfilesIncomplets(prev => prev.filter(p => p.id !== event.id));
       }
     });
     return () => { 
@@ -167,10 +180,16 @@ export default function DispatcherDashboard() {
   const enAttente = courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport);
   const enCours = courses.filter(c => ["assignee_attente", "acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport);
   const terminees = courses.filter(c => c.statut === "livree" && !c.moyen_transport);
-  const livreursActifs = livreurs.filter(l => l.disponible);
-  const livreursValides = livreurs.filter(l => l.statut_validation_livreur === "valide");
-  const livreursEnAttente = livreurs.filter(l => !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente");
-  const livreursBlockes = livreurs.filter(l => l.livreur_bloque);
+  // Exclure les livreurs avec profil incomplet
+  const incompletLivreurEmails = profilesIncomplets
+    .filter(p => p.profile_type === 'livreur')
+    .map(p => p.user_email);
+  const livreursFiltered = livreurs.filter(l => !incompletLivreurEmails.includes(l.email));
+  
+  const livreursActifs = livreursFiltered.filter(l => l.disponible);
+  const livreursValides = livreursFiltered.filter(l => l.statut_validation_livreur === "valide");
+  const livreursEnAttente = livreursFiltered.filter(l => !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente");
+  const livreursBlockes = livreursFiltered.filter(l => l.livreur_bloque);
   const totalCommissionsJour = courses
     .filter(c => c.statut === "livree" && new Date(c.date_livraison).toDateString() === today)
     .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
@@ -267,6 +286,22 @@ export default function DispatcherDashboard() {
               <p className="text-xs text-blue-600">Cliquez pour examiner et valider</p>
             </div>
             <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{profilesEnAttente.length}</span>
+          </div>
+        </Link>
+      )}
+
+      {/* Alerte profils incomplets */}
+      {profilesIncomplets.length > 0 && (
+        <Link to="/gestion-profils">
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-orange-50 border-2 border-orange-300">
+            <div className="h-10 w-10 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-orange-800 text-sm">⚠️ {profilesIncomplets.length} profil(s) incomplet(s)</p>
+              <p className="text-xs text-orange-600">À compléter avant activation</p>
+            </div>
+            <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{profilesIncomplets.length}</span>
           </div>
         </Link>
       )}

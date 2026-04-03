@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import RoleSetup from "../components/RoleSetup";
 import LivreurDocuments from "../components/LivreurDocuments";
 import PendingProfiles from "../components/PendingProfiles";
+import IncompleteProfileGuard from "../components/IncompleteProfileGuard";
 import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
@@ -205,6 +206,11 @@ export default function Home() {
 
   const activeProfileType = activeUserProfile?.profile_type;
   const activeCfg = PROFILE_CFG[activeProfileType] || {};
+
+  // Profil incomplet — forcer complétion
+  if (activeUserProfile?.status === 'incomplet') {
+    return <IncompleteProfileGuard user={user} profile={activeUserProfile} />;
+  }
 
   // Livreur sans documents
   const livreurHasDocs = !!(activeUserProfile?.documents_json && (() => {
