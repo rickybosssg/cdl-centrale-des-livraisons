@@ -108,6 +108,7 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
+    console.log('[AdminDashboard] Dashboard mounted');
     loadData();
     const interval = setInterval(loadData, 30000);
 
@@ -168,6 +169,8 @@ export default function AdminDashboard() {
     );
   }
 
+  console.log('[AdminDashboard] Rendering dashboard - loading complete');
+
   const alertConfig = {
     livreurs: { icon: Truck, text: '📋 ' + counts.livreurs?.pending + ' livreurs à valider' },
     partenaires: { icon: Store, text: '🏪 ' + counts.partenaires?.pending + ' partenaires en attente' },
@@ -205,6 +208,39 @@ export default function AdminDashboard() {
           })}
         </div>
       )}
+
+      {/* PUBLICITÉS ADMIN - Carte principale en haut */}
+      <div className="px-4">
+        <div className="relative group">
+          <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl blur opacity-30 group-hover:opacity-40 transition-opacity" />
+          <div className="relative bg-gradient-to-br from-orange-500 to-amber-600 text-white rounded-2xl p-6 space-y-4 shadow-lg">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="font-bold text-xl">📢 PUBLICITÉS ADMIN</p>
+                <p className="text-sm text-white/85 mt-1">Créez et gérez vos campagnes publicitaires</p>
+              </div>
+              <span className="text-4xl">✨</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Link to="/admin-creer-publicite">
+                <Button size="sm" className="w-full bg-white text-orange-600 hover:bg-orange-50 font-bold">
+                  + Créer
+                </Button>
+              </Link>
+              <Link to="/admin-mes-publicites">
+                <Button size="sm" className="w-full bg-white/20 text-white hover:bg-white/30 font-semibold border border-white/40">
+                  Mes pubs
+                </Button>
+              </Link>
+              <Link to="/gerer-publicites">
+                <Button size="sm" className="w-full bg-white/20 text-white hover:bg-white/30 font-semibold border border-white/40">
+                  Toutes
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* KPIs */}
       <div className="px-4 grid grid-cols-2 gap-3">
