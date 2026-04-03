@@ -43,6 +43,7 @@ const PROFILE_CFG = {
   livreur:    { label: 'Livreur',        emoji: '🛵', color: '#22c55e' },
   partenaire: { label: 'Partenaire',     emoji: '🏪', color: '#a855f7' },
   commercial: { label: 'Commercial',     emoji: '📣', color: '#f97316' },
+  annonceur:  { label: 'Annonceur',      emoji: '📢', color: '#ec4899' },
 };
 
 export default function Home() {
