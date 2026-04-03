@@ -14,6 +14,14 @@
       "type": "string",
       "title": "Images (JSON array URLs)"
     },
+    "video_url": {
+      "type": "string",
+      "title": "Vid\u00e9o URL (mp4 de pr\u00e9f\u00e9rence)"
+    },
+    "video_title": {
+      "type": "string",
+      "title": "Titre vid\u00e9o"
+    },
     "lien_url": {
       "type": "string",
       "title": "Lien de redirection"

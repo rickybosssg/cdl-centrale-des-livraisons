@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Upload, AlertCircle } from "lucide-react";
+import { ArrowLeft, Upload, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +23,9 @@ export default function CreerPublicite({ user }) {
     titre: "",
     description: "",
     image_url: "",
+    images: [],
+    video_url: "",
+    video_title: "",
     lien_url: "",
     placement: "accueil",
     targets: ["client"],
@@ -42,14 +45,40 @@ export default function CreerPublicite({ user }) {
     load();
   }, []);
 
-  const handleImageUpload = async (file) => {
+  const handleImageUpload = async (file, isMulti = false) => {
     try {
       const res = await base44.integrations.Core.UploadFile({ file });
-      setForm(prev => ({ ...prev, image_url: res.file_url }));
-      toast.success("Image uploadée");
+      if (isMulti) {
+        setForm(prev => ({
+          ...prev,
+          images: [...(prev.images || []), res.file_url]
+        }));
+      } else {
+        setForm(prev => ({ ...prev, image_url: res.file_url }));
+      }
+      toast.success("Média uploadé");
     } catch (e) {
       console.error("[CreerPublicite] Upload error:", e);
-      toast.error("Erreur upload image");
+      toast.error("Erreur upload");
+    }
+  };
+
+  const handleVideoUpload = async (file) => {
+    if (!file.type.startsWith('video/')) {
+      toast.error('Seules les vidéos sont acceptées');
+      return;
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error('Vidéo trop volumineuse (max 100MB)');
+      return;
+    }
+    try {
+      const res = await base44.integrations.Core.UploadFile({ file });
+      setForm(prev => ({ ...prev, video_url: res.file_url }));
+      toast.success('Vidéo uploadée');
+    } catch (e) {
+      console.error('[CreerPublicite] Video upload error:', e);
+      toast.error('Erreur upload vidéo');
     }
   };
 
@@ -80,6 +109,9 @@ export default function CreerPublicite({ user }) {
         titre: form.titre,
         description: form.description || "",
         image_url: form.image_url,
+        images: form.images.length > 0 ? JSON.stringify(form.images) : "",
+        video_url: form.video_url || "",
+        video_title: form.video_title || "",
         lien_url: form.lien_url || "",
         placement: form.placement,
         targets: form.targets,
@@ -196,6 +228,87 @@ export default function CreerPublicite({ user }) {
                   onChange={e => {
                     const file = e.target.files?.[0];
                     if (file) handleImageUpload(file);
+                  }}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
+
+          {/* Galerie multi-images */}
+          <div>
+            <label className="block text-sm font-semibold mb-1.5">Galerie d'images (optionnel)</label>
+            <div className="space-y-2">
+              {form.images.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {form.images.map((img, idx) => (
+                    <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
+                      <img src={img} alt={`Image ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => setForm(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== idx) }))}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="block p-3 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/30 transition-colors">
+                <div className="flex flex-col items-center gap-1">
+                  <Upload className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium">Ajouter photos</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={e => {
+                    Array.from(e.target.files || []).forEach(file => {
+                      handleImageUpload(file, true);
+                    });
+                  }}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Vidéo */}
+          <div>
+            <label className="block text-sm font-semibold mb-1.5">Vidéo (optionnel)</label>
+            {form.video_url ? (
+              <div className="space-y-2">
+                <div className="aspect-video rounded-lg overflow-hidden bg-gray-900">
+                  <video src={form.video_url} className="w-full h-full object-cover" controls />
+                </div>
+                <div>
+                  <Input
+                    placeholder="Titre vidéo (optionnel)"
+                    value={form.video_title}
+                    onChange={e => setForm(prev => ({ ...prev, video_title: e.target.value }))}
+                  />
+                </div>
+                <button
+                  onClick={() => setForm(prev => ({ ...prev, video_url: '', video_title: '' }))}
+                  className="w-full px-3 py-2 text-sm rounded-md border text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  Supprimer vidéo
+                </button>
+              </div>
+            ) : (
+              <label className="block p-3 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/30 transition-colors">
+                <div className="flex flex-col items-center gap-1">
+                  <Upload className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium">Upload vidéo (mp4)</span>
+                  <span className="text-[10px] text-muted-foreground">Max 100MB</span>
+                </div>
+                <input
+                  type="file"
+                  accept="video/mp4,video/quicktime"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) handleVideoUpload(file);
                   }}
                   className="hidden"
                 />

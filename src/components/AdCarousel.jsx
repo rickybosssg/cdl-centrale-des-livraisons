@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import PubliciteTracker from "./PubliciteTracker";
+import MediaGallery from "./MediaGallery";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function AdCarousel({ placement = "accueil", userRole = "client" }) {
   const [ads, setAds] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [subIndex, setSubIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -56,12 +55,10 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
 
     loadAds();
 
-    // Écoute temps réel
     const unsub = base44.entities.Publicite.subscribe(() => {
       if (isMounted) loadAds();
     });
     
-    // Refresh automatique toutes les 30 secondes
     const intervalId = setInterval(() => {
       if (isMounted) loadAds();
     }, 30000);
@@ -71,106 +68,102 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
       unsub?.();
       clearInterval(intervalId);
     };
-  }, [placement, userRole, refreshTrigger]);
+  }, [placement, userRole]);
 
-  useEffect(() => { setSubIndex(0); }, [currentIndex]);
+  const goNext = () => setCurrentIndex((currentIndex + 1) % ads.length);
+  const goPrev = () => setCurrentIndex((currentIndex - 1 + ads.length) % ads.length);
 
   if (loading || ads.length === 0 || error) return null;
 
   const current = ads?.[currentIndex];
   if (!current) return null;
-  const goNext = () => setCurrentIndex((currentIndex + 1) % ads.length);
-  const goPrev = () => setCurrentIndex((currentIndex - 1 + ads.length) % ads.length);
 
-  // Extraire les images de la pub courante
-  const getCurrentImages = (ad) => {
-    if (ad.images) {
-      try {
-        const parsed = JSON.parse(ad.images);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch {}
-    }
-    return ad.image_url ? [ad.image_url] : [];
-  };
+  // Parser images
+  let allImages = [];
+  if (current.image_url) allImages.push(current.image_url);
+  if (current.images) {
+    try {
+      const parsed = JSON.parse(current.images);
+      if (Array.isArray(parsed)) allImages.push(...parsed);
+    } catch {}
+  }
+  allImages = allImages.filter(Boolean);
 
-
-
-  const currentImages = getCurrentImages(current);
-  const currentImage = currentImages[subIndex] || currentImages[0];
-
-  // Auto-rotate toutes les 8 secondes
+  // Auto-rotate
   useEffect(() => {
     const timer = setInterval(goNext, 8000);
     return () => clearInterval(timer);
   }, [currentIndex, ads.length]);
 
+  const trackClick = (pubId, pubUrl) => {
+    base44.functions
+      .invoke('trackPubliciteInteraction', {
+        publicite_id: pubId,
+        interaction_type: 'click',
+        user_role: userRole,
+      })
+      .catch(() => {});
+    if (pubUrl) window.open(pubUrl, '_blank');
+  };
+
   return (
     <PubliciteTracker publiciteId={current.id} userRole={userRole}>
       <div className="relative w-full rounded-2xl overflow-hidden group shadow-lg">
-        {/* Pub — aspect ratio 16/9 */}
-        <div className="relative bg-black" style={{ aspectRatio: '16/9' }}>
-          <img
-            src={currentImage}
-            alt={current.titre}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-          
-          {/* Overlay gradient pour lisibilité texte */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent pointer-events-none" />
+        {/* Galerie média unifiée */}
+        <MediaGallery
+          images={allImages}
+          videoUrl={current?.video_url}
+          videoTitle={current?.video_title}
+        />
 
-          {/* Navigation images internes (multi-images) */}
-          {currentImages.length > 1 && (
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-              {currentImages.map((_, i) => (
-                <button key={i} onClick={() => setSubIndex(i)}
-                  className={`h-1.5 rounded-full transition-all ${i === subIndex ? 'bg-white w-4' : 'bg-white/50 w-1.5'}`}
-                />
-              ))}
-            </div>
-          )}
+        {/* Navigation entre pubs */}
+        {ads.length > 1 && (
+          <>
+            <button
+              onClick={goPrev}
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all z-10"
+            >
+              <ChevronLeft className="h-5 w-5 text-white" />
+            </button>
+            <button
+              onClick={goNext}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all z-10"
+            >
+              <ChevronRight className="h-5 w-5 text-white" />
+            </button>
 
-          {/* Navigation entre pubs */}
-          {ads.length > 1 && (
-            <>
-              <button onClick={goPrev} className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all">
-                <ChevronLeft className="h-5 w-5 text-white" />
-              </button>
-              <button onClick={goNext} className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all">
-                <ChevronRight className="h-5 w-5 text-white" />
-              </button>
-            </>
-          )}
-
-          {/* Dots pubs */}
-          {ads.length > 1 && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {/* Dots pubs */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
               {ads.map((_, i) => (
-                <button key={i} onClick={() => setCurrentIndex(i)}
-                  className={`h-1.5 rounded-full transition-all ${i === currentIndex ? 'bg-white w-4' : 'bg-white/40 w-1.5'}`}
+                <button
+                  key={i}
+                  onClick={() => setCurrentIndex(i)}
+                  className={`rounded-full transition-all ${
+                    i === currentIndex ? 'bg-white w-4 h-1.5' : 'bg-white/40 w-1.5 h-1.5'
+                  }`}
                 />
               ))}
             </div>
-          )}
+          </>
+        )}
 
-          {/* Texte + CTA overlay */}
-          {current.titre && (
-            <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-              <p className="font-bold text-lg line-clamp-2">{current.titre}</p>
-              {current.lien_url && (
-                <a
-                  href={current.lien_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => trackClick(current.id, current.lien_url)}
-                  className="text-white/90 text-xs font-medium mt-2 inline-block underline hover:text-white transition-colors"
-                >
-                  En savoir plus →
-                </a>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Titre + CTA overlay */}
+        {current.titre && (
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 z-10">
+            <p className="font-bold text-base text-white line-clamp-2">{current.titre}</p>
+            {current.lien_url && (
+              <a
+                href={current.lien_url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => trackClick(current.id, current.lien_url)}
+                className="text-white/90 text-xs font-medium mt-2 inline-block underline hover:text-white transition-colors"
+              >
+                En savoir plus →
+              </a>
+            )}
+          </div>
+        )}
       </div>
     </PubliciteTracker>
   );
