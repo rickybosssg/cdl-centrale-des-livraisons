@@ -79,6 +79,7 @@ import AuditComplet from './pages/dispatcher/AuditComplet';
 import TestPublicitesVisibilite from './pages/dispatcher/TestPublicitesVisibilite';
 import BedouAudit from './pages/dispatcher/BedouAudit';
 import AdminProfilUnifie from './pages/dispatcher/AdminProfilUnifie';
+import TestMallE2E from './pages/dispatcher/TestMallE2E';
 import Mall from './pages/Mall';
 import DashboardAnnonceur from './pages/annonceur/DashboardAnnonceur';
 import CreerPublicite from './pages/annonceur/CreerPublicite';
@@ -260,6 +261,7 @@ const AuthenticatedApp = () => {
           <Route path="/test-publicites" element={<TestPublicitesVisibilite />} />
           <Route path="/bedou-audit" element={<BedouAudit />} />
           <Route path="/admin/profil/:userId" element={<AdminProfilUnifie />} />
+          <Route path="/test-mall-e2e" element={<TestMallE2E />} />
         </Route>
       </Route>
 

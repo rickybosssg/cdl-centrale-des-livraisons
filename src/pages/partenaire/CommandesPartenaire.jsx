@@ -110,6 +110,23 @@ export default function CommandesPartenaire({ user }) {
       nombre_tentatives: 0,
     });
     await base44.entities.CommandePartenaire.update(cmd.id, { course_id: courseData.id, statut: "acceptee" });
+    
+    // #2 FIX: Auto-dispatch livreur via fonction atomique
+    try {
+      const dispatchRes = await base44.functions.invoke('autoDispatchMallCourse', {
+        commande_id: cmd.id,
+        course_id: courseData.id,
+      });
+      if (dispatchRes.data?.success) {
+        toast.success(`✅ Livreur assigné : ${dispatchRes.data.message}`);
+      } else {
+        toast.warning(dispatchRes.data?.message || "Aucun livreur dispo - alerte admin envoyée");
+      }
+    } catch (e) {
+      console.error('[autoDispatchMallCourse] Error:', e);
+      toast.warning('Erreur assignation livreur - essai manuel en cours');
+    }
+    
     lancerDispatch(courseData);
     vibrateSuccess();
     toast.success("✅ Commande acceptée ! Livreur en recherche...");
