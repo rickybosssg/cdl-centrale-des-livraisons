@@ -68,27 +68,31 @@ export default function LivreurHome({ user }) {
 
   // Charger courses
   useEffect(() => {
+    let isMounted = true;
+
     const load = async () => {
+      if (!isMounted) return;
       try {
         const data = await base44.entities.Course.filter({ livreur_email: user.email }, "-created_date", 10);
-        setCourses(Array.isArray(data) ? data : []);
+        if (isMounted) setCourses(Array.isArray(data) ? data : []);
         
         const pending = await base44.entities.Course.filter({ statut: 'en_attente' }, '-created_date', 20);
-        setZoneChaudeCount(Array.isArray(pending) ? pending.length : 0);
+        if (isMounted) setZoneChaudeCount(Array.isArray(pending) ? pending.length : 0);
       } catch (err) {
         console.error('[LivreurHome] Load error:', err);
-        setCourses([]);
+        if (isMounted) setCourses([]);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     load();
     base44.functions.invoke('getLivreurClassement', {}).then(r => {
-      if (r?.data?.rank) setClassement(r.data);
+      if (isMounted && r?.data?.rank) setClassement(r.data);
     }).catch(() => {});
 
     const unsub = base44.entities.Course.subscribe((event) => {
+      if (!isMounted) return;
       if (event.type === 'create' && event?.data?.livreur_email === user.email) {
         setCourses(prev => [event.data, ...prev]);
         toast.info('Nouvelle course !');
@@ -97,7 +101,10 @@ export default function LivreurHome({ user }) {
       }
     });
 
-    return () => { if (unsub) unsub(); };
+    return () => { 
+      isMounted = false;
+      if (unsub) unsub(); 
+    };
   }, [user?.email]);
 
   const toggleDisponible = async () => {

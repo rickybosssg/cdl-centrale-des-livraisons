@@ -42,24 +42,28 @@ export default function ClientHome({ user }) {
 
   // Charger courses
   useEffect(() => {
+    let isMounted = true;
+
     const load = async () => {
+      if (!isMounted) return;
       try {
         const data = await base44.entities.Course.filter(
           { client_email: user.email },
           "-created_date",
           20
         );
-        setCourses(Array.isArray(data) ? data : []);
+        if (isMounted) setCourses(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('[ClientHome] Load error:', err);
-        setCourses([]);
+        if (isMounted) setCourses([]);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     load();
 
     const unsub = base44.entities.Course.subscribe((event) => {
+      if (!isMounted) return;
       if (!event?.data?.client_email || event.data.client_email !== user.email) return;
       if (event.type === "create") {
         setCourses(prev => [event.data, ...prev]);
@@ -70,7 +74,10 @@ export default function ClientHome({ user }) {
       }
     });
 
-    return () => { if (unsub) unsub(); };
+    return () => { 
+      isMounted = false;
+      if (unsub) unsub(); 
+    };
   }, [user?.email]);
 
   const safeCourses = Array.isArray(courses) ? courses : [];
