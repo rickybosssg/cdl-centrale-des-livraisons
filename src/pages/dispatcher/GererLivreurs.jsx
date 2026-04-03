@@ -75,18 +75,13 @@ export default function GererLivreurs() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const loadData = async () => {
-    const [livreursPurs, livreursAttente, livreursValides, livreursRefuses, paiementsData, me] = await Promise.all([
+    const [livreursPurs, paiementsData, me] = await Promise.all([
       base44.entities.User.filter({ user_type: "livreur" }),
-      base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
-      base44.entities.User.filter({ statut_validation_livreur: "valide" }),
-      base44.entities.User.filter({ statut_validation_livreur: "refuse" }),
       base44.entities.PaiementCommission.list("-created_date", 200),
       base44.auth.me(),
     ]);
-    const map = new Map();
-    [...livreursPurs, ...livreursAttente, ...livreursValides, ...livreursRefuses].forEach(u => map.set(u.id, u));
     // Ne garder que les vrais livreurs (user_type livreur ou user_roles contient livreur)
-    const tousLivreurs = Array.from(map.values()).filter(u => {
+    const tousLivreurs = livreursPurs.filter(u => {
       if (u.user_type === 'livreur') return true;
       if (u.user_roles) {
         try { return JSON.parse(u.user_roles).includes('livreur'); } catch (_) {}
