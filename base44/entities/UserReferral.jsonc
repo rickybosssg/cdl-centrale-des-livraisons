@@ -1,0 +1,56 @@
+{
+  "name": "UserReferral",
+  "type": "object",
+  "properties": {
+    "referrer_email": {
+      "type": "string",
+      "title": "Email du parrain"
+    },
+    "referred_email": {
+      "type": "string",
+      "title": "Email du filleul"
+    },
+    "referral_code": {
+      "type": "string",
+      "title": "Code promo unique du parrain",
+      "index": true
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "cancelled"
+      ],
+      "title": "Statut du parrainage",
+      "default": "active"
+    },
+    "signup_bonus_paid": {
+      "type": "boolean",
+      "title": "Bonus inscription vers\u00e9",
+      "default": false
+    },
+    "signup_bonus_paid_at": {
+      "type": "string",
+      "title": "Date paiement bonus inscription"
+    },
+    "first_course_bonus_paid": {
+      "type": "boolean",
+      "title": "Bonus premi\u00e8re course vers\u00e9",
+      "default": false
+    },
+    "first_course_bonus_paid_at": {
+      "type": "string",
+      "title": "Date paiement bonus premi\u00e8re course"
+    },
+    "total_bonus": {
+      "type": "number",
+      "title": "Total bonus vers\u00e9 (F)",
+      "default": 0
+    }
+  },
+  "required": [
+    "referrer_email",
+    "referred_email",
+    "referral_code"
+  ]
+}

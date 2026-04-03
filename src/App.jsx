@@ -83,6 +83,7 @@ import TestMallE2E from './pages/dispatcher/TestMallE2E';
 import Mall from './pages/Mall';
 import DashboardAnnonceur from './pages/annonceur/DashboardAnnonceur';
 import CreerPublicite from './pages/annonceur/CreerPublicite';
+import MyReferral from './pages/MyReferral';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -220,6 +221,7 @@ const AuthenticatedApp = () => {
         <Route path="/supprimer-compte" element={<SupprimerCompte />} />
         <Route path="/mon-bedou" element={<MonBedou />} />
         <Route path="/mes-notifications" element={<MesNotifications />} />
+        <Route path="/mon-parrainage" element={<MyReferral />} />
         <Route path="/complete-profile/:profileId" element={<CompleteProfile />} />
 
         {/* Admin uniquement */}
