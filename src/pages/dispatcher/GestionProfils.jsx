@@ -433,7 +433,7 @@ export default function GestionProfils() {
                         <div className="flex gap-1 flex-shrink-0">
                           <Button
                             size="sm" variant="outline" className="h-7 text-xs px-2"
-                            onClick={e => { e.stopPropagation(); openUser(user); }}
+                            onClick={e => { e.stopPropagation(); navigate(`/admin/profil/${user.id}`); }}
                           >
                             <Eye className="h-3 w-3" />
                           </Button>
@@ -456,7 +456,7 @@ export default function GestionProfils() {
               {filteredUsers.filter(u => getValidatedProfiles(u).length > 0).map(user => {
                 const validatedProfs = getValidatedProfiles(user);
                 return (
-                  <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openUser(user)}>
+                  <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/admin/profil/${user.id}`)}>
                     <CardContent className="p-3 flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center font-bold text-green-700 flex-shrink-0">
                         {user.full_name?.charAt(0) || "?"}
@@ -488,7 +488,7 @@ export default function GestionProfils() {
                 <p className="text-center text-sm text-muted-foreground py-8">Aucun utilisateur sans profil</p>
               )}
               {filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email).length === 0).map(user => (
-                <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow opacity-60" onClick={() => openUser(user)}>
+                <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow opacity-60" onClick={() => navigate(`/admin/profil/${user.id}`)}>
                   <CardContent className="p-3 flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 flex-shrink-0">
                       {user.full_name?.charAt(0) || "?"}

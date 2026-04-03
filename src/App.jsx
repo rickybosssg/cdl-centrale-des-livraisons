@@ -78,6 +78,7 @@ import HealthDashboard from './pages/dispatcher/HealthDashboard';
 import AuditComplet from './pages/dispatcher/AuditComplet';
 import TestPublicitesVisibilite from './pages/dispatcher/TestPublicitesVisibilite';
 import BedouAudit from './pages/dispatcher/BedouAudit';
+import AdminProfilUnifie from './pages/dispatcher/AdminProfilUnifie';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -250,6 +251,7 @@ const AuthenticatedApp = () => {
           <Route path="/audit-complet" element={<AuditComplet />} />
           <Route path="/test-publicites" element={<TestPublicitesVisibilite />} />
           <Route path="/bedou-audit" element={<BedouAudit />} />
+          <Route path="/admin/profil/:userId" element={<AdminProfilUnifie />} />
         </Route>
       </Route>
 

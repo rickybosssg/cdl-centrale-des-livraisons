@@ -458,7 +458,7 @@ export default function GererLivreurs() {
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs flex-1"
-                  onClick={() => ouvrirProfil(livreur)}
+                  onClick={() => navigate(`/admin/profil/${livreur.id}`)}
                 >
                   <Eye className="h-3 w-3 mr-1" />
                   Profil

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Search, Truck, RefreshCw, Phone, MessageCircle, Mail } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,7 +20,6 @@ export default function BaseLivreurs() {
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [selectedLivreur, setSelectedLivreur] = useState(null);
   const [filtre, setFiltre] = useState("tous");
 
   const loadLivreurs = async () => {
@@ -146,7 +146,7 @@ export default function BaseLivreurs() {
                       </button>
                     </a>
                   )}
-                  <button onClick={() => setSelectedLivreur(livreur)} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted">
+                  <button onClick={() => navigate(`/admin/profil/${livreur.id}`)} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted">
                     Voir fiche
                   </button>
                 </div>
@@ -157,9 +157,7 @@ export default function BaseLivreurs() {
         {filtered.length === 0 && <div className="text-center py-12"><Truck className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" /><p className="text-sm text-muted-foreground">Aucun livreur trouvé</p></div>}
       </div>
 
-      {selectedLivreur && (
-        <FicheLivreur livreur={selectedLivreur} onClose={() => setSelectedLivreur(null)} onUpdated={(updated) => { setLivreurs(prev => prev.map(l => l.id === updated.id ? updated : l)); setSelectedLivreur(updated); }} />
-      )}
+
     </div>
   );
 }

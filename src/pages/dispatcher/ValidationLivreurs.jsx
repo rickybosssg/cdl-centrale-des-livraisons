@@ -1,158 +1,43 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, CheckCircle2, XCircle, User, Eye, MessageCircle, Phone, Mail } from "lucide-react";
-import ChatLivreur from "@/components/ChatLivreur";
+import { ArrowLeft, User, Eye, MessageCircle, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import moment from "moment";
 
 export default function ValidationLivreurs() {
   const navigate = useNavigate();
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLivreur, setSelectedLivreur] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [motifRefus, setMotifRefus] = useState("");
-  const [processing, setProcessing] = useState(false);
-  const [adminUser, setAdminUser] = useState(null);
-  const [activeTab, setActiveTab] = useState("dossier");
-
-  useEffect(() => { base44.auth.me().then(setAdminUser); }, []);
 
   const loadData = async () => {
-    // Récupère les livreurs purs ET les multi-profils ayant un statut livreur
-    const [livreursPurs, autresLivreurs] = await Promise.all([
-      base44.entities.User.filter({ user_type: "livreur" }),
-      base44.entities.User.filter({ statut_validation_livreur: "en_attente" }),
-    ]);
-    const map = new Map();
-    [...livreursPurs, ...autresLivreurs].forEach(u => map.set(u.id, u));
-    const data = Array.from(map.values());
+    const data = await base44.entities.User.filter({ user_type: "livreur" });
     setLivreurs(data);
     setLoading(false);
   };
 
   useEffect(() => {
     loadData();
-    const unsubUser = base44.entities.User.subscribe((event) => {
-      const isLivreur = event.data?.user_type === 'livreur' || event.data?.statut_validation_livreur;
-      if (!isLivreur) return;
-      if (event.type === 'create') {
-        setLivreurs(prev => [...prev, event.data]);
-        toast.info('Nouveau livreur en attente de validation !');
-      } else if (event.type === 'update') {
-        setLivreurs(prev => prev.map(l => l.id === event.id ? event.data : l));
-      } else if (event.type === 'delete') {
-        setLivreurs(prev => prev.filter(l => l.id !== event.id));
-      }
+    const unsub = base44.entities.User.subscribe((event) => {
+      if (event.data?.user_type !== 'livreur') return;
+      if (event.type === 'create') setLivreurs(prev => [...prev, event.data]);
+      else if (event.type === 'update') setLivreurs(prev => prev.map(l => l.id === event.id ? event.data : l));
+      else if (event.type === 'delete') setLivreurs(prev => prev.filter(l => l.id !== event.id));
     });
-    
-    // Subscribe à UserProfile livreur pour détecter nouveaux profils
-    const unsubProfile = base44.entities.UserProfile.subscribe((event) => {
-      if (event.data?.profile_type !== 'livreur' || event.data?.deleted) return;
-      if (event.type === 'create' || event.type === 'update') {
-        // Chercher si cet utilisateur existe déjà
-        base44.entities.User.filter({ email: event.data.user_email }).then(users => {
-          if (users.length > 0) {
-            const user = users[0];
-            // Ajouter ou mettre à jour avec info du profil
-            setLivreurs(prev => {
-              const exists = prev.find(l => l.email === event.data.user_email);
-              if (exists) {
-                return prev.map(l => l.email === event.data.user_email ? 
-                  { ...l, profile_status: event.data.status, profile_id: event.data.id } : l);
-              }
-              toast.info(`Nouveau profil livreur de ${user.full_name} détecté!`);
-              return [...prev, { ...user, profile_status: event.data.status, profile_id: event.data.id }];
-            });
-          }
-        });
-      }
-    });
-    
-    return () => { unsubUser(); unsubProfile(); };
+    return () => unsub();
   }, []);
-
-  const valider = async (livreur) => {
-    if (!livreur.telephone) {
-      toast.error("❌ Validation impossible : numéro de téléphone manquant");
-      return;
-    }
-    setProcessing(true);
-    await base44.entities.User.update(livreur.id, {
-      statut_validation_livreur: "valide",
-      profil_valide: true,
-      actif: true,
-      date_validation: new Date().toISOString(),
-    });
-    // Notifier le livreur
-    await base44.entities.Notification.create({
-      destinataire_email: livreur.email,
-      destinataire_role: "livreur",
-      titre: "✅ Profil livreur validé !",
-      message: `Félicitations ${livreur.full_name} ! Votre profil livreur a été validé par l'administration CDL. Vous pouvez maintenant recevoir des courses. Bonne livraison ! 🛵`,
-      type: "success",
-      lue: false,
-    });
-    toast.success("Le livreur a été validé avec succès !");
-    setDialogOpen(false);
-    loadData();
-    setProcessing(false);
-  };
-
-  const refuser = async (livreur) => {
-    setProcessing(true);
-    const motif = motifRefus || "Documents insuffisants ou illisibles";
-    await base44.entities.User.update(livreur.id, {
-      statut_validation_livreur: "refuse",
-      profil_valide: false,
-      motif_refus: motif,
-    });
-    // Notifier le livreur avec le motif
-    await base44.entities.Notification.create({
-      destinataire_email: livreur.email,
-      destinataire_role: "livreur",
-      titre: "❌ Dossier refusé",
-      message: `Votre dossier livreur a été refusé. Motif : ${motif}. Contactez-nous via WhatsApp pour corriger votre dossier.`,
-      type: "danger",
-      lue: false,
-    });
-    // Envoyer aussi via FCM si possible
-    try {
-      await base44.functions.invoke('sendFcmNotification', {
-        user_email: livreur.email,
-        title: "❌ Dossier livreur refusé",
-        body: `Motif : ${motif}. Contactez CDL pour corriger.`,
-      });
-    } catch (_) {}
-    toast.success("Le livreur a été refusé et notifié");
-    setDialogOpen(false);
-    setMotifRefus("");
-    loadData();
-    setProcessing(false);
-  };
 
   const enAttente = livreurs.filter(l => !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente");
   const valides = livreurs.filter(l => l.statut_validation_livreur === "valide");
   const refuses = livreurs.filter(l => l.statut_validation_livreur === "refuse");
 
   const StatutBadge = ({ statut }) => {
-    const cfg = {
-      "en_attente": "bg-amber-100 text-amber-700",
-      "valide": "bg-green-100 text-green-700",
-      "refuse": "bg-red-100 text-red-700",
-    };
+    const cfg = { en_attente: "bg-amber-100 text-amber-700", valide: "bg-green-100 text-green-700", refuse: "bg-red-100 text-red-700" };
     const labels = { en_attente: "En attente", valide: "Validé", refuse: "Refusé" };
     const key = statut || "en_attente";
-    return (
-      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg[key]}`}>
-        {labels[key]}
-      </span>
-    );
+    return <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg[key]}`}>{labels[key]}</span>;
   };
 
   const LivreurCard = ({ livreur }) => (
@@ -177,11 +62,10 @@ export default function ValidationLivreurs() {
             {livreur.date_validation && <p className="text-xs text-green-600">Validé le {moment(livreur.date_validation).format("DD/MM/YYYY")}</p>}
           </div>
           <Button size="sm" variant="outline" className="h-8 text-xs flex-shrink-0"
-            onClick={() => { setSelectedLivreur(livreur); setDialogOpen(true); }}>
+            onClick={() => navigate(`/admin/profil/${livreur.id}`)}>
             <Eye className="h-3 w-3 mr-1" />Voir
           </Button>
         </div>
-        {/* Boutons contact rapide */}
         <div className="flex gap-2">
           {livreur.telephone ? (
             <a href={`tel:${livreur.telephone}`} className="flex-1">
@@ -221,189 +105,23 @@ export default function ValidationLivreurs() {
 
       <Tabs defaultValue="attente">
         <TabsList className="w-full">
-          <TabsTrigger value="attente" className="flex-1 text-xs">
-            En attente ({enAttente.length})
-          </TabsTrigger>
-          <TabsTrigger value="valides" className="flex-1 text-xs">
-            Validés ({valides.length})
-          </TabsTrigger>
-          <TabsTrigger value="refuses" className="flex-1 text-xs">
-            Refusés ({refuses.length})
-          </TabsTrigger>
+          <TabsTrigger value="attente" className="flex-1 text-xs">En attente ({enAttente.length})</TabsTrigger>
+          <TabsTrigger value="valides" className="flex-1 text-xs">Validés ({valides.length})</TabsTrigger>
+          <TabsTrigger value="refuses" className="flex-1 text-xs">Refusés ({refuses.length})</TabsTrigger>
         </TabsList>
-
         <TabsContent value="attente" className="space-y-3 mt-3">
           {enAttente.map(l => <LivreurCard key={l.id} livreur={l} />)}
-          {enAttente.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucun livreur en attente de validation</p>}
+          {enAttente.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucun livreur en attente</p>}
         </TabsContent>
-
         <TabsContent value="valides" className="space-y-3 mt-3">
           {valides.map(l => <LivreurCard key={l.id} livreur={l} />)}
           {valides.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucun livreur validé</p>}
         </TabsContent>
-
         <TabsContent value="refuses" className="space-y-3 mt-3">
           {refuses.map(l => <LivreurCard key={l.id} livreur={l} />)}
           {refuses.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucun livreur refusé</p>}
         </TabsContent>
       </Tabs>
-
-      {/* Dialog détail livreur */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Dossier livreur</DialogTitle>
-          </DialogHeader>
-          {selectedLivreur && (
-            <div className="space-y-4">
-              {/* Tabs: Dossier / Messages */}
-              <div className="flex gap-2 border-b pb-2">
-                <button
-                  onClick={() => setActiveTab("dossier")}
-                  className={`text-sm font-medium px-3 py-1 rounded-full transition-colors ${
-                    activeTab === "dossier" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  Dossier
-                </button>
-                <button
-                  onClick={() => setActiveTab("messages")}
-                  className={`flex items-center gap-1 text-sm font-medium px-3 py-1 rounded-full transition-colors ${
-                    activeTab === "messages" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  Messages
-                </button>
-              </div>
-
-              {activeTab === "dossier" && (
-                <>
-                  <div className="flex items-center gap-3">
-                    {selectedLivreur.photo_profil ? (
-                      <img src={selectedLivreur.photo_profil} alt="Photo" className="h-16 w-16 rounded-full object-cover border-2 border-primary" />
-                    ) : (
-                      <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-                        <User className="h-8 w-8 text-primary" />
-                      </div>
-                    )}
-                    <div>
-                      <p className="font-bold">{selectedLivreur.full_name}</p>
-                      <StatutBadge statut={selectedLivreur.statut_validation_livreur} />
-                    </div>
-                  </div>
-                  {/* Bloc contacts */}
-                  <div className="p-3 rounded-xl bg-muted/50 border space-y-2">
-                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Contacts</p>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-primary flex-shrink-0" />
-                      <span className="text-sm font-medium">{selectedLivreur.telephone || "non renseigné"}</span>
-                      {selectedLivreur.telephone && (
-                        <a href={`tel:${selectedLivreur.telephone}`} className="ml-auto text-xs text-primary underline">Appeler</a>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-primary flex-shrink-0" />
-                      <span className="text-sm">{selectedLivreur.email || "non renseigné"}</span>
-                    </div>
-                    {selectedLivreur.telephone && (
-                      <a href={`https://wa.me/${selectedLivreur.telephone?.replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2 p-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm font-medium hover:bg-green-100">
-                        <MessageCircle className="h-4 w-4" /> Ouvrir WhatsApp
-                      </a>
-                    )}
-                    <div className="text-xs text-muted-foreground">
-                      <span>Quartier : {selectedLivreur.quartier || "—"}</span>
-                      {selectedLivreur.date_validation && <span className="ml-3">Validé le {moment(selectedLivreur.date_validation).format("DD/MM/YYYY")}</span>}
-                      <span className="ml-3">Inscrit le {moment(selectedLivreur.created_date).format("DD/MM/YYYY")}</span>
-                    </div>
-                  </div>
-
-                  {/* Documents */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold">Documents fournis</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { label: "CNIB Recto", url: selectedLivreur.photo_identite_recto },
-                        { label: "CNIB Verso", url: selectedLivreur.photo_identite_verso },
-                        { label: "Moyen de déplacement", url: selectedLivreur.photo_moyen_deplacement },
-                      ].map(doc => (
-                        <div key={doc.label} className="border rounded-lg overflow-hidden">
-                          {doc.url ? (
-                            <a href={doc.url} target="_blank" rel="noreferrer">
-                              <img src={doc.url} alt={doc.label} className="w-full h-20 object-cover hover:opacity-80 transition-opacity" />
-                            </a>
-                          ) : (
-                            <div className="h-20 bg-muted flex items-center justify-center">
-                              <p className="text-xs text-muted-foreground">Non fourni</p>
-                            </div>
-                          )}
-                          <p className="text-[10px] text-center py-1 text-muted-foreground">{doc.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {(!selectedLivreur.statut_validation_livreur || selectedLivreur.statut_validation_livreur === "en_attente") && (
-                    <>
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Motif de refus (optionnel)</p>
-                        <input
-                          className="w-full border rounded-md px-3 py-1.5 text-sm"
-                          placeholder="Ex: Documents illisibles..."
-                          value={motifRefus}
-                          onChange={e => setMotifRefus(e.target.value)}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
-                          onClick={() => refuser(selectedLivreur)}
-                          disabled={processing}
-                        >
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Refuser
-                        </Button>
-                        <Button
-                          className="flex-1 bg-green-600 hover:bg-green-700"
-                          onClick={() => valider(selectedLivreur)}
-                          disabled={processing}
-                        >
-                          <CheckCircle2 className="h-4 w-4 mr-1" />
-                          Valider
-                        </Button>
-                      </div>
-                    </>
-                  )}
-
-                  {selectedLivreur.statut_validation_livreur === "valide" && (
-                    <Button
-                      variant="outline"
-                      className="w-full border-red-300 text-red-600"
-                      onClick={() => refuser(selectedLivreur)}
-                      disabled={processing}
-                    >
-                      Révoquer la validation
-                    </Button>
-                  )}
-
-                  {selectedLivreur.motif_refus && (
-                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-                      <p className="font-medium">Motif de refus :</p>
-                      <p>{selectedLivreur.motif_refus}</p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {activeTab === "messages" && (
-                <ChatLivreur livreurEmail={selectedLivreur.email} currentUser={adminUser} />
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
