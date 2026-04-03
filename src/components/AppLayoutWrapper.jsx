@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { requestNotificationPermission, registerFcmToken, onForegroundMessage } from "@/lib/pushNotifications";
 import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
@@ -105,28 +104,24 @@ export default function AppLayoutWrapper({ user }) {
     load();
   }, []);
 
-  // Initialiser FCM et demander permissions
+  // FCM initialisé en arrière-plan (optionnel)
   useEffect(() => {
     const initFcm = async () => {
       try {
-        const permitted = await requestNotificationPermission();
-        if (permitted) {
-          const token = await registerFcmToken();
-          if (token) {
-            // Sauvegarder le token
-            await base44.functions.invoke('saveFcmToken', { token });
-            // Écouter les messages en avant-plan
-            onForegroundMessage((payload) => {
-              console.log('[FCM] Message reçu en avant-plan:', payload);
-              new Notification(payload.notification?.title || 'CDL', {
-                body: payload.notification?.body,
-                icon: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
-              });
-            });
-          }
+        const { requestNotificationPermission, registerFcmToken, onForegroundMessage } = await import('@/lib/pushNotifications');
+        const permitted = await requestNotificationPermission?.();
+        if (!permitted) return;
+        const token = await registerFcmToken?.();
+        if (token) {
+          base44.functions.invoke('saveFcmToken', { token }).catch(() => {});
+          onForegroundMessage?.((payload) => {
+            if (payload?.notification?.title) {
+              new Notification(payload.notification.title, { body: payload.notification?.body });
+            }
+          });
         }
       } catch (err) {
-        console.warn('[FCM] Erreur initialisation:', err);
+        // Silencieux
       }
     };
     initFcm();
