@@ -108,20 +108,25 @@ export default function AppLayoutWrapper({ user }) {
   useEffect(() => {
     const initFcm = async () => {
       try {
-        const { requestNotificationPermission, registerFcmToken, onForegroundMessage } = await import('@/lib/pushNotifications');
-        const permitted = await requestNotificationPermission?.();
+        if (typeof window === 'undefined' || !('Notification' in window)) return;
+        const mod = await import('@/lib/pushNotifications');
+        if (!mod?.requestNotificationPermission) return;
+        const permitted = await mod.requestNotificationPermission();
         if (!permitted) return;
-        const token = await registerFcmToken?.();
+        if (!mod?.registerFcmToken) return;
+        const token = await mod.registerFcmToken();
         if (token) {
           base44.functions.invoke('saveFcmToken', { token }).catch(() => {});
-          onForegroundMessage?.((payload) => {
-            if (payload?.notification?.title) {
-              new Notification(payload.notification.title, { body: payload.notification?.body });
-            }
-          });
+          if (mod?.onForegroundMessage) {
+            mod.onForegroundMessage((payload) => {
+              if (payload?.notification?.title) {
+                new Notification(payload.notification.title, { body: payload.notification?.body });
+              }
+            });
+          }
         }
       } catch (err) {
-        // Silencieux
+        console.debug('[FCM] Erreur initialisation (non-critique):', err?.message);
       }
     };
     initFcm();
