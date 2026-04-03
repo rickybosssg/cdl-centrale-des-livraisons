@@ -79,6 +79,7 @@ import AuditComplet from './pages/dispatcher/AuditComplet';
 import TestPublicitesVisibilite from './pages/dispatcher/TestPublicitesVisibilite';
 import BedouAudit from './pages/dispatcher/BedouAudit';
 import AdminProfilUnifie from './pages/dispatcher/AdminProfilUnifie';
+import Mall from './pages/Mall';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -188,6 +189,7 @@ const AuthenticatedApp = () => {
         <Route path="/mes-commandes-marketplace" element={<MesCommandesMarketplace />} />
         <Route path="/commande-marketplace/:id" element={<CommandeMarketplaceDetail />} />
         <Route path="/commerce/:id" element={<PagePartenaire />} />
+        <Route path="/mall" element={<Mall />} />
 
         {/* Livreur */}
         <Route path="/courses-disponibles" element={<CoursesDisponibles />} />
