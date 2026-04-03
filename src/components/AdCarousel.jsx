@@ -11,12 +11,14 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
+    let isMounted = true;
     const loadAds = async () => {
       try {
         const now = new Date().toISOString();
         const allAds = await base44.entities.Publicite.list('-created_date', 50);
+        if (!isMounted) return;
 
-        const active = allAds.filter(ad => {
+        const active = (allAds || []).filter(ad => {
           if (!ad.active) return false;
           if (!ad.date_debut || !ad.date_fin) return true;
           const start = new Date(ad.date_debut);
@@ -41,23 +43,28 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
           return matchPlace && matchDest;
         });
 
-        setAds(targeted);
+        if (isMounted) setAds(targeted);
       } catch (err) {
         console.error("[AdCarousel] Error:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     loadAds();
 
     // Écoute temps réel
-    const unsub = base44.entities.Publicite.subscribe(() => loadAds());
+    const unsub = base44.entities.Publicite.subscribe(() => {
+      if (isMounted) loadAds();
+    });
     
     // Refresh automatique toutes les 30 secondes
-    const intervalId = setInterval(loadAds, 30000);
+    const intervalId = setInterval(() => {
+      if (isMounted) loadAds();
+    }, 30000);
     
     return () => {
+      isMounted = false;
       unsub?.();
       clearInterval(intervalId);
     };

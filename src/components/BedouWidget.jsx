@@ -9,9 +9,14 @@ export default function BedouWidget({ user, compact = false }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     base44.functions.invoke('bedouEngine', { action: 'get_bedou' })
-      .then(res => { setBedou(res.data.bedou); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(res => { 
+        if (isMounted) setBedou(res.data.bedou); 
+        if (isMounted) setLoading(false); 
+      })
+      .catch(() => { if (isMounted) setLoading(false); });
+    return () => { isMounted = false; };
   }, [user?.email]);
 
   if (loading) return (
