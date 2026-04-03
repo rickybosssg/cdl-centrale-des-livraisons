@@ -326,36 +326,46 @@ export default function GestionProfils() {
         />
         
         {/* Onglets catégories */}
-        <div className="flex gap-2 border-b">
+        <div className="flex gap-2 border-b overflow-x-auto">
           <button
             onClick={() => setTab('pending')}
-            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               tab === 'pending'
                 ? 'border-amber-500 text-amber-600'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            🆕 Nouvelles demandes ({filteredUsers.filter(u => getPendingProfiles(u).length > 0).length})
+            ⏳ Demandes en cours ({filteredUsers.filter(u => getPendingProfiles(u).length > 0).length})
           </button>
           <button
             onClick={() => setTab('validated')}
-            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               tab === 'validated'
                 ? 'border-green-500 text-green-600'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            ✅ Profils validés
+            ✅ Profils validés ({filteredUsers.filter(u => getValidatedProfiles(u).length > 0).length})
+          </button>
+          <button
+            onClick={() => setTab('refused')}
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              tab === 'refused'
+                ? 'border-red-500 text-red-600'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            ❌ Refusés ({filteredUsers.filter(u => allProfiles.some(p => p.user_email === u.email && p.status === 'refuse')).length})
           </button>
           <button
             onClick={() => setTab('none')}
-            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               tab === 'none'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            🔹 Aucune demande
+            🔹 Sans demande active ({filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email && ['en_attente','incomplet'].includes(p.status)).length === 0).length})
           </button>
         </div>
       </div>
@@ -392,10 +402,10 @@ export default function GestionProfils() {
       {/* Résultats filtrés par onglet */}
       {!loading && users.length > 0 && (
         <div className="space-y-3">
-          {/* Onglet : Nouvelles demandes */}
+          {/* Onglet : Demandes en cours */}
           {tab === 'pending' && (
             <div className="space-y-2">
-              <p className="text-xs text-amber-700 font-medium">Affichage : Utilisateurs avec demandes en attente</p>
+              <p className="text-xs text-amber-700 font-medium">Affichage : Utilisateurs avec demandes en attente ou incomplètes</p>
               {filteredUsers.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-8">Aucun résultat pour "{search}"</p>
               )}
@@ -480,15 +490,50 @@ export default function GestionProfils() {
             </div>
           )}
 
-          {/* Onglet : Aucune demande */}
+          {/* Onglet : Refusés */}
+          {tab === 'refused' && (
+            <div className="space-y-2">
+              <p className="text-xs text-red-700 font-medium">Affichage : Utilisateurs avec au moins un profil refusé</p>
+              {filteredUsers.filter(u => allProfiles.some(p => p.user_email === u.email && p.status === 'refuse')).length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">Aucun profil refusé</p>
+              )}
+              {filteredUsers.filter(u => allProfiles.some(p => p.user_email === u.email && p.status === 'refuse')).map(user => {
+                const refusedProfs = allProfiles.filter(p => p.user_email === user.email && p.status === 'refuse');
+                return (
+                  <Card key={user.id} className="border-2 border-red-200 bg-red-50/30 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/admin/profil/${user.id}`)}>  
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center font-bold text-red-700 flex-shrink-0">
+                        {user.full_name?.charAt(0) || "?"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm">{user.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {refusedProfs.map(p => {
+                            const badge = getProfileBadge(p.profile_type);
+                            return <span key={p.id} className={`text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-medium`}>{badge?.emoji} {badge?.label} — Refusé</span>;
+                          })}
+                        </div>
+                      </div>
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Onglet : Sans demande active */}
           {tab === 'none' && (
             <div className="space-y-2">
-              <p className="text-xs text-blue-700 font-medium">Affichage : Utilisateurs sans aucun profil ({filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email).length === 0).length})</p>
-              {filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email).length === 0).length === 0 && (
-                <p className="text-center text-sm text-muted-foreground py-8">Aucun utilisateur sans profil</p>
+              <p className="text-xs text-blue-700 font-medium">Affichage : Utilisateurs sans demande active (en_attente ou incomplet)</p>
+              {filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email && ['en_attente','incomplet'].includes(p.status)).length === 0).length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">Tous les utilisateurs ont une demande active</p>
               )}
-              {filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email).length === 0).map(user => (
-                <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow opacity-60" onClick={() => navigate(`/admin/profil/${user.id}`)}>
+              {filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email && ['en_attente','incomplet'].includes(p.status)).length === 0).map(user => {
+                const userProfs = allProfiles.filter(p => p.user_email === user.email);
+                return (
+                <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/admin/profil/${user.id}`)}>
                   <CardContent className="p-3 flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 flex-shrink-0">
                       {user.full_name?.charAt(0) || "?"}
@@ -496,12 +541,16 @@ export default function GestionProfils() {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">{user.full_name}</p>
                       <p className="text-xs text-muted-foreground">{user.email}</p>
-                      <p className="text-xs text-muted-foreground">{user.telephone}</p>
+                      {userProfs.length === 0
+                        ? <p className="text-[10px] text-muted-foreground mt-0.5 italic">Aucun profil</p>
+                        : <div className="mt-1 flex flex-wrap gap-1">{userProfs.map(p => { const b = getProfileBadge(p.profile_type); return <span key={p.id} className={`text-[10px] px-1.5 py-0.5 rounded-full ${b?.color} font-medium`}>{b?.emoji} {b?.label}</span>; })}</div>
+                      }
                     </div>
                     <Eye className="h-4 w-4 text-muted-foreground" />
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
