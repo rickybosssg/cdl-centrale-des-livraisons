@@ -11,6 +11,7 @@ export default function CompleteProfile() {
   const { profileId } = useParams();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
+  const [profileRecord, setProfileRecord] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState({});
@@ -26,13 +27,12 @@ export default function CompleteProfile() {
         if (response.data?.success) {
           setProfile(response.data);
           setAnalysis(response.data);
-          // Charger état engagement
-          if (response.data.profileType === "livreur") {
-            const profiles = await base44.entities.UserProfile.filter({ id: profileId });
-            if (profiles && profiles[0]) {
-              const data = profiles[0].data_json
-                ? JSON.parse(profiles[0].data_json)
-                : {};
+          // Charger profil complet
+          const profiles = await base44.entities.UserProfile.filter({ id: profileId });
+          if (profiles && profiles[0]) {
+            setProfileRecord(profiles[0]);
+            if (response.data.profileType === "livreur") {
+              const data = profiles[0].data_json ? JSON.parse(profiles[0].data_json) : {};
               setEngagementChecked(!!data.engagement_accepted);
             }
           }
@@ -142,6 +142,7 @@ export default function CompleteProfile() {
     try {
       await base44.entities.UserProfile.update(profileId, {
         status: "en_attente",
+        refusal_reason: null,
       });
 
       toast.success("✅ Dossier envoyé pour validation");
@@ -186,6 +187,21 @@ export default function CompleteProfile() {
       </div>
 
       <div className="px-4 space-y-4">
+        {/* Bandeau refus */}
+        {profileRecord?.status === "refuse" && (
+          <Card className="border-red-300 bg-red-50">
+            <CardContent className="p-4 space-y-2">
+              <p className="font-semibold text-red-800 text-sm">❌ Votre profil a été refusé</p>
+              {profileRecord.refusal_reason && (
+                <div className="p-2 rounded-lg bg-red-100 border border-red-200 text-xs text-red-700">
+                  <span className="font-semibold">Motif :</span> {profileRecord.refusal_reason}
+                </div>
+              )}
+              <p className="text-xs text-red-700">Corrigez les documents indiqués ci-dessous, puis cliquez sur "Renvoyer ma demande".</p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Barre progression */}
         <div className="space-y-2">
           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -288,7 +304,7 @@ export default function CompleteProfile() {
                 className="w-full bg-green-600 hover:bg-green-700"
                 onClick={handleSubmitForValidation}
               >
-                📩 Envoyer pour validation
+                {profileRecord?.status === "refuse" ? "🔄 Renvoyer ma demande" : "📩 Envoyer pour validation"}
               </Button>
             </CardContent>
           </Card>
