@@ -9,7 +9,7 @@ const PROFIL_LABELS = {
   commercial: { emoji: "📣", label: "Commercial", color: "bg-purple-50 border-purple-200 text-purple-800" },
 };
 
-export default function AttentePage({ profile, isBlocked = false, blockReason = "", docsEnvoyes = true, motifRefus = "", phoneManquant = false }) {
+export default function AttentePage({ profile, isBlocked = false, blockReason = "", docsEnvoyes = true, motifRefus = "", phoneManquant = false, profileId = null }) {
   const info = PROFIL_LABELS[profile] || { emoji: "⏳", label: profile, color: "bg-gray-50 border-gray-200 text-gray-800" };
   const navigate = useNavigate();
 
@@ -77,24 +77,32 @@ export default function AttentePage({ profile, isBlocked = false, blockReason = 
     );
   }
 
-  // Livreur qui a refusé → afficher motif
-  if (profile === 'livreur' && motifRefus) {
+  // 🔴 DOSSIER REFUSÉ — Permettre correction directe
+  if (motifRefus) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
         <div className="w-full max-w-sm space-y-6 text-center">
           <div className="text-6xl">❌</div>
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-red-600">Dossier refusé</h2>
-            <p className="text-sm text-muted-foreground">Votre dossier livreur a été refusé par l'administration CDL.</p>
+            <p className="text-sm text-muted-foreground">Votre dossier {info.label.toLowerCase()} a été examiné et refusé.</p>
           </div>
           <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-left">
             <p className="text-sm font-semibold text-red-700">Motif du refus :</p>
             <p className="text-sm text-red-600 mt-1">{motifRefus}</p>
           </div>
-          <div className="p-4 rounded-xl bg-gray-50 border text-sm space-y-1">
-            <p className="font-medium">Contactez-nous pour corriger votre dossier :</p>
-            <a href="https://wa.me/message/EH7SMNHNHL7RN1?text=Bonjour%20CDL%2C%20mon%20dossier%20livreur%20a%20été%20refusé." target="_blank" rel="noopener noreferrer" className="text-green-600 font-semibold underline">💬 WhatsApp CDL</a>
-          </div>
+          {/* ✅ Bouton correction directe */}
+          <Button
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold h-12"
+            onClick={() => navigate(`/complete-profile/${localStorage.getItem('activeProfileId')}`)}
+          >
+            🔧 Corriger mon dossier
+          </Button>
+          {/* WhatsApp optionnel */}
+          <p className="text-xs text-muted-foreground">ou contactez-nous :</p>
+          <a href="https://wa.me/message/EH7SMNHNHL7RN1?text=Bonjour%20CDL%2C%20mon%20dossier%20a%20été%20refusé." target="_blank" rel="noopener noreferrer" className="inline-block text-green-600 font-semibold underline hover:text-green-700">
+            💬 WhatsApp CDL Support
+          </a>
           <Button variant="outline" className="w-full" onClick={handleLogout}>Se déconnecter</Button>
         </div>
       </div>

@@ -231,6 +231,11 @@ export default function Home() {
     return <AttentePage profile={activeProfileType} isBlocked={true} blockReason={activeUserProfile?.blocked_reason || ''} />;
   }
 
+  // 🔴 REFUSÉ
+  if (activeUserProfile?.status === 'refuse') {
+    return <AttentePage profile={activeProfileType} motifRefus={activeUserProfile?.refusal_reason || 'Veuillez corriger votre dossier'} profileId={activeUserProfile?.id} />;
+  }
+
   // En attente validation
   if (['livreur', 'partenaire', 'commercial'].includes(activeProfileType) && activeUserProfile?.status !== 'actif') {
     const hasDocs = !!(activeUserProfile?.documents_json && (() => {
