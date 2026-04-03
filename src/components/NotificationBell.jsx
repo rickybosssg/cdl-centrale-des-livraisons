@@ -9,6 +9,7 @@ import NotificationPanel from "./NotificationPanel";
 export default function NotificationBell({ userEmail }) {
   const [notifs, setNotifs] = useState([]);
   const [open, setOpen] = useState(false);
+  const loadTimerRef = useState(null)[0];
 
   const loadNotifs = async () => {
     if (!userEmail) return;
@@ -17,6 +18,7 @@ export default function NotificationBell({ userEmail }) {
       setNotifs(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn('[NotificationBell] Load error:', err?.message);
+      // Silently fail, subscription will handle updates
     }
   };
 
@@ -40,16 +42,17 @@ export default function NotificationBell({ userEmail }) {
     if (!userEmail) return;
     let isMounted = true;
     
-    const load = async () => {
-      if (isMounted) await loadNotifs();
-    };
-    load();
+    // Charge les notifs UNE SEULE FOIS au mount (après 500ms de délai)
+    const initialTimer = setTimeout(() => {
+      if (isMounted) loadNotifs();
+    }, 500);
+    
     initFcm();
     
-    // Recharge toutes les 60 secondes (au lieu de chaque render)
+    // Recharge toutes les 120 secondes (délai long pour éviter rate limit)
     const interval = setInterval(() => {
-      if (isMounted) load();
-    }, 60000);
+      if (isMounted) loadNotifs();
+    }, 120000);
     
     const unsub = base44.entities.Notification.subscribe((event) => {
       if (!isMounted || event.data?.destinataire_email !== userEmail) return;
@@ -64,6 +67,7 @@ export default function NotificationBell({ userEmail }) {
     
     return () => {
       isMounted = false;
+      clearTimeout(initialTimer);
       clearInterval(interval);
       if (unsub) unsub();
     };
