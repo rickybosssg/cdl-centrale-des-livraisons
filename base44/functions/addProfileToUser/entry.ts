@@ -147,10 +147,15 @@ Deno.serve(async (req) => {
     console.log('[addProfileToUser] Mise à jour User.profiles_list...');
     console.log('[addProfileToUser] Ancienne liste:', user.profiles_list);
     console.log('[addProfileToUser] Nouvelle liste:', JSON.stringify(userProfiles));
-    await base44.auth.updateMe({
+    const updateData = {
       profiles_list: JSON.stringify(userProfiles),
       active_profile_type: isActiveProfile ? profile_type : user.active_profile_type,
-    });
+    };
+    // Synchroniser le téléphone dans User s'il n'existe pas
+    if (data.telephone && !user.telephone) {
+      updateData.telephone = data.telephone;
+    }
+    await base44.auth.updateMe(updateData);
     console.log('[addProfileToUser] User mis à jour');
 
     // Créer le code promo commercial
@@ -219,7 +224,7 @@ Deno.serve(async (req) => {
       
       if (profile_type === 'partenaire') {
         adminMessage = `Commerce: ${data.nom_commerce || 'N/A'} | Catégorie: ${data.type_commerce || 'N/A'} | Tél: ${data.telephone || 'N/A'} | Adresse: ${data.adresse || 'N/A'}`;
-      } else if (profile_type === 'livreur') {
+      } else if (profile_type === 'livreur' || profile_type === 'annonceur') {
         adminMessage = `Nom: ${user.full_name} | Tél: ${data.telephone || 'N/A'} | Zone: ${data.quartier || 'N/A'} | Transport: ${data.moyen_deplacement || 'N/A'}`;
       }
       
