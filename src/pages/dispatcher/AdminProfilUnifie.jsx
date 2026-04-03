@@ -496,10 +496,18 @@ export default function AdminProfilUnifie() {
 
         {/* ── DOCUMENTS ── */}
         <TabsContent value="docs" className="mt-4">
-          <DocumentViewer user={user} profiles={profiles} profileType="livreur" />
-          {!profiles.some(p => p.profile_type === 'livreur') && !user.photo_identite_recto && !user.photo_profil && (
-            <p className="text-center text-sm text-muted-foreground py-8">Aucun document disponible</p>
-          )}
+          {(() => {
+            const livreurProfile = profiles.find(p => p.profile_type === 'livreur');
+            if (!isLivreur) return <p className="text-center text-sm text-muted-foreground py-8">Pas de profil livreur associé</p>;
+            return (
+              <DocumentViewer
+                profileType="livreur"
+                profileData={livreurProfile?.documents_json}
+                dataJson={livreurProfile?.data_json}
+                userObj={user}
+              />
+            );
+          })()}
         </TabsContent>
 
         {/* ── COURSES ── */}
