@@ -490,14 +490,11 @@ export default function DispatcherDashboard() {
             </CardContent>
           </Card>
         </Link>
-        <Link to="/audit-utilisateurs" className="col-span-2">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-indigo-500 bg-indigo-50">
-            <CardContent className="p-4 flex items-center gap-4">
-              <ShieldCheck className="h-8 w-8 text-indigo-600 flex-shrink-0" />
-              <div className="text-left">
-                <p className="text-sm font-bold text-indigo-700">Audit utilisateurs</p>
-                <p className="text-xs text-indigo-600">Vérification comptes · Rôles · Anomalies</p>
-              </div>
+        <Link to="/admin-mes-publicites">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500 bg-orange-50">
+            <CardContent className="p-4 text-center space-y-2">
+              <Megaphone className="h-8 w-8 text-orange-600 mx-auto" />
+              <p className="text-sm font-medium text-orange-700">Publicités Admin</p>
             </CardContent>
           </Card>
         </Link>
