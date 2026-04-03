@@ -12,8 +12,12 @@ export default function NotificationBell({ userEmail }) {
 
   const loadNotifs = async () => {
     if (!userEmail) return;
-    const data = await base44.entities.Notification.filter({ destinataire_email: userEmail }, "-created_date", 30);
-    setNotifs(data);
+    try {
+      const data = await base44.entities.Notification.filter({ destinataire_email: userEmail }, "-created_date", 30);
+      setNotifs(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn('[NotificationBell] Load error:', err?.message);
+    }
   };
 
   const initFcm = async () => {
@@ -33,20 +37,36 @@ export default function NotificationBell({ userEmail }) {
   };
 
   useEffect(() => {
-    loadNotifs();
+    if (!userEmail) return;
+    let isMounted = true;
+    
+    const load = async () => {
+      if (isMounted) await loadNotifs();
+    };
+    load();
     initFcm();
+    
+    // Recharge toutes les 60 secondes (au lieu de chaque render)
+    const interval = setInterval(() => {
+      if (isMounted) load();
+    }, 60000);
+    
     const unsub = base44.entities.Notification.subscribe((event) => {
-      if (event.data?.destinataire_email === userEmail) {
-        if (event.type === 'create') {
-          setNotifs(prev => [event.data, ...prev]);
-          vibrateNotif();
-          playNotificationSound();
-        } else if (event.type === 'update') {
-          setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
-        }
+      if (!isMounted || event.data?.destinataire_email !== userEmail) return;
+      if (event.type === 'create') {
+        setNotifs(prev => [event.data, ...prev]);
+        vibrateNotif();
+        playNotificationSound();
+      } else if (event.type === 'update') {
+        setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
       }
     });
-    return unsub;
+    
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      if (unsub) unsub();
+    };
   }, [userEmail]);
 
   const unread = notifs.filter(n => !n.lue).length;
