@@ -7,13 +7,10 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
   const [pub, setPub] = useState(null);
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Clé session pour persistance
   const SESSION_KEY = `pub_dismissed_${userRole}`;
 
   useEffect(() => {
-    // Vérifier si déjà rejetée cette session
     const isDismissed = sessionStorage.getItem(SESSION_KEY) === 'true';
     if (isDismissed) {
       setDismissed(true);
@@ -21,25 +18,25 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
       return;
     }
 
+    let isMounted = true; // Cleanup guard
+    let unsub = null;
+    let intervalId = null;
+
     const loadPublicite = async () => {
       try {
         const now = new Date().toISOString();
         const allPubs = await base44.entities.Publicite.list('-created_date', 50);
 
-        // Filtrer : actif, dates valides, profil adapté
+        if (!isMounted) return; // Guard: ne pas setState si unmounted
+
         const filtered = (allPubs || []).filter(p => {
           if (!p.active) return false;
           if (p.date_debut && new Date(p.date_debut) > now) return false;
           if (p.date_fin && new Date(p.date_fin) < now) return false;
 
-          // Filtre placement : accueil ou tous
-          const matchPlace =
-            p.placement === 'accueil' ||
-            p.placement === 'toutes_pages' ||
-            p.placement === 'tous';
+          const matchPlace = p.placement === 'accueil' || p.placement === 'toutes_pages' || p.placement === 'tous';
           if (!matchPlace) return false;
 
-          // Filtre profil : tous, vide, ou correspondant
           const targets = p.targets || ['all'];
           if (targets.includes('all')) return true;
           if (!targets.includes(userRole)) return false;
@@ -47,7 +44,7 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
           return true;
         });
 
-        if (filtered.length > 0) {
+        if (isMounted && filtered.length > 0) {
           const selected = filtered[Math.floor(Math.random() * filtered.length)];
           setPub(selected);
           trackView(selected.id);
@@ -55,23 +52,28 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
       } catch (err) {
         console.error('[PubliciteHomeBanner] Error:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     loadPublicite();
-    
-    // Écoute temps réel des changements de pubs
-    const unsub = base44.entities.Publicite.subscribe(() => loadPublicite());
-    
-    // Refresh automatique toutes les 30 secondes
-    const intervalId = setInterval(loadPublicite, 30000);
-    
+
+    // Subscribe avec cleanup
+    unsub = base44.entities.Publicite.subscribe(() => {
+      if (isMounted) loadPublicite();
+    });
+
+    // Interval avec cleanup
+    intervalId = setInterval(() => {
+      if (isMounted) loadPublicite();
+    }, 30000);
+
     return () => {
-      unsub?.();
-      clearInterval(intervalId);
+      isMounted = false;
+      if (unsub) unsub();
+      if (intervalId) clearInterval(intervalId);
     };
-  }, [userRole, refreshTrigger]);
+  }, [userRole, SESSION_KEY]);
 
   const trackView = (pubId) => {
     base44.functions
@@ -106,7 +108,6 @@ export default function PubliciteHomeBanner({ userRole = 'client', userId, userE
 
   if (loading || dismissed || !pub) return null;
 
-  // Parser images : 'images' (JSON array), fallback sur 'image_url'
   let images = [];
   if (pub.images) {
     try {
