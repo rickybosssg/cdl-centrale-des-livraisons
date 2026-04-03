@@ -489,6 +489,7 @@ export default function AdminProfilUnifie() {
                 profileData={livreurProfile?.documents_json}
                 dataJson={livreurProfile?.data_json}
                 userObj={user}
+                profileStatus={livreurProfile?.status}
               />
             );
           })()}

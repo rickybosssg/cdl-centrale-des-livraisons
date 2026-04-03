@@ -56,7 +56,7 @@ function parseAndNormalizeDocs(documentsJson, userObj) {
   return docs;
 }
 
-export default function DocumentViewer({ profileData, dataJson, profileType, userObj, onValidationBlock }) {
+export default function DocumentViewer({ profileData, dataJson, profileType, userObj, profileStatus, onValidationBlock }) {
   const [selectedDoc, setSelectedDoc] = useState(null);
 
   if (profileType !== "livreur") return null;
@@ -71,7 +71,10 @@ export default function DocumentViewer({ profileData, dataJson, profileType, use
       engagement = parsed;
     } catch {}
   }
-  const engagementAccepted = !!engagement?.engagement_accepted;
+  // Un profil soumis (en_attente, actif, refuse) implique que l'engagement a forcément été accepté
+  const SUBMITTED_STATUSES = ["en_attente", "actif", "refuse"];
+  const inferredAccepted = SUBMITTED_STATUSES.includes(profileStatus);
+  const engagementAccepted = !!engagement?.engagement_accepted || inferredAccepted;
   const engagementDate = engagement?.engagement_date || engagement?.accepted_at;
 
   const requiredDocs = DOCS_CONFIG.filter(d => d.required);

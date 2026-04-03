@@ -139,10 +139,25 @@ export default function CompleteProfile() {
       return;
     }
 
+    if (!engagementChecked) {
+      toast.error("Vous devez accepter les conditions pour continuer");
+      return;
+    }
+
     try {
+      // Forcer engagement_accepted=true au moment de la soumission (source de vérité)
+      const profiles = await base44.entities.UserProfile.filter({ id: profileId });
+      const current = profiles[0];
+      const data = (() => {
+        try { return current?.data_json ? JSON.parse(current.data_json) : {}; } catch { return {}; }
+      })();
+      data.engagement_accepted = true;
+      data.engagement_date = new Date().toISOString();
+
       await base44.entities.UserProfile.update(profileId, {
         status: "en_attente",
         refusal_reason: null,
+        data_json: JSON.stringify(data),
       });
 
       toast.success("✅ Dossier envoyé pour validation");
