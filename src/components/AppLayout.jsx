@@ -49,8 +49,14 @@ const NAV_ITEMS = {
 };
 
 export default function AppLayout({ userRole, userEmail }) {
-  // ⚠️ Guard : si pas d'email ou rôle, pas de render
-  if (!userEmail || !userRole) return null;
+  // ⚠️ GUARD STRICTE : Aucun hook ne s'exécute si données incomplètes
+  if (!userEmail || !userRole) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const location = useLocation();
   const navigate = useNavigate();

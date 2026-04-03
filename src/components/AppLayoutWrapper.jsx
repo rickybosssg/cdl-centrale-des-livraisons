@@ -6,8 +6,14 @@ import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 
 export default function AppLayoutWrapper({ user }) {
-  // ⚠️ GUARD STRICTE : pas de user = pas de render
-  if (!user?.email) return null;
+  // ⚠️ GUARD STRICTE LIGNE 1 : si pas de user complet, retour immédiat
+  if (!user?.email || !user?.id) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const [userRole, setUserRole] = useState("client");
   const [userEmail, setUserEmail] = useState("");
@@ -131,7 +137,13 @@ export default function AppLayoutWrapper({ user }) {
   }
 
   // ⚠️ Double-check : userEmail et userRole prêts avant render
-  if (!userEmail || !userRole) return null;
+  if (!userEmail || !userRole) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <>
