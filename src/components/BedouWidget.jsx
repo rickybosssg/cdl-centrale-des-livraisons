@@ -10,13 +10,25 @@ export default function BedouWidget({ user, compact = false }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (!user?.email) {
+      setLoading(false);
+      return;
+    }
     let isMounted = true;
     base44.functions.invoke('bedouEngine', { action: 'get_bedou' })
       .then(res => { 
-        if (isMounted) setBedou(res.data.bedou); 
-        if (isMounted) setLoading(false); 
+        if (isMounted) {
+          setBedou(res?.data?.bedou || null);
+          setLoading(false);
+        }
       })
-      .catch(() => { if (isMounted) setLoading(false); });
+      .catch(err => { 
+        console.warn('[BedouWidget] Error:', err);
+        if (isMounted) {
+          setError(err?.message);
+          setLoading(false);
+        }
+      });
     return () => { isMounted = false; };
   }, [user?.email]);
 
@@ -24,9 +36,16 @@ export default function BedouWidget({ user, compact = false }) {
     <div className="rounded-2xl bg-gradient-to-br from-primary to-blue-700 p-4 animate-pulse h-24" />
   );
 
-  if (error || !bedou) return null;
-
+  // Pas de données → afficher fallback
   if (!user?.email) return null;
+  if (error || !bedou) {
+    return (
+      <div className="rounded-2xl bg-primary/5 p-4 border border-primary/20 text-center">
+        <p className="text-xs text-muted-foreground">Bedou indisponible</p>
+      </div>
+    );
+  }
+
   const role = user?.user_type;
   const canRetrait = ['livreur', 'partenaire', 'commercial'].includes(role);
 
@@ -40,6 +59,8 @@ export default function BedouWidget({ user, compact = false }) {
       </Link>
     );
   }
+
+  const safeBedou = bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0 };
 
   return (
     <Link to="/mon-bedou">
@@ -58,18 +79,18 @@ export default function BedouWidget({ user, compact = false }) {
         </div>
 
         <p className="text-3xl font-extrabold tracking-tight text-white">
-          {fmt(bedou.solde || 0)}
+          {fmt(safeBedou?.solde || 0)}
         </p>
 
         <div className="flex gap-4 mt-3">
           <div className="flex items-center gap-1">
             <TrendingUp className="h-3.5 w-3.5 text-green-300" />
-            <span className="text-xs text-white/90 font-medium">Dispo : {fmt(bedou.solde_disponible || 0)}</span>
+            <span className="text-xs text-white/90 font-medium">Dispo : {fmt(safeBedou?.solde_disponible || 0)}</span>
           </div>
-          {(bedou.solde_bloque || 0) > 0 && (
+          {(safeBedou?.solde_bloque || 0) > 0 && (
             <div className="flex items-center gap-1">
               <Lock className="h-3.5 w-3.5 text-amber-300" />
-              <span className="text-xs text-white/90 font-medium">Bloqué : {fmt(bedou.solde_bloque || 0)}</span>
+              <span className="text-xs text-white/90 font-medium">Bloqué : {fmt(safeBedou?.solde_bloque || 0)}</span>
             </div>
           )}
         </div>
