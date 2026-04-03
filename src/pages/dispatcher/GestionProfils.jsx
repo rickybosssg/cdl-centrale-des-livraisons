@@ -32,7 +32,8 @@ export default function GestionProfils() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [userProfiles, setUserProfiles] = useState([]);
+  const [allProfiles, setAllProfiles] = useState([]); // tous les profils (liste)
+  const [selectedUserProfiles, setSelectedUserProfiles] = useState([]); // profils de l'utilisateur ouvert
   const [dialogOpen, setDialogOpen] = useState(false);
   const [assignDialog, setAssignDialog] = useState(false);
   const [assignProfile, setAssignProfile] = useState(null);
@@ -65,7 +66,7 @@ export default function GestionProfils() {
         console.log('[GestionProfils] Utilisateurs chargés:', users?.length || 0);
         console.log('[GestionProfils] Profils chargés:', profiles?.length || 0);
         setUsers(users || []);
-        setUserProfiles(profiles || []);
+        setAllProfiles(profiles || []);
       } catch (err) {
         console.error('[GestionProfils] Erreur chargement:', err);
         toast.error('Erreur lors du chargement');
@@ -85,19 +86,13 @@ export default function GestionProfils() {
     return perms.includes(permission);
   };
 
-  // Récupérer les infos de profil pour chaque utilisateur et les catégoriser
-  const getUserCategory = (user) => {
-    const pendingProfiles = userProfiles.filter(p => p.user_email === user.email && p.status === 'en_attente');
-    const validatedProfiles = userProfiles.filter(p => p.user_email === user.email && p.status === 'actif');
-    
-    if (pendingProfiles.length > 0) return 'pending';
-    if (validatedProfiles.length > 0) return 'validated';
-    return 'none';
+  // Récupérer les profils en attente pour un utilisateur (depuis allProfiles)
+  const getPendingProfiles = (user) => {
+    return allProfiles.filter(p => p.user_email === user.email && p.status === 'en_attente');
   };
 
-  // Récupérer les profils en attente pour un utilisateur
-  const getPendingProfiles = (user) => {
-    return userProfiles.filter(p => p.user_email === user.email && p.status === 'en_attente');
+  const getValidatedProfiles = (user) => {
+    return allProfiles.filter(p => p.user_email === user.email && p.status === 'actif');
   };
 
   // Filtrer la liste existante en temps réel
@@ -121,30 +116,31 @@ export default function GestionProfils() {
   // Ici on les charge au besoin lors de l'ouverture
 
   const openUser = async (user) => {
-    console.log('[GestionProfils] Ouverture fiche utilisateur:', user.email);
     setSelectedUser(user);
-    try {
-      const profiles = await base44.entities.UserProfile.filter({ user_email: user.email });
-      console.log('[GestionProfils] Profils trouvés:', profiles?.length || 0);
-      setUserProfiles(profiles || []);
-      
-      const history = await base44.entities.AdminActionLog.filter({ target_email: user.email }, "-created_date", 20);
-      console.log('[GestionProfils] Historique chargé:', history?.length || 0);
-      setLogs(history || []);
-    } catch (err) {
-      console.error('[GestionProfils] Erreur chargement fiche:', err);
-      toast.error('Erreur chargement fiche: ' + err.message);
-      setUserProfiles([]);
-      setLogs([]);
-    }
+    setSelectedUserProfiles([]);
     setDialogOpen(true);
+    try {
+      const [profiles, history] = await Promise.all([
+        base44.entities.UserProfile.filter({ user_email: user.email }),
+        base44.entities.AdminActionLog.filter({ target_email: user.email }, "-created_date", 20),
+      ]);
+      setSelectedUserProfiles(profiles || []);
+      setLogs(history || []);
+      // Mettre à jour aussi allProfiles avec les données fraîches de cet utilisateur
+      setAllProfiles(prev => {
+        const withoutUser = prev.filter(p => p.user_email !== user.email);
+        return [...withoutUser, ...(profiles || [])];
+      });
+    } catch (err) {
+      toast.error('Erreur chargement fiche: ' + err.message);
+    }
   };
 
   const handleAssignProfile = async () => {
     if (!assignProfile) return;
     setProcessing(true);
 
-    const existing = userProfiles.find(p => p.profile_type === assignProfile);
+    const existing = selectedUserProfiles.find(p => p.profile_type === assignProfile);
     if (existing) {
       toast.error("Cet utilisateur a déjà ce profil");
       setProcessing(false);
@@ -156,7 +152,7 @@ export default function GestionProfils() {
       user_email: selectedUser.email,
       profile_type: assignProfile,
       status: "actif",
-      is_active_profile: userProfiles.length === 0,
+      is_active_profile: selectedUserProfiles.length === 0,
       validated_at: new Date().toISOString(),
       validated_by: adminUser.email,
     });
@@ -206,7 +202,7 @@ export default function GestionProfils() {
       action: "validate",
       reason: `Attribution profil: ${assignProfile}`,
       target_email: selectedUser.email,
-      old_data: JSON.stringify({ profiles: userProfiles.map(p => p.profile_type) }),
+      old_data: JSON.stringify({ profiles: selectedUserProfiles.map(p => p.profile_type) }),
       new_data: JSON.stringify({ added_profile: assignProfile }),
     });
 
@@ -338,10 +334,7 @@ export default function GestionProfils() {
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            🆕 Nouvelles demandes ({filteredUsers.filter(u => {
-              // Lazy count of pending
-              return true; // À améliorer avec cache
-            }).length})
+            🆕 Nouvelles demandes ({filteredUsers.filter(u => getPendingProfiles(u).length > 0).length})
           </button>
           <button
             onClick={() => setTab('validated')}
@@ -443,13 +436,12 @@ export default function GestionProfils() {
           {/* Onglet : Profils validés */}
           {tab === 'validated' && (
             <div className="space-y-2">
-              <p className="text-xs text-green-700 font-medium">Affichage : Utilisateurs avec profils validés</p>
-              {filteredUsers.length === 0 && (
-                <p className="text-center text-sm text-muted-foreground py-8">Aucun résultat pour "{search}"</p>
+              <p className="text-xs text-green-700 font-medium">Affichage : Utilisateurs avec profils validés ({filteredUsers.filter(u => getValidatedProfiles(u).length > 0).length})</p>
+              {filteredUsers.filter(u => getValidatedProfiles(u).length > 0).length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">Aucun utilisateur avec profil validé</p>
               )}
-              {filteredUsers.map(user => {
-                // Vérifier s'il a au moins un profil validé
-                const hasValidated = filteredUsers.some(u => u.id === user.id); // À améliorer
+              {filteredUsers.filter(u => getValidatedProfiles(u).length > 0).map(user => {
+                const validatedProfs = getValidatedProfiles(user);
                 return (
                   <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openUser(user)}>
                     <CardContent className="p-3 flex items-center gap-3">
@@ -461,9 +453,12 @@ export default function GestionProfils() {
                         <p className="text-xs text-muted-foreground">{user.email}</p>
                         <p className="text-xs text-muted-foreground">{user.telephone}</p>
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✅ Validé</span>
-                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+                        {validatedProfs.map(p => {
+                          const badge = getProfileBadge(p.profile_type);
+                          return <span key={p.id} className={`text-[10px] px-1.5 py-0.5 rounded-full ${badge?.color} font-medium`}>{badge?.emoji} {badge?.label}</span>;
+                        })}
+                        <Eye className="h-4 w-4 text-muted-foreground ml-1" />
                       </div>
                     </CardContent>
                   </Card>
@@ -475,11 +470,11 @@ export default function GestionProfils() {
           {/* Onglet : Aucune demande */}
           {tab === 'none' && (
             <div className="space-y-2">
-              <p className="text-xs text-blue-700 font-medium">Affichage : Utilisateurs sans demande de profil</p>
-              {filteredUsers.length === 0 && (
-                <p className="text-center text-sm text-muted-foreground py-8">Aucun résultat pour "{search}"</p>
+              <p className="text-xs text-blue-700 font-medium">Affichage : Utilisateurs sans aucun profil ({filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email).length === 0).length})</p>
+              {filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email).length === 0).length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">Aucun utilisateur sans profil</p>
               )}
-              {filteredUsers.map(user => (
+              {filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email).length === 0).map(user => (
                 <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow opacity-60" onClick={() => openUser(user)}>
                   <CardContent className="p-3 flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 flex-shrink-0">
@@ -526,11 +521,11 @@ export default function GestionProfils() {
 
               {/* Profils actuels */}
               <div className="space-y-2">
-                <p className="text-sm font-semibold">Profils actuels ({userProfiles.length})</p>
-                {userProfiles.length === 0 && (
+                <p className="text-sm font-semibold">Profils actuels ({selectedUserProfiles.length})</p>
+                {selectedUserProfiles.length === 0 && (
                   <p className="text-xs text-muted-foreground italic">Aucun profil attribué</p>
                 )}
-                {userProfiles.map(profile => {
+                {selectedUserProfiles.map(profile => {
                   const badge = getProfileBadge(profile.profile_type);
                   return (
                     <div key={profile.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card">
@@ -586,8 +581,8 @@ export default function GestionProfils() {
               )}
 
               {/* Documents si livreur */}
-              {selectedUser && userProfiles.length > 0 && (() => {
-                const livreurProfile = userProfiles.find(p => p.profile_type === 'livreur');
+              {selectedUser && selectedUserProfiles.length > 0 && (() => {
+                const livreurProfile = selectedUserProfiles.find(p => p.profile_type === 'livreur');
                 return livreurProfile ? (
                   <DocumentViewer
                     profileData={livreurProfile.documents_json}
@@ -628,7 +623,7 @@ export default function GestionProfils() {
             <p className="text-sm text-muted-foreground">Choisissez le profil à attribuer à <strong>{selectedUser?.full_name}</strong></p>
             <div className="grid grid-cols-2 gap-2">
               {PROFILES.map(p => {
-                const hasProfile = userProfiles.some(up => up.profile_type === p.key);
+                const hasProfile = selectedUserProfiles.some(up => up.profile_type === p.key);
                 const canAssign = canAssignProfile(p.key);
                 return (
                   <button
