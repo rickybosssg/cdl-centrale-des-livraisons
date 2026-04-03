@@ -47,6 +47,7 @@ export default function TrackingMap({
   course,
 }) {
   const mapRef = useRef(null);
+  const markerRef = useRef(null);
   const [mapInitialized, setMapInitialized] = useState(false);
 
   // Centrer la carte automatiquement
@@ -60,7 +61,17 @@ export default function TrackingMap({
     ]);
 
     mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    setMapInitialized(true);
   }, [livreurLat, livreurLng, clientLat, clientLng, destinationLat, destinationLng]);
+
+  // Animer le marker du livreur en temps réel
+  useEffect(() => {
+    if (!mapRef.current || !livreurLat || !livreurLng) return;
+    
+    if (markerRef.current) {
+      markerRef.current.setLatLng([livreurLat, livreurLng]);
+    }
+  }, [livreurLat, livreurLng]);
 
   // Itinéraire
   const routePoints = [];
@@ -127,7 +138,12 @@ export default function TrackingMap({
 
           {/* Position livreur */}
           {livreurLat && livreurLng && (
-            <Marker position={[livreurLat, livreurLng]} icon={livreurIcon}>
+            <Marker 
+              ref={markerRef}
+              position={[livreurLat, livreurLng]} 
+              icon={livreurIcon}
+              key={`${livreurLat}-${livreurLng}`}
+            >
               <Popup>
                 <div className="text-xs">
                   <p className="font-bold">🛵 {livreurName}</p>
@@ -135,18 +151,6 @@ export default function TrackingMap({
                   <p className="text-gray-500 mt-1">
                     {livreurLat.toFixed(4)}, {livreurLng.toFixed(4)}
                   </p>
-                </div>
-              </Popup>
-            </Marker>
-          )}
-
-          {/* Position destination */}
-          {destinationLat && destinationLng && (
-            <Marker position={[destinationLat, destinationLng]} icon={destinationIcon}>
-              <Popup>
-                <div className="text-xs">
-                  <p className="font-bold">📦 Destination</p>
-                  <p className="text-gray-600">{course?.quartier_arrivee}</p>
                 </div>
               </Popup>
             </Marker>
