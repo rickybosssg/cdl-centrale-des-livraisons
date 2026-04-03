@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle, User, BarChart2 } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
+import PromoShare from "@/components/PromoShare";
 import { toast } from "sonner";
 import moment from "moment";
 
@@ -205,6 +206,11 @@ export default function DashboardCommercial({ user }) {
           <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-xs text-green-800">
             💡 <strong>Votre code promo est votre source de revenu.</strong> Partagez-le pour gagner <strong>50 F CFA</strong> par client actif !
           </div>
+
+          {/* PROMO SHARE - WhatsApp + Copy link */}
+          {code.statut === 'valide' && (
+            <PromoShare code={code.code} commercialEmail={user.email} commercialName={user.full_name} />
+          )}
 
           {/* Onglet Aperçu */}
           {tab === "apercu" && (

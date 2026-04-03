@@ -44,6 +44,13 @@ export default function RoleSetup({ onComplete }) {
     base44.entities.User.filter({ user_type: 'livreur', disponible: true })
       .then(res => setLivreursActifs(res.length))
       .catch(() => {});
+    
+    // NEW: Auto-fill promo code from URL param (for clients only)
+    const params = new URLSearchParams(window.location.search);
+    const promoCode = params.get('promo');
+    if (promoCode) {
+      setForm(f => ({ ...f, code_promo: promoCode.toUpperCase() }));
+    }
   }, []);
 
   const uploadFile = async (file) => {

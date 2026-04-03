@@ -40,6 +40,7 @@ export default function CreateCourse() {
     description: "",
     prix_base: "",
     instructions_speciales: "",
+    code_promo: "", // NEW: from URL param or user input
   });
 
   const handleGpsLocationUpdate = async (locationData) => {
@@ -63,6 +64,12 @@ export default function CreateCourse() {
       if (me.gps_latitude && me.gps_longitude) {
         setGpsDepart({ lat: me.gps_latitude, lng: me.gps_longitude });
       }
+      // NEW: Auto-fill code promo from URL param
+      const params = new URLSearchParams(window.location.search);
+      const promoCode = params.get('promo');
+      if (promoCode) {
+        setForm(f => ({ ...f, code_promo: promoCode.toUpperCase() }));
+      }
     };
     load();
   }, []); 
@@ -71,7 +78,12 @@ export default function CreateCourse() {
 
   const prixBase = parseInt(form.prix_base, 10) || 0;
   const supplement = tresUrgent ? 1000 : urgent ? 500 : 0;
-  const prixAvecPromo = prixBase + supplement;
+  // NEW: Check if first course + valid promo code -> 15% reduction
+  const hasValidPromo = form.code_promo && form.code_promo.trim().length > 0;
+  const isFirstCourse = user && !user.premiere_course_effectuee; // Check if first course was done
+  const reductionPercent = hasValidPromo && isFirstCourse ? 15 : 0;
+  const reductionAmount = Math.round((prixBase * reductionPercent) / 100);
+  const prixAvecPromo = prixBase + supplement - reductionAmount;
   const soldeInsuffisant = soldeBedou !== null && prixAvecPromo > 0 && soldeBedou < prixAvecPromo;
 
   const handleUrgent = (val) => { setUrgent(val); if (val) setTresUrgent(false); };
@@ -120,6 +132,8 @@ export default function CreateCourse() {
       montant_base: prixBase,
       supplement_urgence: supplement,
       niveau_urgence: tresUrgent ? "tres_urgent" : urgent ? "urgent" : "normal",
+      code_promo_utilise: hasValidPromo ? form.code_promo : null,
+      reduction_promo: reductionAmount,
       commission,
       commission_active: true,
       commission_cdl: commission,
@@ -398,6 +412,27 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
+      {/* NEW: Code promo input */}
+      {!form.code_promo && (
+        <Card className="border-green-200 bg-green-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <span className="text-lg">🎁</span>Code promo (optionnel)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input
+              placeholder="Entrez votre code promo pour 15% de réduction"
+              value={form.code_promo}
+              onChange={(e) => setForm({ ...form, code_promo: e.target.value.toUpperCase() })}
+            />
+            {isFirstCourse && (
+              <p className="text-xs text-green-700">✨ Vous pouvez bénéficier de 15% de réduction sur votre première course !</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Prix */}
       <Card>
         <CardHeader className="pb-3">
@@ -499,6 +534,12 @@ export default function CreateCourse() {
                 <div className="flex justify-between text-amber-700">
                   <span>{tresUrgent ? "🚨 Très urgent" : "🔔 Urgent"}</span>
                     <span className="font-medium text-amber-700">+{fmt(supplement)}</span>
+                </div>
+              )}
+              {reductionAmount > 0 && (
+                <div className="flex justify-between text-green-700">
+                  <span>🌟 Réduction promo {reductionPercent}%</span>
+                    <span className="font-medium text-green-700">-{fmt(reductionAmount)}</span>
                 </div>
               )}
               <div className="border-t pt-2 flex justify-between font-bold text-base">
