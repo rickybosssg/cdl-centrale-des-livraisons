@@ -167,6 +167,7 @@ export default function DashboardCommercial({ user }) {
   const statsValues = Object.values(clientStats || {}) || [];
   const nbInscriptions = code?.nombre_utilisations || 0;
   const nbValidations = code?.nombre_validations || 0;
+  const nbPremieresCoursesValidees = statsValues.filter(s => s?.firstCourseValidated).length;
   const gainReel = nbValidations * 50; // 50 F par validation
   const balanceBlocked = bedou?.balance_blocked || 0;
   const targetAmount = 5000;
@@ -303,26 +304,34 @@ export default function DashboardCommercial({ user }) {
               );
             })()}
 
-            {/* Bouton copier + WhatsApp */}
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1 gap-2"
-                onClick={() => { navigator.clipboard.writeText(code?.code); toast.success('Copié !'); }}
-              >
-                📋 Copier code
-              </Button>
-              <Button
-                className="flex-1 gap-2 bg-green-600 hover:bg-green-700"
-                onClick={() => {
-                  const message = encodeURIComponent(
-                    `🚀 Rejoins CDL et gagne de l'argent !\n\nUtilise mon code promo : ${code?.code}\n\nInscris-toi ici :\nhttps://cdl.base44.app/signup?ref=${code?.code}`
-                  );
-                  window.open(`https://wa.me/?text=${message}`, '_blank');
-                }}
-              >
-                <Share2 className="h-4 w-4" /> WhatsApp
-              </Button>
+            {/* Boutons parrainage */}
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://cdl.base44.app/signup?ref=${code?.code}`);
+                    toast.success('Lien copié !');
+                  }}
+                >
+                  📋 Copier lien
+                </Button>
+                <Button
+                  className="flex-1 gap-2 bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => {
+                    const message = encodeURIComponent(
+                      `🚀 Rejoins CDL et gagne de l'argent !\n\nUtilise mon code promo : ${code?.code}\n\nInscris-toi ici :\nhttps://cdl.base44.app/signup?ref=${code?.code}`
+                    );
+                    window.open(`https://wa.me/?text=${message}`, '_blank');
+                  }}
+                >
+                  📲 Partager WhatsApp
+                </Button>
+              </div>
+              <div className="text-xs text-muted-foreground text-center">
+                Lien: <span className="font-mono bg-muted px-2 py-1 rounded text-primary font-semibold">https://cdl.base44.app/signup?ref={code?.code}</span>
+              </div>
             </div>
           </div>
 
