@@ -11,6 +11,7 @@ import AdminBadge from "@/components/AdminBadge";
 import moment from "moment";
 
 export default function AdminDashboard() {
+  console.log('[AdminDashboard] RENDER - Composant en cours de rendu');
   const navigate = useNavigate();
   const [kpis, setKpis] = useState({
     coursesToday: 0,
@@ -168,8 +169,9 @@ export default function AdminDashboard() {
     blocked: { icon: AlertCircle, text: '🔒 Livreurs bloqués détectés' },
   };
 
+  console.log('[AdminDashboard] Affichage du JSX');
   return (
-    <div className="pb-24 space-y-4">
+    <div className="pb-24 space-y-4" key="dashboard-root-div">
       <div className="sticky top-0 bg-background/95 backdrop-blur p-4 border-b z-10">
         <div className="flex items-center justify-between">
           <div>
@@ -342,13 +344,14 @@ export default function AdminDashboard() {
           </div>
         </Link>
 
-        <Link to="/gerer-publicites">
-          <Button className="w-full justify-start gap-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-bold">
+        <Link to="/gerer-publicites" key="pub-admin-card">
+          <Button className="w-full justify-start gap-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-bold" title="Ouvrir la gestion des publicités admin">
             <Megaphone className="h-4 w-4" />
             📢 PUBLICITÉS ADMIN
           </Button>
         </Link>
       </div>
+      {console.log('[AdminDashboard] Carte PUBLICITÉS ADMIN rendue')}
 
       <div className="px-4 pb-4">
         <Card className="bg-primary/5">
