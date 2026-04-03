@@ -14,7 +14,7 @@ const PUBLIC_ROLES = [
   { value: "livreur", label: "Livreur 🛵", icon: Truck, desc: "Gagner de l'argent avec des courses automatiques" },
   { value: "client", label: "Client", icon: User, desc: "Envoyer un colis rapidement" },
   { value: "partenaire", label: "Partenaire", icon: Store, desc: "Vendre plus grâce à CDL" },
-  { value: "commercial", label: "Commercial", icon: Megaphone, desc: "Promouvoir CDL et gagner des commissions" },
+  { value: "commercial", label: "Commercial 💼", icon: Megaphone, desc: "Parrainer et gagner 50 F par client validé" },
   { value: "annonceur", label: "Annonceur 📢", icon: Megaphone, desc: "Publier des publicités et promouvoir votre activité" },
 ];
 
@@ -61,6 +61,10 @@ export default function RoleSetup({ onComplete }) {
 
   const handleSubmit = async () => {
     if (selectedRole === "livreur") {
+      const err = validateTelephone(form.telephone);
+      if (err) { setTelError(err); toast.error(err); return; }
+    }
+    if (selectedRole === "commercial") {
       const err = validateTelephone(form.telephone);
       if (err) { setTelError(err); toast.error(err); return; }
     }
@@ -321,7 +325,7 @@ export default function RoleSetup({ onComplete }) {
             )}
           </div>
 
-          {selectedRole !== "livreur" && (
+          {selectedRole !== "livreur" && selectedRole !== "commercial" && (
             <div className="space-y-2">
               <Label>Numéro WhatsApp</Label>
               <Input
@@ -363,6 +367,13 @@ export default function RoleSetup({ onComplete }) {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {selectedRole === "commercial" && (
+            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm space-y-2">
+              <p className="font-semibold text-blue-700">🎯 Profil Commercial</p>
+              <p className="text-xs text-blue-600">Vous recevrez un code promo unique après validation. Utilisez-le pour parrainer et gagnez 50 F par client ayant effectué sa première course.</p>
             </div>
           )}
 

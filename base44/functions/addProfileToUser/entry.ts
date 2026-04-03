@@ -87,15 +87,22 @@ Deno.serve(async (req) => {
     const allDocKeys = [...requirements.documents, ...(requirements.optionalDocuments || [])];
     const missingDocuments = allDocKeys.filter(docKey => !data[docKey]);
 
-    // Pour commercial : valider unicité du code promo AVANT toute création
+    // Pour commercial : générer code unique automatiquement
+    let generatedCode = null;
     if (profile_type === 'commercial') {
-      const codeValue = (data.code_promo || '').toUpperCase().trim();
-      if (!codeValue || codeValue.length < 4 || codeValue.length > 12 || !/^[A-Z0-9]+$/.test(codeValue)) {
-        return Response.json({ error: 'Code promo invalide : 4-12 caractères, lettres et chiffres uniquement' }, { status: 400 });
+      // Générer un code unique : CDL + 5 chiffres aléatoires
+      let codeAttempts = 0;
+      while (!generatedCode && codeAttempts < 10) {
+        const randomNum = Math.floor(Math.random() * 99999).toString().padStart(5, '0');
+        const candidate = `CDL${randomNum}`;
+        const existing = await base44.entities.CodePromo.filter({ code: candidate });
+        if (!existing || existing.length === 0) {
+          generatedCode = candidate;
+        }
+        codeAttempts++;
       }
-      const existingCode = await base44.entities.CodePromo.filter({ code: codeValue });
-      if (existingCode.length > 0) {
-        return Response.json({ error: 'Ce code promo est déjà utilisé, veuillez en choisir un autre' }, { status: 400 });
+      if (!generatedCode) {
+        return Response.json({ error: 'Impossible de générer un code promo unique' }, { status: 500 });
       }
     }
 
@@ -167,20 +174,21 @@ Deno.serve(async (req) => {
     await base44.auth.updateMe(updateData);
     console.log('[addProfileToUser] User mis à jour');
 
-    // Créer le code promo commercial
-    if (profile_type === 'commercial') {
-      const codeValue = (data.code_promo || '').toUpperCase().trim();
+    // Créer le code promo commercial (auto-généré)
+    if (profile_type === 'commercial' && generatedCode) {
       await base44.entities.CodePromo.create({
         commercial_email: user.email,
         commercial_name: user.full_name,
-        code: codeValue,
+        code: generatedCode,
         statut: 'en_attente',
         actif: false,
         nombre_utilisations: 0,
+        nombre_validations: 0,
         commission_due: 0,
         commission_payee: 0,
         statut_paiement: 'À jour',
       });
+      console.log('[addProfileToUser] CodePromo créé:', generatedCode);
     }
 
     // Créer/mettre à jour l'entité associée si nécessaire

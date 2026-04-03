@@ -54,6 +54,12 @@
       "title": "D\u00e9penses totales (F CFA)",
       "default": 0
     },
+    "balance_blocked": {
+      "type": "number",
+      "title": "Balance bloqu\u00e9e commerciale (F CFA)",
+      "default": 0,
+      "description": "Gains commerciaux bloqu\u00e9s jusqu'\u00e0 5000 F"
+    },
     "statut_bedou": {
       "type": "string",
       "enum": [

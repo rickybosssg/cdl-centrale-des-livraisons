@@ -4,11 +4,12 @@ import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle, BarChart2, AlertCircle } from "lucide-react";
+import { Users, TrendingUp, Wallet, Tag, CheckCircle2, Clock, XCircle, MessageCircle, BarChart2, AlertCircle, Share2, Lock } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
 import PromoShare from "@/components/PromoShare";
 import { toast } from "sonner";
 import moment from "moment";
+import { fmt } from "@/lib/formatMoney";
 
 export default function DashboardCommercial({ user }) {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function DashboardCommercial({ user }) {
   const [clientStats, setClientStats] = useState({});
   const [loadingPerf, setLoadingPerf] = useState(false);
   const [error, setError] = useState(null);
+  const [bedou, setBedou] = useState(null);
 
   // Guard: sécuriser user
   if (!user?.email) {
@@ -54,12 +56,21 @@ export default function DashboardCommercial({ user }) {
         setClientStats({});
         setLoadingPerf(false);
       }
+
+      // Charger Bedou
+      const bedouRecords = await base44.entities.Bedou.filter({ user_email: user.email });
+      if (bedouRecords && bedouRecords.length > 0) {
+        setBedou(bedouRecords[0]);
+      } else {
+        setBedou(null);
+      }
     } catch (err) {
       console.error('[DashboardCommercial] loadCode error:', err);
       setError('Erreur chargement: ' + (err?.message || ''));
       setCode(null);
       setClients([]);
       setClientStats({});
+      setBedou(null);
     } finally {
       setLoading(false);
     }
@@ -154,10 +165,13 @@ export default function DashboardCommercial({ user }) {
   // Calculs sécurisés
   const clientsArray = Array.isArray(clients) ? clients : [];
   const statsValues = Object.values(clientStats || {}) || [];
-  const nbInscriptions = clientsArray.length;
-  const nbPremieresCoursesValidees = statsValues.filter(s => s?.firstCourseValidated).length;
-  const gainReel = nbPremieresCoursesValidees * 50;
-  const commissionRestante = Math.max(0, (code?.commission_due || 0) - (code?.commission_payee || 0));
+  const nbInscriptions = code?.nombre_utilisations || 0;
+  const nbValidations = code?.nombre_validations || 0;
+  const gainReel = nbValidations * 50; // 50 F par validation
+  const balanceBlocked = bedou?.balance_blocked || 0;
+  const targetAmount = 5000;
+  const progressPercent = Math.min(100, (balanceBlocked / targetAmount) * 100);
+  const canWithdraw = balanceBlocked >= targetAmount;
 
   const statutConfig = {
     en_attente: { label: "En attente", color: "text-amber-600", bg: "bg-amber-50 border-amber-200", icon: Clock },
@@ -220,6 +234,32 @@ export default function DashboardCommercial({ user }) {
         </Card>
       )}
 
+      {/* NOUVEAU: Afficher progression balance_blocked + règle retrait */}
+      {code && (
+      <div className="p-4 rounded-xl bg-gradient-to-br from-primary to-blue-600 text-white space-y-3">
+      <div className="flex items-center justify-between">
+       <div>
+         <p className="text-sm font-semibold">Gains bloqués (Parrainage)</p>
+         <p className="text-3xl font-black mt-1">{fmt(balanceBlocked)} F</p>
+       </div>
+       <Lock className={`h-8 w-8 ${canWithdraw ? 'text-green-300' : 'text-white/50'}`} />
+      </div>
+      <div className="space-y-1">
+       <div className="flex justify-between text-xs font-medium">
+         <span>Progression déverrouillage</span>
+         <span>{Math.round(progressPercent)}%</span>
+       </div>
+       <div className="w-full bg-white/20 rounded-full h-2">
+         <div
+           className={`h-2 rounded-full transition-all ${canWithdraw ? 'bg-green-300' : 'bg-white/70'}`}
+           style={{ width: `${progressPercent}%` }}
+         />
+       </div>
+       <p className="text-xs text-white/80 pt-1">{canWithdraw ? '✅ Retrait déverrouillé !' : `Encore ${fmt(targetAmount - balanceBlocked)} F`}</p>
+      </div>
+      </div>
+      )}
+
       {/* Code promo — pas encore de code */}
       {!code ? (
         <Card>
@@ -244,38 +284,52 @@ export default function DashboardCommercial({ user }) {
         </Card>
       ) : (
         <>
-          {/* Statut du code */}
-          {(() => {
-            const cfg = statutConfig[code?.statut] || statutConfig.en_attente;
-            const Icon = cfg.icon;
-            return (
-              <div className={`p-4 rounded-xl border ${cfg.bg} flex items-center gap-3`}>
-                <Icon className={`h-5 w-5 ${cfg.color} flex-shrink-0`} />
-                <div className="flex-1">
-                  <p className={`font-semibold text-sm ${cfg.color}`}>{cfg.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Code: <strong className="font-mono">{code?.code}</strong>
-                  </p>
+          {/* Statut + Actions */}
+          <div className="space-y-3">
+            {/* Statut du code */}
+            {(() => {
+              const cfg = statutConfig[code?.statut] || statutConfig.en_attente;
+              const Icon = cfg.icon;
+              return (
+                <div className={`p-4 rounded-xl border ${cfg.bg} flex items-center gap-3`}>
+                  <Icon className={`h-5 w-5 ${cfg.color} flex-shrink-0`} />
+                  <div className="flex-1">
+                    <p className={`font-semibold text-sm ${cfg.color}`}>{cfg.label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Code: <strong className="font-mono">{code?.code}</strong>
+                    </p>
+                  </div>
                 </div>
-                <button
-                  onClick={() => { navigator.clipboard.writeText(code?.code); toast.success('Copié !'); }}
-                  className="px-3 py-1.5 rounded-lg bg-white border text-xs font-bold hover:bg-primary hover:text-white transition-colors"
-                >
-                  📋 Copier
-                </button>
-              </div>
-            );
-          })()}
+              );
+            })()}
 
-          {/* UX message */}
-          <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-xs text-green-800">
-            💡 Partagez votre code pour gagner <strong>50 F CFA</strong> par client actif !
+            {/* Bouton copier + WhatsApp */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={() => { navigator.clipboard.writeText(code?.code); toast.success('Copié !'); }}
+              >
+                📋 Copier code
+              </Button>
+              <Button
+                className="flex-1 gap-2 bg-green-600 hover:bg-green-700"
+                onClick={() => {
+                  const message = encodeURIComponent(
+                    `🚀 Rejoins CDL et gagne de l'argent !\n\nUtilise mon code promo : ${code?.code}\n\nInscris-toi ici :\nhttps://cdl.base44.app/signup?ref=${code?.code}`
+                  );
+                  window.open(`https://wa.me/?text=${message}`, '_blank');
+                }}
+              >
+                <Share2 className="h-4 w-4" /> WhatsApp
+              </Button>
+            </div>
           </div>
 
-          {/* PROMO SHARE */}
-          {code?.statut === 'valide' && (
-            <PromoShare code={code?.code} commercialEmail={user?.email} commercialName={user?.full_name} />
-          )}
+          {/* UX message */}
+          <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800">
+            💡 Partagez votre code pour gagner <strong>50 F CFA</strong> par client ayant complété sa première course !
+          </div>
 
           {/* Tabs */}
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -301,8 +355,8 @@ export default function DashboardCommercial({ user }) {
                 <Card>
                   <CardContent className="p-4 text-center">
                     <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                    <p className="text-2xl font-bold text-green-600">{nbPremieresCoursesValidees}</p>
-                    <p className="text-xs text-muted-foreground">1ères courses</p>
+                    <p className="text-2xl font-bold text-green-600">{nbValidations}</p>
+                    <p className="text-xs text-muted-foreground">Validées</p>
                   </CardContent>
                 </Card>
               </div>
@@ -314,23 +368,17 @@ export default function DashboardCommercial({ user }) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                    <div className="p-2 rounded-lg bg-muted">
-                      <p className="font-bold text-base">{gainReel} F</p>
-                      <p className="text-muted-foreground">Gagné</p>
+                    <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                      <div className="p-2 rounded-lg bg-blue-50">
+                        <p className="font-bold text-base text-blue-600">{fmt(gainReel)} F</p>
+                        <p className="text-muted-foreground">Gains bloqués</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-green-50">
+                        <p className="font-bold text-base text-green-600">{canWithdraw ? '✅ Possible' : '🔒 Min 5000 F'}</p>
+                        <p className="text-muted-foreground">Retrait</p>
+                      </div>
                     </div>
-                    <div className="p-2 rounded-lg bg-green-50">
-                      <p className="font-bold text-base text-green-600">{code?.commission_payee || 0} F</p>
-                      <p className="text-muted-foreground">Payé</p>
-                    </div>
-                    <div className={`p-2 rounded-lg ${commissionRestante > 0 ? "bg-amber-50" : "bg-green-50"}`}>
-                      <p className={`font-bold text-base ${commissionRestante > 0 ? "text-amber-600" : "text-green-600"}`}>
-                        {commissionRestante} F
-                      </p>
-                      <p className="text-muted-foreground">Restant</p>
-                    </div>
-                  </div>
-                </CardContent>
+                  </CardContent>
               </Card>
             </>
           )}
