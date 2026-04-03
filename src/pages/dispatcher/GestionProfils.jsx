@@ -376,6 +376,17 @@ export default function GestionProfils() {
         </div>
       )}
 
+      {/* DEBUG : affichage diagnostic */}
+      {!loading && allProfiles.length > 0 && (
+        <div className="p-3 rounded-xl bg-slate-100 border border-slate-300 text-xs space-y-1">
+          <p className="font-bold text-slate-700">🔍 Diagnostic profils</p>
+          <p>Total profils chargés : <strong>{allProfiles.length}</strong></p>
+          <p>Statuts présents : <strong>{[...new Set(allProfiles.map(p => p.status))].join(', ') || 'aucun'}</strong></p>
+          <p>Profils "en_attente" : <strong className="text-amber-700">{allProfiles.filter(p => p.status === 'en_attente').length}</strong></p>
+          <p>Utilisateurs avec profil en_attente : <strong className="text-amber-700">{filteredUsers.filter(u => getPendingProfiles(u).length > 0).length}</strong></p>
+        </div>
+      )}
+
       {/* Résultats filtrés par onglet */}
       {!loading && users.length > 0 && (
         <div className="space-y-3">
