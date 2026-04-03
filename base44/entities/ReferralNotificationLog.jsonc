@@ -1,0 +1,45 @@
+{
+  "name": "ReferralNotificationLog",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "notification_type": {
+      "type": "string",
+      "enum": [
+        "new_user",
+        "first_course",
+        "inactive_48h",
+        "active_user",
+        "progress_5000",
+        "threshold_reached",
+        "no_referrals"
+      ],
+      "title": "Type de notification"
+    },
+    "message": {
+      "type": "string",
+      "title": "Message envoy\u00e9"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "clicked",
+        "shared"
+      ],
+      "title": "Statut",
+      "default": "sent"
+    },
+    "clicked_at": {
+      "type": "string",
+      "title": "Date de clic"
+    }
+  },
+  "required": [
+    "user_email",
+    "notification_type"
+  ]
+}
