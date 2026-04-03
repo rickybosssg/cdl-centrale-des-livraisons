@@ -61,8 +61,7 @@ export default function AdminProfilUnifie() {
   const [assignDialog, setAssignDialog] = useState(false);
   const [assignProfile, setAssignProfile] = useState(null);
   const [blocageDialog, setBlocageDialog] = useState(false);
-  const [refusingProfileId, setRefusingProfileId] = useState(null);
-  const [refusingMotif, setRefusingMotif] = useState("");
+
 
   const loadAll = async () => {
     const [me, allUsers] = await Promise.all([
@@ -92,10 +91,18 @@ export default function AdminProfilUnifie() {
   const validerLivreur = async () => {
     if (!user.telephone) { toast.error("Téléphone manquant, validation impossible"); return; }
     setProcessing(true);
+    const now = new Date().toISOString();
     await base44.entities.User.update(user.id, {
       statut_validation_livreur: "valide", profil_valide: true, actif: true,
-      date_validation: new Date().toISOString(),
+      date_validation: now,
     });
+    // Synchroniser le UserProfile livreur
+    const livreurProf = profiles.find(p => p.profile_type === "livreur");
+    if (livreurProf) {
+      await base44.entities.UserProfile.update(livreurProf.id, {
+        status: "actif", validated_at: now, validated_by: admin.email, refusal_reason: null,
+      });
+    }
     await base44.entities.Notification.create({
       destinataire_email: user.email, destinataire_role: "livreur",
       titre: "✅ Profil livreur validé !",
@@ -113,6 +120,13 @@ export default function AdminProfilUnifie() {
     await base44.entities.User.update(user.id, {
       statut_validation_livreur: "refuse", profil_valide: false, motif_refus: motif,
     });
+    // Synchroniser le UserProfile livreur
+    const livreurProf = profiles.find(p => p.profile_type === "livreur");
+    if (livreurProf) {
+      await base44.entities.UserProfile.update(livreurProf.id, {
+        status: "refuse", refusal_reason: motif,
+      });
+    }
     await base44.entities.Notification.create({
       destinataire_email: user.email, destinataire_role: "livreur",
       titre: "❌ Dossier refusé",
@@ -429,42 +443,12 @@ export default function AdminProfilUnifie() {
                         {profile.validated_at && `Validé ${moment(profile.validated_at).format("DD/MM/YY")} · `}
                         Créé {moment(profile.created_date).format("DD/MM/YY")}
                       </p>
+                      {profile.status === "refuse" && profile.refusal_reason && (
+                        <p className="text-[10px] text-red-600 mt-0.5">Motif : {profile.refusal_reason}</p>
+                      )}
                     </div>
                     <StatutBadge status={profile.status} />
-                    <div className="flex gap-1">
-                      {(profile.status === "en_attente" || profile.status === "incomplet") && (
-                        <>
-                          <Button size="sm" variant="outline" className="h-7 text-xs px-1.5 border-green-300 text-green-600" onClick={() => validerProfil(profile)} disabled={processing}>✓</Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs px-1.5 border-red-300 text-red-600" onClick={() => setRefusingProfileId(profile.id)} disabled={processing}>✕</Button>
-                        </>
-                      )}
-                      {profile.status === "refuse" && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs px-1.5 border-green-300 text-green-600" onClick={() => validerProfil(profile)} disabled={processing}>✓ Valider quand même</Button>
-                      )}
-                    </div>
                   </CardContent>
-                  {/* Motif refus inline */}
-                  {refusingProfileId === profile.id && (
-                    <div className="px-3 pb-3 space-y-2">
-                      <input
-                        autoFocus
-                        className="w-full border rounded-md px-3 py-1.5 text-sm"
-                        placeholder="Motif du refus (obligatoire)..."
-                        value={refusingMotif}
-                        onChange={e => setRefusingMotif(e.target.value)}
-                      />
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="flex-1" onClick={() => { setRefusingProfileId(null); setRefusingMotif(""); }}>Annuler</Button>
-                        <Button size="sm" variant="destructive" className="flex-1" onClick={() => refuserProfil(profile, refusingMotif)} disabled={!refusingMotif.trim() || processing}>Confirmer le refus</Button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Motif affiché si refusé */}
-                  {profile.status === "refuse" && profile.refusal_reason && (
-                    <div className="px-3 pb-3">
-                      <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">Motif : {profile.refusal_reason}</div>
-                    </div>
-                  )}
                 </Card>
               );
             })}
