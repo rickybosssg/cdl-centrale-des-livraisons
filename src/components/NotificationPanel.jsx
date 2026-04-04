@@ -70,21 +70,22 @@ function NotifDetailModal({ notif, onClose, onNavigate }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center p-4 bg-black/60"
+      transition={{ duration: 0.18 }}
+      className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60"
       onClick={onClose}
     >
       <motion.div
-        initial={{ y: 60, scale: 0.96 }}
-        animate={{ y: 0, scale: 1 }}
-        exit={{ y: 60, scale: 0.96 }}
-        transition={{ type: 'spring', damping: 22, stiffness: 300 }}
-        className="w-full max-w-sm bg-card rounded-3xl shadow-2xl overflow-hidden"
+        initial={{ opacity: 0, scale: 0.88, y: -12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: -12 }}
+        transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+        className="w-full max-w-md bg-card rounded-3xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header coloré */}
         <div className={`px-5 py-4 border-l-4 ${cfg.color} flex items-start gap-3`}>
-          <div className={`flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center ${cfg.badge}`}>
-            <Icon className="h-4 w-4" />
+          <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${cfg.badge}`}>
+            <Icon className="h-5 w-5" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-base text-foreground leading-snug">{notif.titre}</p>
@@ -92,13 +93,13 @@ function NotifDetailModal({ notif, onClose, onNavigate }) {
               {TYPE_LABELS[notif.type] || 'Notification'} · {moment(notif.created_date).format('DD/MM/YYYY à HH:mm')}
             </p>
           </div>
-          <button onClick={onClose} className="flex-shrink-0 p-1 rounded-full hover:bg-muted">
+          <button onClick={onClose} className="flex-shrink-0 p-1.5 rounded-full hover:bg-muted transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Message complet scrollable */}
-        <div className="px-5 py-4 max-h-60 overflow-y-auto">
+        <div className="px-5 py-5 max-h-72 overflow-y-auto">
           <FormatMessage message={notif.message} full />
         </div>
 
@@ -107,14 +108,14 @@ function NotifDetailModal({ notif, onClose, onNavigate }) {
           {route && (
             <button
               onClick={() => onNavigate(route)}
-              className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
+              className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-semibold"
             >
               {resolveActionLabel(route, notif.destinataire_role)}
             </button>
           )}
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border text-sm font-semibold text-muted-foreground"
+            className="flex-1 py-3 rounded-xl border text-sm font-semibold text-muted-foreground hover:bg-muted transition-colors"
           >
             Fermer
           </button>
