@@ -187,6 +187,11 @@ export default function RoleSetup({ onComplete }) {
       if (result?.data?.profile?.id) {
         localStorage.setItem('activeProfileId', result.data.profile.id);
       }
+      // Message spécial si profil jumeau auto-créé
+      if (result?.data?.auto_paired) {
+        const pairedLabel = { client: 'Client', commercial: 'Commercial' }[result.data.auto_paired.type] || result.data.auto_paired.type;
+        toast.success(`🎉 Votre profil a été créé avec succès. Votre second profil compatible (${pairedLabel}) a aussi été activé automatiquement.`, { duration: 5000 });
+      }
     } catch (_) {}
     setLoading(false);
     localStorage.removeItem('cdl_pending_role');

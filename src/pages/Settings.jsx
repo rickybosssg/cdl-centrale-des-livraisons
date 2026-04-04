@@ -151,7 +151,13 @@ export default function Settings() {
       setSubmitting(false);
       if (result.data?.success) {
         console.log('[Settings.handleAddProfile] SUCCÈS');
-        toast.success(result.data.status === 'actif' ? '✅ Profil activé !' : '⏳ Demande envoyée à l\'admin');
+        const pairedType = result.data?.auto_paired?.type;
+        const pairedLabel = { client: 'Client', commercial: 'Commercial' }[pairedType];
+        if (pairedLabel) {
+          toast.success(`🎉 Profil créé ! Votre second profil compatible (${pairedLabel}) a aussi été activé automatiquement.`, { duration: 5000 });
+        } else {
+          toast.success(result.data.status === 'actif' ? '✅ Profil activé !' : '⏳ Demande envoyée à l\'admin');
+        }
         setDialogAdd(false);
         setSelectedProfile(null);
         setFormData({});

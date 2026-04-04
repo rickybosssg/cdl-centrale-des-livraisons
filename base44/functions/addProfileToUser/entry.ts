@@ -259,6 +259,157 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    // CRÉATION CROISÉE AUTOMATIQUE : Client ↔ Commercial
+    // ──────────────────────────────────────────────────────────────────────
+    let autoPairedProfile = null;
+    const PAIR_MAP = { client: 'commercial', commercial: 'client' };
+    const pairedType = PAIR_MAP[profile_type];
+
+    if (pairedType) {
+      // Vérifier si le profil jumeau existe déjà
+      const existingPair = await base44.entities.UserProfile.filter({
+        user_email: user.email,
+        profile_type: pairedType,
+        deleted: false,
+      });
+
+      if (existingPair.length === 0) {
+        console.log('[addProfileToUser] AUTO-PAIR: Création automatique du profil', pairedType);
+
+        let pairCode = null;
+
+        // Générer le code promo si le profil paired est commercial
+        if (pairedType === 'commercial') {
+          const baseName = (user.full_name || 'CDL').replace(/\s+/g, '').toUpperCase().slice(0, 4);
+          let attempts = 0;
+          while (!pairCode && attempts < 15) {
+            const rand = Math.floor(100 + Math.random() * 9900).toString();
+            const candidate = `${baseName}${rand}`.slice(0, 10);
+            const existing = await base44.entities.CodePromo.filter({ code: candidate });
+            if (!existing || existing.length === 0) pairCode = candidate;
+            attempts++;
+          }
+          if (!pairCode) {
+            // Fallback garanti unique
+            pairCode = 'CDL' + Date.now().toString().slice(-6);
+          }
+        }
+
+        // Statut : client = actif immédiat, commercial = en_attente
+        const pairStatus = pairedType === 'client' ? 'actif' : 'en_attente';
+        const pairData = {
+          telephone: data.telephone || user.telephone || '',
+          quartier: data.quartier || '',
+          email: user.email,
+          full_name: user.full_name,
+          auto_created: true,
+        };
+
+        autoPairedProfile = await base44.entities.UserProfile.create({
+          user_email: user.email,
+          profile_type: pairedType,
+          status: pairStatus,
+          is_active_profile: false,
+          data_json: JSON.stringify(pairData),
+          documents_json: null,
+          completion_percentage: pairedType === 'client' ? 100 : 60,
+          missing_fields: JSON.stringify([]),
+          missing_documents: JSON.stringify([]),
+          validated_at: pairedType === 'client' ? new Date().toISOString() : null,
+        });
+        console.log('[addProfileToUser] AUTO-PAIR: Profil créé:', autoPairedProfile.id);
+
+        // Mettre à jour la liste des profils
+        const updatedProfilesList = userProfiles.includes(pairedType) ? userProfiles : [...userProfiles, pairedType];
+        await base44.auth.updateMe({ profiles_list: JSON.stringify(updatedProfilesList) });
+
+        // Créer le CodePromo si commercial auto-créé
+        if (pairedType === 'commercial' && pairCode) {
+          await base44.entities.CodePromo.create({
+            commercial_email: user.email,
+            commercial_name: user.full_name,
+            code: pairCode,
+            statut: 'en_attente',
+            actif: false,
+            nombre_utilisations: 0,
+            nombre_validations: 0,
+            commission_due: 0,
+            commission_payee: 0,
+            statut_paiement: 'À jour',
+            auto_generated: true,
+          });
+          console.log('[addProfileToUser] AUTO-PAIR: CodePromo créé:', pairCode);
+        }
+
+        // Créer l'entité Client si client auto-créé
+        if (pairedType === 'client') {
+          const existingClient = await base44.entities.Client.filter({ email: user.email });
+          if (existingClient.length === 0) {
+            await base44.entities.Client.create({
+              nom_complet: user.full_name,
+              numero_telephone: data.telephone || user.telephone || '',
+              email: user.email,
+              quartier_principal: data.quartier || '',
+              date_inscription: new Date().toISOString(),
+              statut_client: 'Nouveau',
+            });
+          }
+        }
+
+        // Notification utilisateur — profil jumeau créé
+        const pairEmoji = { client: '👤', commercial: '📣' };
+        const pairLabel = { client: 'Client', commercial: 'Commercial' };
+        await base44.entities.Notification.create({
+          destinataire_email: user.email,
+          destinataire_role: pairedType,
+          titre: `🎉 Profil ${pairLabel[pairedType]} activé automatiquement`,
+          message: pairedType === 'commercial'
+            ? `Votre profil Commercial CDL a été activé automatiquement. Votre code promo ${pairCode} est prêt à être partagé pour gagner de l'argent.`
+            : `Votre profil Client CDL a été activé automatiquement. Vous pouvez maintenant commander des livraisons.`,
+          type: 'success',
+          lue: false,
+        });
+
+        // Notification admin — création auto
+        const adminsForPair = await base44.entities.User.filter({ role: 'admin' });
+        await Promise.all(adminsForPair.map(admin =>
+          base44.entities.Notification.create({
+            destinataire_email: admin.email,
+            destinataire_role: 'admin',
+            titre: `🔗 Profil ${pairLabel[pairedType]} créé automatiquement`,
+            message: `Compte: ${user.full_name} (${user.email})\nProfil principal créé: ${profile_type}\nProfil auto-créé: ${pairedType}${pairCode ? '\nCode promo: ' + pairCode : ''}\nSource: auto profile pairing`,
+            type: 'info',
+            lue: false,
+            target_entity_id: user.id || user.email,
+            target_entity_type: 'profil',
+          })
+        ));
+
+        // Log traçabilité
+        try {
+          await base44.entities.AdminActionLog.create({
+            admin_email: 'system',
+            action: 'auto_profile_pairing',
+            entity_type: 'UserProfile',
+            entity_id: autoPairedProfile.id,
+            details: JSON.stringify({
+              user_email: user.email,
+              primary_profile: profile_type,
+              auto_created_profile: pairedType,
+              promo_code: pairCode || null,
+              source: 'auto profile pairing',
+            }),
+          });
+        } catch (_) {}
+
+        console.log('[addProfileToUser] AUTO-PAIR: Terminé avec succès');
+      } else {
+        console.log('[addProfileToUser] AUTO-PAIR: Profil', pairedType, 'existe déjà → pas de création');
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     // Déclencher le recalcul des compteurs en tâche de fond (non bloquant)
     try {
       console.log('[addProfileToUser] ← COMPTEURS: Invocation recalculateProfileCounters...');
@@ -272,6 +423,7 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       profile: createdProfile,
+      auto_paired: autoPairedProfile ? { type: PAIR_MAP[profile_type], id: autoPairedProfile.id } : null,
       status,
       message: status === 'actif' ? 'Profile activated' : 'Profile pending admin validation',
     });
