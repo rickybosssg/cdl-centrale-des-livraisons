@@ -232,7 +232,7 @@ Deno.serve(async (req) => {
     // Notifier les admins si validation requise (seulement si en_attente, pas incomplet)
     if (requirements.needsAdminValidation && finalStatus === 'en_attente') {
       console.log('[addProfileToUser] ← ADMIN NOTIFICATION: Envoi aux admins...');
-      const admins = await base44.entities.User.filter({ role: 'admin' });
+      const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
       console.log('[addProfileToUser] ← ADMIN NOTIFICATION: Nombre admins trouvés:', admins.length);
       if (admins.length === 0) {
         console.warn('[addProfileToUser] ⚠️ ATTENTION: Aucun admin trouvé pour notification!');
@@ -372,7 +372,7 @@ Deno.serve(async (req) => {
         });
 
         // Notification admin — création auto
-        const adminsForPair = await base44.entities.User.filter({ role: 'admin' });
+        const adminsForPair = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
         await Promise.all(adminsForPair.map(admin =>
           base44.entities.Notification.create({
             destinataire_email: admin.email,
