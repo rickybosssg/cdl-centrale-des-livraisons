@@ -42,6 +42,7 @@ export default function LivreurHome({ user }) {
   const activerGPS = () => {
     if (!navigator.geolocation) {
       setGpsBloque(true);
+      setGpsErrorMsg('Localisation non disponible sur cet appareil');
       return;
     }
     setGpsLoading(true);
@@ -58,16 +59,30 @@ export default function LivreurHome({ user }) {
       },
       (err) => {
         setGpsLoading(false);
-        setGpsBloque(true);
-        base44.auth.updateMe({ gps_enabled: false });
+        // Code 1 = refus, Code 2 = GPS désactivé, Code 3 = timeout
+        // Ne pas bloquer l'écran entier — laisser le livreur utiliser l'app
+        if (err.code === 2) {
+          setGpsErrorMsg('GPS désactivé. Activez la localisation dans les paramètres.');
+        } else if (err.code === 1) {
+          setGpsErrorMsg('Permission refusée. Autorisez la localisation dans les paramètres.');
+        } else {
+          setGpsErrorMsg('Position introuvable. Vérifiez votre GPS.');
+        }
+        setGpsBloque(false); // Ne pas bloquer l'écran — juste afficher un bandeau
+        base44.auth.updateMe({ gps_enabled: false }).catch(() => {});
       },
       { enableHighAccuracy: true, timeout: 15000 }
     );
   };
 
-  // Demande GPS au mount
+  // Demande GPS au mount + retour depuis paramètres
   useEffect(() => {
     activerGPS();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && gpsErrorMsg) activerGPS();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   // Charger courses
@@ -157,27 +172,33 @@ export default function LivreurHome({ user }) {
 
   const gainsJour = completedToday.reduce((sum, c) => sum + (c?.gain_livreur || 0), 0);
 
-  // GPS bloqué
-  if (gpsBloque) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center p-4">
-        <div className="text-center space-y-4 max-w-xs">
-          <div className="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center mx-auto">
-            <MapPin className="h-8 w-8 text-red-500" />
-          </div>
-          <p className="text-lg font-bold">Localisation requise</p>
-          <p className="text-sm text-muted-foreground">Activez le GPS pour continuer</p>
-          <button
-            onClick={activerGPS}
-            disabled={gpsLoading}
-            className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm disabled:opacity-70"
-          >
-            {gpsLoading ? "..." : "Activer GPS"}
-          </button>
-        </div>
+  // Bandeau GPS (non bloquant)
+  const GpsBandeau = gpsErrorMsg ? (
+    <div className="mx-4 rounded-2xl p-3 bg-amber-50 border border-amber-200 flex items-start gap-3">
+      <MapPin className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-amber-800">{gpsErrorMsg}</p>
       </div>
-    );
-  }
+      <div className="flex gap-2 flex-shrink-0">
+        <button
+          onClick={activerGPS}
+          disabled={gpsLoading}
+          className="text-xs font-bold text-amber-700 border border-amber-300 rounded-lg px-2 py-1 bg-white disabled:opacity-50"
+        >
+          {gpsLoading ? '...' : 'Réessayer'}
+        </button>
+        <button
+          onClick={() => {
+            try { window.open('intent://settings/location#Intent;scheme=android-app;end', '_blank'); }
+            catch (_) { alert('Ouvrez manuellement : Paramètres → Localisation'); }
+          }}
+          className="text-xs font-bold text-white bg-amber-500 rounded-lg px-2 py-1"
+        >
+          Paramètres
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   // Vérification blocage
   if (user?.livreur_bloque) {
@@ -202,6 +223,7 @@ export default function LivreurHome({ user }) {
   return (
     <div className="space-y-5 pb-20">
       <NewCourseAlert course={alertCourse} onClose={() => setAlertCourse(null)} />
+      {GpsBandeau}
       
       {user && <PubliciteHomeBanner userRole="livreur" userId={user.id} userEmail={user.email} />}
       
