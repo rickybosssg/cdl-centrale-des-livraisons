@@ -27,6 +27,7 @@ export default function RoleSetup({ onComplete }) {
   const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "", code_promo: "" });
   const [checkingCode, setCheckingCode] = useState(false);
   const [codePromoApplique, setCodePromoApplique] = useState(null);
+  const [autoAppliedCode, setAutoAppliedCode] = useState(null);
   const [livreursActifs, setLivreursActifs] = useState(null);
   const [moyenDeplacement, setMoyenDeplacement] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -46,11 +47,16 @@ export default function RoleSetup({ onComplete }) {
       .then(res => setLivreursActifs(res.length))
       .catch(() => {});
     
-    // NEW: Auto-fill promo code from URL param (for clients only)
+    // Auto-fill promo code from URL param ?ref= ou ?promo= + localStorage
     const params = new URLSearchParams(window.location.search);
-    const promoCode = params.get('promo');
-    if (promoCode) {
-      setForm(f => ({ ...f, code_promo: promoCode.toUpperCase() }));
+    const refCode = (params.get('ref') || params.get('promo') || '').toUpperCase().trim();
+    if (refCode) {
+      localStorage.setItem('cdl_promo_code', refCode);
+    }
+    const savedCode = localStorage.getItem('cdl_promo_code');
+    if (savedCode) {
+      setForm(f => ({ ...f, code_promo: savedCode }));
+      setAutoAppliedCode(savedCode);
     }
   }, []);
 
@@ -195,6 +201,7 @@ export default function RoleSetup({ onComplete }) {
     } catch (_) {}
     setLoading(false);
     localStorage.removeItem('cdl_pending_role');
+    localStorage.removeItem('cdl_promo_code');
     onComplete();
   };
 
@@ -385,6 +392,12 @@ export default function RoleSetup({ onComplete }) {
           {selectedRole === "client" && (
             <div className="space-y-2">
               <Label>Code promotionnel (optionnel)</Label>
+              {autoAppliedCode && !codePromoApplique && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800 font-medium">
+                  <span>🎁</span>
+                  <span>Code parrainage détecté : <strong>{autoAppliedCode}</strong> — cliquez "OK" pour l'appliquer</span>
+                </div>
+              )}
               {codePromoApplique ? (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
                   <span className="text-green-700 text-sm font-bold flex-1">✅ {codePromoApplique.code} — -15% sur votre 1ère course !</span>
