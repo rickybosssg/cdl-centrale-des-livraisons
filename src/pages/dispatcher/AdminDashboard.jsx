@@ -38,6 +38,7 @@ export default function AdminDashboard() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [demandeBedouCount, setDemandeBedouCount] = useState(0);
+  const [zonesData, setZonesData] = useState([]);
 
   const loadData = async () => {
     try {
@@ -61,8 +62,27 @@ export default function AdminDashboard() {
       const livreursOnline = (livreurs || []).length;
       const livreursDisponibles = (livreurs || []).filter(l => !l.livreur_bloque).length;
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const clientsOnline = (allClients || []).filter(c => c.last_seen && new Date(c.last_seen) > fiveMinAgo).length;
+      const onlineClients = (allClients || []).filter(c => c.last_seen && new Date(c.last_seen) > fiveMinAgo);
+      const clientsOnline = onlineClients.length;
       const coursesEnAttente = (courses || []).filter(c => c.statut === 'en_attente').length;
+
+      // Calcul zones
+      const zoneClientsMap = {};
+      onlineClients.forEach(c => {
+        const zone = c.quartier || c.quartier_principal || 'Zone inconnue';
+        zoneClientsMap[zone] = (zoneClientsMap[zone] || 0) + 1;
+      });
+      const livreursOnlineList = livreurs || [];
+      const zoneLivreursMap = {};
+      livreursOnlineList.forEach(l => {
+        const zone = l.quartier || 'Zone inconnue';
+        zoneLivreursMap[zone] = (zoneLivreursMap[zone] || 0) + 1;
+      });
+      const zonesComputed = Object.entries(zoneClientsMap)
+        .map(([zone, clients]) => ({ zone, clients, livreurs: zoneLivreursMap[zone] || 0 }))
+        .sort((a, b) => b.clients - a.clients)
+        .slice(0, 8);
+      setZonesData(zonesComputed);
       const newUsersData = (users || []).filter(u => new Date(u.created_date).toDateString() === today);
       const pendingCount = (profiles || []).length;
       const totalCourses = coursesData.length;
@@ -420,6 +440,38 @@ export default function AdminDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Clients en ligne par zone */}
+      {zonesData.length > 0 && (
+        <div className="px-4 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">📍 Clients actifs par zone</p>
+          <div className="space-y-2">
+            {zonesData.map(({ zone, clients, livreurs: liv }) => {
+              const ratio = liv === 0 ? 'critique' : clients > liv * 2 ? 'tension' : clients > liv ? 'fragile' : 'ok';
+              const colors = {
+                ok: 'bg-green-50 border-green-200 text-green-700',
+                fragile: 'bg-amber-50 border-amber-200 text-amber-700',
+                tension: 'bg-orange-50 border-orange-200 text-orange-700',
+                critique: 'bg-red-50 border-red-200 text-red-700',
+              };
+              const dots = { ok: '🟢', fragile: '🟡', tension: '🟠', critique: '🔴' };
+              return (
+                <div key={zone} className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${colors[ratio]}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{dots[ratio]}</span>
+                    <span className="text-sm font-semibold">{zone}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs font-medium">
+                    <span>👤 {clients} client{clients > 1 ? 's' : ''}</span>
+                    <span>🛵 {liv} livreur{liv > 1 ? 's' : ''}</span>
+                    {ratio === 'critique' || ratio === 'tension' ? <span className="font-bold">🔥</span> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="px-4 pb-4">
         <Card className="bg-primary/5">
