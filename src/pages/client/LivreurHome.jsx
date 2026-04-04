@@ -78,7 +78,13 @@ export default function LivreurHome({ user }) {
       if (!isMounted) return;
       try {
         const data = await base44.entities.Course.filter({ livreur_email: user.email }, "-created_date", 10);
-        if (isMounted) setCourses(Array.isArray(data) ? data : []);
+        if (isMounted) {
+          const arr = Array.isArray(data) ? data : [];
+          setCourses(arr);
+          // Point 5: Réafficher alerte si course en attente non répondue (persistance)
+          const missed = arr.find(c => c?.statut === 'assignee_attente' && c?.livreur_email === user.email);
+          if (missed) setAlertCourse(missed);
+        }
         
         const pending = await base44.entities.Course.filter({ statut: 'en_attente' }, '-created_date', 20);
         if (isMounted) setZoneChaudeCount(Array.isArray(pending) ? pending.length : 0);
