@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Truck, User, Store, Megaphone } from "lucide-react";
+import { Truck, User, Store, Megaphone, PartyPopper } from "lucide-react";
 import InscriptionPartenaire from "./InscriptionPartenaire";
 import LivreurBienvenue from "./LivreurBienvenue";
 import { base44 } from "@/api/base44Client";
@@ -207,8 +207,70 @@ export default function RoleSetup({ onComplete }) {
     setLoading(false);
     localStorage.removeItem('cdl_pending_role');
     localStorage.removeItem('cdl_promo_code');
+
+    // Notifier le commercial si code parrainage utilisé
+    if (selectedRole === 'client' && (codePromoApplique || autoAppliedCode)) {
+      const usedCode = codePromoApplique?.code || autoAppliedCode;
+      try {
+        const codeData = codePromoApplique || (await base44.entities.CodePromo.filter({ code: usedCode }))[0];
+        if (codeData?.commercial_email) {
+          await base44.entities.Notification.create({
+            destinataire_email: codeData.commercial_email,
+            destinataire_role: 'commercial',
+            titre: '🔥 Nouveau client inscrit avec votre code !',
+            message: `Un nouveau client vient de s'inscrire avec votre code ${usedCode}. Il doit effectuer sa 1ère course pour valider le bonus. Encouragez-le !`,
+            type: 'success',
+            lue: false,
+          });
+        }
+      } catch (_) {}
+      // Afficher écran de confirmation parrainage
+      setStep(3);
+      return;
+    }
+
     onComplete();
   };
+
+  // ÉTAPE 3 : Confirmation parrainage
+  if (step === 3) {
+    const usedCode = codePromoApplique?.code || autoAppliedCode;
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-green-500 to-emerald-600">
+        <div className="w-full max-w-sm text-center space-y-6">
+          <div className="text-6xl">🎉</div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-extrabold text-white">Compte créé avec succès !</h1>
+            <p className="text-white/90 text-sm">
+              Vous avez utilisé le code <strong className="bg-white/20 px-2 py-0.5 rounded">{usedCode}</strong>
+            </p>
+            <p className="text-white/80 text-sm">Profitez de votre avantage et commencez maintenant 🚀</p>
+          </div>
+          <div className="bg-white/20 rounded-2xl p-4 space-y-2 text-white text-sm">
+            <p className="font-semibold">🎁 Vos avantages activés :</p>
+            <p>✅ -15% sur votre 1ère course</p>
+            <p>✅ Accès complet à CDL</p>
+            <p>✅ Suivi de vos livraisons en direct</p>
+          </div>
+          <div className="space-y-3">
+            <Button
+              className="w-full h-12 bg-white text-green-700 hover:bg-white/90 font-bold text-base"
+              onClick={() => { window.location.href = '/commander'; }}
+            >
+              🛵 Commander une course maintenant
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full h-11 border-white/50 text-white hover:bg-white/10"
+              onClick={onComplete}
+            >
+              Découvrir l'application
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (showLivreurBienvenue) {
     return <LivreurBienvenue onContinuer={() => { setShowLivreurBienvenue(false); onComplete(); }} />;
