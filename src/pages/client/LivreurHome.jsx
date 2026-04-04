@@ -14,6 +14,8 @@ import CoursePendante from "../livreur/CoursePendante";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import CourseCard from "../../components/CourseCard";
+import NewCourseAlert from "../../components/NewCourseAlert";
+import ForteDemandeBanner from "../../components/ForteDemandeBanner";
 
 export default function LivreurHome({ user }) {
   // Guard immédiate
@@ -31,6 +33,8 @@ export default function LivreurHome({ user }) {
   const [showMessages, setShowMessages] = useState(false);
   const [classement, setClassement] = useState(null);
   const [zoneChaudeCount, setZoneChaudeCount] = useState(0);
+  const [livreursActifsCount, setLivreursActifsCount] = useState(0);
+  const [alertCourse, setAlertCourse] = useState(null);
   const [gpsBloque, setGpsBloque] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsErrorMsg, setGpsErrorMsg] = useState('');
@@ -78,6 +82,9 @@ export default function LivreurHome({ user }) {
         
         const pending = await base44.entities.Course.filter({ statut: 'en_attente' }, '-created_date', 20);
         if (isMounted) setZoneChaudeCount(Array.isArray(pending) ? pending.length : 0);
+        // Compter livreurs actifs pour détection forte demande
+        const livActifs = await base44.entities.User.filter({ user_type: 'livreur', disponible: true });
+        if (isMounted) setLivreursActifsCount(Array.isArray(livActifs) ? livActifs.length : 0);
       } catch (err) {
         console.error('[LivreurHome] Load error:', err);
         if (isMounted) setCourses([]);
@@ -95,9 +102,14 @@ export default function LivreurHome({ user }) {
       if (!isMounted) return;
       if (event.type === 'create' && event?.data?.livreur_email === user.email) {
         setCourses(prev => [event.data, ...prev]);
-        toast.info('Nouvelle course !');
+        // Popup prioritaire + son + vibration
+        setAlertCourse(event.data);
       } else if (event.type === 'update' && event?.data?.livreur_email === user.email) {
         setCourses(prev => prev.map(c => c?.id === event.id ? event.data : c));
+        // Alerte si assignée
+        if (event.data?.statut === 'assignee_attente' && event.data?.livreur_email === user.email) {
+          setAlertCourse(event.data);
+        }
       }
     });
 
@@ -179,7 +191,15 @@ export default function LivreurHome({ user }) {
 
   return (
     <div className="space-y-5 pb-20">
+      <NewCourseAlert course={alertCourse} onClose={() => setAlertCourse(null)} />
+      
       {user && <PubliciteHomeBanner userRole="livreur" userId={user.id} userEmail={user.email} />}
+      
+      <ForteDemandeBanner
+        coursesEnAttente={zoneChaudeCount}
+        livreursActifs={livreursActifsCount}
+        disponible={disponible}
+      />
 
       {!disponible && (
         <div className="mx-4 mb-2 p-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-sm font-bold text-center shadow">

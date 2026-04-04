@@ -1,9 +1,10 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { vibrateLight } from "@/lib/vibration";
 import { Package, Home, Clock, Users, BarChart3, Truck, Plus, TrendingUp, Database, Store, Sparkles, Megaphone, Tag, MessageCircle, ShieldCheck } from "lucide-react";
+import { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import PageTransition from "./PageTransition";
-import { useState } from "react";
 import { useTabNavigation } from "@/hooks/useTabNavigation";
 import { useMessageCount } from "@/hooks/useMessageCount";
 import AppHeader from "./AppHeader";
@@ -63,6 +64,29 @@ export default function AppLayout({ userRole, userEmail }) {
   const { scrollContainerRef, isRootTab } = useTabNavigation();
   const items = NAV_ITEMS[userRole] || NAV_ITEMS.client;
   const hasUnread = useMessageCount(userEmail, userRole) || false;
+  const [courseBadge, setCourseBadge] = useState(0);
+
+  // Badge courses disponibles (livreur uniquement)
+  useEffect(() => {
+    if (userRole !== 'livreur') return;
+    const load = async () => {
+      try {
+        const data = await base44.entities.Course.filter({ statut: 'en_attente' }, '-created_date', 20);
+        setCourseBadge(Array.isArray(data) ? data.length : 0);
+      } catch (_) {}
+    };
+    load();
+    const interval = setInterval(load, 60000);
+    const unsub = base44.entities.Course.subscribe((event) => {
+      if (event.type === 'create' && event.data?.statut === 'en_attente') {
+        setCourseBadge(prev => prev + 1);
+      } else if (event.type === 'update') {
+        // Recharger si statut change
+        load();
+      }
+    });
+    return () => { clearInterval(interval); if (unsub) unsub(); };
+  }, [userRole]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -129,6 +153,11 @@ export default function AppLayout({ userRole, userEmail }) {
                     transition={{ duration: 0.2, ease: [0.4,0,0.2,1] }}
                   >
                     <Icon className="h-5 w-5" />
+                    {userRole === 'livreur' && item.path === '/courses-disponibles' && courseBadge > 0 && (
+                      <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">
+                        {courseBadge > 9 ? '9+' : courseBadge}
+                      </span>
+                    )}
                   </motion.div>
                   <span className={`text-[10px] font-semibold transition-all text-center leading-tight max-w-[50px] ${
                     active ? "text-primary" : item.label === "Messages" && hasUnread ? "text-red-500 font-black" : ""
