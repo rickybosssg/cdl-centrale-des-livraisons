@@ -85,11 +85,22 @@ export default function RoleSetup({ onComplete }) {
     }
     setLoading(true);
     let docUrls = {};
-    if (selectedRole === "client" && form.code_promo.trim() && codePromoApplique) {
-      const nouvNb = (codePromoApplique.nombre_utilisations || 0) + 1;
-      await base44.entities.CodePromo.update(codePromoApplique.id, {
+
+    // Résoudre le codePromoApplique si non encore résolu (cas autoAppliedCode)
+    let resolvedCode = codePromoApplique;
+    if (selectedRole === 'client' && !resolvedCode && (form.code_promo.trim() || autoAppliedCode)) {
+      const codeToCheck = form.code_promo.trim() || autoAppliedCode;
+      try {
+        const codes = await base44.entities.CodePromo.filter({ code: codeToCheck });
+        if (codes.length > 0) resolvedCode = codes[0];
+      } catch (_) {}
+    }
+
+    if (selectedRole === "client" && resolvedCode) {
+      const nouvNb = (resolvedCode.nombre_utilisations || 0) + 1;
+      await base44.entities.CodePromo.update(resolvedCode.id, {
         nombre_utilisations: nouvNb,
-        commission_due: (codePromoApplique.commission_due || 0) + 50,
+        commission_due: (resolvedCode.commission_due || 0) + 50,
         statut_paiement: "Doit",
       });
     }
@@ -99,8 +110,8 @@ export default function RoleSetup({ onComplete }) {
       updateData.moyen_deplacement = JSON.stringify(moyenDeplacement);
       updateData.docs_envoyes = false;
     }
-    if (selectedRole === 'client' && codePromoApplique) {
-      updateData.code_promo_utilise = codePromoApplique.code;
+    if (selectedRole === 'client' && resolvedCode) {
+      updateData.code_promo_utilise = resolvedCode.code;
     }
     await base44.auth.updateMe(updateData);
 
@@ -209,10 +220,10 @@ export default function RoleSetup({ onComplete }) {
     localStorage.removeItem('cdl_promo_code');
 
     // Notifier le commercial si code parrainage utilisé
-    if (selectedRole === 'client' && (codePromoApplique || autoAppliedCode)) {
-      const usedCode = codePromoApplique?.code || autoAppliedCode;
+    if (selectedRole === 'client' && resolvedCode) {
+      const usedCode = resolvedCode.code;
       try {
-        const codeData = codePromoApplique || (await base44.entities.CodePromo.filter({ code: usedCode }))[0];
+        const codeData = resolvedCode;
         if (codeData?.commercial_email) {
           await base44.entities.Notification.create({
             destinataire_email: codeData.commercial_email,
@@ -234,7 +245,7 @@ export default function RoleSetup({ onComplete }) {
 
   // ÉTAPE 3 : Confirmation parrainage
   if (step === 3) {
-    const usedCode = codePromoApplique?.code || autoAppliedCode;
+    const usedCode = form.code_promo || autoAppliedCode;
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-green-500 to-emerald-600">
         <div className="w-full max-w-sm text-center space-y-6">

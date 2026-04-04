@@ -127,8 +127,12 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else {
+      // Sauvegarder le code ref AVANT redirection
+      const _p = new URLSearchParams(window.location.search);
+      const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
+      if (_ref) localStorage.setItem('cdl_promo_code', _ref);
       // auth_required ou autre → rediriger vers le login
-      b44.auth.redirectToLogin();
+      b44.auth.redirectToLogin(window.location.pathname + window.location.search);
       return (
         <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
           <div className="text-center space-y-4 text-white">
@@ -142,7 +146,10 @@ const AuthenticatedApp = () => {
 
   // Rediriger les non-authentifiés vers le login
   if (!isAuthenticated) {
-    b44.auth.redirectToLogin();
+    const _p2 = new URLSearchParams(window.location.search);
+    const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
+    if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
+    b44.auth.redirectToLogin(window.location.pathname + window.location.search);
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
         <div className="text-center space-y-4 text-white">
