@@ -336,16 +336,29 @@ export default function AdminProfilUnifie() {
     setProcessing(false);
   };
 
-  const toggleProfil = async (profile) => {
-    const newStatus = profile.status === "actif" ? "suspendu" : "actif";
+  const toggleProfil = async (profile, targetStatus) => {
+    const newStatus = targetStatus || (profile.status === "actif" ? "suspendu" : "actif");
     await base44.entities.UserProfile.update(profile.id, { status: newStatus });
     await base44.entities.AdminActionLog.create({
-      admin_email: admin.email, object_type: "commercial", object_id: user.id,
-      object_name: user.full_name, action: newStatus === "actif" ? "unsuspend" : "suspend",
-      reason: `${newStatus === "actif" ? "Activation" : "Suspension"} profil: ${profile.profile_type}`,
+      admin_email: admin.email, object_type: profile.profile_type, object_id: user.id,
+      object_name: user.full_name, action: newStatus === "actif" ? "unsuspend" : newStatus === "suspendu" ? "suspend" : "block",
+      reason: `Changement statut profil ${profile.profile_type}: ${profile.status} → ${newStatus}`,
       target_email: user.email,
     });
-    toast.success(`Profil ${newStatus === "actif" ? "activé" : "suspendu"}`);
+    // Synchroniser les tables métier
+    if (profile.profile_type === 'partenaire') {
+      const existing = await base44.entities.Partenaire.filter({ user_email: user.email });
+      if (existing.length > 0) await base44.entities.Partenaire.update(existing[0].id, { statut: newStatus === 'actif' ? 'actif' : 'suspendu', suspended: newStatus !== 'actif' });
+    }
+    await base44.entities.Notification.create({
+      destinataire_email: user.email,
+      destinataire_role: profile.profile_type,
+      titre: newStatus === 'actif' ? `✅ Profil ${profile.profile_type} réactivé` : newStatus === 'suspendu' ? `⏸️ Profil ${profile.profile_type} suspendu` : `🔒 Profil ${profile.profile_type} bloqué`,
+      message: newStatus === 'actif' ? 'Votre profil a été réactivé par l\'administration.' : newStatus === 'suspendu' ? 'Votre profil a été suspendu temporairement. Contactez l\'admin.' : 'Votre profil a été bloqué. Contactez l\'administration CDL.',
+      type: newStatus === 'actif' ? 'success' : 'danger',
+      lue: false,
+    });
+    toast.success(`Profil ${newStatus}`);
     await loadAll();
   };
 
@@ -721,15 +734,31 @@ export default function AdminProfilUnifie() {
                     {profile.status === 'actif' && (
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" className="flex-1 border-orange-300 text-orange-600 h-7 text-xs"
-                          disabled={processing} onClick={() => toggleProfil(profile)}>
+                          disabled={processing} onClick={() => toggleProfil(profile, 'suspendu')}>
                           Suspendre
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1 border-red-400 text-red-700 h-7 text-xs"
+                          disabled={processing} onClick={() => { if (window.confirm(`Bloquer le profil ${profile.profile_type} de ${user.full_name} ?`)) toggleProfil(profile, 'bloque'); }}>
+                          <Lock className="h-3 w-3 mr-1" /> Bloquer
                         </Button>
                       </div>
                     )}
                     {profile.status === 'suspendu' && (
+                      <div className="flex gap-2">
+                        <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700 h-7 text-xs"
+                          disabled={processing} onClick={() => toggleProfil(profile, 'actif')}>
+                          Réactiver
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1 border-red-400 text-red-700 h-7 text-xs"
+                          disabled={processing} onClick={() => { if (window.confirm(`Bloquer le profil ${profile.profile_type} ?`)) toggleProfil(profile, 'bloque'); }}>
+                          <Lock className="h-3 w-3 mr-1" /> Bloquer
+                        </Button>
+                      </div>
+                    )}
+                    {profile.status === 'bloque' && (
                       <Button size="sm" className="w-full bg-green-600 hover:bg-green-700 h-7 text-xs"
-                        disabled={processing} onClick={() => toggleProfil(profile)}>
-                        Réactiver
+                        disabled={processing} onClick={() => toggleProfil(profile, 'actif')}>
+                        <Unlock className="h-3 w-3 mr-1" /> Débloquer
                       </Button>
                     )}
                   </CardContent>
