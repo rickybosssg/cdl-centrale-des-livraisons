@@ -63,6 +63,8 @@ export default function AdminProfilUnifie() {
   const [assignProfile, setAssignProfile] = useState(null);
   const [blocageDialog, setBlocageDialog] = useState(false);
   const [refusingProfileType, setRefusingProfileType] = useState(null);
+  const [refusingProfileId, setRefusingProfileId] = useState(null);
+  const [refusingMotif, setRefusingMotif] = useState("");
 
 
   const loadAll = async () => {
@@ -257,8 +259,48 @@ export default function AdminProfilUnifie() {
 
   const validerProfil = async (profile) => {
     setProcessing(true);
-    const res = await base44.functions.invoke('validateLivreurProfile', { profile_id: profile.id, action: 'approve' });
-    if (res.data?.success) toast.success(`Profil ${profile.profile_type} validé`);
+    const now = new Date().toISOString();
+    await base44.entities.UserProfile.update(profile.id, {
+      status: 'actif',
+      validated_at: now,
+      validated_by: admin.email,
+      refusal_reason: null,
+    });
+    // Si c'est un partenaire, créer l'entrée Partenaire si inexistante
+    if (profile.profile_type === 'partenaire') {
+      const data = profile.data_json ? (() => { try { return JSON.parse(profile.data_json); } catch { return {}; } })() : {};
+      const existing = await base44.entities.Partenaire.filter({ user_email: profile.user_email });
+      if (existing.length === 0) {
+        await base44.entities.Partenaire.create({
+          user_email: profile.user_email,
+          nom_commerce: data.nom_commerce || user.full_name || profile.user_email,
+          type_commerce: data.type_commerce || '—',
+          telephone: data.telephone || user.telephone || '',
+          statut: 'actif',
+          date_inscription: now,
+        });
+      } else {
+        await base44.entities.Partenaire.update(existing[0].id, { statut: 'actif' });
+      }
+    }
+    await base44.entities.Notification.create({
+      destinataire_email: user.email,
+      destinataire_role: profile.profile_type,
+      titre: `✅ Profil ${PROFILES.find(p => p.key === profile.profile_type)?.label || profile.profile_type} validé !`,
+      message: `Félicitations ! Votre profil a été validé par l'administration CDL.`,
+      type: 'success',
+      lue: false,
+    });
+    await base44.entities.AdminActionLog.create({
+      admin_email: admin.email,
+      object_type: profile.profile_type,
+      object_id: profile.id,
+      object_name: user.full_name,
+      action: 'validate',
+      reason: `Validation profil ${profile.profile_type}`,
+      target_email: user.email,
+    });
+    toast.success(`Profil ${profile.profile_type} validé !`);
     await loadAll();
     setProcessing(false);
   };
@@ -280,8 +322,8 @@ export default function AdminProfilUnifie() {
     });
     await base44.entities.AdminActionLog.create({
       admin_email: admin.email,
-      object_type: "commercial",
-      object_id: user.id,
+      object_type: profile.profile_type,
+      object_id: profile.id,
       object_name: user.full_name,
       action: "refuse",
       reason,
@@ -624,21 +666,72 @@ export default function AdminProfilUnifie() {
             {profiles.length === 0 && <p className="text-xs text-muted-foreground italic text-center py-4">Aucun profil attribué</p>}
             {profiles.map(profile => {
               const badge = PROFILES.find(p => p.key === profile.profile_type);
+              const isRefusing = refusingProfileId === profile.id;
               return (
-                <Card key={profile.id}>
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <span className="text-xl">{badge?.emoji}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold">{badge?.label || profile.profile_type}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {profile.validated_at && `Validé ${moment(profile.validated_at).format("DD/MM/YY")} · `}
-                        Créé {moment(profile.created_date).format("DD/MM/YY")}
-                      </p>
-                      {profile.status === "refuse" && profile.refusal_reason && (
-                        <p className="text-[10px] text-red-600 mt-0.5">Motif : {profile.refusal_reason}</p>
-                      )}
+                <Card key={profile.id} className={profile.status === 'en_attente' ? 'border-amber-200' : ''}>
+                  <CardContent className="p-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{badge?.emoji}</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">{badge?.label || profile.profile_type}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {profile.validated_at && `Validé ${moment(profile.validated_at).format('DD/MM/YY')} · `}
+                          Créé {moment(profile.created_date).format('DD/MM/YY')}
+                        </p>
+                        {profile.status === 'refuse' && profile.refusal_reason && (
+                          <p className="text-[10px] text-red-600 mt-0.5">Motif : {profile.refusal_reason}</p>
+                        )}
+                      </div>
+                      <StatutBadge status={profile.status} />
                     </div>
-                    <StatutBadge status={profile.status} />
+                    {/* Boutons d'action selon statut */}
+                    {(profile.status === 'en_attente' || profile.status === 'refuse') && (
+                      <div className="space-y-2">
+                        {isRefusing && (
+                          <input
+                            className="w-full border rounded px-2 py-1 text-xs"
+                            placeholder="Motif de refus..."
+                            value={refusingMotif}
+                            onChange={e => setRefusingMotif(e.target.value)}
+                          />
+                        )}
+                        <div className="flex gap-2">
+                          {!isRefusing ? (
+                            <Button size="sm" variant="outline" className="flex-1 border-red-300 text-red-600 h-7 text-xs"
+                              onClick={() => { setRefusingProfileId(profile.id); setRefusingMotif(''); }}>
+                              <XCircle className="h-3 w-3 mr-1" /> Refuser
+                            </Button>
+                          ) : (
+                            <>
+                              <Button size="sm" variant="outline" className="flex-1 h-7 text-xs"
+                                onClick={() => { setRefusingProfileId(null); setRefusingMotif(''); }}>Annuler</Button>
+                              <Button size="sm" variant="outline" className="flex-1 border-red-300 text-red-600 h-7 text-xs"
+                                disabled={processing} onClick={() => refuserProfil(profile, refusingMotif)}>
+                                Confirmer refus
+                              </Button>
+                            </>
+                          )}
+                          <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700 h-7 text-xs"
+                            disabled={processing} onClick={() => validerProfil(profile)}>
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> Valider
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {profile.status === 'actif' && (
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="flex-1 border-orange-300 text-orange-600 h-7 text-xs"
+                          disabled={processing} onClick={() => toggleProfil(profile)}>
+                          Suspendre
+                        </Button>
+                      </div>
+                    )}
+                    {profile.status === 'suspendu' && (
+                      <Button size="sm" className="w-full bg-green-600 hover:bg-green-700 h-7 text-xs"
+                        disabled={processing} onClick={() => toggleProfil(profile)}>
+                        Réactiver
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               );

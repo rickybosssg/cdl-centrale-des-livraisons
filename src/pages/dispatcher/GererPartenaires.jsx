@@ -20,6 +20,7 @@ const STATUT_CONFIG = {
 export default function GererPartenaires() {
   const navigate = useNavigate();
   const [partenaires, setPartenaires] = useState([]);
+  const [pendingProfiles, setPendingProfiles] = useState([]);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [admin, setAdmin] = useState(null);
@@ -29,23 +30,114 @@ export default function GererPartenaires() {
   const [filtre, setFiltre] = useState("tous");
 
   const loadData = async () => {
-    const [dataPartenaires, me] = await Promise.all([
+    const [dataPartenaires, me, userProfiles] = await Promise.all([
       base44.entities.Partenaire.list("-created_date", 500),
       base44.auth.me(),
+      base44.entities.UserProfile.filter({ profile_type: "partenaire" }, "-created_date", 200),
     ]);
     setPartenaires(dataPartenaires);
     setAdmin(me);
+    // Profils UserProfile en attente/refusés non encore convertis en Partenaire
+    const partenaireEmails = new Set(dataPartenaires.map(p => p.user_email));
+    const pending = (userProfiles || []).filter(p =>
+      !partenaireEmails.has(p.user_email) ||
+      p.status === "en_attente" || p.status === "refuse" || p.status === "incomplet"
+    );
+    setPendingProfiles(pending);
     setLoading(false);
+  };
+
+  const validerProfilPartenaire = async (profile) => {
+    try {
+      const now = new Date().toISOString();
+      await base44.entities.UserProfile.update(profile.id, {
+        status: "actif",
+        validated_at: now,
+        validated_by: admin.email,
+      });
+      // Créer l'entrée Partenaire si inexistante
+      const data = profile.data_json ? JSON.parse(profile.data_json) : {};
+      const existing = await base44.entities.Partenaire.filter({ user_email: profile.user_email });
+      if (existing.length === 0) {
+        await base44.entities.Partenaire.create({
+          user_email: profile.user_email,
+          nom_commerce: data.nom_commerce || data.full_name || profile.user_email,
+          type_commerce: data.type_commerce || "—",
+          telephone: data.telephone || "",
+          adresse: data.adresse || "",
+          statut: "actif",
+          date_inscription: now,
+        });
+      } else {
+        await base44.entities.Partenaire.update(existing[0].id, { statut: "actif" });
+      }
+      await base44.entities.Notification.create({
+        destinataire_email: profile.user_email,
+        destinataire_role: "partenaire",
+        titre: "✅ Profil partenaire validé !",
+        message: "Félicitations ! Votre profil partenaire a été validé. Vous pouvez maintenant publier votre boutique sur CDL.",
+        type: "success",
+        lue: false,
+      });
+      await base44.entities.AdminActionLog.create({
+        admin_email: admin.email,
+        object_type: "partenaire",
+        object_id: profile.id,
+        object_name: profile.user_email,
+        action: "validate",
+        reason: "Validation profil partenaire",
+        target_email: profile.user_email,
+      });
+      toast.success("✅ Profil partenaire validé !");
+      await loadData();
+    } catch (err) {
+      toast.error("Erreur : " + err.message);
+    }
+  };
+
+  const refuserProfilPartenaire = async (profile) => {
+    const motif = window.prompt("Motif de refus (optionnel) :") || "Documents insuffisants";
+    try {
+      await base44.entities.UserProfile.update(profile.id, {
+        status: "refuse",
+        refusal_reason: motif,
+      });
+      await base44.entities.Notification.create({
+        destinataire_email: profile.user_email,
+        destinataire_role: "partenaire",
+        titre: "❌ Demande partenaire refusée",
+        message: `Votre demande de profil partenaire a été refusée. Motif : ${motif}. Contactez-nous pour corriger votre dossier.`,
+        type: "danger",
+        lue: false,
+      });
+      await base44.entities.AdminActionLog.create({
+        admin_email: admin.email,
+        object_type: "partenaire",
+        object_id: profile.id,
+        object_name: profile.user_email,
+        action: "refuse",
+        reason: motif,
+        target_email: profile.user_email,
+      });
+      toast.success("Demande refusée");
+      await loadData();
+    } catch (err) {
+      toast.error("Erreur : " + err.message);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const unsub = base44.entities.Partenaire.subscribe((event) => {
+    const unsub1 = base44.entities.Partenaire.subscribe((event) => {
       if (event.type === 'create') setPartenaires(prev => [...prev, event.data]);
       else if (event.type === 'update') setPartenaires(prev => prev.map(p => p.id === event.id ? event.data : p));
       else if (event.type === 'delete') setPartenaires(prev => prev.filter(p => p.id !== event.id));
     });
-    return unsub;
+    const unsub2 = base44.entities.UserProfile.subscribe((event) => {
+      if (event.data?.profile_type !== 'partenaire') return;
+      loadData();
+    });
+    return () => { unsub1(); unsub2(); };
   }, []);
 
   const ouvrirFiche = async (partenaire) => {
@@ -140,9 +232,10 @@ export default function GererPartenaires() {
         <h1 className="text-xl font-bold">Gérer les partenaires</h1>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold">{partenaires.length}</p><p className="text-[10px] text-muted-foreground">Total</p></CardContent></Card>
         <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-green-600">{partenaires.filter(p => p.statut === "actif").length}</p><p className="text-[10px] text-muted-foreground">Actifs</p></CardContent></Card>
+        <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-amber-600">{pendingProfiles.filter(p => p.status === "en_attente").length}</p><p className="text-[10px] text-muted-foreground">En attente</p></CardContent></Card>
         <Card className="text-center"><CardContent className="p-3"><p className="text-2xl font-bold text-orange-600">{partenaires.filter(p => p.statut === "suspendu" || p.suspended).length}</p><p className="text-[10px] text-muted-foreground">Suspendus</p></CardContent></Card>
       </div>
 
@@ -172,6 +265,50 @@ export default function GererPartenaires() {
           </button>
         )}
       </div>
+
+      {/* Demandes UserProfile en attente */}
+      {pendingProfiles.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-amber-700">⏳ Demandes de profil partenaire ({pendingProfiles.length})</p>
+          {pendingProfiles.map(profile => {
+            const data = profile.data_json ? (() => { try { return JSON.parse(profile.data_json); } catch { return {}; } })() : {};
+            const statusCfg = { en_attente: "bg-amber-100 text-amber-700", refuse: "bg-red-100 text-red-700", incomplet: "bg-gray-100 text-gray-600" };
+            return (
+              <Card key={profile.id} className="border-amber-200 bg-amber-50/30">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm">🏪 {data.nom_commerce || data.full_name || profile.user_email}</p>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusCfg[profile.status] || "bg-muted text-muted-foreground"}`}>{profile.status}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{data.type_commerce || "—"}</p>
+                      <p className="text-xs font-medium">{data.telephone || "Non renseigné"}</p>
+                      <p className="text-xs text-muted-foreground">{profile.user_email}</p>
+                      {profile.refusal_reason && <p className="text-xs text-red-600">Motif : {profile.refusal_reason}</p>}
+                    </div>
+                  </div>
+                  {profile.status === "en_attente" && (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="flex-1 border-red-300 text-red-600 h-8 text-xs" onClick={() => refuserProfilPartenaire(profile)}>
+                        ❌ Refuser
+                      </Button>
+                      <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700 h-8 text-xs" onClick={() => validerProfilPartenaire(profile)}>
+                        ✅ Valider
+                      </Button>
+                    </div>
+                  )}
+                  {profile.status === "refuse" && (
+                    <Button size="sm" className="w-full bg-green-600 hover:bg-green-700 h-8 text-xs" onClick={() => validerProfilPartenaire(profile)}>
+                      ✅ Valider quand même
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       <div className="space-y-2">
         {filtered.map(partenaire => {
