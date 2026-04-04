@@ -33,9 +33,19 @@ function getNavPath(notif) {
     if (t.includes("commande")) return "/commandes-partenaire";
     return "/dashboard-partenaire";
   }
+  if (role === "commercial") {
+    if (t.includes("gain") || t.includes("crédit") || t.includes("bedou")) return "/mon-bedou";
+    return "/";
+  }
+  if (role === "annonceur") {
+    return "/dashboard-annonceur";
+  }
   if (role === "admin") {
     if (t.includes("livreur") || t.includes("profil")) return "/gestion-profils";
     if (t.includes("course") || t.includes("bloqu")) return "/gerer-courses";
+    if (t.includes("retrait") || t.includes("recharge") || t.includes("bedou")) return "/gestion-transactions";
+    if (t.includes("commercial")) return "/gerer-commerciaux";
+    if (t.includes("partenaire")) return "/gerer-partenaires";
     return "/admin-dashboard";
   }
   if (id) return `/course/${id}`;
@@ -61,8 +71,14 @@ export default function MesNotifications() {
   };
 
   useEffect(() => {
-    load();
+    let userEmail = null;
+    load().then(async () => {
+      const me = await base44.auth.me();
+      userEmail = me?.email;
+    });
     const unsub = base44.entities.Notification.subscribe((event) => {
+      // Filtrer uniquement les notifications de l'utilisateur courant
+      if (userEmail && event.data?.destinataire_email && event.data.destinataire_email !== userEmail) return;
       if (event.type === "create") setNotifs(prev => [event.data, ...prev]);
       else if (event.type === "update") setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
       else if (event.type === "delete") setNotifs(prev => prev.filter(n => n.id !== event.id));

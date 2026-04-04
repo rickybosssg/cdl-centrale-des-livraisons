@@ -1,0 +1,179 @@
+/**
+ * notifyUser — Fonction centralisée pour envoyer une notification
+ * 
+ * 1. Crée toujours la notification en base (DB) pour fallback in-app
+ * 2. Envoie FCM push si l'utilisateur a un token (app fermée / background)
+ * 3. Si pas de token FCM, la notif DB sera affichée à la réouverture
+ * 
+ * Payload:
+ * {
+ *   user_email: string,           // Email du destinataire
+ *   role: string,                 // Rôle du destinataire (client, livreur, etc.)
+ *   titre: string,                // Titre de la notification
+ *   message: string,              // Corps du message
+ *   type: "success"|"info"|"warning"|"danger",
+ *   priority: "normal"|"high",    // high = requireInteraction sur mobile
+ *   course_id?: string,           // ID de la course liée (optionnel)
+ *   route?: string,               // Route de navigation au clic
+ *   data?: object,                // Données supplémentaires
+ * }
+ */
+
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+
+const PROJECT_ID = "cdl-app-4743c";
+const FCM_URL = `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`;
+
+async function getAccessToken(serviceAccount) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: serviceAccount.client_email,
+    sub: serviceAccount.client_email,
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+  };
+  const header = { alg: "RS256", typ: "JWT" };
+  const encodeB64Url = (obj) =>
+    btoa(JSON.stringify(obj)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const headerB64 = encodeB64Url(header);
+  const payloadB64 = encodeB64Url(payload);
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const pemContents = serviceAccount.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, "");
+  const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8", binaryKey,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false, ["sign"]
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5", cryptoKey,
+    new TextEncoder().encode(signingInput)
+  );
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const jwt = `${signingInput}.${sigB64}`;
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) throw new Error("Token OAuth manquant: " + JSON.stringify(tokenData));
+  return tokenData.access_token;
+}
+
+async function sendFcmPush(accessToken, fcmToken, title, body, data = {}) {
+  const res = await fetch(FCM_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message: {
+        token: fcmToken,
+        notification: { title, body },
+        data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v || '')])),
+        webpush: {
+          notification: {
+            icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
+            badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
+            vibrate: [200, 100, 200],
+            requireInteraction: data.priority === 'high',
+          },
+        },
+      },
+    }),
+  });
+  const result = await res.json();
+  if (!res.ok) {
+    // Token invalide ou expiré → le supprimer
+    if (result?.error?.code === 404 || result?.error?.details?.[0]?.errorCode === 'UNREGISTERED') {
+      return { ok: false, invalidToken: true };
+    }
+    console.error('[notifyUser] FCM error:', JSON.stringify(result));
+  }
+  return { ok: res.ok, result };
+}
+
+Deno.serve(async (req) => {
+  let body = {};
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "JSON invalide" }, { status: 400 });
+  }
+
+  const { user_email, role, titre, message, type = "info", priority = "normal", course_id, route, data = {} } = body;
+
+  if (!user_email || !titre || !message) {
+    return Response.json({ error: "user_email, titre et message requis" }, { status: 400 });
+  }
+
+  try {
+    const base44 = createClientFromRequest(req);
+
+    // 1. TOUJOURS créer la notification en base (fallback in-app)
+    const notifData = {
+      destinataire_email: user_email,
+      destinataire_role: role || "user",
+      titre,
+      message,
+      type,
+      lue: false,
+      ...(course_id ? { course_id } : {}),
+      ...(priority ? { priority } : {}),
+    };
+    await base44.asServiceRole.entities.Notification.create(notifData);
+
+    // 2. Récupérer tokens FCM de l'utilisateur
+    const fcmTokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email });
+    const fcmTokens = fcmTokenRecords.map(r => r.token).filter(Boolean);
+
+    if (fcmTokens.length === 0) {
+      // Pas de token FCM, la notif DB sera affichée à la réouverture
+      return Response.json({ success: true, db: true, push: false, reason: "no_fcm_token" });
+    }
+
+    // 3. Envoyer FCM push
+    const rawJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON") || '';
+    if (!rawJson) {
+      return Response.json({ success: true, db: true, push: false, reason: "no_service_account" });
+    }
+    const serviceAccount = JSON.parse(rawJson);
+    const accessToken = await getAccessToken(serviceAccount);
+
+    const pushData = {
+      type: data.type || "notification",
+      priority,
+      ...(course_id ? { courseId: course_id } : {}),
+      ...(route ? { route } : {}),
+      ...data,
+    };
+
+    const results = await Promise.allSettled(
+      fcmTokens.map(token => sendFcmPush(accessToken, token, titre, message, pushData))
+    );
+
+    // Nettoyer les tokens invalides
+    const invalidTokens = results
+      .map((r, i) => ({ result: r, token: fcmTokens[i], record: fcmTokenRecords[i] }))
+      .filter(({ result }) => result.status === 'fulfilled' && result.value?.invalidToken);
+    
+    for (const { record } of invalidTokens) {
+      if (record?.id) {
+        await base44.asServiceRole.entities.FcmToken.delete(record.id).catch(() => {});
+      }
+    }
+
+    const sent = results.filter(r => r.status === "fulfilled" && r.value?.ok).length;
+
+    return Response.json({ success: true, db: true, push: true, sent, total: fcmTokens.length });
+  } catch (error) {
+    console.error('[notifyUser] Error:', error.message);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+});

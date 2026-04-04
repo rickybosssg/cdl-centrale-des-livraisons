@@ -2,14 +2,15 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Bell } from "lucide-react";
 import { vibrateNotif, playNotificationSound } from "@/lib/vibration";
-import { requestNotificationPermission, registerFcmToken, onForegroundMessage } from "@/lib/pushNotifications";
+import { requestNotificationPermission, registerFcmToken, onForegroundMessage, sendPushNotification } from "@/lib/pushNotifications";
 import { motion } from "framer-motion";
 import NotificationPanel from "./NotificationPanel";
+import { useTopNotification } from "@/context/TopNotificationContext";
 
 export default function NotificationBell({ userEmail }) {
   const [notifs, setNotifs] = useState([]);
   const [open, setOpen] = useState(false);
-  const loadTimerRef = useState(null)[0];
+  const { showNotification } = useTopNotification();
 
   const loadNotifs = async () => {
     if (!userEmail) return;
@@ -18,7 +19,6 @@ export default function NotificationBell({ userEmail }) {
       setNotifs(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn('[NotificationBell] Load error:', err?.message);
-      // Silently fail, subscription will handle updates
     }
   };
 
@@ -28,11 +28,16 @@ export default function NotificationBell({ userEmail }) {
     const token = await registerFcmToken();
     if (token) {
       await base44.functions.invoke('saveFcmToken', { token });
-      // Écouter les messages FCM en premier plan
       onForegroundMessage((payload) => {
         if (payload.notification) {
           vibrateNotif();
           playNotificationSound();
+          showNotification({
+            title: payload.notification.title,
+            message: payload.notification.body,
+            type: 'info',
+            autoCloseDuration: 8000,
+          });
         }
       });
     }
@@ -60,6 +65,15 @@ export default function NotificationBell({ userEmail }) {
         setNotifs(prev => [event.data, ...prev]);
         vibrateNotif();
         playNotificationSound();
+        // Afficher la bannière top in-app
+        showNotification({
+          title: event.data.titre,
+          message: event.data.message,
+          type: event.data.type === 'danger' ? 'error' : (event.data.type || 'info'),
+          autoCloseDuration: event.data.priority === 'high' ? 12000 : 7000,
+        });
+        // Envoyer une notification Web native si permission accordée (app en foreground)
+        sendPushNotification(event.data.titre, event.data.message);
       } else if (event.type === 'update') {
         setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
       }

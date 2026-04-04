@@ -56,7 +56,15 @@ function getNavRoute(notif) {
 
   // Commercial
   if (role === "commercial") {
+    if (t.includes("gain") || t.includes("crédit") || t.includes("bedou")) return "/mon-bedou";
+    if (t.includes("validé") || t.includes("première course")) return "/";
+    if (t.includes("code") || t.includes("promo")) return "/";
     return "/";
+  }
+
+  // Annonceur
+  if (role === "annonceur") {
+    return "/dashboard-annonceur";
   }
 
   // Admin
@@ -65,6 +73,8 @@ function getNavRoute(notif) {
     if (t.includes("course") || t.includes("bloquée")) return "/gerer-courses";
     if (t.includes("commercial")) return "/gerer-commerciaux";
     if (t.includes("partenaire")) return "/gerer-partenaires";
+    if (t.includes("retrait") || t.includes("recharge") || t.includes("bedou")) return "/gestion-transactions";
+    if (t.includes("publicité") || t.includes("annonceur")) return "/gerer-publicites";
     return "/admin-dashboard";
   }
 
