@@ -23,62 +23,62 @@ export default function NotificationBell({ userEmail }) {
   };
 
   const initFcm = async () => {
-    const granted = await requestNotificationPermission();
-    if (!granted) return;
-    const token = await registerFcmToken();
-    if (token) {
-      await base44.functions.invoke('saveFcmToken', { token });
-      onForegroundMessage((payload) => {
-        if (payload.notification) {
-          vibrateNotif();
-          playNotificationSound();
-          showNotification({
-            title: payload.notification.title,
-            message: payload.notification.body,
-            type: 'info',
-            autoCloseDuration: 8000,
-          });
-        }
-      });
+    try {
+      const granted = await requestNotificationPermission();
+      if (!granted) return;
+      const token = await registerFcmToken();
+      if (token) {
+        await base44.functions.invoke('saveFcmToken', { token });
+        onForegroundMessage((payload) => {
+          if (payload.notification) {
+            vibrateNotif();
+            playNotificationSound();
+            showNotification({
+              title: payload.notification.title,
+              message: payload.notification.body,
+              type: 'info',
+              autoCloseDuration: 8000,
+            });
+          }
+        });
+      }
+    } catch (err) {
+      console.debug('[FCM] Init error:', err?.message);
     }
   };
 
   useEffect(() => {
     if (!userEmail) return;
     let isMounted = true;
-    
-    // Charge les notifs UNE SEULE FOIS au mount (après 500ms de délai)
+
     const initialTimer = setTimeout(() => {
       if (isMounted) loadNotifs();
     }, 500);
-    
+
     initFcm();
-    
-    // Recharge toutes les 120 secondes (délai long pour éviter rate limit)
+
     const interval = setInterval(() => {
       if (isMounted) loadNotifs();
     }, 120000);
-    
+
     const unsub = base44.entities.Notification.subscribe((event) => {
       if (!isMounted || event.data?.destinataire_email !== userEmail) return;
       if (event.type === 'create') {
         setNotifs(prev => [event.data, ...prev]);
         vibrateNotif();
         playNotificationSound();
-        // Afficher la bannière top in-app
         showNotification({
           title: event.data.titre,
           message: event.data.message,
           type: event.data.type === 'danger' ? 'error' : (event.data.type || 'info'),
           autoCloseDuration: event.data.priority === 'high' ? 12000 : 7000,
         });
-        // Envoyer une notification Web native si permission accordée (app en foreground)
         sendPushNotification(event.data.titre, event.data.message);
       } else if (event.type === 'update') {
         setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
       }
     });
-    
+
     return () => {
       isMounted = false;
       clearTimeout(initialTimer);
