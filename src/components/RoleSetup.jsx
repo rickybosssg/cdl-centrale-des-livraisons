@@ -57,6 +57,11 @@ export default function RoleSetup({ onComplete }) {
     if (savedCode) {
       setForm(f => ({ ...f, code_promo: savedCode }));
       setAutoAppliedCode(savedCode);
+      // Auto-sélectionner CLIENT et aller directement à l'étape 2
+      if (!pendingRole) {
+        setSelectedRole('client');
+        setStep(2);
+      }
     }
   }, []);
 
@@ -306,6 +311,14 @@ export default function RoleSetup({ onComplete }) {
       <div className="w-full max-w-sm space-y-5 py-6">
 
         {/* Header motivation */}
+        {autoAppliedCode && selectedRole === 'client' && (
+          <div className="rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white p-4 text-center space-y-1">
+            <p className="text-base font-bold">🎁 Code parrainage appliqué !</p>
+            <p className="text-sm opacity-90">Code : <strong>{autoAppliedCode}</strong></p>
+            <p className="text-xs opacity-80">★ -15% sur votre 1ère course + bonus parrainage</p>
+          </div>
+        )}
+
         {selectedRole === "livreur" && (
           <div className="rounded-2xl bg-gradient-to-br from-primary to-blue-600 text-white p-4 text-center space-y-1">
             <p className="text-sm font-bold">🚀 Inscription rapide</p>
