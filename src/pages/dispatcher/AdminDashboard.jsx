@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2 } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,9 @@ export default function AdminDashboard() {
     coursesToday: 0,
     revenueToday: 0,
     livreursOnline: 0,
+    livreursDisponibles: 0,
+    clientsOnline: 0,
+    coursesEnAttente: 0,
     newUsers: 0,
     pendingRequests: 0,
     totalCourses: 0,
@@ -40,13 +43,14 @@ export default function AdminDashboard() {
     try {
       // Charger KPIs
       const today = new Date().toDateString();
-      const [courses, livreurs, users, partenaires, profiles, countsRes] = await Promise.allSettled([
+      const [courses, livreurs, users, partenaires, profiles, countsRes, allClients] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 100),
         base44.entities.User.filter({ user_type: "livreur", disponible: true }),
         base44.entities.User.list("-created_date", 100),
         base44.entities.Partenaire.list('-created_date', 200),
         base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),
         base44.functions.invoke('getAdminCounts', {}),
+        base44.entities.User.filter({ user_type: "client" }),
       ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
 
       const coursesData = courses || [];
@@ -55,6 +59,10 @@ export default function AdminDashboard() {
         .filter(c => new Date(c.created_date).toDateString() === today && c.statut === 'livree')
         .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
       const livreursOnline = (livreurs || []).length;
+      const livreursDisponibles = (livreurs || []).filter(l => !l.livreur_bloque).length;
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const clientsOnline = (allClients || []).filter(c => c.last_seen && new Date(c.last_seen) > fiveMinAgo).length;
+      const coursesEnAttente = (courses || []).filter(c => c.statut === 'en_attente').length;
       const newUsersData = (users || []).filter(u => new Date(u.created_date).toDateString() === today);
       const pendingCount = (profiles || []).length;
       const totalCourses = coursesData.length;
@@ -75,6 +83,9 @@ export default function AdminDashboard() {
         coursesToday,
         revenueToday: Math.round(revenueToday),
         livreursOnline,
+        livreursDisponibles,
+        clientsOnline,
+        coursesEnAttente,
         newUsers: newUsersData.length,
         pendingRequests: pendingCount,
         totalCourses,
@@ -221,18 +232,62 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground mt-1">Livreurs en ligne</p>
           </CardContent>
         </Card>
+        <Card className="border-l-4 border-l-cyan-500">
+          <CardContent className="p-4">
+            <p className="text-3xl font-bold text-cyan-600">{kpis.clientsOnline}</p>
+            <p className="text-xs text-muted-foreground mt-1">Clients en ligne</p>
+          </CardContent>
+        </Card>
         <Card className="border-l-4 border-l-purple-500">
           <CardContent className="p-4">
             <p className="text-3xl font-bold text-purple-600">{kpis.newUsers}</p>
             <p className="text-xs text-muted-foreground mt-1">Nouveaux utilisateurs</p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-orange-500 col-span-2">
+        <Card className="border-l-4 border-l-orange-500">
           <CardContent className="p-4">
             <p className="text-3xl font-bold text-orange-600">{kpis.totalCourses}</p>
-            <p className="text-xs text-muted-foreground mt-1">Total courses en base</p>
+            <p className="text-xs text-muted-foreground mt-1">Total courses</p>
           </CardContent>
         </Card>
+        <Card className="border-l-4 border-l-red-500">
+          <CardContent className="p-4">
+            <p className="text-3xl font-bold text-red-600">{kpis.coursesEnAttente}</p>
+            <p className="text-xs text-muted-foreground mt-1">Courses en attente</p>
+          </CardContent>
+        </Card>
+        {/* Bloc Ratio Offre / Demande */}
+        {(() => {
+          const ratio = kpis.livreursDisponibles >= kpis.coursesEnAttente && kpis.clientsOnline <= 3
+            ? { label: 'Faible demande', color: 'bg-blue-50 border-blue-300', badge: 'bg-blue-100 text-blue-700', dot: '🔵' }
+            : kpis.livreursDisponibles >= kpis.coursesEnAttente
+            ? { label: 'Offre suffisante', color: 'bg-green-50 border-green-300', badge: 'bg-green-100 text-green-700', dot: '🟢' }
+            : kpis.coursesEnAttente <= kpis.livreursDisponibles + 2
+            ? { label: 'Équilibré', color: 'bg-amber-50 border-amber-300', badge: 'bg-amber-100 text-amber-700', dot: '🟡' }
+            : kpis.coursesEnAttente > kpis.livreursDisponibles * 2
+            ? { label: 'Pénurie critique', color: 'bg-red-50 border-red-300', badge: 'bg-red-100 text-red-700', dot: '🔴' }
+            : { label: 'Tension', color: 'bg-orange-50 border-orange-300', badge: 'bg-orange-100 text-orange-700', dot: '🟠' };
+          return (
+            <Card className={`col-span-2 border-2 ${ratio.color}`}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-muted-foreground" />
+                      <p className="text-sm font-semibold text-muted-foreground">Ratio Offre / Demande</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {kpis.livreursDisponibles} livreurs dispo · {kpis.coursesEnAttente} courses · {kpis.clientsOnline} clients actifs
+                    </p>
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${ratio.badge}`}>
+                    {ratio.dot} {ratio.label}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
         <Card className="border-l-4 border-l-green-700 col-span-2">
           <CardContent className="p-4">
             <p className="text-3xl font-bold text-green-700">{kpis.totalRevenuCDL.toLocaleString()} F</p>
