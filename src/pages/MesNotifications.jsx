@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, CheckCircle2, Info, AlertTriangle, XCircle } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Bell, CheckCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,12 +54,73 @@ function getNavPath(notif) {
   return null;
 }
 
+const TYPE_LABELS = {
+  success: '✅ Succès',
+  info: 'ℹ️ Information',
+  warning: '⚠️ Avertissement',
+  danger: '🚨 Alerte',
+};
+
+function NotifDetailModal({ notif, onClose, onNavigate }) {
+  if (!notif) return null;
+  const cfg = TYPE_CFG[notif.type] || TYPE_CFG.info;
+  const route = getNavPath(notif);
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/60"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 60, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 60, scale: 0.96 }}
+        transition={{ type: 'spring', damping: 22, stiffness: 300 }}
+        className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className={`px-5 py-4 border-l-4 ${cfg.bg} flex items-start gap-3`}>
+          <span className="text-2xl flex-shrink-0">{cfg.icon}</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base text-foreground leading-snug">{notif.titre}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {TYPE_LABELS[notif.type] || 'Notification'} · {moment(notif.created_date).format('DD/MM/YYYY à HH:mm')}
+            </p>
+          </div>
+          <button onClick={onClose} className="flex-shrink-0 p-1 rounded-full hover:bg-muted">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="px-5 py-4 max-h-64 overflow-y-auto">
+          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{notif.message}</p>
+        </div>
+        <div className="px-5 pb-5 flex gap-2">
+          {route && (
+            <button
+              onClick={() => onNavigate(route)}
+              className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
+            >
+              Voir les détails →
+            </button>
+          )}
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-sm font-semibold text-muted-foreground">
+            Fermer
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function MesNotifications() {
   const navigate = useNavigate();
   const [notifs, setNotifs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // all | unread
   const [searchQuery, setSearchQuery] = useState('');
+  const [detailNotif, setDetailNotif] = useState(null);
 
   const load = async () => {
     const me = await base44.auth.me();
@@ -94,12 +157,18 @@ export default function MesNotifications() {
   };
 
   const markRead = async (notif) => {
+    // Marquer comme lu
     if (!notif.lue) {
       await base44.entities.Notification.update(notif.id, { lue: true });
       setNotifs(prev => prev.map(n => n.id === notif.id ? { ...n, lue: true } : n));
     }
-    const path = getNavPath(notif);
-    if (path) navigate(path);
+    // Ouvrir la modal détail
+    setDetailNotif(notif);
+  };
+
+  const handleNavigate = (route) => {
+    setDetailNotif(null);
+    navigate(route);
   };
 
   const deleteNotif = async (e, id) => {
@@ -118,6 +187,15 @@ export default function MesNotifications() {
 
   return (
     <div className="space-y-4 pb-16">
+      <AnimatePresence>
+        {detailNotif && (
+          <NotifDetailModal
+            notif={detailNotif}
+            onClose={() => setDetailNotif(null)}
+            onNavigate={handleNavigate}
+          />
+        )}
+      </AnimatePresence>
       {/* Header */}
       <div className="flex items-center gap-3 sticky top-0 bg-background z-10 py-2">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
@@ -215,7 +293,7 @@ export default function MesNotifications() {
                 <p className={`text-sm font-semibold ${!notif.lue ? "" : "text-muted-foreground"}`}>
                   {notif.titre}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{notif.message}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{notif.message}</p>
                 <p className="text-[10px] text-muted-foreground mt-1.5">
                   {moment(notif.created_date).fromNow()}
                 </p>

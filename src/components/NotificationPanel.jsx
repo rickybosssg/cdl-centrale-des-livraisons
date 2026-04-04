@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Bell, Check, User, Truck, Megaphone, ShieldCheck, AlertTriangle, Info, CheckCircle2, XCircle, Package } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -83,43 +83,102 @@ function getNavRoute(notif) {
   return null;
 }
 
-// Formate le message pour afficher les infos sur des lignes séparées
-function FormatMessage({ message }) {
+// Formate le message (liste si séparateurs, sinon texte)
+function FormatMessage({ message, full = false }) {
   if (!message) return null;
-  // Si le message contient des champs séparés par | ou •
   const parts = message.split(/[|•\n]/).map(s => s.trim()).filter(Boolean);
   if (parts.length > 1) {
     return (
-      <div className="space-y-0.5">
+      <div className="space-y-1">
         {parts.map((p, i) => (
-          <p key={i} className="text-xs text-muted-foreground leading-snug">{p}</p>
+          <p key={i} className="text-sm text-muted-foreground leading-relaxed">{p}</p>
         ))}
       </div>
     );
   }
-  // Sinon afficher normalement avec troncature
   return (
-    <p className="text-xs text-muted-foreground leading-snug line-clamp-2">{message}</p>
+    <p className={`text-sm text-muted-foreground leading-relaxed ${full ? '' : 'line-clamp-2'}`}>{message}</p>
+  );
+}
+
+// Labels lisibles par type
+const TYPE_LABELS = {
+  success: '✅ Succès',
+  info: 'ℹ️ Information',
+  warning: '⚠️ Avertissement',
+  danger: '🚨 Alerte',
+};
+
+// Modal détail notification
+function NotifDetailModal({ notif, onClose, onNavigate }) {
+  if (!notif) return null;
+  const cfg = TYPE_CONFIG[notif.type] || TYPE_CONFIG.info;
+  const Icon = getNotifIcon(notif);
+  const route = getNavRoute(notif);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center p-4 bg-black/60"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 60, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 60, scale: 0.96 }}
+        transition={{ type: 'spring', damping: 22, stiffness: 300 }}
+        className="w-full max-w-sm bg-card rounded-3xl shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header coloré */}
+        <div className={`px-5 py-4 border-l-4 ${cfg.color} flex items-start gap-3`}>
+          <div className={`flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center ${cfg.badge}`}>
+            <Icon className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base text-foreground leading-snug">{notif.titre}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {TYPE_LABELS[notif.type] || 'Notification'} · {moment(notif.created_date).format('DD/MM/YYYY à HH:mm')}
+            </p>
+          </div>
+          <button onClick={onClose} className="flex-shrink-0 p-1 rounded-full hover:bg-muted">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Message complet scrollable */}
+        <div className="px-5 py-4 max-h-60 overflow-y-auto">
+          <FormatMessage message={notif.message} full />
+        </div>
+
+        {/* Actions */}
+        <div className="px-5 pb-5 flex gap-2">
+          {route && (
+            <button
+              onClick={() => onNavigate(route)}
+              className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
+            >
+              Voir les détails →
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border text-sm font-semibold text-muted-foreground"
+          >
+            Fermer
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 export default function NotificationPanel({ open, onClose, notifs, setNotifs, userEmail }) {
   const panelRef = useRef(null);
   const navigate = useNavigate();
-
-  // Fermer en cliquant à l'extérieur
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (panelRef.current && !panelRef.current.contains(e.target)) onClose();
-    };
-    document.addEventListener("mousedown", handler);
-    document.addEventListener("touchstart", handler);
-    return () => {
-      document.removeEventListener("mousedown", handler);
-      document.removeEventListener("touchstart", handler);
-    };
-  }, [open, onClose]);
+  const [detailNotif, setDetailNotif] = useState(null);
 
   const unread = notifs.filter(n => !n.lue).length;
 
@@ -132,19 +191,31 @@ export default function NotificationPanel({ open, onClose, notifs, setNotifs, us
   };
 
   const handleClick = async (notif) => {
+    // Marquer comme lu
     if (!notif.lue) {
       await base44.entities.Notification.update(notif.id, { lue: true });
       setNotifs(prev => prev.map(n => n.id === notif.id ? { ...n, lue: true } : n));
     }
-    const route = getNavRoute(notif);
-    if (route) {
-      onClose();
-      navigate(route);
-    }
+    // Ouvrir la modal détail (pas naviguer directement)
+    setDetailNotif(notif);
+  };
+
+  const handleNavigate = (route) => {
+    setDetailNotif(null);
+    onClose();
+    navigate(route);
   };
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
+      {detailNotif && (
+        <NotifDetailModal
+          key="detail"
+          notif={detailNotif}
+          onClose={() => setDetailNotif(null)}
+          onNavigate={handleNavigate}
+        />
+      )}
       {open && (
         <>
           {/* Backdrop */}
@@ -217,24 +288,19 @@ export default function NotificationPanel({ open, onClose, notifs, setNotifs, us
                   {notifs.map(n => {
                     const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.info;
                     const Icon = getNotifIcon(n);
-                    const route = getNavRoute(n);
-                    const isClickable = !!route;
 
                     return (
                       <button
                         key={n.id}
                         onClick={() => handleClick(n)}
                         className={`w-full text-left px-4 py-3 border-l-4 transition-all ${cfg.color} ${
-                          !n.lue ? "opacity-100" : "opacity-60"
-                        } ${isClickable ? "cursor-pointer hover:brightness-95 active:brightness-90" : "cursor-default"}`}
+                          !n.lue ? "opacity-100" : "opacity-70"
+                        } cursor-pointer hover:brightness-95 active:brightness-90`}
                       >
                         <div className="flex items-start gap-2.5">
-                          {/* Icône */}
                           <div className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center mt-0.5 ${cfg.badge}`}>
                             <Icon className="h-3.5 w-3.5" />
                           </div>
-
-                          {/* Contenu */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-1 mb-0.5">
                               <p className={`text-xs leading-snug ${!n.lue ? "font-bold text-foreground" : "font-semibold text-foreground/80"} flex-1 min-w-0`}>
@@ -244,7 +310,7 @@ export default function NotificationPanel({ open, onClose, notifs, setNotifs, us
                                 <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-primary mt-1" />
                               )}
                             </div>
-                            <FormatMessage message={n.message} />
+                            <p className="text-xs text-muted-foreground leading-snug line-clamp-2">{n.message}</p>
                             <p className="text-[10px] text-muted-foreground/60 mt-1">
                               {moment(n.created_date).fromNow()}
                             </p>
