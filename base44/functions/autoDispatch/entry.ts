@@ -216,6 +216,9 @@ Deno.serve(async (req) => {
             type: 'warning',
             lue: false,
             course_id: courseId,
+            target_screen: `/course/${courseId}`,
+            target_entity_id: courseId,
+            target_entity_type: 'course',
           });
         } catch (_) {}
       }
@@ -310,6 +313,9 @@ Deno.serve(async (req) => {
       type: 'success',
       lue: false,
       course_id: courseId,
+      target_screen: `/course-livreur/${courseId}`,
+      target_entity_id: courseId,
+      target_entity_type: 'course',
     });
 
     console.log(`[DISPATCH] Course ${courseId} assignée à ${best.full_name} (${best.email}) — score: ${scored[0].score}`);

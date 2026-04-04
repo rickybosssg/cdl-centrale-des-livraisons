@@ -4,6 +4,7 @@ import { X, Bell, Check, User, Truck, Megaphone, ShieldCheck, AlertTriangle, Inf
 import { base44 } from "@/api/base44Client";
 import { useNavigate, Link } from "react-router-dom";
 import moment from "moment";
+import { resolveNotifRoute, resolveActionLabel } from "@/lib/notificationRouter";
 
 moment.locale("fr");
 
@@ -26,61 +27,9 @@ function getNotifIcon(notif) {
   return (TYPE_CONFIG[notif.type] || TYPE_CONFIG.info).Icon;
 }
 
-// Route de navigation contextuelle selon le rôle destinataire et le titre
+// Route de navigation — délègue au router centralisé
 function getNavRoute(notif) {
-  const t = (notif.titre || "").toLowerCase();
-  const role = notif.destinataire_role || "";
-  const courseId = notif.course_id;
-
-  // Livreur : course spécifique ou liste disponibles
-  if (role === "livreur") {
-    if (courseId && (t.includes("attribuée") || t.includes("nouvelle course"))) return "/courses-disponibles";
-    if (courseId) return `/course-livreur/${courseId}`;
-    if (t.includes("validé") || t.includes("profil")) return "/settings";
-    if (t.includes("gain") || t.includes("commission")) return "/mes-gains";
-    return "/courses-disponibles";
-  }
-
-  // Client : détail course
-  if (role === "client") {
-    if (courseId) return `/course/${courseId}`;
-    if (t.includes("commande")) return "/mes-commandes-marketplace";
-    return "/mes-courses";
-  }
-
-  // Partenaire
-  if (role === "partenaire") {
-    if (t.includes("commande")) return "/commandes-partenaire";
-    return "/dashboard-partenaire";
-  }
-
-  // Commercial
-  if (role === "commercial") {
-    if (t.includes("gain") || t.includes("crédit") || t.includes("bedou")) return "/mon-bedou";
-    if (t.includes("validé") || t.includes("première course")) return "/";
-    if (t.includes("code") || t.includes("promo")) return "/";
-    return "/";
-  }
-
-  // Annonceur
-  if (role === "annonceur") {
-    return "/dashboard-annonceur";
-  }
-
-  // Admin
-  if (role === "admin") {
-    if (t.includes("livreur") || t.includes("profil") || t.includes("demande")) return "/gestion-profils";
-    if (t.includes("course") || t.includes("bloquée")) return "/gerer-courses";
-    if (t.includes("commercial")) return "/gerer-commerciaux";
-    if (t.includes("partenaire")) return "/gerer-partenaires";
-    if (t.includes("retrait") || t.includes("recharge") || t.includes("bedou")) return "/gestion-transactions";
-    if (t.includes("publicité") || t.includes("annonceur")) return "/gerer-publicites";
-    return "/admin-dashboard";
-  }
-
-  // Fallback
-  if (courseId) return `/course/${courseId}`;
-  return null;
+  return resolveNotifRoute(notif);
 }
 
 // Formate le message (liste si séparateurs, sinon texte)
@@ -160,7 +109,7 @@ function NotifDetailModal({ notif, onClose, onNavigate }) {
               onClick={() => onNavigate(route)}
               className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
             >
-              Voir les détails →
+              {resolveActionLabel(route, notif.destinataire_role)}
             </button>
           )}
           <button

@@ -100,6 +100,8 @@ Deno.serve(async (req) => {
       message: `${user.full_name} demande une recharge de ${montant.toLocaleString()} F CFA via ${methode}.`,
       type: 'info',
       lue: false,
+      target_screen: '/gestion-transactions',
+      target_section: 'recharges',
     });
     return Response.json({ success: true, demande, bonus_applique });
   }
@@ -162,6 +164,8 @@ Deno.serve(async (req) => {
       message: `Votre recharge de ${demande.montant.toLocaleString()} F CFA a été validée.${demande.bonus_applique ? ` Bonus : +${demande.bonus_applique} F CFA !` : ''}`,
       type: 'success',
       lue: false,
+      target_screen: '/mon-bedou',
+      target_entity_type: 'transaction',
     });
     return Response.json({ success: true });
   }
@@ -232,6 +236,8 @@ Deno.serve(async (req) => {
       message: `${user.full_name} demande un retrait de ${montant.toLocaleString()} F CFA via ${methode}.`,
       type: 'warning',
       lue: false,
+      target_screen: '/gestion-transactions',
+      target_section: 'retraits',
     });
     return Response.json({ success: true, demande });
   }
@@ -274,6 +280,8 @@ Deno.serve(async (req) => {
       message: `Votre retrait de ${demande.montant.toLocaleString()} F CFA a été payé.`,
       type: 'success',
       lue: false,
+      target_screen: '/mon-bedou',
+      target_entity_type: 'transaction',
     });
     return Response.json({ success: true });
   }
@@ -395,6 +403,17 @@ Deno.serve(async (req) => {
       reference_id: course_id,
       description: `Bonus parrainage client ${client_email} - code ${clientUser.code_promo_utilise}`,
       statut: 'valide',
+    });
+    // Notif commercial avec deep-link
+    await base44.asServiceRole.entities.Notification.create({
+      destinataire_email: promo.commercial_email,
+      destinataire_role: 'commercial',
+      titre: '🎉 Bonus parrainage reçu !',
+      message: `+${BONUS_COMMERCIAL} F CFA ajoutés à vos gains. Un client parrainé a effectué sa première course.`,
+      type: 'success',
+      lue: false,
+      target_screen: '/mon-bedou',
+      target_entity_type: 'transaction',
     });
     // Marquer le bonus comme versé
     await base44.asServiceRole.entities.User.update(clientUser.id, { bonus_commercial_traite: true });

@@ -107,7 +107,8 @@ Deno.serve(async (req) => {
     return Response.json({ error: "JSON invalide" }, { status: 400 });
   }
 
-  const { user_email, role, titre, message, type = "info", priority = "normal", course_id, route, data = {} } = body;
+  const { user_email, role, titre, message, type = "info", priority = "normal", course_id, route,
+          target_screen, target_entity_id, target_entity_type, target_section, data = {} } = body;
 
   if (!user_email || !titre || !message) {
     return Response.json({ error: "user_email, titre et message requis" }, { status: 400 });
@@ -125,7 +126,11 @@ Deno.serve(async (req) => {
       type,
       lue: false,
       ...(course_id ? { course_id } : {}),
-      ...(priority ? { priority } : {}),
+      // Deep-link fields
+      ...(target_screen ? { target_screen } : route ? { target_screen: route } : {}),
+      ...(target_entity_id ? { target_entity_id } : course_id ? { target_entity_id: course_id } : {}),
+      ...(target_entity_type ? { target_entity_type } : course_id ? { target_entity_type: 'course' } : {}),
+      ...(target_section ? { target_section } : {}),
     };
     await base44.asServiceRole.entities.Notification.create(notifData);
 

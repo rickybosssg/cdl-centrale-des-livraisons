@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CheckCircle2, Info, AlertTriangle, XCircle } from "lucide-react";
+import { resolveNotifRoute, resolveActionLabel } from "@/lib/notificationRouter";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Bell, CheckCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,42 +17,7 @@ const TYPE_CFG = {
 };
 
 function getNavPath(notif) {
-  const t = (notif.titre || "").toLowerCase();
-  const role = notif.destinataire_role || "";
-  const id = notif.course_id;
-
-  if (role === "livreur") {
-    if (id && (t.includes("attribu") || t.includes("nouvelle course"))) return "/courses-disponibles";
-    if (id) return `/course-livreur/${id}`;
-    if (t.includes("profil") || t.includes("valid")) return "/settings";
-    if (t.includes("gain") || t.includes("commission")) return "/mes-gains";
-    return "/courses-disponibles";
-  }
-  if (role === "client") {
-    if (id) return `/course/${id}`;
-    return "/mes-courses";
-  }
-  if (role === "partenaire") {
-    if (t.includes("commande")) return "/commandes-partenaire";
-    return "/dashboard-partenaire";
-  }
-  if (role === "commercial") {
-    if (t.includes("gain") || t.includes("crédit") || t.includes("bedou")) return "/mon-bedou";
-    return "/";
-  }
-  if (role === "annonceur") {
-    return "/dashboard-annonceur";
-  }
-  if (role === "admin") {
-    if (t.includes("livreur") || t.includes("profil")) return "/gestion-profils";
-    if (t.includes("course") || t.includes("bloqu")) return "/gerer-courses";
-    if (t.includes("retrait") || t.includes("recharge") || t.includes("bedou")) return "/gestion-transactions";
-    if (t.includes("commercial")) return "/gerer-commerciaux";
-    if (t.includes("partenaire")) return "/gerer-partenaires";
-    return "/admin-dashboard";
-  }
-  if (id) return `/course/${id}`;
-  return null;
+  return resolveNotifRoute(notif);
 }
 
 const TYPE_LABELS = {
@@ -102,7 +68,7 @@ function NotifDetailModal({ notif, onClose, onNavigate }) {
               onClick={() => onNavigate(route)}
               className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
             >
-              Voir les détails →
+              {resolveActionLabel(route, notif.destinataire_role)}
             </button>
           )}
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-sm font-semibold text-muted-foreground">

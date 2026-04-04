@@ -8,7 +8,7 @@
     },
     "destinataire_role": {
       "type": "string",
-      "title": "R\u00f4le destinataire (admin, livreur, client)"
+      "title": "R\u00f4le destinataire (admin, livreur, client, partenaire, commercial, annonceur)"
     },
     "titre": {
       "type": "string",
@@ -36,6 +36,22 @@
     "course_id": {
       "type": "string",
       "title": "Course li\u00e9e (optionnel)"
+    },
+    "target_screen": {
+      "type": "string",
+      "title": "\u00c9cran cible (ex: /course-livreur/123)"
+    },
+    "target_entity_id": {
+      "type": "string",
+      "title": "ID de l'entit\u00e9 li\u00e9e (course, commande, profil\u2026)"
+    },
+    "target_entity_type": {
+      "type": "string",
+      "title": "Type d'entit\u00e9 (course, commande, profil, transaction, publicite)"
+    },
+    "target_section": {
+      "type": "string",
+      "title": "Section admin (gestion-profils, gestion-transactions\u2026)"
     }
   },
   "required": [
