@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import GpsLocationManager from "@/components/GpsLocationManager";
+import EditPersonalInfoModal from "@/components/EditPersonalInfoModal";
 import { base44 } from "@/api/base44Client";
 import { useNavigate, Link } from "react-router-dom";
 import {
@@ -65,6 +66,7 @@ export default function Settings() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogAdd, setDialogAdd] = useState(false);
+  const [showEditInfo, setShowEditInfo] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [formData, setFormData] = useState({});
   const [moyenDeplacement, setMoyenDeplacement] = useState([]);
@@ -343,15 +345,47 @@ export default function Settings() {
         </Card>
         )}
 
-        {/* Info admin - afficher si admin */}
-        {isAdmin && (
-        <Card className="border-blue-300 bg-blue-50">
-         <CardContent className="p-4 space-y-2">
-           <p className="text-sm font-semibold text-blue-900">🛡️ Profil administrateur</p>
-           <p className="text-xs text-blue-700">Vous êtes administrateur du système CDL. Vous avez accès complet au tableau de bord d'administration.</p>
-         </CardContent>
+        {/* ─── Informations personnelles ─── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center justify-between">
+              Informations personnelles
+              <Button size="sm" variant="outline" onClick={() => setShowEditInfo(true)} className="gap-1.5 text-xs">
+                ✏️ Modifier
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-muted/50">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-0.5">Nom complet</p>
+                <p className="text-sm font-semibold">{user?.full_name || '—'}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-muted/50">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-0.5">Téléphone</p>
+                <p className="text-sm font-semibold">{user?.telephone || '—'}</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground">📧 Email : {user?.email}</p>
+          </CardContent>
         </Card>
-        )}
+
+        <EditPersonalInfoModal
+          open={showEditInfo}
+          onClose={() => setShowEditInfo(false)}
+          user={user}
+          onSaved={(updated) => setUser(prev => ({ ...prev, ...updated }))}
+        />
+
+        {/* Info admin - afficher si admin */}
+          {isAdmin && (
+          <Card className="border-blue-300 bg-blue-50">
+           <CardContent className="p-4 space-y-2">
+             <p className="text-sm font-semibold text-blue-900">🛡️ Profil administrateur</p>
+             <p className="text-xs text-blue-700">Vous êtes administrateur du système CDL. Vous avez accès complet au tableau de bord d'administration.</p>
+           </CardContent>
+          </Card>
+           )}
 
         {/* Localisation GPS */}
       {!isAdmin && activeProfileType === 'client' && (

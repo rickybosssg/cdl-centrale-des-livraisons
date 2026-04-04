@@ -1,0 +1,40 @@
+{
+  "name": "ProfileChangeLog",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "ID utilisateur"
+    },
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "field": {
+      "type": "string",
+      "title": "Champ modifi\u00e9 (nom, prenom, telephone)"
+    },
+    "old_value": {
+      "type": "string",
+      "title": "Ancienne valeur"
+    },
+    "new_value": {
+      "type": "string",
+      "title": "Nouvelle valeur"
+    },
+    "source": {
+      "type": "string",
+      "title": "Source",
+      "default": "user"
+    },
+    "user_roles": {
+      "type": "string",
+      "title": "R\u00f4les utilisateur (JSON)"
+    }
+  },
+  "required": [
+    "user_email",
+    "field",
+    "new_value"
+  ]
+}
