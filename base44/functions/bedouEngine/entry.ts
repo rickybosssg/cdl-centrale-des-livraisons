@@ -188,15 +188,33 @@ Deno.serve(async (req) => {
     const bedou = await getBedou(user.email);
     if (!bedou) return Response.json({ error: 'Bedou introuvable' }, { status: 404 });
     if (bedou.statut_bedou === 'suspendu') return Response.json({ error: 'Bedou suspendu' }, { status: 403 });
-    if ((bedou.solde_disponible || 0) < montant) {
-      return Response.json({ error: `Solde insuffisant. Disponible : ${bedou.solde_disponible || 0} F CFA` }, { status: 400 });
+    // Commercial : vérifier seuil balance_blocked >= 5000 F avant tout retrait
+    if (user.user_type === 'commercial') {
+      const balanceBlocked = bedou.balance_blocked || 0;
+      if (balanceBlocked < 5000) {
+        return Response.json({ error: `Seuil non atteint. Gains bloqués : ${balanceBlocked} F / 5000 F requis` }, { status: 400 });
+      }
+      if (montant > balanceBlocked) {
+        return Response.json({ error: `Montant supérieur aux gains bloqués disponibles : ${balanceBlocked} F CFA` }, { status: 400 });
+      }
+    } else {
+      if ((bedou.solde_disponible || 0) < montant) {
+        return Response.json({ error: `Solde insuffisant. Disponible : ${bedou.solde_disponible || 0} F CFA` }, { status: 400 });
+      }
     }
     if (montant < 500) return Response.json({ error: 'Retrait minimum 500 F CFA' }, { status: 400 });
-    // Bloquer le montant
-    await updateBedou(bedou.id, {
-      solde_disponible: (bedou.solde_disponible || 0) - montant,
-      solde_bloque: (bedou.solde_bloque || 0) + montant,
-    });
+    // Bloquer le montant selon le type de rôle
+    const retaitUpdates = user.user_type === 'commercial'
+      ? {
+          balance_blocked: Math.max(0, (bedou.balance_blocked || 0) - montant),
+          solde: Math.max(0, (bedou.solde || 0) - montant),
+          solde_bloque: (bedou.solde_bloque || 0) + montant,
+        }
+      : {
+          solde_disponible: (bedou.solde_disponible || 0) - montant,
+          solde_bloque: (bedou.solde_bloque || 0) + montant,
+        };
+    await updateBedou(bedou.id, retaitUpdates);
     const demande = await base44.asServiceRole.entities.DemandeRetrait.create({
       user_email: user.email,
       user_nom: user.full_name,
@@ -356,11 +374,13 @@ Deno.serve(async (req) => {
     if (autresCourses.length > 0) return Response.json({ skip: true, reason: 'not_first_course' });
     // Vérifier si bonus déjà versé
     if (clientUser.bonus_commercial_traite) return Response.json({ skip: true, reason: 'already_done' });
-    // Créditer le commercial
+    // Créditer le commercial — dans balance_blocked (seuil 5000 F avant retrait)
     const bedouComm = await ensureBedou(promo.commercial_email, 'commercial', commercial.full_name);
+    const newBalanceBlocked = (bedouComm.balance_blocked || 0) + BONUS_COMMERCIAL;
     await updateBedou(bedouComm.id, {
       solde: (bedouComm.solde || 0) + BONUS_COMMERCIAL,
-      solde_disponible: (bedouComm.solde_disponible || 0) + BONUS_COMMERCIAL,
+      // Ne pas créditer solde_disponible : le gain commercial est bloqué jusqu'au seuil de 5000 F
+      balance_blocked: newBalanceBlocked,
       gains_totaux: (bedouComm.gains_totaux || 0) + BONUS_COMMERCIAL,
     });
     await createTransaction({

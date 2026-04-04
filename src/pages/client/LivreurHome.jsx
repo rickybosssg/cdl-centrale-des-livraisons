@@ -108,14 +108,18 @@ export default function LivreurHome({ user }) {
       if (!isMounted) return;
       if (event.type === 'create' && event?.data?.livreur_email === user.email) {
         setCourses(prev => [event.data, ...prev]);
-        // Popup prioritaire + son + vibration
         setAlertCourse(event.data);
       } else if (event.type === 'update' && event?.data?.livreur_email === user.email) {
         setCourses(prev => prev.map(c => c?.id === event.id ? event.data : c));
-        // Alerte si assignée
-        if (event.data?.statut === 'assignee_attente' && event.data?.livreur_email === user.email) {
+        if (event.data?.statut === 'assignee_attente') {
           setAlertCourse(event.data);
+        } else {
+          // Course acceptée par quelqu'un d'autre ou annulée — effacer l'alerte si c'était cette course
+          setAlertCourse(prev => prev?.id === event.id ? null : prev);
         }
+      } else if (event.type === 'update' && event?.data?.livreur_email !== user.email) {
+        // Course redistribuée à un autre livreur — effacer alerte si c'était notre alerte
+        setAlertCourse(prev => prev?.id === event.id ? null : prev);
       }
     });
 

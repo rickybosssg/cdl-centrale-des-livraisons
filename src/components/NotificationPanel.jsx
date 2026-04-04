@@ -207,7 +207,7 @@ export default function NotificationPanel({ open, onClose, notifs, setNotifs, us
   };
 
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence>
       {detailNotif && (
         <NotifDetailModal
           key="detail"
