@@ -590,7 +590,7 @@ export default function GestionProfils() {
 
           {/* Onglet : Clients */}
           {tab === 'clients' && (() => {
-            const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const fiveMinAgo = new Date(Date.now() - 3 * 60 * 1000); // cohérent avec heartbeat 30s
             const clientUsers = filteredUsers.filter(u => allProfiles.some(p => p.user_email === u.email && p.profile_type === 'client'));
             return (
               <div className="space-y-2">

@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import PageTransition from "./PageTransition";
 import { useTabNavigation } from "@/hooks/useTabNavigation";
 import { useMessageCount } from "@/hooks/useMessageCount";
+import usePresence from "@/hooks/usePresence";
 import AppHeader from "./AppHeader";
 
 const NAV_ITEMS = {
@@ -64,6 +65,9 @@ export default function AppLayout({ userRole, userEmail }) {
   const { scrollContainerRef, isRootTab } = useTabNavigation();
   const items = NAV_ITEMS[userRole] || NAV_ITEMS.client;
   const hasUnread = useMessageCount(userEmail, userRole) || false;
+
+  // Présence temps réel (tous rôles)
+  usePresence(userEmail);
   const [courseBadge, setCourseBadge] = useState(0);
 
   // Badge courses disponibles (livreur uniquement)

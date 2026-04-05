@@ -26,15 +26,7 @@ export default function ClientHome({ user }) {
   const [loading, setLoading] = useState(true);
   const [showMessages, setShowMessages] = useState(false);
 
-  // Ping last_seen pour tracking clients en ligne
-  useEffect(() => {
-    if (!user?.email) return;
-    base44.auth.updateMe({ last_seen: new Date().toISOString() }).catch(() => {});
-    const interval = setInterval(() => {
-      base44.auth.updateMe({ last_seen: new Date().toISOString() }).catch(() => {});
-    }, 60000); // ping toutes les minutes
-    return () => clearInterval(interval);
-  }, [user?.email]);
+  // Présence gérée centralement par usePresence dans AppLayout
 
   // Demande géolocalisation
   useEffect(() => {

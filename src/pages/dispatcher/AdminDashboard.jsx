@@ -63,7 +63,7 @@ export default function AdminDashboard() {
         .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
       const livreursOnline = (livreurs || []).length;
       const livreursDisponibles = (livreurs || []).filter(l => !l.livreur_bloque).length;
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const fiveMinAgo = new Date(Date.now() - 3 * 60 * 1000); // 3 minutes = 2x heartbeat (30s) + marge
       const onlineClients = (allClients || []).filter(c => c.last_seen && new Date(c.last_seen) > fiveMinAgo);
       const clientsOnline = onlineClients.length;
       const totalClients = (allClients || []).length;
