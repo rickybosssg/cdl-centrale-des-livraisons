@@ -40,7 +40,7 @@ export default function GestionProfils() {
   const [assignProfile, setAssignProfile] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [logs, setLogs] = useState([]);
-  const [tab, setTab] = useState('pending'); // 'pending', 'validated', 'none'
+  const [tab, setTab] = useState('pending'); // 'pending', 'validated', 'refused', 'none', 'clients'
 
   useEffect(() => {
     const load = async () => {
@@ -391,6 +391,16 @@ export default function GestionProfils() {
           >
             🔹 Sans demande active ({filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email && ['en_attente','incomplet'].includes(p.status)).length === 0).length})
           </button>
+          <button
+            onClick={() => setTab('clients')}
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              tab === 'clients'
+                ? 'border-cyan-500 text-cyan-600'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            👤 Clients ({filteredUsers.filter(u => allProfiles.some(p => p.user_email === u.email && p.profile_type === 'client')).length})
+          </button>
         </div>
       </div>
 
@@ -557,7 +567,7 @@ export default function GestionProfils() {
               {filteredUsers.filter(u => allProfiles.filter(p => p.user_email === u.email && ['en_attente','incomplet'].includes(p.status)).length === 0).map(user => {
                 const userProfs = allProfiles.filter(p => p.user_email === user.email);
                 return (
-                <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/admin/profil/${user.id}`)}>
+                <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/admin/profil/${user.id}`)}>  
                   <CardContent className="p-3 flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 flex-shrink-0">
                       {user.full_name?.charAt(0) || "?"}
@@ -577,6 +587,68 @@ export default function GestionProfils() {
               })}
             </div>
           )}
+
+          {/* Onglet : Clients */}
+          {tab === 'clients' && (() => {
+            const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const clientUsers = filteredUsers.filter(u => allProfiles.some(p => p.user_email === u.email && p.profile_type === 'client'));
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-cyan-700 font-medium">Affichage : {clientUsers.length} client(s)</p>
+                  <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
+                    <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+                    {clientUsers.filter(u => u.last_seen && new Date(u.last_seen) > fiveMinAgo).length} en ligne
+                  </div>
+                </div>
+                {clientUsers.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground py-8">Aucun client trouvé</p>
+                )}
+                {clientUsers.map(user => {
+                  const isOnline = user.last_seen && new Date(user.last_seen) > fiveMinAgo;
+                  const clientProfile = allProfiles.find(p => p.user_email === user.email && p.profile_type === 'client');
+                  return (
+                    <Card key={user.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/admin/profil/${user.id}`)}>  
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex-shrink-0">
+                            <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center font-bold text-cyan-700">
+                              {user.full_name?.charAt(0) || "?"}
+                            </div>
+                            {isOnline && <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-500 border-2 border-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-sm">{user.full_name}</p>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                isOnline ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {isOnline ? '🟢 En ligne' : '⚫ Hors ligne'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{user.email}</p>
+                            <p className="text-xs text-muted-foreground">{user.telephone || '—'}</p>
+                            <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
+                              <span>📅 Inscrit {moment(user.created_date).format('DD/MM/YYYY')}</span>
+                              {user.last_seen && <span>🕐 Actif {moment(user.last_seen).fromNow()}</span>}
+                            </div>
+                            {clientProfile?.status && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-1 inline-block ${
+                                clientProfile.status === 'actif' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                👤 Profil {clientProfile.status}
+                              </span>
+                            )}
+                          </div>
+                          <Eye className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 

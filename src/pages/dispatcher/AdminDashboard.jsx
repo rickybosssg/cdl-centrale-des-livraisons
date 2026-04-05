@@ -19,6 +19,8 @@ export default function AdminDashboard() {
     livreursOnline: 0,
     livreursDisponibles: 0,
     clientsOnline: 0,
+    totalClients: 0,
+    clientsNewToday: 0,
     coursesEnAttente: 0,
     newUsers: 0,
     pendingRequests: 0,
@@ -64,6 +66,8 @@ export default function AdminDashboard() {
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
       const onlineClients = (allClients || []).filter(c => c.last_seen && new Date(c.last_seen) > fiveMinAgo);
       const clientsOnline = onlineClients.length;
+      const totalClients = (allClients || []).length;
+      const clientsNewToday = (allClients || []).filter(c => new Date(c.created_date).toDateString() === today).length;
       const coursesEnAttente = (courses || []).filter(c => c.statut === 'en_attente').length;
 
       // Calcul zones
@@ -109,6 +113,8 @@ export default function AdminDashboard() {
         newUsers: newUsersData.length,
         pendingRequests: pendingCount,
         totalCourses,
+        totalClients,
+        clientsNewToday,
         totalRevenuCDL: Math.round(totalRevenuCDL),
         totalPartenairesActifs: partenairesActifs.length,
         revenuAbonnements,
@@ -258,6 +264,37 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground mt-1">Clients en ligne</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Section Statistiques Clients */}
+      <div className="px-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">👤 Statistiques clients</p>
+        <div className="grid grid-cols-3 gap-2">
+          <Card className="border-l-4 border-l-blue-400">
+            <CardContent className="p-3">
+              <p className="text-2xl font-bold text-blue-600">{kpis.totalClients}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Total clients</p>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-green-400">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+                <p className="text-2xl font-bold text-green-600">{kpis.clientsOnline}</p>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">En ligne (5min)</p>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-purple-400">
+            <CardContent className="p-3">
+              <p className="text-2xl font-bold text-purple-600">{kpis.clientsNewToday}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Nouveaux/jour</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="px-4 grid grid-cols-2 gap-3">
         <Card className="border-l-4 border-l-purple-500">
           <CardContent className="p-4">
             <p className="text-3xl font-bold text-purple-600">{kpis.newUsers}</p>
