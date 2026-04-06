@@ -51,15 +51,7 @@ const NAV_ITEMS = {
 };
 
 export default function AppLayout({ userRole, userEmail }) {
-  // ⚠️ GUARD STRICTE : Aucun hook ne s'exécute si données incomplètes
-  if (!userEmail || !userRole) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
-
+  // ⚠️ Tous les hooks TOUJOURS appelés en premier (Rules of Hooks)
   const location = useLocation();
   const navigate = useNavigate();
   const { scrollContainerRef, isRootTab } = useTabNavigation();
@@ -91,6 +83,15 @@ export default function AppLayout({ userRole, userEmail }) {
     });
     return () => { clearInterval(interval); if (unsub) unsub(); };
   }, [userRole]);
+
+  // Guard post-hooks
+  if (!userEmail || !userRole) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
