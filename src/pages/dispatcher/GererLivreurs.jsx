@@ -75,12 +75,15 @@ export default function GererLivreurs() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const loadData = async () => {
-    const [livreursPurs, paiementsData, me] = await Promise.all([
+    const [livreursRes, paiementsRes, meRes] = await Promise.allSettled([
       base44.entities.User.filter({ user_type: "livreur" }),
       base44.entities.PaiementCommission.list("-created_date", 200),
       base44.auth.me(),
     ]);
-    // Ne garder que les vrais livreurs (user_type livreur ou user_roles contient livreur)
+    const livreursPurs = livreursRes.status === 'fulfilled' ? livreursRes.value : [];
+    const paiementsData = paiementsRes.status === 'fulfilled' ? paiementsRes.value : [];
+    const me = meRes.status === 'fulfilled' ? meRes.value : null;
+
     const tousLivreurs = livreursPurs.filter(u => {
       if (u.user_type === 'livreur') return true;
       if (u.user_roles) {
@@ -90,7 +93,7 @@ export default function GererLivreurs() {
     });
     setLivreurs(tousLivreurs);
     setPaiements(paiementsData);
-    setAdmin(me);
+    if (me) setAdmin(me);
     setLoading(false);
   };
 
