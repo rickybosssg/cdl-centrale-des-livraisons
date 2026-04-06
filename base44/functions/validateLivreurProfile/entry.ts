@@ -16,47 +16,55 @@ Deno.serve(async (req) => {
     }
 
     // Récupérer le profil
-    const profiles = await base44.asServiceRole.entities.UserProfile.filter({
-      id: profile_id,
-    });
-
+    const profiles = await base44.asServiceRole.entities.UserProfile.filter({ id: profile_id });
     if (profiles.length === 0) {
       return Response.json({ error: 'Profile not found' }, { status: 404 });
     }
-
     const profile = profiles[0];
 
     if (action === 'approve') {
-      // Marquer comme validé
+      const now = new Date().toISOString();
+
+      // 1. Valider le UserProfile
       await base44.asServiceRole.entities.UserProfile.update(profile_id, {
         status: 'actif',
-        validated_at: new Date().toISOString(),
+        validated_at: now,
         validated_by: user.email,
+        refusal_reason: null,
       });
 
-      // Pour livreur, créer l'entité Livreur
+      // 2. SYNCHRONISATION CRITIQUE — mettre à jour l'entité User
       if (profile.profile_type === 'livreur') {
         try {
-          const data = JSON.parse(profile.data_json || '{}');
-          const existingLivreur = await base44.asServiceRole.entities.User.filter({
-            email: profile.user_email,
-            user_type: 'livreur',
-          });
+          const users = await base44.asServiceRole.entities.User.filter({ email: profile.user_email });
+          if (users.length > 0) {
+            const u = users[0];
+            const data = (() => { try { return JSON.parse(profile.data_json || '{}'); } catch (_) { return {}; } })();
 
-          if (existingLivreur.length === 0) {
-            // Créer enregistrement complet Livreur
-            await base44.asServiceRole.functions.invoke('createClientOnUserCreation', {
-              user_email: profile.user_email,
+            const updateData = {
               user_type: 'livreur',
-              data,
-            });
+              statut_validation_livreur: 'valide',
+              profil_valide: true,
+              actif: true,
+              date_validation: now,
+            };
+
+            // Copier téléphone / quartier / moyen_deplacement depuis data_json si manquants sur User
+            if (!u.telephone && data.telephone) updateData.telephone = data.telephone;
+            if (!u.quartier && data.quartier) updateData.quartier = data.quartier;
+            if (!u.moyen_deplacement && data.moyen_deplacement) updateData.moyen_deplacement = data.moyen_deplacement;
+
+            await base44.asServiceRole.entities.User.update(u.id, updateData);
+            console.log(`[validateLivreurProfile] User synchronisé: ${profile.user_email} → user_type=livreur, statut_validation_livreur=valide`);
+          } else {
+            console.warn(`[validateLivreurProfile] User introuvable pour ${profile.user_email}`);
           }
         } catch (e) {
-          console.warn('[validateLivreurProfile] Erreur création livreur (non bloquant):', e.message);
+          console.error('[validateLivreurProfile] Erreur synchro User:', e.message);
         }
       }
 
-      // Notifier l'utilisateur
+      // 3. Notifier l'utilisateur
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: profile.user_email,
         destinataire_role: profile.profile_type,
@@ -67,6 +75,7 @@ Deno.serve(async (req) => {
       });
 
       return Response.json({ success: true, message: 'Profile approved' });
+
     } else {
       // Rejeter
       await base44.asServiceRole.entities.UserProfile.update(profile_id, {
@@ -75,6 +84,20 @@ Deno.serve(async (req) => {
         refused_at: new Date().toISOString(),
         refused_by: user.email,
       });
+
+      // Révoquer la validation livreur sur l'entité User si applicable
+      if (profile.profile_type === 'livreur') {
+        try {
+          const users = await base44.asServiceRole.entities.User.filter({ email: profile.user_email });
+          if (users.length > 0) {
+            await base44.asServiceRole.entities.User.update(users[0].id, {
+              statut_validation_livreur: 'refuse',
+              profil_valide: false,
+              motif_refus: refusal_reason || 'Documents insuffisants',
+            });
+          }
+        } catch (_) {}
+      }
 
       // Notifier l'utilisateur
       await base44.asServiceRole.entities.Notification.create({

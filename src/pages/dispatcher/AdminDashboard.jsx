@@ -41,6 +41,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [demandeBedouCount, setDemandeBedouCount] = useState(0);
   const [zonesData, setZonesData] = useState([]);
+  const [syncingLivreurs, setSyncingLivreurs] = useState(false);
 
   const loadData = async () => {
     try {
@@ -353,7 +354,7 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      <div className="px-4">
+      <div className="px-4 space-y-2">
         <Button
           variant="destructive"
           className="w-full text-xs h-9"
@@ -361,6 +362,28 @@ export default function AdminDashboard() {
           disabled={resetting}
         >
           {resetting ? "Réinitialisation..." : "🔄 Réinitialiser"}
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full text-xs h-9 border-amber-300 text-amber-700 hover:bg-amber-50"
+          onClick={async () => {
+            setSyncingLivreurs(true);
+            try {
+              const res = await base44.functions.invoke('syncLivreurProfiles', {});
+              if (res.data?.success) {
+                toast.success(`✅ Sync terminée : ${res.data.synced} livreur(s) synchronisé(s)`);
+                loadData();
+              } else {
+                toast.error('Erreur sync : ' + (res.data?.error || 'inconnue'));
+              }
+            } catch (e) {
+              toast.error('Erreur : ' + e.message);
+            }
+            setSyncingLivreurs(false);
+          }}
+          disabled={syncingLivreurs}
+        >
+          {syncingLivreurs ? '⏳ Synchronisation...' : '🚚 Sync livreurs validés (correction rétroactive)'}
         </Button>
       </div>
 

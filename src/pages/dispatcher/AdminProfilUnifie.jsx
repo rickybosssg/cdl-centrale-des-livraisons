@@ -210,10 +210,7 @@ export default function AdminProfilUnifie() {
     if (!user.telephone) { toast.error("Téléphone manquant, validation impossible"); return; }
     setProcessing(true);
     const now = new Date().toISOString();
-    await base44.entities.User.update(user.id, {
-      statut_validation_livreur: "valide", profil_valide: true, actif: true,
-      date_validation: now,
-    });
+
     // Synchroniser le UserProfile livreur
     const livreurProf = profiles.find(p => p.profile_type === "livreur");
     if (livreurProf) {
@@ -221,12 +218,16 @@ export default function AdminProfilUnifie() {
         status: "actif", validated_at: now, validated_by: admin.email, refusal_reason: null,
       });
     }
-    await base44.entities.Notification.create({
-      destinataire_email: user.email, destinataire_role: "livreur",
-      titre: "✅ Profil livreur validé !",
-      message: `Félicitations ${user.full_name} ! Votre profil a été validé par l'administration CDL. Vous pouvez maintenant recevoir des courses. 🛵`,
-      type: "success", lue: false,
+
+    // CRITIQUE : mettre à jour l'entité User pour que le livreur soit visible dans GererLivreurs et le dispatch
+    await base44.entities.User.update(user.id, {
+      user_type: 'livreur',
+      statut_validation_livreur: "valide",
+      profil_valide: true,
+      actif: true,
+      date_validation: now,
     });
+
     toast.success("Livreur validé !");
     await loadAll();
     setProcessing(false);
@@ -235,9 +236,6 @@ export default function AdminProfilUnifie() {
   const refuserLivreur = async () => {
     setProcessing(true);
     const motif = motifRefus || "Documents insuffisants ou illisibles";
-    await base44.entities.User.update(user.id, {
-      statut_validation_livreur: "refuse", profil_valide: false, motif_refus: motif,
-    });
     // Synchroniser le UserProfile livreur
     const livreurProf = profiles.find(p => p.profile_type === "livreur");
     if (livreurProf) {
@@ -245,13 +243,10 @@ export default function AdminProfilUnifie() {
         status: "refuse", refusal_reason: motif,
       });
     }
-    await base44.entities.Notification.create({
-      destinataire_email: user.email, destinataire_role: "livreur",
-      titre: "❌ Dossier refusé",
-      message: `Votre dossier a été refusé. Motif : ${motif}. Contactez-nous pour corriger votre dossier.`,
-      type: "danger", lue: false,
+    // Mettre à jour User en cohérence
+    await base44.entities.User.update(user.id, {
+      statut_validation_livreur: "refuse", profil_valide: false, motif_refus: motif,
     });
-    toast.success("Livreur refusé");
     setMotifRefus("");
     await loadAll();
     setProcessing(false);
