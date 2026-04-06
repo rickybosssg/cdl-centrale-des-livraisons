@@ -89,6 +89,7 @@ import CreerPublicite from './pages/annonceur/CreerPublicite';
 import MyReferral from './pages/MyReferral';
 import GestionSignalements from './pages/dispatcher/GestionSignalements';
 import PlayStoreChecklist from './pages/dispatcher/PlayStoreChecklist';
+import PlayStoreValidationFinal from './pages/dispatcher/PlayStoreValidationFinal';
 import SpaceSelector from './pages/SpaceSelector';
 import StaffGuard from './components/StaffGuard';
 import StaffDashboard from './pages/staff/StaffDashboard';
@@ -340,6 +341,7 @@ const AuthenticatedApp = () => {
           <Route path="/test-mall-e2e" element={<TestMallE2E />} />
           <Route path="/gestion-signalements" element={<GestionSignalements />} />
           <Route path="/playstore-checklist" element={<PlayStoreChecklist />} />
+          <Route path="/playstore-validation" element={<PlayStoreValidationFinal />} />
         </Route>
       </Route>
 
