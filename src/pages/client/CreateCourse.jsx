@@ -412,9 +412,8 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
-      {/* NEW: Code promo input */}
-      {!form.code_promo && (
-        <Card className="border-green-200 bg-green-50/50">
+      {/* Code promo */}
+      <Card className="border-green-200 bg-green-50/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <span className="text-lg">🎁</span>Code promo (optionnel)
@@ -424,14 +423,13 @@ export default function CreateCourse() {
             <Input
               placeholder="Entrez votre code promo pour 15% de réduction"
               value={form.code_promo}
-              onChange={(e) => setForm({ ...form, code_promo: e.target.value.toUpperCase() })}
+              onChange={(e) => setForm(f => ({ ...f, code_promo: e.target.value.toUpperCase() }))}
             />
             {isFirstCourse && (
               <p className="text-xs text-green-700">✨ Vous pouvez bénéficier de 15% de réduction sur votre première course !</p>
             )}
           </CardContent>
         </Card>
-      )}
 
       {/* Prix */}
       <Card>

@@ -121,7 +121,8 @@ export default function CourseTracking() {
     );
   }
 
-  const isAssigned = !!livreur && course.statut !== "en_attente";
+  // Fix: use livreur_email directly — don't depend on loaded livreur obj which can be null even if assigned
+  const isAssigned = !!(course.livreur_email) && course.statut !== "en_attente";
   const isDelivered = course.statut === "livree";
 
   const FREE_CANCEL_STATUTS = ["en_attente", "assignee_attente", "aucun_livreur"];
@@ -244,19 +245,19 @@ export default function CourseTracking() {
               <CardContent className="p-4 space-y-3">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">Livreur assigné</p>
-                  <p className="font-bold text-sm">{livreur?.full_name || "Unknown"}</p>
-                  <p className="text-xs text-muted-foreground">{livreur?.telephone}</p>
+                  <p className="font-bold text-sm">{livreur?.full_name || course.livreur_name || course.livreur_email?.split('@')[0] || "Livreur"}</p>
+                  <p className="text-xs text-muted-foreground">{livreur?.telephone || course.telephone_livreur}</p>
                 </div>
                 <div className="flex gap-2">
-                  {livreur?.telephone && (
-                    <a href={`tel:${livreur.telephone}`} className="flex-1">
+                  {(livreur?.telephone || course.telephone_livreur) && (
+                    <a href={`tel:${livreur?.telephone || course.telephone_livreur}`} className="flex-1">
                       <button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/5">
                         <Phone className="h-3.5 w-3.5" /> Appeler
                       </button>
                     </a>
                   )}
-                  {livreur?.telephone && (
-                    <a href={`https://wa.me/${livreur.telephone?.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" className="flex-1">
+                  {(livreur?.telephone || course.telephone_livreur) && (
+                    <a href={`https://wa.me/${(livreur?.telephone || course.telephone_livreur)?.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" className="flex-1">
                       <button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-green-300 text-green-700 text-xs font-medium hover:bg-green-50">
                         <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
                       </button>
@@ -268,7 +269,7 @@ export default function CourseTracking() {
           </>
         )}
 
-        {/* Assigné mais position indisponible */}
+        {/* Assigné mais position indisponible OU livreur en cours de chargement */}
         {isAssigned && !course.livreur_lat && (
           <Card className="border-blue-200 bg-blue-50">
             <CardContent className="p-4 flex gap-3">

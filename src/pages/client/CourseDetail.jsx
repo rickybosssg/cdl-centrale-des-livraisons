@@ -284,22 +284,6 @@ export default function CourseDetail() {
         <PaiementMobile course={course} onConfirmed={() => setCourse(prev => ({ ...prev, statut_paiement: "paye" }))} />
       )}
 
-      {/* Bouton annulation avec frais - course acceptée mais pas arrivée */}
-      {course.statut === "acceptee" && course.livreur_email && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4">
-            <p className="text-xs text-red-700 mb-3">Vous pouvez annuler cette course, mais 50% du prix seront prélevés (livreur accepté).</p>
-            <Button
-              variant="destructive"
-              className="w-full"
-              onClick={() => setCancelDialog(true)}
-            >
-              ❌ Annuler la course avec frais
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Appel livreur */}
       {course.livreur_email && ["acceptee", "en_cours"].includes(course.statut) && course.telephone_livreur && (
         <Card className="border-primary/20 bg-primary/5">
@@ -397,17 +381,24 @@ export default function CourseDetail() {
       {course.statut === "livree" && course.livreur_email && !course.note_donnee && (
         <NotationCourse course={course} onDone={() => setCourse(prev => ({ ...prev, note_donnee: true }))} />
       )}
-      {/* Bouton annulation avec frais - course acceptée mais pas arrivée */}
+
+      {/* ✅ BOUTON ANNULATION UNIFIÉ — logique métier CDL */}
+      {["en_attente", "assignee_attente", "aucun_livreur"].includes(course.statut) && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs text-green-700 font-medium">✅ Annulation gratuite — aucun frais</p>
+            <Button variant="destructive" className="w-full" onClick={() => setCancelDialog(true)}>
+              ❌ Annuler ma course
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       {course.statut === "acceptee" && course.livreur_email && (
         <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4">
-            <p className="text-xs text-red-700 mb-3">Vous pouvez annuler cette course, mais 50% du prix seront prélevés (livreur accepté).</p>
-            <Button
-              variant="destructive"
-              className="w-full"
-              onClick={() => setCancelDialog(true)}
-            >
-              ❌ Annuler la course avec frais
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs text-red-700">⚠️ Le livreur a accepté. 50% du montant seront prélevés si vous annulez.</p>
+            <Button variant="destructive" className="w-full" onClick={() => setCancelDialog(true)}>
+              ❌ Annuler la course (frais appliqués)
             </Button>
           </CardContent>
         </Card>
