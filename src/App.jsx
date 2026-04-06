@@ -1,5 +1,21 @@
-import { useEffect, useState, Component } from 'react';
+import { useEffect, useState, useRef, Component } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+// ─── Capturer la route AVANT tout rendu React ─────────────────────────────────
+// Si l'app est ouverte depuis une notification (app fermée), l'URL contient
+// ?notif_route=/course/xxx → on la mémorise immédiatement en sessionStorage
+(function captureNotifRoute() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const r = p.get('notif_route');
+    if (r && r.startsWith('/')) {
+      sessionStorage.setItem('cdl_notif_route', r);
+      // Nettoyer l'URL proprement sans recharger la page
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+    }
+  } catch (_) {}
+})();
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
@@ -110,29 +126,41 @@ function AppLayoutWithUser() {
   return <AppLayoutWrapper user={user} />;
 }
 
-// Deep link FCM (inside Router)
+// ─── Deep link FCM — Handler unique, 3 cas couverts ─────────────────────────
 function FcmDeepLinkHandler() {
   const navigate = useNavigate();
+  const navigated = useRef(false);
+
   useEffect(() => {
-    // App fermée: URL param
-    const params = new URLSearchParams(window.location.search);
-    const notifRoute = params.get('notif_route');
-    if (notifRoute && notifRoute.startsWith('/')) {
-      setTimeout(() => navigate(notifRoute), 500);
+    // CAS 1 : App fermée → route stockée avant le mount (voir captureNotifRoute)
+    const pending = sessionStorage.getItem('cdl_notif_route');
+    if (pending && !navigated.current) {
+      sessionStorage.removeItem('cdl_notif_route');
+      navigated.current = true;
+      // requestAnimationFrame garantit que le Router est prêt avant navigate
+      requestAnimationFrame(() => navigate(pending, { replace: true }));
     }
-    // App background: message SW
+
+    // CAS 2 : App background → SW envoie postMessage au client actif
     const onSwMsg = (event) => {
       if (event.data?.type === 'CDL_NOTIFICATION_CLICK' && event.data.route) {
-        navigate(event.data.route);
+        navigate(event.data.route, { replace: false });
       }
     };
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', onSwMsg);
     }
+
+    // CAS 3 : App ouverte (foreground) → géré via TopNotificationContext (toast)
+    // La navigation foreground se fait via le clic sur le toast uniquement
+
     return () => {
-      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onSwMsg);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', onSwMsg);
+      }
     };
   }, []);
+
   return null;
 }
 
