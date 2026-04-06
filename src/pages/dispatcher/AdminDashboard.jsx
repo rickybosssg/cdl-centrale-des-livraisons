@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2, Activity } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2, Activity, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -486,6 +486,13 @@ export default function AdminDashboard() {
             </Button>
             <AdminBadge count={demandeBedouCount} />
           </div>
+        </Link>
+
+        <Link to="/playstore-checklist">
+          <Button className="w-full justify-start gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold">
+            <ClipboardCheck className="h-4 w-4" />
+            ✅ Checklist Play Store
+          </Button>
         </Link>
       </div>
 

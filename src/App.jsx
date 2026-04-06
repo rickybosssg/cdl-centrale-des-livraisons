@@ -104,6 +104,7 @@ import DashboardAnnonceur from './pages/annonceur/DashboardAnnonceur';
 import CreerPublicite from './pages/annonceur/CreerPublicite';
 import MyReferral from './pages/MyReferral';
 import GestionSignalements from './pages/dispatcher/GestionSignalements';
+import PlayStoreChecklist from './pages/dispatcher/PlayStoreChecklist';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -333,7 +334,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin/profil/:userId" element={<AdminProfilUnifie />} />
           <Route path="/test-mall-e2e" element={<TestMallE2E />} />
           <Route path="/gestion-signalements" element={<GestionSignalements />} />
-          <Route path="/gestion-signalements" element={<GestionSignalements />} />
+          <Route path="/playstore-checklist" element={<PlayStoreChecklist />} />
         </Route>
       </Route>
 
