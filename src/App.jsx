@@ -160,24 +160,19 @@ function FcmDeepLinkHandler() {
     // CAS 3 : App ouverte (foreground) → Firebase onMessage
     let unsubFcm = null;
     import('./lib/pushNotifications').then(({ onForegroundMessage }) => {
-      try {
-        unsubFcm = onForegroundMessage((payload) => {
-          const data = payload.data || {};
-          const title = payload.notification?.title || data.title || 'CDL';
-          const body = payload.notification?.body || data.body || '';
-          import('sonner').then(({ toast }) => {
-            toast(title, {
-              description: body,
-              duration: 8000,
-              action: data.route ? {
-                label: 'Voir',
-                onClick: () => navigate(data.route),
-              } : undefined,
-            });
+      onForegroundMessage((payload) => {
+        const data = payload.data || {};
+        const title = payload.notification?.title || data.title || 'CDL';
+        const body = payload.notification?.body || data.body || '';
+        import('sonner').then(({ toast }) => {
+          toast(title, {
+            description: body,
+            duration: 8000,
+            action: data.route ? { label: 'Voir', onClick: () => navigate(data.route) } : undefined,
           });
-          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
         });
-      } catch (_) {}
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      }).then(unsub => { unsubFcm = unsub; }).catch(() => {});
     }).catch(() => {});
 
     return () => {

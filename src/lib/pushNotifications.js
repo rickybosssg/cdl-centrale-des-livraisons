@@ -1,5 +1,5 @@
-import { initializeApp, getApps, deleteApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { initializeApp, getApps } from 'firebase/app';
+import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
 
 export const FIREBASE_CONFIG = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -35,31 +35,18 @@ function getFirebaseApp() {
   return _app;
 }
 
-function isFirebaseMessagingSupported() {
+async function getFirebaseMessagingAsync() {
   try {
-    return (
-      typeof window !== 'undefined' &&
-      'serviceWorker' in navigator &&
-      'PushManager' in window &&
-      'Notification' in window &&
-      typeof indexedDB !== 'undefined'
-    );
-  } catch (_) {
-    return false;
-  }
-}
-
-function getFirebaseMessaging() {
-  if (!isFirebaseMessagingSupported()) return null;
-  if (!_messaging) {
-    try {
+    const supported = await isSupported();
+    if (!supported) return null;
+    if (!_messaging) {
       _messaging = getMessaging(getFirebaseApp());
-    } catch (err) {
-      console.debug('[FCM] getMessaging error:', err?.message);
-      return null;
     }
+    return _messaging;
+  } catch (err) {
+    console.debug('[FCM] messaging not supported:', err?.message);
+    return null;
   }
-  return _messaging;
 }
 
 export async function requestNotificationPermission() {
@@ -75,13 +62,14 @@ export function isNotificationGranted() {
 }
 
 export async function registerFcmToken() {
-  if (!isFirebaseMessagingSupported()) return null;
   if (!isNotificationGranted()) return null;
-  if (!VAPID_KEY || VAPID_KEY === 'undefined') {
-    console.error('[FCM] VITE_FIREBASE_VAPID_KEY manquant');
-    return null;
-  }
   try {
+    const messaging = await getFirebaseMessagingAsync();
+    if (!messaging) return null;
+    if (!VAPID_KEY || VAPID_KEY === 'undefined') {
+      console.error('[FCM] VITE_FIREBASE_VAPID_KEY manquant');
+      return null;
+    }
     const params = new URLSearchParams({
       apiKey: FIREBASE_CONFIG.apiKey || '',
       authDomain: FIREBASE_CONFIG.authDomain,
@@ -92,27 +80,22 @@ export async function registerFcmToken() {
     });
     const reg = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${params}`);
     await navigator.serviceWorker.ready;
-    console.log('[FCM] Service Worker actif, génération du token...');
-    const token = await getToken(getFirebaseMessaging(), {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: reg,
-    });
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
     if (token) console.log('[FCM] Token obtenu:', token.substring(0, 20) + '...');
-    else console.warn('[FCM] Aucun token retourné');
     return token || null;
   } catch (err) {
-    console.warn('[FCM] Erreur token:', err);
+    console.debug('[FCM] registerFcmToken error:', err?.message);
     return null;
   }
 }
 
-export function onForegroundMessage(callback) {
+export async function onForegroundMessage(callback) {
   try {
-    const messaging = getFirebaseMessaging();
+    const messaging = await getFirebaseMessagingAsync();
     if (!messaging) return () => {};
     return onMessage(messaging, callback);
   } catch (err) {
-    console.warn('FCM foreground listener error:', err);
+    console.debug('[FCM] foreground listener error:', err?.message);
     return () => {};
   }
 }
