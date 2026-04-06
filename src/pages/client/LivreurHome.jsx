@@ -222,7 +222,7 @@ export default function LivreurHome({ user }) {
 
   return (
     <div className="space-y-5 pb-20">
-      <NewCourseAlert course={alertCourse} onClose={() => setAlertCourse(null)} />
+      <NewCourseAlert course={alertCourse} onClose={() => setAlertCourse(null)} user={user} />
       {GpsBandeau}
       
       {user && <PubliciteHomeBanner userRole="livreur" userId={user.id} userEmail={user.email} />}
