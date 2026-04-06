@@ -1,0 +1,206 @@
+{
+  "name": "StaffPermission",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "string",
+      "title": "ID utilisateur"
+    },
+    "userEmail": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "userName": {
+      "type": "string",
+      "title": "Nom utilisateur"
+    },
+    "isStaff": {
+      "type": "boolean",
+      "title": "Est personnel CDL",
+      "default": false
+    },
+    "staffAccessActive": {
+      "type": "boolean",
+      "title": "Acc\u00e8s actif",
+      "default": false
+    },
+    "roleLabel": {
+      "type": "string",
+      "title": "R\u00f4le interne",
+      "enum": [
+        "Administrateur principal",
+        "Gestionnaire Bedou",
+        "Validateur Livreurs",
+        "Dispatcher Manuel",
+        "Support Client",
+        "Superviseur Publicit\u00e9s & Commerciaux",
+        "Admin secondaire"
+      ]
+    },
+    "canManageBedou": {
+      "type": "boolean",
+      "default": false
+    },
+    "canApproveTopups": {
+      "type": "boolean",
+      "default": false
+    },
+    "canRejectTopups": {
+      "type": "boolean",
+      "default": false
+    },
+    "canApproveWithdrawals": {
+      "type": "boolean",
+      "default": false
+    },
+    "canRejectWithdrawals": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewBedouHistory": {
+      "type": "boolean",
+      "default": false
+    },
+    "canExportBedouData": {
+      "type": "boolean",
+      "default": false
+    },
+    "canAdjustBalanceManually": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewDriverRequests": {
+      "type": "boolean",
+      "default": false
+    },
+    "canValidateDrivers": {
+      "type": "boolean",
+      "default": false
+    },
+    "canRejectDrivers": {
+      "type": "boolean",
+      "default": false
+    },
+    "canSuspendDrivers": {
+      "type": "boolean",
+      "default": false
+    },
+    "canRequestMissingDriverDocs": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewDriverDocuments": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewPendingCourses": {
+      "type": "boolean",
+      "default": false
+    },
+    "canManualDispatch": {
+      "type": "boolean",
+      "default": false
+    },
+    "canReassignCourse": {
+      "type": "boolean",
+      "default": false
+    },
+    "canCancelAssignment": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewDriverLocations": {
+      "type": "boolean",
+      "default": false
+    },
+    "canContactDriver": {
+      "type": "boolean",
+      "default": false
+    },
+    "canContactClient": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewComplaints": {
+      "type": "boolean",
+      "default": false
+    },
+    "canRespondComplaints": {
+      "type": "boolean",
+      "default": false
+    },
+    "canEscalateComplaints": {
+      "type": "boolean",
+      "default": false
+    },
+    "canCloseComplaints": {
+      "type": "boolean",
+      "default": false
+    },
+    "canTrackOrders": {
+      "type": "boolean",
+      "default": false
+    },
+    "canManageAds": {
+      "type": "boolean",
+      "default": false
+    },
+    "canApproveAds": {
+      "type": "boolean",
+      "default": false
+    },
+    "canRejectAds": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewPromoStats": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewUsers": {
+      "type": "boolean",
+      "default": false
+    },
+    "canBlockUsers": {
+      "type": "boolean",
+      "default": false
+    },
+    "canUnblockUsers": {
+      "type": "boolean",
+      "default": false
+    },
+    "canDeleteUsers": {
+      "type": "boolean",
+      "default": false
+    },
+    "canViewAuditLogs": {
+      "type": "boolean",
+      "default": false
+    },
+    "delegatedByAdminId": {
+      "type": "string",
+      "title": "D\u00e9l\u00e9gu\u00e9 par (ID admin)"
+    },
+    "delegatedByAdminEmail": {
+      "type": "string",
+      "title": "D\u00e9l\u00e9gu\u00e9 par (email)"
+    },
+    "delegatedAt": {
+      "type": "string",
+      "title": "Date d\u00e9l\u00e9gation"
+    },
+    "isActive": {
+      "type": "boolean",
+      "title": "Acc\u00e8s actif",
+      "default": true
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "userEmail",
+    "roleLabel"
+  ]
+}

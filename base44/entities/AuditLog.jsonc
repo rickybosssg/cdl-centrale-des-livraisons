@@ -1,0 +1,76 @@
+{
+  "name": "AuditLog",
+  "type": "object",
+  "properties": {
+    "actorUserId": {
+      "type": "string",
+      "title": "ID acteur"
+    },
+    "actorName": {
+      "type": "string",
+      "title": "Nom acteur"
+    },
+    "actorEmail": {
+      "type": "string",
+      "title": "Email acteur"
+    },
+    "actorRoleLabel": {
+      "type": "string",
+      "title": "R\u00f4le acteur"
+    },
+    "actionType": {
+      "type": "string",
+      "title": "Type d'action",
+      "enum": [
+        "BEDOU_TOPUP_APPROVED",
+        "BEDOU_TOPUP_REJECTED",
+        "BEDOU_WITHDRAWAL_APPROVED",
+        "BEDOU_WITHDRAWAL_REJECTED",
+        "BEDOU_BALANCE_ADJUSTED",
+        "DRIVER_VALIDATED",
+        "DRIVER_REJECTED",
+        "DRIVER_SUSPENDED",
+        "DRIVER_REACTIVATED",
+        "COURSE_ASSIGNED",
+        "COURSE_REASSIGNED",
+        "COURSE_UNASSIGNED",
+        "COMPLAINT_RESPONDED",
+        "COMPLAINT_ESCALATED",
+        "COMPLAINT_CLOSED",
+        "AD_APPROVED",
+        "AD_REJECTED",
+        "USER_BLOCKED",
+        "USER_UNBLOCKED",
+        "USER_DELETED",
+        "STAFF_CREATED",
+        "STAFF_MODIFIED",
+        "STAFF_REMOVED",
+        "STAFF_SUSPENDED"
+      ]
+    },
+    "targetType": {
+      "type": "string",
+      "title": "Type cible"
+    },
+    "targetId": {
+      "type": "string",
+      "title": "ID cible"
+    },
+    "targetName": {
+      "type": "string",
+      "title": "Nom cible"
+    },
+    "details": {
+      "type": "string",
+      "title": "D\u00e9tails"
+    },
+    "metadataJson": {
+      "type": "string",
+      "title": "M\u00e9tadonn\u00e9es (JSON)"
+    }
+  },
+  "required": [
+    "actorEmail",
+    "actionType"
+  ]
+}

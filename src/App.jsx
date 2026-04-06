@@ -89,6 +89,16 @@ import CreerPublicite from './pages/annonceur/CreerPublicite';
 import MyReferral from './pages/MyReferral';
 import GestionSignalements from './pages/dispatcher/GestionSignalements';
 import PlayStoreChecklist from './pages/dispatcher/PlayStoreChecklist';
+import SpaceSelector from './pages/SpaceSelector';
+import StaffGuard from './components/StaffGuard';
+import StaffDashboard from './pages/staff/StaffDashboard';
+import BedouManager from './pages/staff/BedouManager';
+import LivreurValidator from './pages/staff/LivreurValidator';
+import ManualDispatch from './pages/staff/ManualDispatch';
+import SupportClient from './pages/staff/SupportClient';
+import PubCommercial from './pages/staff/PubCommercial';
+import StaffAdmin from './pages/staff/StaffAdmin';
+import AuditLogs from './pages/staff/AuditLogs';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -330,6 +340,23 @@ const AuthenticatedApp = () => {
           <Route path="/test-mall-e2e" element={<TestMallE2E />} />
           <Route path="/gestion-signalements" element={<GestionSignalements />} />
           <Route path="/playstore-checklist" element={<PlayStoreChecklist />} />
+        </Route>
+      </Route>
+
+      {/* Espace sélecteur */}
+      <Route path="/espaces" element={<SpaceSelector />} />
+
+      {/* Staff CDL */}
+      <Route element={<AppLayoutWithUser />}>
+        <Route element={<StaffGuard />}>
+          <Route path="/staff" element={<StaffDashboard />} />
+          <Route path="/staff/bedou" element={<BedouManager />} />
+          <Route path="/staff/livreurs" element={<LivreurValidator />} />
+          <Route path="/staff/dispatch" element={<ManualDispatch />} />
+          <Route path="/staff/support" element={<SupportClient />} />
+          <Route path="/staff/pubs" element={<PubCommercial />} />
+          <Route path="/staff/admin" element={<StaffAdmin />} />
+          <Route path="/staff/audit" element={<AuditLogs />} />
         </Route>
       </Route>
 
