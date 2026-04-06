@@ -71,12 +71,13 @@ export default function MonBedou() {
   const handleRecharge = async () => {
     const montant = parseInt(form.montant);
     if (!montant || montant < 100) return toast.error("Montant minimum 100 F CFA");
+    if (!form.methode) return toast.error("Veuillez sélectionner une méthode");
+    if (!form.preuve) return toast.error("Veuillez ajouter une preuve de paiement");
+    // Vérifier taille max 5MB
+    if (form.preuve.size > 5 * 1024 * 1024) return toast.error("Image trop grande (max 5 MB)");
     setSubmitting(true);
-    let preuve_url = "";
-    if (form.preuve) {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file: form.preuve });
-      preuve_url = file_url;
-    }
+    const { file_url } = await base44.integrations.Core.UploadFile({ file: form.preuve });
+    const preuve_url = file_url;
     const res = await base44.functions.invoke('bedouEngine', {
       action: 'demande_recharge',
       montant,
@@ -285,9 +286,54 @@ export default function MonBedou() {
                 onChange={e => setForm({ ...form, numero_transaction: e.target.value })}
                 className="w-full mt-1 h-11 rounded-xl border border-input px-3 py-2 text-sm text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              </div>
-            <Button className="w-full h-12 font-semibold" onClick={handleRecharge} disabled={submitting || !form.montant}>
-              {submitting ? "Envoi en cours..." : `Envoyer la demande${bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ''}`}
+            </div>
+
+            {/* Preuve de paiement obligatoire */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Preuve de paiement * <span className="text-red-500">(obligatoire)</span></label>
+              {!form.preuve ? (
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors">
+                    <span className="text-2xl">📷</span>
+                    <span className="text-xs font-medium text-primary">Prendre une photo</span>
+                    <input
+                      type="file" accept="image/jpg,image/jpeg,image/png" capture="environment"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) setForm(prev => ({ ...prev, preuve: f })); }}
+                    />
+                  </label>
+                  <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-border hover:bg-muted/50 transition-colors">
+                    <span className="text-2xl">🖼️</span>
+                    <span className="text-xs font-medium">Depuis la galerie</span>
+                    <input
+                      type="file" accept="image/jpg,image/jpeg,image/png"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) setForm(prev => ({ ...prev, preuve: f })); }}
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div className="mt-1 relative rounded-xl overflow-hidden border-2 border-green-300">
+                  <img
+                    src={URL.createObjectURL(form.preuve)}
+                    alt="Preuve"
+                    className="w-full h-40 object-cover"
+                  />
+                  <button
+                    onClick={() => setForm(prev => ({ ...prev, preuve: null }))}
+                    className="absolute top-2 right-2 bg-red-600 text-white rounded-full h-7 w-7 flex items-center justify-center text-sm font-bold shadow"
+                  >
+                    ×
+                  </button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-green-600/90 text-white text-xs py-1 text-center font-medium">
+                    ✅ {form.preuve.name} ({(form.preuve.size / 1024).toFixed(0)} KB)
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Button className="w-full h-12 font-semibold" onClick={handleRecharge} disabled={submitting || !form.montant || !form.preuve}>
+              {submitting ? "Upload en cours..." : `Envoyer la demande${bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ''}`}
             </Button>
           </div>
         </div>

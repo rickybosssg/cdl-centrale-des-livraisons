@@ -215,7 +215,7 @@ export default function GestionBedou() {
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <p className="font-semibold text-sm truncate">{request.user_nom}</p>
+                <p className="font-semibold text-sm truncate">{request.user_nom}</p>              
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${cfg.bg}`}>
                   {cfg.label}
                 </span>
@@ -226,9 +226,17 @@ export default function GestionBedou() {
                 {type === "recharge" ? "🔄 Recharge" : "💸 Retrait"} • {moment(request.created_date).fromNow()}
               </p>
             </div>
-            <div className="text-right flex-shrink-0">
+            <div className="text-right flex-shrink-0 space-y-1">
               <p className="text-lg font-bold text-primary">{request.montant?.toLocaleString()} F</p>
               <p className="text-[10px] text-muted-foreground">{request.methode || "—"}</p>
+              {type === "recharge" && request.preuve_paiement && (
+                <button
+                  onClick={() => window.open(request.preuve_paiement, "_blank")}
+                  className="text-[10px] text-blue-600 underline"
+                >
+                  📷 Voir preuve
+                </button>
+              )}
             </div>
           </div>
 
@@ -383,6 +391,26 @@ export default function GestionBedou() {
                   {selectedRequest.type === "recharge" ? "🔄 Recharge" : "💸 Retrait"} • {moment(selectedRequest.created_date).format("DD/MM/YYYY HH:mm")}
                 </p>
               </div>
+
+              {/* Preuve de paiement */}
+              {selectedRequest?.type === "recharge" && selectedRequest?.preuve_paiement && (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold">Preuve de paiement</label>
+                  <div
+                    className="rounded-xl overflow-hidden border-2 border-blue-200 cursor-pointer"
+                    onClick={() => window.open(selectedRequest.preuve_paiement, "_blank")}
+                  >
+                    <img
+                      src={selectedRequest.preuve_paiement}
+                      alt="Preuve de paiement"
+                      className="w-full max-h-48 object-contain bg-gray-50"
+                    />
+                    <div className="bg-blue-50 text-blue-700 text-xs py-1.5 text-center font-medium">
+                      🔍 Cliquer pour agrandir
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-xs font-semibold">Commentaire (refus obligatoire)</label>
