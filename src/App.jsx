@@ -86,6 +86,7 @@ import Mall from './pages/Mall';
 import DashboardAnnonceur from './pages/annonceur/DashboardAnnonceur';
 import CreerPublicite from './pages/annonceur/CreerPublicite';
 import MyReferral from './pages/MyReferral';
+import GestionSignalements from './pages/dispatcher/GestionSignalements';
 
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
@@ -275,6 +276,8 @@ const AuthenticatedApp = () => {
           <Route path="/bedou-audit" element={<BedouAudit />} />
           <Route path="/admin/profil/:userId" element={<AdminProfilUnifie />} />
           <Route path="/test-mall-e2e" element={<TestMallE2E />} />
+          <Route path="/gestion-signalements" element={<GestionSignalements />} />
+          <Route path="/gestion-signalements" element={<GestionSignalements />} />
         </Route>
       </Route>
 

@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, MapPin, Phone, Package, User, Clock, Navigation, Map } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Package, Navigation, Map, AlertTriangle, RefreshCw } from "lucide-react";
 import NotationCourse from "../../components/NotationCourse";
 import MiniChat from "../../components/MiniChat";
 import MapSuivi from "../../components/MapSuivi";
 import CancelCourseDialog from "../../components/CancelCourseDialog";
+import ReportIssueModal from "../../components/ReportIssueModal";
 import PaiementMobile from "../../components/PaiementMobile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,26 +25,29 @@ export default function CourseDetail() {
   const [showPrixForm, setShowPrixForm] = useState(false);
   const [prixErreur, setPrixErreur] = useState("");
   const [cancelDialog, setCancelDialog] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
+
+  const load = useCallback(async (silent = false) => {
+    if (!id || id === ':id') { setLoading(false); return; }
+    if (!silent) setLoading(true); else setRefreshing(true);
+    const courses = await base44.entities.Course.filter({ id });
+    if (courses.length > 0) setCourse(courses[0]);
+    if (!silent) setLoading(false); else setRefreshing(false);
+  }, [id]);
 
   useEffect(() => {
-    if (!id || id === ':id') {
-      setLoading(false);
-      return;
-    }
-    const load = async () => {
-      const courses = await base44.entities.Course.filter({ id });
-      if (courses.length > 0) setCourse(courses[0]);
-      setLoading(false);
-    };
     load();
-
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.id === id && event.data) {
-        setCourse(event.data);
-      }
+      if (event.id === id && event.data) setCourse(event.data);
     });
-    return unsub;
-  }, [id]);
+    const onVisible = () => { if (document.visibilityState === "visible") load(true); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { unsub(); document.removeEventListener("visibilitychange", onVisible); };
+  }, [load]);
 
   const relancerSeul = async () => {
     setRelancantSeul(true);
@@ -112,8 +116,9 @@ export default function CourseDetail() {
           <h1 className="text-lg font-bold">Suivi de la course</h1>
           <p className="text-xs text-muted-foreground">#{course.id?.slice(0, 8)}</p>
         </div>
-        {course.urgence === 'tres_urgent' && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">🚨 TRÈS URGENT</span>}
-        {course.urgence === 'urgent' && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">🔔 URGENT</span>}
+        <Button variant="ghost" size="icon" onClick={() => load(true)} disabled={refreshing}>
+          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+        </Button>
         <StatusBadge statut={course.statut} />
       </div>
 
@@ -181,20 +186,22 @@ export default function CourseDetail() {
         </CardContent>
       </Card>
 
-      {/* Suivi GPS avec bouton accès carte interactive */}
-      {course.livreur_lat && course.livreur_lng && (
-        <Card>
+      {/* Bouton suivi live toujours visible si livreur assigné */}
+      {course.livreur_email && ["acceptee","en_cours","assignee_attente"].includes(course.statut) && (
+        <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4 space-y-3">
             <p className="text-sm font-semibold flex items-center gap-2">
               <Navigation className="h-4 w-4 text-primary" />
-              Suivi en temps réel
+              Suivi GPS en temps réel
             </p>
-            <MapSuivi livreurLat={course.livreur_lat} livreurLng={course.livreur_lng} />
+            {course.livreur_lat && course.livreur_lng && (
+              <MapSuivi livreurLat={course.livreur_lat} livreurLng={course.livreur_lng} />
+            )}
             <Button
-              className="w-full bg-primary hover:bg-primary/90 gap-2"
+              className="w-full bg-primary hover:bg-primary/90 gap-2 font-bold"
               onClick={() => navigate(`/course/${id}/track`)}
             >
-              <Map className="h-4 w-4" /> Suivre en direct sur la carte
+              <Map className="h-4 w-4" /> 🔴 Suivre en direct sur la carte
             </Button>
           </CardContent>
         </Card>
@@ -420,15 +427,22 @@ export default function CourseDetail() {
         </Card>
       )}
 
+      {/* Signaler un problème */}
+      {!["livree"].includes(course.statut) && (
+        <Button variant="outline" className="w-full border-orange-300 text-orange-700 hover:bg-orange-50 gap-2"
+          onClick={() => setReportOpen(true)}>
+          <AlertTriangle className="h-4 w-4" /> Signaler un problème
+        </Button>
+      )}
+
       {/* Dialog annulation */}
       <CancelCourseDialog
         open={cancelDialog}
         onOpenChange={setCancelDialog}
         course={course}
-        onSuccess={() => {
-          setCourse(prev => ({ ...prev, statut: 'annulee' }));
-        }}
+        onSuccess={() => setCourse(prev => ({ ...prev, statut: 'annulee' }))}
       />
+      <ReportIssueModal open={reportOpen} onOpenChange={setReportOpen} course={course} user={user} />
     </div>
   );
 }

@@ -469,6 +469,15 @@ export default function AdminDashboard() {
           </div>
         </Link>
 
+        <Link to="/gestion-signalements">
+          <div className="relative">
+            <Button className="w-full justify-start gap-2 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold">
+              <AlertCircle className="h-4 w-4" />
+              ⚠️ Signalements courses
+            </Button>
+          </div>
+        </Link>
+
         <Link to="/gestion-bedou">
           <div className="relative">
             <Button className="w-full justify-start gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold">

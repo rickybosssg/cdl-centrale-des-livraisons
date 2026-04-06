@@ -1,0 +1,105 @@
+{
+  "name": "CourseIssue",
+  "type": "object",
+  "properties": {
+    "course_id": {
+      "type": "string",
+      "title": "ID de la course"
+    },
+    "client_email": {
+      "type": "string",
+      "title": "Email client"
+    },
+    "client_name": {
+      "type": "string",
+      "title": "Nom client"
+    },
+    "livreur_email": {
+      "type": "string",
+      "title": "Email livreur"
+    },
+    "livreur_name": {
+      "type": "string",
+      "title": "Nom livreur"
+    },
+    "issue_type": {
+      "type": "string",
+      "title": "Type de probl\u00e8me",
+      "enum": [
+        "livreur_en_retard",
+        "livreur_introuvable",
+        "mauvais_comportement",
+        "colis_non_recupere",
+        "colis_non_livre",
+        "probleme_paiement",
+        "mauvaise_destination",
+        "erreur_montant",
+        "annulation_injustifiee",
+        "autre"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "title": "Description du probl\u00e8me"
+    },
+    "urgency": {
+      "type": "string",
+      "title": "Niveau d'urgence",
+      "enum": [
+        "normal",
+        "urgent",
+        "critique"
+      ],
+      "default": "normal"
+    },
+    "attachments": {
+      "type": "string",
+      "title": "Pi\u00e8ces jointes (JSON array URLs)"
+    },
+    "status": {
+      "type": "string",
+      "title": "Statut",
+      "enum": [
+        "nouveau",
+        "en_traitement",
+        "resolu",
+        "rejete"
+      ],
+      "default": "nouveau"
+    },
+    "admin_notes": {
+      "type": "string",
+      "title": "Notes admin"
+    },
+    "resolved_at": {
+      "type": "string",
+      "title": "R\u00e9solu le"
+    },
+    "resolved_by": {
+      "type": "string",
+      "title": "R\u00e9solu par (email admin)"
+    },
+    "course_statut_at_report": {
+      "type": "string",
+      "title": "Statut course au moment du signalement"
+    },
+    "course_prix": {
+      "type": "number",
+      "title": "Prix de la course"
+    },
+    "course_quartier_depart": {
+      "type": "string",
+      "title": "Quartier d\u00e9part"
+    },
+    "course_quartier_arrivee": {
+      "type": "string",
+      "title": "Quartier arriv\u00e9e"
+    }
+  },
+  "required": [
+    "course_id",
+    "client_email",
+    "issue_type",
+    "description"
+  ]
+}
