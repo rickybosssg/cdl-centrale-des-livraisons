@@ -1,21 +1,5 @@
 import { useEffect, useState, useRef, Component } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-// ─── Capturer la route AVANT tout rendu React ─────────────────────────────────
-// Si l'app est ouverte depuis une notification (app fermée), l'URL contient
-// ?notif_route=/course/xxx → on la mémorise immédiatement en sessionStorage
-(function captureNotifRoute() {
-  try {
-    const p = new URLSearchParams(window.location.search);
-    const r = p.get('notif_route');
-    if (r && r.startsWith('/')) {
-      sessionStorage.setItem('cdl_notif_route', r);
-      // Nettoyer l'URL proprement sans recharger la page
-      const clean = window.location.pathname;
-      window.history.replaceState({}, '', clean);
-    }
-  } catch (_) {}
-})();
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
@@ -106,6 +90,17 @@ import MyReferral from './pages/MyReferral';
 import GestionSignalements from './pages/dispatcher/GestionSignalements';
 import PlayStoreChecklist from './pages/dispatcher/PlayStoreChecklist';
 
+// ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
+// Doit être exécuté après les imports (ESM) mais avant le mount
+try {
+  const _p = new URLSearchParams(window.location.search);
+  const _r = _p.get('notif_route');
+  if (_r && _r.startsWith('/')) {
+    sessionStorage.setItem('cdl_notif_route', _r);
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+} catch (_) {}
+
 // Wrappers qui chargent le user avant de rendre
 function DashboardPartenaireWrapper() {
   const [user, setUser] = useState(null);
@@ -133,16 +128,15 @@ function FcmDeepLinkHandler() {
   const navigated = useRef(false);
 
   useEffect(() => {
-    // CAS 1 : App fermée → route stockée avant le mount (voir captureNotifRoute)
+    // CAS 1 : App fermée → notif_route stocké en sessionStorage avant le mount
     const pending = sessionStorage.getItem('cdl_notif_route');
     if (pending && !navigated.current) {
       sessionStorage.removeItem('cdl_notif_route');
       navigated.current = true;
-      // requestAnimationFrame garantit que le Router est prêt avant navigate
       requestAnimationFrame(() => navigate(pending, { replace: true }));
     }
 
-    // CAS 2 : App background → SW envoie postMessage au client actif
+    // CAS 2 : App background → SW postMessage
     const onSwMsg = (event) => {
       if (event.data?.type === 'CDL_NOTIFICATION_CLICK' && event.data.route) {
         navigate(event.data.route, { replace: false });
@@ -152,13 +146,32 @@ function FcmDeepLinkHandler() {
       navigator.serviceWorker.addEventListener('message', onSwMsg);
     }
 
-    // CAS 3 : App ouverte (foreground) → géré via TopNotificationContext (toast)
-    // La navigation foreground se fait via le clic sur le toast uniquement
+    // CAS 3 : App ouverte (foreground) → Firebase onMessage
+    let unsubFcm = null;
+    import('./lib/pushNotifications').then(({ onForegroundMessage }) => {
+      try {
+        unsubFcm = onForegroundMessage((payload) => {
+          const data = payload.data || {};
+          const title = payload.notification?.title || data.title || 'CDL';
+          const body = payload.notification?.body || data.body || '';
+          import('sonner').then(({ toast }) => {
+            toast(title, {
+              description: body,
+              duration: 8000,
+              action: data.route ? {
+                label: 'Voir',
+                onClick: () => navigate(data.route),
+              } : undefined,
+            });
+          });
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        });
+      } catch (_) {}
+    }).catch(() => {});
 
     return () => {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.removeEventListener('message', onSwMsg);
-      }
+      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onSwMsg);
+      if (unsubFcm) unsubFcm();
     };
   }, []);
 
@@ -218,21 +231,6 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Redirection automatique admin vers dashboard
-  if (isAuthenticated) {
-    // Vérifier si c'est un admin et rediriger
-    const checkAdmin = async () => {
-      try {
-        const me = await b44.auth.me();
-        if (me?.role === 'admin' || me?.user_type === 'admin') {
-          // Rediriger vers admin dashboard
-          // Note: sera géré par Home.jsx
-        }
-      } catch (_) {}
-    };
-    checkAdmin();
-  }
-
   return (
     <>
       <TopNotificationBanner notification={notification} onClose={closeNotification} />
@@ -255,8 +253,6 @@ const AuthenticatedApp = () => {
         <Route path="/course/:id/track" element={<CourseTracking />} />
         <Route path="/effectuer-deplacement" element={<EffectuerDeplacement />} />
         <Route path="/vitrines" element={<Vitrines />} />
-        <Route path="/mes-commandes-marketplace" element={<MesCommandesMarketplace />} />
-        <Route path="/commande-marketplace/:id" element={<CommandeMarketplaceDetail />} />
         <Route path="/mes-commandes-marketplace" element={<MesCommandesMarketplace />} />
         <Route path="/commande-marketplace/:id" element={<CommandeMarketplaceDetail />} />
         <Route path="/commerce/:id" element={<PagePartenaire />} />
@@ -309,7 +305,6 @@ const AuthenticatedApp = () => {
           <Route path="/gerer-clients" element={<GererClients />} />
           <Route path="/gerer-commerciaux" element={<GererCommerciaux />} />
           <Route path="/gerer-publicites" element={<GererPublicites />} />
-          <Route path="/gerer-commerciaux" element={<GererCommerciaux />} />
           <Route path="/suppression" element={<Suppression />} />
           <Route path="/audit-utilisateurs" element={<AuditUtilisateurs />} />
           <Route path="/admin-trash" element={<AdminTrash />} />

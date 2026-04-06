@@ -49,7 +49,7 @@ export default function TopNotificationBanner({ notification, onClose, autoClose
   const colorClass = COLOR_MAP[notification.type || 'info'];
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[999] flex justify-center pt-4 px-4 animate-in slide-in-from-top-full duration-300">
+    <div className="fixed top-0 left-0 right-0 z-[999] flex justify-center px-4 animate-in slide-in-from-top-full duration-300" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
       <div className={`w-full max-w-md rounded-lg border-2 p-4 shadow-lg ${colorClass}`}>
         <div className="flex items-start gap-3">
           <Icon className="h-5 w-5 flex-shrink-0 mt-0.5" />
