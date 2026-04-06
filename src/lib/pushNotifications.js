@@ -94,6 +94,50 @@ export function onForegroundMessage(callback) {
   }
 }
 
+// Deep link: résoudre route depuis données FCM
+export function resolveNotificationRoute(data) {
+  if (!data) return null;
+  const { route, type, courseId, target_screen, target_entity_id, target_entity_type } = data;
+  if (route && route.startsWith('/')) return route;
+  if (target_screen && target_screen.startsWith('/')) return target_screen;
+  switch (type) {
+    case 'new_course': case 'course_accepted': case 'course_update': case 'course_cancelled':
+      return courseId ? `/course/${courseId}` : '/mes-courses';
+    case 'course_tracking': return courseId ? `/course/${courseId}/track` : '/mes-courses';
+    case 'new_message': return '/mes-messages';
+    case 'profile_validated': case 'profile_rejected': return '/settings';
+    case 'bedou_recharge': case 'bedou_retrait': case 'bedou': return '/mon-bedou';
+    case 'course_issue': return '/gestion-signalements';
+    case 'admin': return '/admin-dashboard';
+    case 'commande': return target_entity_id ? `/commande-marketplace/${target_entity_id}` : '/mes-commandes-marketplace';
+    default: return null;
+  }
+}
+
+// Écouter les messages du Service Worker (deep link au clic notification background)
+export function onSwNotificationClick(callback) {
+  if (!('serviceWorker' in navigator)) return () => {};
+  const handler = (event) => {
+    if (event.data?.type === 'CDL_NOTIFICATION_CLICK') {
+      callback(event.data);
+    }
+  };
+  navigator.serviceWorker.addEventListener('message', handler);
+  return () => navigator.serviceWorker.removeEventListener('message', handler);
+}
+
+// Lire les données de notification depuis le localStorage (si app était fermée)
+export function consumePendingNotificationRoute() {
+  try {
+    const raw = localStorage.getItem('cdl_pending_notif_route');
+    if (raw) {
+      localStorage.removeItem('cdl_pending_notif_route');
+      return raw;
+    }
+  } catch (_) {}
+  return null;
+}
+
 export function sendPushNotification(title, body, options = {}) {
   if (!isNotificationGranted()) return;
   const notif = new Notification(title, {

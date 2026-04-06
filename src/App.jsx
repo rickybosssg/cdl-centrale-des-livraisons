@@ -1,4 +1,5 @@
 import { useEffect, useState, Component } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
@@ -109,6 +110,32 @@ function AppLayoutWithUser() {
   return <AppLayoutWrapper user={user} />;
 }
 
+// Deep link FCM (inside Router)
+function FcmDeepLinkHandler() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    // App fermée: URL param
+    const params = new URLSearchParams(window.location.search);
+    const notifRoute = params.get('notif_route');
+    if (notifRoute && notifRoute.startsWith('/')) {
+      setTimeout(() => navigate(notifRoute), 500);
+    }
+    // App background: message SW
+    const onSwMsg = (event) => {
+      if (event.data?.type === 'CDL_NOTIFICATION_CLICK' && event.data.route) {
+        navigate(event.data.route);
+      }
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', onSwMsg);
+    }
+    return () => {
+      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onSwMsg);
+    };
+  }, []);
+  return null;
+}
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
   const { notification, closeNotification } = useTopNotification();
@@ -180,6 +207,7 @@ const AuthenticatedApp = () => {
   return (
     <>
       <TopNotificationBanner notification={notification} onClose={closeNotification} />
+      <FcmDeepLinkHandler />
       <Routes>
         {/* Routes publiques sans layout */}
         <Route path="/phone-auth" element={<PhoneAuth />} />

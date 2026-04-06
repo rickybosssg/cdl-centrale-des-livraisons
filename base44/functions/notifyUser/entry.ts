@@ -65,7 +65,45 @@ async function getAccessToken(serviceAccount) {
   return tokenData.access_token;
 }
 
+// Canaux Android par type de notification
+function getAndroidChannel(type) {
+  if (['new_course', 'course_cancelled', 'course_issue', 'admin'].includes(type)) return 'cdl_courses';
+  if (type === 'new_message') return 'cdl_messages';
+  if (['bedou_recharge', 'bedou_retrait', 'bedou'].includes(type)) return 'cdl_bedou';
+  if (['profile_validated', 'profile_rejected'].includes(type)) return 'cdl_admin';
+  if (type === 'commande') return 'cdl_mall';
+  return 'cdl_general';
+}
+
+// Résoudre la route deep link
+function resolveRoute(data) {
+  if (data.route && data.route.startsWith('/')) return data.route;
+  switch (data.type) {
+    case 'new_course': case 'course_accepted': case 'course_update': case 'course_cancelled':
+      return data.courseId ? `/course/${data.courseId}` : '/mes-courses';
+    case 'course_tracking': return data.courseId ? `/course/${data.courseId}/track` : '/mes-courses';
+    case 'new_message': return '/mes-messages';
+    case 'profile_validated': case 'profile_rejected': return '/settings';
+    case 'bedou_recharge': case 'bedou_retrait': case 'bedou': return '/mon-bedou';
+    case 'course_issue': return '/gestion-signalements';
+    case 'admin': return '/admin-dashboard';
+    case 'commande': return data.commandeId ? `/commande-marketplace/${data.commandeId}` : '/mes-commandes-marketplace';
+    default: return '/';
+  }
+}
+
 async function sendFcmPush(accessToken, fcmToken, title, body, data = {}) {
+  const isHighPriority = data.priority === 'high' || ['new_course', 'course_cancelled', 'course_issue'].includes(data.type);
+  const channelId = getAndroidChannel(data.type || '');
+  const route = resolveRoute(data);
+  
+  // S'assurer que route est dans les data (pour le SW)
+  const enrichedData = {
+    ...data,
+    route,
+    channelId,
+  };
+
   const res = await fetch(FCM_URL, {
     method: "POST",
     headers: {
@@ -76,13 +114,43 @@ async function sendFcmPush(accessToken, fcmToken, title, body, data = {}) {
       message: {
         token: fcmToken,
         notification: { title, body },
-        data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v || '')])),
+        data: Object.fromEntries(Object.entries(enrichedData).map(([k, v]) => [k, String(v || '')])),
+        // Config Android : vraie notification push système
+        android: {
+          priority: isHighPriority ? 'HIGH' : 'NORMAL',
+          notification: {
+            channel_id: channelId,
+            icon: 'notification_icon',
+            color: '#1a73e8',
+            sound: isHighPriority ? 'cdl_alert' : 'default',
+            vibrate_timings_millis: isHighPriority ? [0, 300, 100, 300, 100, 300] : [0, 200, 100, 200],
+            notification_priority: isHighPriority ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
+            visibility: 'PUBLIC',
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+        },
+        // Config Web / PWA
         webpush: {
+          headers: { Urgency: isHighPriority ? 'high' : 'normal' },
           notification: {
             icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
             badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-            vibrate: [200, 100, 200],
-            requireInteraction: data.priority === 'high',
+            vibrate: isHighPriority ? [300, 100, 300, 100, 300] : [200, 100, 200],
+            requireInteraction: isHighPriority,
+            renotify: true,
+            tag: `cdl-${data.type || 'notif'}-${data.courseId || Date.now()}`,
+          },
+          fcm_options: { link: route },
+        },
+        // Config APNs (iOS) si nécessaire
+        apns: {
+          headers: { 'apns-priority': isHighPriority ? '10' : '5' },
+          payload: {
+            aps: {
+              sound: isHighPriority ? 'default' : null,
+              badge: 1,
+              'content-available': 1,
+            },
           },
         },
       },
