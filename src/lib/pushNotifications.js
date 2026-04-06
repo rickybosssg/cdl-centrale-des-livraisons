@@ -35,9 +35,29 @@ function getFirebaseApp() {
   return _app;
 }
 
+function isFirebaseMessagingSupported() {
+  try {
+    return (
+      typeof window !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window &&
+      'Notification' in window &&
+      typeof indexedDB !== 'undefined'
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
 function getFirebaseMessaging() {
+  if (!isFirebaseMessagingSupported()) return null;
   if (!_messaging) {
-    _messaging = getMessaging(getFirebaseApp());
+    try {
+      _messaging = getMessaging(getFirebaseApp());
+    } catch (err) {
+      console.debug('[FCM] getMessaging error:', err?.message);
+      return null;
+    }
   }
   return _messaging;
 }
@@ -55,6 +75,7 @@ export function isNotificationGranted() {
 }
 
 export async function registerFcmToken() {
+  if (!isFirebaseMessagingSupported()) return null;
   if (!isNotificationGranted()) return null;
   if (!VAPID_KEY || VAPID_KEY === 'undefined') {
     console.error('[FCM] VITE_FIREBASE_VAPID_KEY manquant');
@@ -87,7 +108,9 @@ export async function registerFcmToken() {
 
 export function onForegroundMessage(callback) {
   try {
-    return onMessage(getFirebaseMessaging(), callback);
+    const messaging = getFirebaseMessaging();
+    if (!messaging) return () => {};
+    return onMessage(messaging, callback);
   } catch (err) {
     console.warn('FCM foreground listener error:', err);
     return () => {};
