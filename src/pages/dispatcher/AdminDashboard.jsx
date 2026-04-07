@@ -42,6 +42,8 @@ export default function AdminDashboard() {
   const [demandeBedouCount, setDemandeBedouCount] = useState(0);
   const [zonesData, setZonesData] = useState([]);
   const [syncingLivreurs, setSyncingLivreurs] = useState(false);
+  const [dispatchMode, setDispatchMode] = useState('auto');
+  const [coursesAAffecter, setCoursesAAffecter] = useState(0);
 
   const loadData = async () => {
     try {
@@ -125,6 +127,16 @@ export default function AdminDashboard() {
       if (countsRes.data) {
         setCounts(countsRes.data);
       }
+
+      // Charger mode dispatch
+      try {
+        const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
+        if (configs[0]) setDispatchMode(configs[0].mode || 'auto');
+      } catch (_) {}
+
+      // Courses en attente d'affectation manuelle
+      const enAttenteCount = (courses || []).filter(c => ['en_attente', 'aucun_livreur'].includes(c.statut)).length;
+      setCoursesAAffecter(enAttenteCount);
 
       // Charger les demandes Bedou en attente
       const [recharges, retraits] = await Promise.allSettled([
@@ -451,6 +463,38 @@ export default function AdminDashboard() {
             💰 Finances & Bedou
           </Button>
         </Link>
+
+        {/* Zone dispatch — affichage adaptatif selon le mode */}
+        <div className={`rounded-2xl border-2 p-3 ${dispatchMode === 'manuel' ? 'bg-amber-50 border-amber-400' : 'bg-green-50 border-green-300'}`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className={`h-2.5 w-2.5 rounded-full ${dispatchMode === 'manuel' ? 'bg-amber-500' : 'bg-green-500 animate-pulse'}`} />
+              <p className={`text-sm font-bold ${dispatchMode === 'manuel' ? 'text-amber-800' : 'text-green-800'}`}>
+                {dispatchMode === 'manuel' ? '🔧 Mode manuel activé' : '⚡ Mode automatique activé'}
+              </p>
+            </div>
+            <Link to="/dispatch-monitor">
+              <button className="text-xs underline text-muted-foreground">Configurer</button>
+            </Link>
+          </div>
+          {dispatchMode === 'manuel' && coursesAAffecter > 0 && (
+            <Link to="/staff/dispatch">
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-amber-600" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">Courses à affecter manuellement</p>
+                    <p className="text-xs text-amber-600">{coursesAAffecter} course{coursesAAffecter > 1 ? 's' : ''} en attente d'attribution</p>
+                  </div>
+                </div>
+                <span className="text-lg font-extrabold text-white bg-amber-500 rounded-full h-7 w-7 flex items-center justify-center text-sm">{coursesAAffecter}</span>
+              </div>
+            </Link>
+          )}
+          {dispatchMode === 'auto' && (
+            <p className="text-xs text-green-700">Attribution automatique des courses activée</p>
+          )}
+        </div>
 
         <Link to="/dispatch-monitor">
           <Button className="w-full justify-start gap-2 border-green-300 hover:bg-green-50 text-green-800" variant="outline">

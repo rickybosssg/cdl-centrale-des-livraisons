@@ -32,11 +32,13 @@ export default function ManualDispatch() {
       const perms = await base44.entities.StaffPermission.filter({ userEmail: actor.email, isActive: true });
       if (!perms[0]?.canManualDispatch) { toast.error("Accès refusé"); navigate("/staff"); return; }
     }
-    const [c, l] = await Promise.all([
+    const [cEnAttente, cSansLivreur, l] = await Promise.all([
       base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 100),
+      base44.entities.Course.filter({ statut: "aucun_livreur" }, "-created_date", 50),
       base44.entities.User.filter({ user_type: "livreur", disponible: true }),
     ]);
-    setCourses(c); setLivreurs(l.filter(l => !l.livreur_bloque)); setLoading(false);
+    const allCourses = [...cEnAttente, ...cSansLivreur].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    setCourses(allCourses); setLivreurs(l.filter(l => !l.livreur_bloque)); setLoading(false);
   };
 
   useEffect(() => { load().catch(() => setLoading(false)); }, []);
@@ -50,7 +52,10 @@ export default function ManualDispatch() {
       telephone_livreur: livreur.telephone, statut: "assignee_attente",
       mode_assignation: "manuel", heure_assignation: now,
     });
-    await base44.entities.Notification.create({ destinataire_email: livreur.email, destinataire_role: "livreur", titre: "📦 Nouvelle course assignée", message: `Course de ${selectedCourse.quartier_depart} → ${selectedCourse.quartier_arrivee} (${selectedCourse.prix} F).`, type: "info", lue: false, course_id: selectedCourse.id });
+    await base44.entities.Notification.create({ destinataire_email: livreur.email, destinataire_role: "livreur", titre: "📦 Nouvelle course assignée", message: `Course de ${selectedCourse.quartier_depart} → ${selectedCourse.quartier_arrivee} (${selectedCourse.prix} F). Ouvrez l'app pour accepter.`, type: "info", lue: false, course_id: selectedCourse.id, target_screen: `/course-livreur/${selectedCourse.id}` });
+    if (selectedCourse.client_email) {
+      await base44.entities.Notification.create({ destinataire_email: selectedCourse.client_email, destinataire_role: "client", titre: "🛵 Livreur trouvé !", message: `${livreur.full_name} a été assigné à votre course. Il sera bientôt en route.`, type: "success", lue: false, course_id: selectedCourse.id, target_screen: `/course/${selectedCourse.id}` });
+    }
     await logAction(me, "COURSE_ASSIGNED", { id: selectedCourse.id, name: selectedCourse.id?.slice(0, 8) }, `Assigné à ${livreur.full_name}`);
     toast.success("Course assignée avec succès");
     setSelectedCourse(null); load();

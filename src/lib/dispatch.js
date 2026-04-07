@@ -60,8 +60,18 @@ function scoreDriver(driver, course) {
 }
 
 export async function lancerDispatch(course, excludeEmails = []) {
-  const dispatchMode = localStorage.getItem('cdl_dispatch_mode') || 'auto';
-  if (dispatchMode === 'manuel') return null;
+  // Lire le mode depuis la BDD (source de vérité partagée entre tous les devices)
+  try {
+    const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
+    const config = configs[0];
+    if (config?.mode === 'manuel') {
+      console.log(`[DISPATCH] Mode MANUEL ACTIVÉ — dispatch automatique bloqué pour la course ${course.id}. L'admin doit affecter manuellement.`);
+      return null;
+    }
+    console.log(`[DISPATCH] Mode AUTOMATIQUE ACTIVÉ — lancement dispatch pour la course ${course.id}`);
+  } catch (e) {
+    console.warn('[DISPATCH] Impossible de lire DispatchConfig, mode auto par défaut:', e.message);
+  }
 
   try {
     const allDrivers = await base44.entities.User.filter({ user_type: "livreur" });
