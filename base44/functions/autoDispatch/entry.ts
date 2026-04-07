@@ -132,12 +132,24 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const courseId = body.course_id || body.event?.entity_id;
+    const forceDispatch = body.force === true; // Admin peut forcer même en mode manuel
 
     if (!courseId) {
       return Response.json({ error: 'course_id manquant' }, { status: 400 });
     }
 
     const base44 = createClientFromRequest(req);
+
+    // ── Vérification du mode de dispatch ────────────────────────────────────
+    const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
+    const config = configs[0] || { mode: 'auto', force_override: false, seuil_livreurs_auto: 3 };
+
+    if (config.mode === 'manuel' && !forceDispatch) {
+      console.log(`[DISPATCH] Mode MANUEL actif — dispatch automatique bloqué pour la course ${courseId}`);
+      return Response.json({ success: false, blocked: true, reason: 'mode_manuel', message: 'Dispatch automatique désactivé — mode manuel actif' });
+    }
+
+    console.log(`[DISPATCH] Mode: ${config.mode.toUpperCase()}${forceDispatch ? ' (forcé admin)' : ''}`);
 
     // Récupérer la course
     const courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });

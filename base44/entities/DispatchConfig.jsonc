@@ -1,0 +1,36 @@
+{
+  "name": "DispatchConfig",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "manuel"
+      ],
+      "title": "Mode dispatch",
+      "default": "auto"
+    },
+    "force_override": {
+      "type": "boolean",
+      "title": "Forc\u00e9 manuellement par admin",
+      "default": false
+    },
+    "seuil_livreurs_auto": {
+      "type": "number",
+      "title": "Seuil livreurs en ligne pour mode auto",
+      "default": 3
+    },
+    "last_changed_by": {
+      "type": "string",
+      "title": "Dernier changement par (email admin)"
+    },
+    "last_changed_reason": {
+      "type": "string",
+      "title": "Raison du changement"
+    }
+  },
+  "required": [
+    "mode"
+  ]
+}
