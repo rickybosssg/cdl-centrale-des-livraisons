@@ -10,19 +10,22 @@ const attemptStore = new Map();
 function normalizePhone(phone) {
   if (!phone) return null;
   let cleaned = phone.replace(/\D/g, '');
-  
+
+  // 8 chiffres BF → +226XXXXXXXX (format principal CDL)
+  if (cleaned.length === 8) return '+226' + cleaned;
+
   // Si commence par 226, ajouter +
-  if (cleaned.startsWith('226')) return '+' + cleaned;
-  
+  if (cleaned.startsWith('226') && cleaned.length === 11) return '+' + cleaned;
+
   // Si commence par 0, remplacer par 226
-  if (cleaned.startsWith('0')) return '+226' + cleaned.slice(1);
-  
-  // Si 9 chiffres, ajouter +226
+  if (cleaned.startsWith('0') && cleaned.length === 9) return '+226' + cleaned.slice(1);
+
+  // Si 9 chiffres sans 0, ajouter +226
   if (cleaned.length === 9) return '+226' + cleaned;
-  
-  // Si 12 chiffres (226XXXXXXXX), ajouter +
+
+  // 12 chiffres (226XXXXXXXX), ajouter +
   if (cleaned.length === 12 && cleaned.startsWith('226')) return '+' + cleaned;
-  
+
   return null;
 }
 

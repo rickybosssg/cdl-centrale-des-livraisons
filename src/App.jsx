@@ -219,38 +219,20 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else {
-      // Sauvegarder le code ref AVANT redirection
+      // auth_required ou autre → afficher /phone-auth directement, jamais l'ancien login
       const _p = new URLSearchParams(window.location.search);
       const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
       if (_ref) localStorage.setItem('cdl_promo_code', _ref);
-      // auth_required ou autre → rediriger vers le login
-      b44.auth.redirectToLogin(window.location.pathname + window.location.search);
-      return (
-        <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
-          <div className="text-center space-y-4 text-white">
-            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
-            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-          </div>
-        </div>
-      );
+      return <PhoneAuth />;
     }
   }
 
-  // Rediriger les non-authentifiés vers le login
+  // Non authentifié → afficher directement /phone-auth
   if (!isAuthenticated) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
-    b44.auth.redirectToLogin(window.location.pathname + window.location.search);
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
-        <div className="text-center space-y-4 text-white">
-          <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
-          <p className="font-semibold text-lg">CDL APP</p>
-          <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-        </div>
-      </div>
-    );
+    return <PhoneAuth />;
   }
 
   return (
