@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
-import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
+// getDispatchMode/setDispatchMode supprimés — mode géré via DispatchConfig BDD
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
@@ -49,7 +49,9 @@ export default function Parametres() {
   const [confirmText, setConfirmText] = useState("");
 
   useEffect(() => {
-    setParams(prev => ({ ...prev, mode_dispatch: getDispatchMode() }));
+    base44.entities.DispatchConfig.list('-updated_date', 1).then(configs => {
+      if (configs[0]) setParams(prev => ({ ...prev, mode_dispatch: configs[0].mode || 'auto' }));
+    }).catch(() => {});
   }, []);
 
   const sauvegarderAlertes = () => {
@@ -76,9 +78,16 @@ export default function Parametres() {
 
   const updateAlerte = (key, value) => setAlertesConfig(prev => ({ ...prev, [key]: value }));
 
-  const sauvegarder = () => {
+  const sauvegarder = async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(params));
-    setDispatchMode(params.mode_dispatch);
+    // Sauvegarder le mode dans DispatchConfig (source de vérité BDD)
+    const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
+    if (configs[0]) {
+      const me = await base44.auth.me();
+      await base44.entities.DispatchConfig.update(configs[0].id, {
+        mode: params.mode_dispatch, force_override: true, last_changed_by: me?.email || 'admin',
+      });
+    }
     setSaved(true);
     toast.success("Paramètres sauvegardés !");
     setTimeout(() => setSaved(false), 2000);

@@ -6,6 +6,15 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
+    // ── Vérification du mode dispatch AVANT TOUT ──────────────────────────────
+    const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
+    const config = configs[0];
+    console.log(`MODE ACTIF : ${(config?.mode || 'auto').toUpperCase()}`);
+    if (config?.mode === 'manuel') {
+      console.log('AUTO DISPATCH BLOQUÉ (MODE MANUEL) — checkPendingAssignments ignoré');
+      return Response.json({ success: true, blocked: true, reason: 'mode_manuel', reassigned: 0, skipped: 0 });
+    }
+
     // Récupérer toutes les courses en assignee_attente
     const coursesRaw = await base44.asServiceRole.entities.Course.filter({ statut: 'assignee_attente' });
 
@@ -99,7 +108,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Relancer le dispatch
+      // Relancer le dispatch (mode auto vérifié en haut de la fonction)
       await base44.asServiceRole.functions.invoke('autoDispatch', { course_id: course.id });
       reassigned++;
     }
