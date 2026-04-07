@@ -110,17 +110,11 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = (shouldRedirect = true) => {
+  const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
-    
-    if (shouldRedirect) {
-      // Use the SDK's logout method which handles token cleanup and redirect
-      base44.auth.logout(window.location.href);
-    } else {
-      // Just remove the token without redirect
-      base44.auth.logout();
-    }
+    // Toujours rediriger vers /phone-auth, jamais vers le login plateforme
+    base44.auth.logout('/phone-auth');
   };
 
   const navigateToLogin = () => {
