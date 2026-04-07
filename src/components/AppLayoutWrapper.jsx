@@ -116,18 +116,17 @@ export default function AppLayoutWrapper({ user }) {
                   duration: 8000,
                   action: route ? {
                     label: 'Voir',
-                    onClick: () => window.location.hash = route,
+                    // Navigation React Router compatible
+                    onClick: () => { window.location.href = window.location.origin + route; },
                   } : undefined,
                 });
               });
               if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
             },
             onNotificationTap: ({ route }) => {
-              // Tap depuis background/app fermée → naviguer
+              // Tap depuis background/app fermée → naviguer directement
               if (route && route.startsWith('/')) {
-                // Stocker pour que FcmDeepLinkHandler le récupère
-                sessionStorage.setItem('cdl_notif_route', route);
-                window.location.reload();
+                window.location.href = window.location.origin + route;
               }
             },
           });
