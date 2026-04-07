@@ -76,7 +76,6 @@ import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
 import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
 import ProfilsAdmin from './pages/dispatcher/ProfilsAdmin';
 import TestUpload from './pages/TestUpload';
-import PhoneAuth from './pages/PhoneAuth';
 import AdminLoginSecure from './pages/AdminLoginSecure';
 import HealthDashboard from './pages/dispatcher/HealthDashboard';
 import AuditComplet from './pages/dispatcher/AuditComplet';
@@ -220,11 +219,19 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else {
-      // auth_required ou autre → afficher /phone-auth directement, jamais l'ancien login
+      // auth_required → login standard Base44
       const _p = new URLSearchParams(window.location.search);
       const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
       if (_ref) localStorage.setItem('cdl_promo_code', _ref);
-      return <PhoneAuth />;
+      b44.auth.redirectToLogin(window.location.pathname + window.location.search);
+      return (
+        <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
+          <div className="text-center space-y-4 text-white">
+            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
+            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+          </div>
+        </div>
+      );
     }
   }
 
@@ -233,12 +240,20 @@ const AuthenticatedApp = () => {
     return <AdminLoginSecure />;
   }
 
-  // Non authentifié → afficher directement /phone-auth
+  // Non authentifié → login standard Base44 (Google + Email/Password)
   if (!isAuthenticated) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
-    return <PhoneAuth />;
+    b44.auth.redirectToLogin(window.location.pathname + window.location.search);
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
+        <div className="text-center space-y-4 text-white">
+          <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
+          <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -247,7 +262,6 @@ const AuthenticatedApp = () => {
       <FcmDeepLinkHandler />
       <Routes>
         {/* Routes publiques sans layout */}
-        <Route path="/phone-auth" element={<PhoneAuth />} />
         <Route path="/admin-login-secure" element={<AdminLoginSecure />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
@@ -362,7 +376,7 @@ const AuthenticatedApp = () => {
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/phone-auth" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );
