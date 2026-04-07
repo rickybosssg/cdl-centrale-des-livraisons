@@ -159,34 +159,13 @@ export default function Home() {
   }
   console.log('[HOME] Loading done, user:', user?.email, 'profiles:', allProfiles.length);
 
-  // Pas authentifié
+  // Pas authentifié → redirection immédiate vers /phone-auth
   if (!user) {
-    console.log('[HOME] NOT AUTHENTICATED - rendering login');
+    console.log('[HOME] NOT AUTHENTICATED - redirecting to /phone-auth');
+    window.location.replace('/phone-auth');
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-blue-50 flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-sm space-y-6 text-center">
-          <div>
-            <div className="h-20 w-20 rounded-3xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <Phone className="h-10 w-10 text-white" />
-            </div>
-            <h1 className="text-3xl font-extrabold text-foreground">Bienvenue sur CDL</h1>
-            <p className="text-base text-muted-foreground mt-2">
-              Créez votre compte ou connectez-vous avec votre numéro de téléphone
-            </p>
-          </div>
-
-          <Link to="/phone-auth" className="block">
-            <button className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 text-base active:scale-[0.98]">
-              <Phone className="h-5 w-5" />
-              Connexion / Inscription par téléphone
-            </button>
-          </Link>
-
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Nouveau sur CDL ? Créez votre compte avec votre numéro</p>
-            <p className="text-xs text-muted-foreground">Réception du code par SMS ou WhatsApp selon disponibilité</p>
-          </div>
-        </div>
+      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-primary to-blue-700">
+        <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
       </div>
     );
   }
