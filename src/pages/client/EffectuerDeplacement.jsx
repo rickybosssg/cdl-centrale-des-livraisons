@@ -70,11 +70,14 @@ export default function EffectuerDeplacement() {
   const soldeInsuffisant = soldeBedou !== null && prixTotal > 0 && soldeBedou < prixTotal;
 
   const handleSubmit = async () => {
-    if (!moyenDeplacement || !prixBaseNum || !quartier_depart || !quartier_arrivee) {
-      toast.error("Veuillez remplir tous les champs");
+    if (!user) {
+      toast.error("Profil non chargé. Veuillez patienter.");
       return;
     }
-
+    if (!moyenDeplacement || !prixBaseNum || !quartier_depart || !quartier_arrivee) {
+      toast.error("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
     if (soldeInsuffisant) {
       toast.error("Solde Bedou insuffisant. Rechargez votre Bedou.");
       return;
@@ -96,7 +99,7 @@ export default function EffectuerDeplacement() {
       const course = await base44.entities.Course.create({
         quartier_depart,
         quartier_arrivee,
-        telephone_expediteur: user.telephone,
+        telephone_expediteur: user.telephone || user.numero_telephone || user.phone || "Non renseigné",
         telephone_destinataire: "",
         type_colis: "Personne",
         description: notes,
@@ -124,25 +127,37 @@ export default function EffectuerDeplacement() {
         niveau_urgence: niveauUrgence,
       });
 
+      // Débiter le Bedou client
+      try {
+        await base44.functions.invoke('bedouEngine', {
+          action: 'debit',
+          montant: prixTotal,
+          description: `Déplacement ${quartier_depart} → ${quartier_arrivee}`,
+          reference_id: course.id,
+        });
+      } catch (bedouErr) {
+        console.warn('[EffectuerDeplacement] Bedou debit warn:', bedouErr.message);
+      }
+
       // Notifier le livreur
       await base44.entities.Notification.create({
         destinataire_email: livreur.email,
         destinataire_role: "livreur",
-        titre: "📦 Nouvelle course disponible",
+        titre: "📦 Nouveau déplacement",
         message: `${quartier_depart} → ${quartier_arrivee} · ${fmt(prixTotal)}`,
         type: "info",
         lue: false,
         course_id: course.id,
       });
 
-      toast.success("Course créée et assignée au livreur!");
+      toast.success("✅ Déplacement confirmé ! Votre livreur a été notifié.");
       navigate("/mes-courses");
     } catch (error) {
-      toast.error("Erreur lors de la création de la course");
-      console.error(error);
+      toast.error(`Erreur : ${error.message || "Impossible de créer le déplacement"}`);
+      console.error('[EffectuerDeplacement]', error);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
@@ -309,7 +324,7 @@ export default function EffectuerDeplacement() {
               disabled={loading || soldeInsuffisant || !prixBaseNum}
               className="flex-1"
             >
-              {loading ? "Paiement & recherche..." : "Payer et créer"}
+              {loading ? "⏳ Traitement..." : "Confirmer"}
             </Button>
           </div>
         </div>
