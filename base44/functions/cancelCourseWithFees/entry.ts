@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
         required: fraisAnnulation,
         available: soldeDisponible,
         message: `Solde insuffisant. Vous devez recharger de ${fraisAnnulation - soldeDisponible}F.`,
-      }, { status: 402 });
+      });
     }
 
     // 5. Transaction ATOMIQUE

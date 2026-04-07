@@ -1,9 +1,28 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ChevronDown, MapPin, X, Search } from "lucide-react";
 
 export default function MobileSelect({ value, onValueChange, options, placeholder, icon: Icon = MapPin }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const searchRef = useRef(null);
+  const scrollYRef = useRef(0);
+
+  // Focus sans scroll : garder la position exacte de scroll
+  useEffect(() => {
+    if (open) {
+      scrollYRef.current = window.scrollY;
+      setTimeout(() => {
+        if (searchRef.current) {
+          searchRef.current.focus({ preventScroll: true });
+        }
+      }, 80);
+    } else {
+      // Restaurer la position de scroll après fermeture du modal
+      setTimeout(() => {
+        window.scrollTo({ top: scrollYRef.current, behavior: 'instant' });
+      }, 10);
+    }
+  }, [open]);
 
   const filtered = search.trim()
     ? options.filter(o => o.toLowerCase().includes(search.toLowerCase()))
@@ -14,7 +33,11 @@ export default function MobileSelect({ value, onValueChange, options, placeholde
       {/* Déclencheur */}
       <button
         type="button"
-        onClick={() => { setOpen(true); setSearch(""); }}
+        onClick={() => {
+      scrollYRef.current = window.scrollY;
+      setOpen(true);
+      setSearch("");
+    }}
         className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -49,12 +72,12 @@ export default function MobileSelect({ value, onValueChange, options, placeholde
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
+                  ref={searchRef}
                   type="text"
                   placeholder="Rechercher..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-9 pr-3 h-9 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  autoFocus
                 />
               </div>
             </div>
@@ -68,7 +91,10 @@ export default function MobileSelect({ value, onValueChange, options, placeholde
                 <button
                   key={opt}
                   type="button"
-                  onClick={() => { onValueChange(opt); setOpen(false); }}
+                  onClick={() => {
+                onValueChange(opt);
+                setOpen(false);
+              }}
                   className={`w-full text-left px-4 py-3 rounded-lg text-sm transition-colors ${
                     value === opt
                       ? "bg-primary text-primary-foreground font-semibold"
