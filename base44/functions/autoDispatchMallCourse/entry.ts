@@ -5,6 +5,15 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const { commande_id } = await req.json();
 
+    // ── Vérification STRICTE du mode dispatch ──────────────────────────────
+    const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
+    const config = configs[0];
+    console.log(`[autoDispatchMallCourse] MODE ACTIF : ${(config?.mode || 'auto').toUpperCase()}`);
+    if (config?.mode === 'manuel') {
+      console.log('DISPATCH REFUSÉ – MODE MANUEL ACTIF (autoDispatchMallCourse)');
+      return Response.json({ success: false, blocked: true, reason: 'mode_manuel', message: 'Dispatch automatique désactivé — mode manuel actif' });
+    }
+
     // Récupérer la commande
     const commande = await base44.entities.CommandePartenaire.list();
     const cmd = commande.find(c => c.id === commande_id);
