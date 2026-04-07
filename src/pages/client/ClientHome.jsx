@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Package, Plus, Clock, CheckCircle2, Truck, Store, MessageCircle, User, ShoppingBag, TrendingUp } from "lucide-react";
+import NotationCourse from "../../components/NotationCourse";
 import PubliciteHomeBanner from "@/components/PubliciteHomeBanner";
 import BedouWidget from "../../components/BedouWidget";
 import EffectuerDeplacement from "./EffectuerDeplacement";
@@ -25,6 +26,7 @@ export default function ClientHome({ user }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showMessages, setShowMessages] = useState(false);
+  const [courseANoter, setCourseANoter] = useState(null);
 
   // Présence gérée centralement par usePresence dans AppLayout
 
@@ -71,7 +73,12 @@ export default function ClientHome({ user }) {
       if (event.type === "create") {
         setCourses(prev => [event.data, ...prev]);
       } else if (event.type === "update") {
-        setCourses(prev => prev.map(c => c?.id === event.id ? event.data : c));
+        const updated = event.data;
+        setCourses(prev => prev.map(c => c?.id === event.id ? updated : c));
+        // Déclencher notation si course vient de passer en "livree"
+        if (updated?.statut === 'livree' && updated?.livreur_email && !updated?.note_donnee) {
+          setCourseANoter(updated);
+        }
       } else if (event.type === "delete") {
         setCourses(prev => prev.filter(c => c?.id !== event.id));
       }
@@ -87,8 +94,46 @@ export default function ClientHome({ user }) {
   const activeCourses = safeCourses.filter(c => !['livree', 'annulee'].includes(c?.statut));
   const completedCount = safeCourses.filter(c => c?.statut === 'livree').length;
 
+  // Détecter courses terminées non notées au chargement (cas client qui revient)
+  useEffect(() => {
+    if (!loading && safeCourses.length > 0 && !courseANoter) {
+      const aNoter = safeCourses.find(c => c?.statut === 'livree' && c?.livreur_email && !c?.note_donnee);
+      if (aNoter) setCourseANoter(aNoter);
+    }
+  }, [loading]);
+
   return (
     <div className="space-y-0">
+      {/* Modal notation automatique */}
+      {courseANoter && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0">
+          <div className="w-full max-w-md bg-background rounded-t-3xl p-6 pb-10 space-y-4 animate-in slide-in-from-bottom-full duration-300">
+            <div className="text-center">
+              <div className="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+                <span className="text-3xl">⭐</span>
+              </div>
+              <p className="text-lg font-extrabold">Notez votre livreur</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Course {courseANoter.quartier_depart} → {courseANoter.quartier_arrivee}
+              </p>
+            </div>
+            <NotationCourse
+              course={courseANoter}
+              onDone={() => {
+                setCourses(prev => prev.map(c => c?.id === courseANoter.id ? { ...c, note_donnee: true } : c));
+                setCourseANoter(null);
+              }}
+            />
+            <button
+              onClick={() => setCourseANoter(null)}
+              className="w-full text-xs text-muted-foreground underline py-2"
+            >
+              Pas maintenant (vous pourrez noter plus tard)
+            </button>
+          </div>
+        </div>
+      )}
+
       {user && <PubliciteHomeBanner userRole="client" userId={user.id} userEmail={user.email} />}
       <div className="space-y-6 mt-4">
         {/* Welcome */}
