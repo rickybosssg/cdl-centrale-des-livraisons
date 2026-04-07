@@ -1,19 +1,20 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, RefreshCw, Zap, Users, AlertCircle, Clock, MapPin, TrendingUp } from "lucide-react";
+import { ArrowLeft, RefreshCw, Zap, Users, AlertCircle, Clock, MapPin, TrendingUp, ToggleLeft, ToggleRight, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
 import moment from "moment";
 
 const STATUT_CFG = {
-  en_attente:       { label: "⏳ En attente",         badge: "bg-amber-100 text-amber-800" },
-  assignee_attente: { label: "📡 Proposée",           badge: "bg-blue-100 text-blue-800" },
-  acceptee:         { label: "✅ Acceptée",            badge: "bg-green-100 text-green-800" },
-  en_cours:         { label: "🚀 En cours",            badge: "bg-primary/10 text-primary" },
-  livree:           { label: "📦 Livrée",              badge: "bg-green-50 text-green-700" },
-  aucun_livreur:    { label: "❌ Sans livreur",        badge: "bg-red-100 text-red-800" },
-  annulee:          { label: "🚫 Annulée",             badge: "bg-gray-100 text-gray-600" },
+  en_attente:       { label: "⏳ En attente",    badge: "bg-amber-100 text-amber-800" },
+  assignee_attente: { label: "📡 Proposée",       badge: "bg-blue-100 text-blue-800" },
+  acceptee:         { label: "✅ Acceptée",        badge: "bg-green-100 text-green-800" },
+  en_cours:         { label: "🚀 En cours",        badge: "bg-primary/10 text-primary" },
+  livree:           { label: "📦 Livrée",          badge: "bg-green-50 text-green-700" },
+  aucun_livreur:    { label: "❌ Sans livreur",    badge: "bg-red-100 text-red-800" },
+  annulee:          { label: "🚫 Annulée",         badge: "bg-gray-100 text-gray-600" },
 };
 
 export default function DispatchMonitor() {
@@ -22,6 +23,21 @@ export default function DispatchMonitor() {
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [dispatchConfig, setDispatchConfig] = useState(null);
+  const [togglingMode, setTogglingMode] = useState(false);
+
+  const loadDispatchConfig = async () => {
+    const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
+    if (configs.length > 0) {
+      setDispatchConfig(configs[0]);
+      console.log(`MODE ACTIF : ${(configs[0].mode || 'auto').toUpperCase()}`);
+      if (configs[0].mode === 'manuel') console.log('AUTO DISPATCH BLOQUÉ (MODE MANUEL)');
+    } else {
+      const created = await base44.entities.DispatchConfig.create({ mode: 'auto', force_override: true });
+      setDispatchConfig(created);
+      console.log('MODE ACTIF : AUTO (init)');
+    }
+  };
 
   const load = async () => {
     const [coursesData, livreursData] = await Promise.all([
@@ -34,13 +50,38 @@ export default function DispatchMonitor() {
     setLoading(false);
   };
 
+  // ⛔ AUCUNE logique automatique de changement de mode.
+  // Le mode ne change QUE sur action explicite de l'admin.
+
+  const toggleMode = async () => {
+    if (!dispatchConfig) return;
+    setTogglingMode(true);
+    const newMode = dispatchConfig.mode === 'auto' ? 'manuel' : 'auto';
+    const me = await base44.auth.me();
+    try {
+      await base44.entities.DispatchConfig.update(dispatchConfig.id, {
+        mode: newMode,
+        force_override: true, // verrou permanent — ne peut être écrasé que par un admin
+        last_changed_by: me?.email || 'admin',
+        last_changed_reason: `Changé manuellement par admin (${me?.email})`,
+      });
+      setDispatchConfig(prev => ({ ...prev, mode: newMode }));
+      console.log(`MODE ACTIF : ${newMode.toUpperCase()} (défini par admin: ${me?.email})`);
+      if (newMode === 'manuel') console.log('AUTO DISPATCH BLOQUÉ (MODE MANUEL)');
+      toast.success(`${newMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé'}`);
+    } catch (err) {
+      toast.error('Erreur: ' + err.message);
+    }
+    setTogglingMode(false);
+  };
+
   useEffect(() => {
+    loadDispatchConfig();
     load();
     const interval = setInterval(load, 20000);
     return () => clearInterval(interval);
   }, []);
 
-  // Temps réel courses
   useEffect(() => {
     const unsub = base44.entities.Course.subscribe((event) => {
       if (event.type === "create") setCourses(prev => [event.data, ...prev]);
@@ -49,57 +90,34 @@ export default function DispatchMonitor() {
     return unsub;
   }, []);
 
-  // KPIs
+  const isAuto = (dispatchConfig?.mode || 'auto') === 'auto';
   const livreursOnline = livreurs.filter(l => l.disponible && !l.livreur_bloque);
   const enRecherche = courses.filter(c => ["en_attente", "assignee_attente"].includes(c.statut));
   const sansLivreur = courses.filter(c => c.statut === "aucun_livreur");
   const enCours = courses.filter(c => ["acceptee", "en_cours"].includes(c.statut));
-  const livreesToday = courses.filter(c => {
-    if (c.statut !== "livree") return false;
-    return new Date(c.updated_date).toDateString() === new Date().toDateString();
-  });
+  const livreesToday = courses.filter(c =>
+    c.statut === "livree" && new Date(c.updated_date).toDateString() === new Date().toDateString()
+  );
 
-  // Taux acceptation
-  const coursesAvecHistorique = courses.filter(c => c.historique_assignation);
-  let totalProposals = 0, totalAccepted = 0;
-  coursesAvecHistorique.forEach(c => {
-    try {
-      const hist = JSON.parse(c.historique_assignation);
-      hist.forEach(h => {
-        if (h.statut) {
-          totalProposals++;
-          if (h.statut === "acceptee" || c.statut === "acceptee" || c.statut === "en_cours" || c.statut === "livree") {
-            if (h === hist[hist.length - 1] && !["refuse", "no_response", "aucun_livreur"].includes(h.statut)) {
-              totalAccepted++;
-            }
-          }
-        }
-      });
-    } catch (_) {}
-  });
-  const tauxAcceptation = totalProposals > 0 ? Math.round((totalAccepted / totalProposals) * 100) : 0;
-
-  // Temps moyen attribution (courses acceptées)
   const coursesAcceptees = courses.filter(c => c.heure_assignation && c.date_acceptation);
-  const tempsTotal = coursesAcceptees.reduce((sum, c) => {
-    const diff = new Date(c.date_acceptation) - new Date(c.heure_assignation);
-    return sum + (diff > 0 ? diff : 0);
-  }, 0);
   const tempsMoyen = coursesAcceptees.length > 0
-    ? Math.round(tempsTotal / coursesAcceptees.length / 1000)
+    ? Math.round(coursesAcceptees.reduce((sum, c) => {
+        const d = new Date(c.date_acceptation) - new Date(c.heure_assignation);
+        return sum + (d > 0 ? d : 0);
+      }, 0) / coursesAcceptees.length / 1000)
     : null;
 
-  const handleManualDispatch = async (courseId) => {
+  const handleForceDispatch = async (courseId) => {
     try {
-      const res = await base44.functions.invoke("autoDispatch", { course_id: courseId });
+      const res = await base44.functions.invoke("autoDispatch", { course_id: courseId, force: true });
       if (res.data?.success) {
-        alert(`✅ Dispatché vers ${res.data.livreur?.nom}`);
+        toast.success(`✅ Dispatché vers ${res.data.livreur?.nom}`);
         load();
       } else {
-        alert("❌ " + (res.data?.message || "Aucun livreur disponible"));
+        toast.error("❌ " + (res.data?.message || "Aucun livreur disponible"));
       }
     } catch (err) {
-      alert("Erreur: " + err.message);
+      toast.error("Erreur: " + err.message);
     }
   };
 
@@ -127,6 +145,40 @@ export default function DispatchMonitor() {
         <Button variant="outline" size="icon" onClick={load}>
           <RefreshCw className="h-4 w-4" />
         </Button>
+      </div>
+
+      {/* Bandeau Mode — contrôle exclusif admin */}
+      <div className={`rounded-2xl border-2 p-4 ${isAuto ? 'bg-green-50 border-green-400' : 'bg-amber-50 border-amber-400'}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`h-3 w-3 rounded-full flex-shrink-0 ${isAuto ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`} />
+            <div>
+              <p className={`font-bold text-base ${isAuto ? 'text-green-800' : 'text-amber-800'}`}>
+                {isAuto ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé'}
+              </p>
+              <p className={`text-xs ${isAuto ? 'text-green-700' : 'text-amber-700'}`}>
+                {isAuto
+                  ? 'Les courses sont assignées automatiquement'
+                  : 'Assignation manuelle — aller sur /staff/dispatch'}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                <Lock className="h-2.5 w-2.5" /> Verrouillé — changeable uniquement par admin
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={toggleMode}
+            disabled={togglingMode}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 disabled:opacity-50 ${
+              isAuto
+                ? 'border-amber-400 text-amber-700 bg-white hover:bg-amber-50'
+                : 'border-green-400 text-green-700 bg-white hover:bg-green-50'
+            }`}
+          >
+            {isAuto ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+            {togglingMode ? '...' : isAuto ? 'Activer manuel' : 'Activer auto'}
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -171,7 +223,7 @@ export default function DispatchMonitor() {
               <p className="text-xs text-muted-foreground">Livrées aujourd'hui</p>
             </div>
             <p className="text-3xl font-bold text-blue-600">{livreesToday.length}</p>
-            {tempsMoyen && <p className="text-[10px] text-muted-foreground">Moy. {tempsMoyen}s d'attribution</p>}
+            {tempsMoyen && <p className="text-[10px] text-muted-foreground">Moy. {tempsMoyen}s</p>}
           </CardContent>
         </Card>
       </div>
@@ -193,9 +245,7 @@ export default function DispatchMonitor() {
                 <div key={l.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 border border-green-200">
                   <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                   <span className="text-xs font-medium text-green-800">{l.full_name?.split(" ")[0]}</span>
-                  {l.gps_latitude && (
-                    <MapPin className="h-3 w-3 text-green-600" />
-                  )}
+                  {l.gps_latitude && <MapPin className="h-3 w-3 text-green-600" />}
                   {(l.nombre_courses_actives || 0) > 0 && (
                     <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded">{l.nombre_courses_actives} actives</span>
                   )}
@@ -206,36 +256,30 @@ export default function DispatchMonitor() {
         </CardContent>
       </Card>
 
-      {/* Courses en recherche / bloquées */}
+      {/* Courses nécessitant attention */}
       {(enRecherche.length > 0 || sansLivreur.length > 0) && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">🚨 Nécessite attention ({enRecherche.length + sansLivreur.length})</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {[...enRecherche, ...sansLivreur].map(c => {
+            {[...sansLivreur, ...enRecherche].map(c => {
               const cfg = STATUT_CFG[c.statut] || {};
-              const age = moment(c.created_date).fromNow();
-              const nbTentatives = c.nombre_tentatives || 0;
               return (
                 <div key={c.id} className="flex items-start gap-3 p-3 rounded-xl border bg-card">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.badge}`}>{cfg.label}</span>
-                      {nbTentatives > 3 && <span className="text-[10px] text-red-600 font-bold">⚠️ {nbTentatives} tentatives</span>}
+                      {(c.nombre_tentatives || 0) > 3 && <span className="text-[10px] text-red-600 font-bold">⚠️ {c.nombre_tentatives} tentatives</span>}
                     </div>
                     <p className="text-sm font-semibold mt-1">{c.quartier_depart} → {c.quartier_arrivee}</p>
-                    <p className="text-xs text-muted-foreground">{c.type_colis} · {c.prix} FCFA · {age}</p>
+                    <p className="text-xs text-muted-foreground">{c.type_colis} · {c.prix} FCFA · {moment(c.created_date).fromNow()}</p>
                     {c.livreur_name && <p className="text-xs text-blue-600">→ Proposé à {c.livreur_name}</p>}
                   </div>
                   {(c.statut === "en_attente" || c.statut === "aucun_livreur") && (
-                    <Button
-                      size="sm"
-                      className="flex-shrink-0 text-xs h-8"
-                      onClick={() => handleManualDispatch(c.id)}
-                    >
+                    <Button size="sm" className="flex-shrink-0 text-xs h-8" onClick={() => handleForceDispatch(c.id)}>
                       <Zap className="h-3 w-3 mr-1" />
-                      Dispatcher
+                      Forcer auto
                     </Button>
                   )}
                 </div>
@@ -245,14 +289,14 @@ export default function DispatchMonitor() {
         </Card>
       )}
 
-      {/* Flux temps réel - courses en cours */}
+      {/* Flux en cours */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">📊 Flux en cours ({enCours.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {enCours.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-3">Aucune course active en ce moment</p>
+            <p className="text-xs text-muted-foreground text-center py-3">Aucune course active</p>
           ) : (
             <div className="space-y-2">
               {enCours.map(c => (
@@ -272,7 +316,7 @@ export default function DispatchMonitor() {
         </CardContent>
       </Card>
 
-      {/* Livreurs hors ligne avec GPS */}
+      {/* Livreurs hors ligne */}
       <Card className="opacity-60">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground">Hors ligne ({livreurs.length - livreursOnline.length})</CardTitle>
