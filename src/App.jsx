@@ -77,6 +77,7 @@ import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
 import ProfilsAdmin from './pages/dispatcher/ProfilsAdmin';
 import TestUpload from './pages/TestUpload';
 import PhoneAuth from './pages/PhoneAuth';
+import AdminLoginSecure from './pages/AdminLoginSecure';
 import HealthDashboard from './pages/dispatcher/HealthDashboard';
 import AuditComplet from './pages/dispatcher/AuditComplet';
 import TestPublicitesVisibilite from './pages/dispatcher/TestPublicitesVisibilite';
@@ -227,6 +228,11 @@ const AuthenticatedApp = () => {
     }
   }
 
+  // Route admin sécurisée — accessible même non connecté (redirige vers Base44 login)
+  if (window.location.pathname === '/admin-login-secure') {
+    return <AdminLoginSecure />;
+  }
+
   // Non authentifié → afficher directement /phone-auth
   if (!isAuthenticated) {
     const _p2 = new URLSearchParams(window.location.search);
@@ -242,6 +248,7 @@ const AuthenticatedApp = () => {
       <Routes>
         {/* Routes publiques sans layout */}
         <Route path="/phone-auth" element={<PhoneAuth />} />
+        <Route path="/admin-login-secure" element={<AdminLoginSecure />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />
