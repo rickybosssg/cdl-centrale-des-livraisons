@@ -60,17 +60,28 @@ function scoreDriver(driver, course) {
 }
 
 export async function lancerDispatch(course, excludeEmails = []) {
-  // Lire le mode depuis la BDD (source de vérité partagée entre tous les devices)
+  // ── Vérification STRICTE du mode dispatch ────────────────────────────────
+  // Le mode admin est TOUJOURS prioritaire. En cas de doute = bloquer.
   try {
     const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
     const config = configs[0];
-    if (config?.mode === 'manuel') {
-      console.log(`[DISPATCH] Mode MANUEL ACTIVÉ — dispatch automatique bloqué pour la course ${course.id}. L'admin doit affecter manuellement.`);
+
+    // Pas de config = on ne sait pas → bloquer pour sécurité
+    if (!config) {
+      console.log('AUTO DISPATCH BLOQUÉ (aucune config trouvée — sécurité)');
       return null;
     }
-    console.log(`[DISPATCH] Mode AUTOMATIQUE ACTIVÉ — lancement dispatch pour la course ${course.id}`);
+
+    console.log(`MODE ACTIF : ${config.mode.toUpperCase()}`);
+
+    if (config.mode === 'manuel') {
+      console.log('AUTO DISPATCH BLOQUÉ (MODE MANUEL)');
+      return null;
+    }
   } catch (e) {
-    console.warn('[DISPATCH] Impossible de lire DispatchConfig, mode auto par défaut:', e.message);
+    // En cas d'erreur de lecture → bloquer (sécurité > confort)
+    console.warn('AUTO DISPATCH BLOQUÉ (erreur lecture config — sécurité):', e.message);
+    return null;
   }
 
   try {
@@ -140,10 +151,5 @@ export async function reassignerCourse(course) {
   return lancerDispatch(course, exclure);
 }
 
-export function getDispatchMode() {
-  return localStorage.getItem('cdl_dispatch_mode') || 'auto';
-}
-
-export function setDispatchMode(mode) {
-  localStorage.setItem('cdl_dispatch_mode', mode);
-}
+// ⚠️ SUPPRIMÉ : getDispatchMode / setDispatchMode localStorage
+// La seule source de vérité est l'entité DispatchConfig en BDD.
