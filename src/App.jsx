@@ -157,7 +157,7 @@ function FcmDeepLinkHandler() {
       navigator.serviceWorker.addEventListener('message', onSwMsg);
     }
 
-    // CAS 3 : App ouverte (foreground) → Firebase onMessage
+    // CAS 3 : App ouverte (foreground web) → Firebase onMessage
     let unsubFcm = null;
     import('./lib/pushNotifications').then(({ onForegroundMessage }) => {
       onForegroundMessage((payload) => {
@@ -173,6 +173,22 @@ function FcmDeepLinkHandler() {
         });
         if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
       }).then(unsub => { unsubFcm = unsub; }).catch(() => {});
+    }).catch(() => {});
+
+    // CAS 4 : APK natif Capacitor → notifications au lancement à froid
+    import('./lib/nativePush').then(({ isNativeApp, getDeliveredNotifications }) => {
+      if (!isNativeApp()) return;
+      getDeliveredNotifications().then((notifs) => {
+        if (notifs.length > 0 && !navigated.current) {
+          const last = notifs[notifs.length - 1];
+          const data = last.data || {};
+          const route = data.notif_route || data.route || data.target_screen;
+          if (route && route.startsWith('/')) {
+            navigated.current = true;
+            navigate(route, { replace: true });
+          }
+        }
+      }).catch(() => {});
     }).catch(() => {});
 
     return () => {

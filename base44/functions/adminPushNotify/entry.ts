@@ -162,7 +162,6 @@ Deno.serve(async (req) => {
           route: notif.route,
           targetId: String(notif.targetId || ''),
           notif_route: deepLinkRoute,
-          click_action: 'FLUTTER_NOTIFICATION_CLICK',
         },
         android: {
           priority: 'HIGH',

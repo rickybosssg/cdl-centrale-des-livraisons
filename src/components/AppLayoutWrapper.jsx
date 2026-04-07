@@ -93,10 +93,48 @@ export default function AppLayoutWrapper({ user }) {
     return () => { isMounted = false; };
   }, [initialized, userReady]);
 
-  // FCM — séparé et sans dépendance
+  // FCM — détection native (APK) vs web (PWA)
   useEffect(() => {
     const initFcm = async () => {
       try {
+        // ── CAS 1 : APK Android (Capacitor natif) ──────────────────────
+        const { isNativeApp, initCapacitorPush } = await import('@/lib/nativePush');
+        if (isNativeApp()) {
+          console.log('[FCM] Mode natif Capacitor détecté');
+          await initCapacitorPush({
+            onToken: (token) => {
+              // Sauvegarder le token FCM natif en backend
+              base44.functions.invoke('saveFcmToken', { token }).catch(() => {});
+            },
+            onForegroundNotif: (notification) => {
+              // App ouverte : afficher un toast avec lien
+              const data = notification.data || {};
+              const route = data.notif_route || data.route || data.target_screen;
+              import('sonner').then(({ toast }) => {
+                toast(notification.title || 'CDL', {
+                  description: notification.body || '',
+                  duration: 8000,
+                  action: route ? {
+                    label: 'Voir',
+                    onClick: () => window.location.hash = route,
+                  } : undefined,
+                });
+              });
+              if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            },
+            onNotificationTap: ({ route }) => {
+              // Tap depuis background/app fermée → naviguer
+              if (route && route.startsWith('/')) {
+                // Stocker pour que FcmDeepLinkHandler le récupère
+                sessionStorage.setItem('cdl_notif_route', route);
+                window.location.reload();
+              }
+            },
+          });
+          return; // Ne pas initialiser le SW web si natif
+        }
+
+        // ── CAS 2 : Navigateur web (PWA / dev) ─────────────────────────
         if (typeof window === 'undefined' || !('Notification' in window)) return;
         const mod = await import('@/lib/pushNotifications');
         if (!mod?.requestNotificationPermission) return;
