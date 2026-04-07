@@ -1,49 +1,48 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
+/**
+ * Automation: UserProfile update → status = 'actif'
+ * Notifie l'utilisateur que son profil est validé (DB + FCM push)
+ */
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const { event } = await req.json();
+    // CORRECT: les données sont dans body.data, pas body.event.data
+    const body = await req.json();
+    const profile = body.data;
 
-    if (!event?.data) return Response.json({ error: "No profile data" }, { status: 400 });
+    if (!profile?.user_email) return Response.json({ skipped: true, reason: 'no profile data' });
 
-    const profile = event.data;
     const PROFILE_LABELS = {
-      livreur: "Livreur",
-      partenaire: "Partenaire",
-      commercial: "Commercial",
-      annonceur: "Annonceur",
+      livreur: 'Livreur', partenaire: 'Partenaire', commercial: 'Commercial', annonceur: 'Annonceur', client: 'Client',
     };
+    const label = PROFILE_LABELS[profile.profile_type] || profile.profile_type;
+    const titre = `✅ Profil ${label} validé !`;
+    const message = `Félicitations ! Votre profil ${label.toLowerCase()} a été approuvé. Vous pouvez maintenant l'utiliser.`;
+    const route = '/settings';
 
-    const title = `✅ Profil validé : ${PROFILE_LABELS[profile.profile_type] || profile.profile_type}`;
-    const body = `Votre demande de profil ${PROFILE_LABELS[profile.profile_type]?.toLowerCase()} a été approuvée !`;
-
-    // Envoyer notification FCM à l'utilisateur
-    await base44.functions.invoke('sendFcmNotification', {
-      user_email: profile.user_email,
-      title,
-      body,
-      data: {
-        type: 'profile_validated',
-        profile_id: profile.id,
-        profile_type: profile.profile_type,
-        url: '/settings',
-      },
-    }).catch(() => {});
-
-    // Créer une notification système
+    // 1. Notif DB
     await base44.asServiceRole.entities.Notification.create({
       destinataire_email: profile.user_email,
-      destinataire_role: profile.profile_type,
-      titre: title,
-      message: body,
+      destinataire_role: profile.profile_type || 'user',
+      titre,
+      message,
       type: 'success',
       lue: false,
+      target_screen: route,
+    });
+
+    // 2. FCM push via notifyUser
+    await base44.asServiceRole.functions.invoke('sendFcmNotification', {
+      user_email: profile.user_email,
+      title: titre,
+      body: message,
+      data: { type: 'profile_validated', route, profile_type: profile.profile_type || '' },
     }).catch(() => {});
 
-    return Response.json({ notified: true });
+    return Response.json({ success: true, notified: profile.user_email });
   } catch (error) {
-    console.error('[notifyUserProfileValidated]:', error);
+    console.error('[notifyUserProfileValidated]:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
