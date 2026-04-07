@@ -493,8 +493,8 @@ export default function CreateCourse() {
             <span className="text-muted-foreground">Mon solde Bedou</span>
             <span className="font-bold text-foreground">{soldeBedou !== null ? fmt(soldeBedou) : '...'}</span>
           </div>
-          {prixAvecPromo > 0 && (
-            <>
+          <div className={`transition-all overflow-hidden ${prixAvecPromo > 0 ? 'max-h-40' : 'max-h-0'}`}>
+            <div className="space-y-2 pt-1">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">Montant total</span>
                 <span className="font-bold text-primary">{fmt(prixAvecPromo)}</span>
@@ -502,15 +502,15 @@ export default function CreateCourse() {
               <div className={`flex items-center gap-2 p-2 rounded-lg text-sm font-semibold ${soldeInsuffisant ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                 {soldeInsuffisant ? '❌ Solde insuffisant' : '✅ Solde suffisant'}
               </div>
-              {soldeInsuffisant && (
-                <div className="space-y-2">
-                  <p className="text-xs text-red-700 font-medium">Il vous manque {fmt(prixAvecPromo - (soldeBedou || 0))}. Rechargez votre Bedou pour continuer.</p>
-                  <Button className="w-full" variant="outline" onClick={() => navigate('/mon-bedou')}>
-                    🔄 Recharger mon Bedou
-                  </Button>
-                </div>
-              )}
-            </>
+            </div>
+          </div>
+          {soldeInsuffisant && (
+            <div className="space-y-2">
+              <p className="text-xs text-red-700 font-medium">Il vous manque {fmt(prixAvecPromo - (soldeBedou || 0))}. Rechargez votre Bedou pour continuer.</p>
+              <Button className="w-full" variant="outline" onClick={() => navigate('/mon-bedou')}>
+                🔄 Recharger mon Bedou
+              </Button>
+            </div>
           )}
           <p className="text-[10px] text-muted-foreground text-center">
             💰 Bedou est l'unique moyen de paiement CDL. Le débit est effectué avant l'attribution du livreur.
@@ -518,36 +518,36 @@ export default function CreateCourse() {
         </CardContent>
       </Card>
 
-      {/* Récapitulatif */}
-      {prixBase > 0 && (
+      {/* Récapitulatif — transition CSS, jamais monté/démonté */}
+      <div className={`transition-all duration-200 overflow-hidden ${prixBase > 0 ? 'max-h-60 opacity-100' : 'max-h-0 opacity-0'}`}>
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="p-4 space-y-3">
             <p className="text-sm font-semibold">📋 Récapitulatif</p>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Prix de base</span>
-                  <span className="font-medium text-foreground">{fmt(prixBase)}</span>
+                <span className="font-medium text-foreground">{fmt(prixBase)}</span>
               </div>
               {supplement > 0 && (
                 <div className="flex justify-between text-amber-700">
                   <span>{tresUrgent ? "🚨 Très urgent" : "🔔 Urgent"}</span>
-                    <span className="font-medium text-amber-700">+{fmt(supplement)}</span>
+                  <span className="font-medium text-amber-700">+{fmt(supplement)}</span>
                 </div>
               )}
               {reductionAmount > 0 && (
                 <div className="flex justify-between text-green-700">
                   <span>🌟 Réduction promo {reductionPercent}%</span>
-                    <span className="font-medium text-green-700">-{fmt(reductionAmount)}</span>
+                  <span className="font-medium text-green-700">-{fmt(reductionAmount)}</span>
                 </div>
               )}
               <div className="border-t pt-2 flex justify-between font-bold text-base">
                 <span>Total à débiter</span>
-                  <span className="text-primary text-xl">{fmt(prixAvecPromo)}</span>
+                <span className="text-primary text-xl">{fmt(prixAvecPromo)}</span>
               </div>
             </div>
           </CardContent>
         </Card>
-      )}
+      </div>
 
       <Button
         className="w-full h-12 text-base font-semibold"
