@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AdminNotificationSystem from "@/components/AdminNotificationSystem";
+import SurgeZonesWidget from "@/components/SurgeZonesWidget";
 import AdminBadge from "@/components/AdminBadge";
 import moment from "moment";
 
@@ -236,6 +237,10 @@ export default function AdminDashboard() {
 
       <div className="px-4">
         <AdminNotificationSystem />
+      </div>
+
+      <div className="px-4">
+        <SurgeZonesWidget />
       </div>
 
       {alerts.length > 0 && (
