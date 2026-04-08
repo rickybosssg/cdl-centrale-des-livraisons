@@ -81,19 +81,28 @@ Deno.serve(async (req) => {
       return Response.json({ skipped: true });
     }
 
-    // Récupérer livreurs disponibles + validés non bloqués
-    const livreurs = await base44.asServiceRole.entities.User.filter({
+    // Livreurs en ligne (disponibles)
+    const livreursOnline = await base44.asServiceRole.entities.User.filter({
       disponible: true,
       statut_validation_livreur: 'valide',
     });
-    const livreursActifs = livreurs.filter(l => !l.livreur_bloque);
 
-    if (livreursActifs.length === 0) {
-      return Response.json({ notified: 0, reason: 'no_available_driver' });
+    // Livreurs récemment offline (last_seen < 2h) — pour maximiser la couverture
+    const deuxHeuresAvant = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const tousLivreurs = await base44.asServiceRole.entities.User.filter({ statut_validation_livreur: 'valide' });
+    const livreursRecentOffline = tousLivreurs.filter(l =>
+      !l.disponible && !l.livreur_bloque &&
+      l.last_seen && l.last_seen > deuxHeuresAvant
+    );
+
+    const livreursActifs = (livreursOnline || []).filter(l => !l.livreur_bloque);
+    const livreursOfflineRecents = livreursRecentOffline || [];
+    const tousCibles = [...livreursActifs, ...livreursOfflineRecents];
+
+    if (tousCibles.length === 0) {
+      return Response.json({ notified: 0, reason: 'no_drivers' });
     }
 
-    const titre = '🛵 Nouvelle course disponible !';
-    const message = `${course.quartier_depart} → ${course.quartier_arrivee} · ${course.type_colis}${course.prix ? ` · ${course.prix} FCFA` : ''}`;
     const route = `/courses-disponibles`;
 
     // Obtenir access token FCM
@@ -104,8 +113,17 @@ Deno.serve(async (req) => {
       accessToken = await getAccessToken(serviceAccount).catch(() => null);
     }
 
-    // Pour chaque livreur : DB + FCM
-    const tasks = livreursActifs.map(async (livreur) => {
+    // Pour chaque livreur : DB + FCM (online + offline récents)
+    const tasks = tousCibles.map(async (livreur) => {
+      const isOffline = !livreur.disponible;
+      const titreOffline = '💰 Gagne de l’argent maintenant !';
+      const messageOffline = `🚕 Course dispo : ${course.quartier_depart} → ${course.quartier_arrivee} · ${course.prix ? course.prix + ' FCFA' : ''} — Connecte-toi vite !`;
+      const titreOnline  = '🚕 Nouvelle course disponible !';
+      const messageOnline = `${course.quartier_depart} → ${course.quartier_arrivee} · ${course.type_colis}${course.prix ? ` · ${course.prix} FCFA` : ''}`;
+
+      const titre   = isOffline ? titreOffline : titreOnline;
+      const message = isOffline ? messageOffline : messageOnline;
+
       // 1. Notif DB
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: livreur.email,
@@ -120,10 +138,11 @@ Deno.serve(async (req) => {
         target_screen: route,
       });
 
-      // 2. FCM push
+      // 2. FCM push (HIGH priority, fonctionne app fermée)
       if (!accessToken) return;
       const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email: livreur.email });
       const tokens = tokenRecords.map(r => r.token).filter(Boolean);
+      if (tokens.length === 0) return;
 
       const results = await Promise.allSettled(
         tokens.map(t => sendFcmPush(accessToken, t, titre, message, route))
@@ -139,8 +158,8 @@ Deno.serve(async (req) => {
     });
 
     await Promise.allSettled(tasks);
-    console.log(`[notifyNewCourse] ${livreursActifs.length} livreurs notifiés (DB+FCM)`);
-    return Response.json({ notified: livreursActifs.length });
+    console.log(`[notifyNewCourse] ${livreursActifs.length} online + ${livreursOfflineRecents.length} offline-récents notifiés (DB+FCM)`);
+    return Response.json({ notified: tousCibles.length, online: livreursActifs.length, offline_recents: livreursOfflineRecents.length });
 
   } catch (error) {
     console.error('[notifyNewCourse] ERROR:', error.message);

@@ -454,6 +454,13 @@ export default function CreateCourse() {
             </div>
           </div>
 
+          {/* Recommandation de prix intelligente */}
+          <PrixRecommande
+            quartierDepart={form.quartier_depart}
+            prixPropose={prixBase}
+            onSuggest={(prix) => setForm(f => ({ ...f, prix_base: String(prix) }))}
+          />
+
           <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
             <span>⚠️ Avec un prix trop bas, vous risquez de ne pas avoir de livreur disponible.</span>
