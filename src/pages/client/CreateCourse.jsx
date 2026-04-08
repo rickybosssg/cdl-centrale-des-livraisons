@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import GpsLocationManager from "@/components/GpsLocationManager";
+import PrixRecommande from "../../components/PrixRecommande";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { vibrateSuccess } from "@/lib/vibration";

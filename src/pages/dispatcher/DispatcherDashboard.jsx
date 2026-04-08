@@ -6,7 +6,7 @@ import { useMessageNotification } from "@/hooks/useMessageNotification";
 import MessageAlert from "@/components/MessageAlert";
 import { Package, Users, TrendingUp, Clock, BarChart3, Settings, ShieldCheck, CreditCard, Megaphone, Store, Tag, Database, Bell, Truck, Trash2, Wallet, Radio, AlertCircle, Activity } from "lucide-react";
 import MapLivreursActifs from "../../components/MapLivreursActifs";
-import { getDispatchMode, setDispatchMode } from "@/lib/dispatch";
+
 import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
 import moment from "moment";
