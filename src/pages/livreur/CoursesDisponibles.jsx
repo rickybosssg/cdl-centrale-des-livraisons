@@ -6,7 +6,7 @@ import CourseCard from "../../components/CourseCard";
 import usePullToRefresh from "../../hooks/usePullToRefresh";
 import { toast } from "sonner";
 import { vibrateSuccess } from "@/lib/vibration";
-import { triggerWhatsAppNotification, waMsgCourseAcceptedByDriver } from "@/lib/whatsappNotifications";
+import { triggerWhatsAppNotification, waMsgCourseAcceptedByDriver, waMsgCourseAcceptedDriver } from "@/lib/whatsappNotifications";
 
 export default function CoursesDisponibles() {
   const [courses, setCourses] = useState([]);
@@ -82,10 +82,21 @@ export default function CoursesDisponibles() {
       recipientRole: 'client',
       recipientName: course.client_name || 'Client',
       recipientPhone: course.telephone_expediteur,
-      messageText: waMsgCourseAcceptedByDriver({ nomClient: course.client_name || 'Client' }),
+      messageText: waMsgCourseAcceptedByDriver(),
       entityId: course.id,
       entityType: 'course',
       priority: 'high',
+    });
+    // WA livreur — confirmation course acceptée
+    triggerWhatsAppNotification({
+      eventType: 'course_accepted_driver',
+      recipientRole: 'driver',
+      recipientName: user.full_name,
+      recipientPhone: user.telephone,
+      messageText: waMsgCourseAcceptedDriver(),
+      entityId: course.id,
+      entityType: 'course',
+      priority: 'normal',
     });
   };
 

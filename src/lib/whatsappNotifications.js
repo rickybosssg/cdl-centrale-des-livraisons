@@ -1,17 +1,9 @@
 /**
- * CDL — Helper alertes WhatsApp via Respond.io (Push to DB)
- *
- * Stratégie :
- * - triggerWhatsAppNotification crée un log avec whatsapp_ready = true
- * - Respond.io surveille les contacts/champs et déclenche ses workflows
- * - Aucun webhook entrant requis, aucun token API côté client
- * - Toutes les fonctions sont NON BLOQUANTES
+ * CDL — Helper alertes WhatsApp via Respond.io (Push to DB / Contact Sync)
+ * Toutes les fonctions sont NON BLOQUANTES — jamais d'await obligatoire.
  */
 import { base44 } from '@/api/base44Client';
 
-/**
- * Fonction centrale — appeler sans await bloquant
- */
 export function triggerWhatsAppNotification({
   eventType,
   recipientRole = '',
@@ -22,11 +14,7 @@ export function triggerWhatsAppNotification({
   entityType = null,
   priority = 'normal',
 }) {
-  if (!messageText) {
-    console.warn('[WA] Message absent, skip:', eventType);
-    return;
-  }
-  // Fire & forget — jamais bloquant
+  if (!messageText) return;
   base44.functions.invoke('sendWhatsAppAlert', {
     eventType,
     recipientRole,
@@ -43,42 +31,57 @@ export function triggerWhatsAppNotification({
 
 // ─── Templates Phase 1 ──────────────────────────────────────────────────────
 
-export function waMsgDriverProfileSubmitted({ nom, telephone, zone }) {
-  return `Bonjour Admin CDL,\nUne nouvelle demande de profil livreur vient d'être soumise.\nNom : ${nom}\nTéléphone : ${telephone || 'Non renseigné'}\nVille/Zone : ${zone || 'Non précisée'}\nOuvre CDL pour valider ou refuser la demande.`;
+// 1. Création course (client)
+export function waMsgCourseCreatedClient() {
+  return `📦 CDL - Centrale des Livraisons\n\nNouvelle activité détectée !\n\nVotre demande est en cours de traitement.\n\n🔍 Recherche d'un livreur en cours...\n⏱ Temps estimé : quelques instants\n\n📲 Vous serez notifié dès qu'un livreur accepte.\n\nMerci pour votre confiance 🙏`;
 }
 
-export function waMsgManualDispatchCourseCreated({ nomClient, depart, arrivee, prix }) {
-  return `Nouvelle course en attente de dispatch manuel.\nClient : ${nomClient}\nDépart : ${depart}\nArrivée : ${arrivee}\nMontant : ${prix} F CFA\nMerci d'assigner un livreur rapidement.`;
+// 2. Course assignée — livreur
+export function waMsgDriverCourseAssigned() {
+  return `🚨 Nouvelle course disponible !\n\n📍 Une course vient de vous être attribuée.\n\n👉 Ouvrez l'application CDL pour accepter ou refuser.\n\n💰 Gagnez de l'argent maintenant !`;
 }
 
-export function waMsgDriverCourseAssigned({ nomLivreur, depart, arrivee, prix }) {
-  return `Bonjour ${nomLivreur},\nUne nouvelle course vous a été attribuée.\nDépart : ${depart}\nArrivée : ${arrivee}\nMontant : ${prix} F CFA\nConnectez-vous à CDL pour accepter et commencer la course.`;
+// 3. Course acceptée — client
+export function waMsgCourseAcceptedByDriver() {
+  return `✅ Un livreur a accepté votre course !\n\n🛵 Il est en route vers vous.\n\n📍 Suivez votre livraison en direct dans l'application.\n\nMerci de votre confiance 🙏`;
 }
 
-export function waMsgCourseAcceptedByDriver({ nomClient }) {
-  return `Bonjour ${nomClient},\nVotre course a été acceptée par un livreur.\nLe trajet va commencer sous peu.\nOuvrez CDL pour suivre l'évolution de votre course.`;
+// 3. Course acceptée — livreur
+export function waMsgCourseAcceptedDriver() {
+  return `📦 Course confirmée !\n\n👉 Dirigez-vous vers le point de départ.\n\n📍 Respectez les instructions client.\n\nBonne mission 💪`;
 }
 
-export function waMsgBedouTopupRequested({ nom, role, montant }) {
-  return `Nouvelle demande de recharge Bedou.\nUtilisateur : ${nom}\nRôle : ${role}\nMontant : ${montant} F CFA\nMerci de vérifier la preuve de paiement dans CDL.`;
+// 4. Course annulée — client
+export function waMsgCourseCancelledClient() {
+  return `❌ Votre course a été annulée.\n\n📞 Contactez le support si nécessaire.`;
 }
 
-export function waMsgBedouWithdrawRequested({ nom, role, montant }) {
-  return `Nouvelle demande de retrait Bedou.\nUtilisateur : ${nom}\nRôle : ${role}\nMontant : ${montant} F CFA\nMerci de traiter la demande rapidement.`;
+// 4. Course annulée — livreur
+export function waMsgCourseCancelledDriver() {
+  return `❌ La course a été annulée.\n\n👉 Retour à l'accueil.`;
 }
 
-export function waMsgCourseCancelledAdmin({ nomClient, referenceCourse }) {
-  return `Une course a été annulée par le client.\nClient : ${nomClient}\nCourse : ${referenceCourse}\nVérifiez les éventuels frais d'annulation.`;
+// 5. Course terminée — client
+export function waMsgCourseCompletedClient() {
+  return `🏁 Livraison terminée !\n\n🙏 Merci d'avoir utilisé CDL.\n\n⭐ N'hésitez pas à nous recommander.`;
 }
 
-export function waMsgCourseCancelledDriver({ referenceCourse }) {
-  return `La course ${referenceCourse} a été annulée par le client.`;
+// 5. Course terminée — livreur
+export function waMsgCourseCompletedDriver() {
+  return `💰 Course terminée !\n\nVotre gain a été ajouté.\n\n🚀 Continuez pour gagner plus.`;
 }
 
-export function waMsgCourseCompletedClient({ nomClient }) {
-  return `Bonjour ${nomClient},\nVotre course a été marquée comme terminée.\nMerci d'avoir utilisé CDL.`;
+// 6. Recharge Bedou — client/livreur
+export function waMsgBedouTopupRequested() {
+  return `💰 Recharge en cours...\n\nVotre demande de recharge Bedou est en traitement.\n\n⏳ Veuillez patienter.`;
 }
 
-export function waMsgCourseCompletedAdmin({ nomClient, nomLivreur, prix }) {
-  return `Une course vient d'être terminée.\nClient : ${nomClient}\nLivreur : ${nomLivreur}\nMontant : ${prix} F CFA`;
+// 7. Retrait Bedou — driver/client
+export function waMsgBedouWithdrawRequested() {
+  return `💸 Demande de retrait reçue !\n\nVotre retrait est en cours de traitement.\n\n⏳ Patientez quelques instants.`;
+}
+
+// 8. Nouveau profil livreur — admin
+export function waMsgDriverProfileSubmitted() {
+  return `🛠 Nouvelle demande livreur !\n\nUn utilisateur a soumis un profil livreur.\n\n👉 Vérifiez et validez dans l'admin CDL.`;
 }

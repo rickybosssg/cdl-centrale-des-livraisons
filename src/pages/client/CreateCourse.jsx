@@ -15,6 +15,7 @@ import { fmt } from "@/lib/formatMoney";
 import QuartierSelect from "../../components/QuartierSelect";
 import AdBanner from "../../components/AdBanner";
 import { lancerDispatch } from "@/lib/dispatch";
+import { triggerWhatsAppNotification, waMsgCourseCreatedClient } from "@/lib/whatsappNotifications";
 import { toast } from "sonner";
 
 const TYPES_COLIS = ["Documents", "Petit colis", "Colis moyen", "Gros colis", "Nourriture", "Autre"];
@@ -145,6 +146,17 @@ export default function CreateCourse() {
     });
 
     lancerDispatch(courseData);
+    // WA client — course créée (non bloquant)
+    triggerWhatsAppNotification({
+      eventType: 'course_created',
+      recipientRole: 'client',
+      recipientName: user.full_name,
+      recipientPhone: form.telephone_expediteur,
+      messageText: waMsgCourseCreatedClient(),
+      entityId: courseData.id,
+      entityType: 'course',
+      priority: 'normal',
+    });
     vibrateSuccess();
     setLoading(false);
     setSearchingCourse(courseData);

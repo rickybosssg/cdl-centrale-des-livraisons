@@ -10,199 +10,31 @@
       ],
       "default": "user"
     },
-    "user_type": {
+    "whatsapp_trigger_event": {
       "type": "string",
-      "enum": [
-        "client",
-        "livreur",
-        "partenaire",
-        "commercial"
-      ],
-      "title": "Profil utilisateur"
+      "title": "Dernier \u00e9v\u00e9nement WA"
     },
-    "onboarding_completed": {
+    "whatsapp_message_text": {
+      "type": "string",
+      "title": "Message WhatsApp \u00e0 envoyer"
+    },
+    "whatsapp_recipient_role": {
+      "type": "string",
+      "title": "R\u00f4le destinataire WA"
+    },
+    "whatsapp_recipient_phone": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone destinataire WA"
+    },
+    "whatsapp_ready": {
       "type": "boolean",
-      "title": "Onboarding termin\u00e9",
+      "title": "Pr\u00eat pour Respond.io",
       "default": false
     },
-    "statut_compte": {
-      "type": "string",
-      "enum": [
-        "actif",
-        "en_attente",
-        "bloque"
-      ],
-      "title": "Statut du compte",
-      "default": "en_attente"
-    },
-    "telephone": {
-      "type": "string",
-      "title": "T\u00e9l\u00e9phone"
-    },
-    "whatsapp": {
-      "type": "string",
-      "title": "WhatsApp"
-    },
-    "quartier": {
-      "type": "string",
-      "title": "Quartier"
-    },
-    "disponible": {
+    "whatsapp_sent": {
       "type": "boolean",
-      "title": "Disponible / En ligne"
-    },
-    "actif": {
-      "type": "boolean",
-      "title": "Actif"
-    },
-    "profil_valide": {
-      "type": "boolean",
-      "title": "Profil valid\u00e9"
-    },
-    "statut_validation_livreur": {
-      "type": "string",
-      "enum": [
-        "en_attente",
-        "valide",
-        "refuse"
-      ],
-      "title": "Statut de validation livreur"
-    },
-    "statut_validation_commercial": {
-      "type": "string",
-      "enum": [
-        "en_attente",
-        "valide",
-        "refuse"
-      ],
-      "title": "Statut de validation commercial"
-    },
-    "statut_validation_partenaire": {
-      "type": "string",
-      "enum": [
-        "en_attente",
-        "valide",
-        "refuse"
-      ],
-      "title": "Statut de validation partenaire"
-    },
-    "motif_refus": {
-      "type": "string",
-      "title": "Motif de refus"
-    },
-    "motif_blocage": {
-      "type": "string",
-      "title": "Motif de blocage"
-    },
-    "date_validation": {
-      "type": "string",
-      "title": "Date de validation"
-    },
-    "livreur_bloque": {
-      "type": "boolean",
-      "title": "Livreur bloqu\u00e9"
-    },
-    "statut_financier_livreur": {
-      "type": "string",
-      "enum": [
-        "\u00c0 jour",
-        "Doit une commission",
-        "Bloqu\u00e9"
-      ],
-      "title": "Statut financier"
-    },
-    "solde_commission_du": {
-      "type": "number",
-      "title": "Solde commission d\u00fb (FCFA)"
-    },
-    "total_courses_livrees": {
-      "type": "number",
-      "title": "Total courses livr\u00e9es"
-    },
-    "nombre_courses_actives": {
-      "type": "number",
-      "title": "Nombre courses actives"
-    },
-    "total_commissions_generees": {
-      "type": "number",
-      "title": "Total commissions g\u00e9n\u00e9r\u00e9es (FCFA)"
-    },
-    "total_commissions_payees": {
-      "type": "number",
-      "title": "Total commissions pay\u00e9es (FCFA)"
-    },
-    "date_dernier_paiement": {
-      "type": "string",
-      "title": "Date du dernier paiement"
-    },
-    "derniere_course_attribuee_at": {
-      "type": "string",
-      "title": "Derni\u00e8re course attribu\u00e9e le"
-    },
-    "gps_latitude": {
-      "type": "number",
-      "title": "Latitude GPS"
-    },
-    "gps_longitude": {
-      "type": "number",
-      "title": "Longitude GPS"
-    },
-    "photo_profil": {
-      "type": "string",
-      "title": "Photo de profil"
-    },
-    "photo_identite_recto": {
-      "type": "string",
-      "title": "CNI recto"
-    },
-    "photo_identite_verso": {
-      "type": "string",
-      "title": "CNI verso"
-    },
-    "photo_moyen_deplacement": {
-      "type": "string",
-      "title": "Photo du moyen de d\u00e9placement"
-    },
-    "moyen_deplacement": {
-      "type": "string",
-      "title": "Mode(s) de d\u00e9placement (JSON)"
-    },
-    "commission_mode": {
-      "type": "boolean",
-      "title": "Mode commission activ\u00e9"
-    },
-    "note_moyenne": {
-      "type": "number",
-      "title": "Note moyenne globale (1-5)"
-    },
-    "total_notes": {
-      "type": "number",
-      "title": "Nombre de notes re\u00e7ues"
-    },
-    "somme_notes": {
-      "type": "number",
-      "title": "Somme des notes (pour calcul moyenne)"
-    },
-    "note_semaine": {
-      "type": "number",
-      "title": "Moyenne des notes sur 7 jours"
-    },
-    "alerte_qualite_envoyee": {
-      "type": "string",
-      "title": "Date derni\u00e8re alerte qualit\u00e9 envoy\u00e9e"
-    },
-    "user_roles": {
-      "type": "string",
-      "title": "R\u00f4les JSON (interne)"
-    },
-    "code_promo_utilise": {
-      "type": "string",
-      "title": "Code promo utilis\u00e9"
-    },
-    "total_courses": {
-      "type": "number",
-      "title": "Total courses"
+      "title": "Envoy\u00e9 par Respond.io",
+      "default": false
     }
-  },
-  "required": []
+  }
 }

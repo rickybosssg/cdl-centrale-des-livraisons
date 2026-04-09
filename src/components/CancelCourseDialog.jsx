@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { triggerWhatsAppNotification, waMsgCourseCancelledClient, waMsgCourseCancelledDriver } from '@/lib/whatsappNotifications';
 import { AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,30 @@ export default function CancelCourseDialog({ open, onOpenChange, course, onSucce
         toast.error(`❌ ${res.data.message}`);
       } else if (res.data?.success) {
         toast.success('✅ Course annulée. Frais prélevés.');
+        // WA client
+        triggerWhatsAppNotification({
+          eventType: 'course_cancelled_by_client',
+          recipientRole: 'client',
+          recipientName: course.client_name || '',
+          recipientPhone: course.telephone_expediteur,
+          messageText: waMsgCourseCancelledClient(),
+          entityId: course.id,
+          entityType: 'course',
+          priority: 'normal',
+        });
+        // WA livreur
+        if (course.livreur_email && course.telephone_livreur) {
+          triggerWhatsAppNotification({
+            eventType: 'course_cancelled_driver',
+            recipientRole: 'driver',
+            recipientName: course.livreur_name || '',
+            recipientPhone: course.telephone_livreur,
+            messageText: waMsgCourseCancelledDriver(),
+            entityId: course.id,
+            entityType: 'course',
+            priority: 'normal',
+          });
+        }
         onOpenChange(false);
         onSuccess?.();
       } else {

@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       const nomLivreur = profileData.nom_complet || profileData.full_name || profile.user_email;
       const telephone = profileData.telephone || '';
       const zone = profileData.quartier || profileData.zone || '';
-      const waMsg = `Bonjour Admin CDL,\nUne nouvelle demande de profil livreur vient d'\u00eatre soumise.\nNom : ${nomLivreur}\nT\u00e9l\u00e9phone : ${telephone}\nVille/Zone : ${zone || 'Non pr\u00e9cis\u00e9e'}\nOuvre CDL pour valider ou refuser la demande.`;
+      const waMsg = `🛠 Nouvelle demande livreur !\n\nUn utilisateur a soumis un profil livreur.\n\n👉 Vérifiez et validez dans l'admin CDL.`;
       const adminPhone = Deno.env.get('WHATSAPP_ADMIN_NUMBER');
       if (adminPhone) {
         base44.asServiceRole.functions.invoke('sendWhatsAppAlert', {

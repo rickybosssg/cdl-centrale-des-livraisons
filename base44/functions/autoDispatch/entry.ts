@@ -339,7 +339,7 @@ Deno.serve(async (req) => {
         recipientRole: 'livreur',
         recipientName: best.full_name,
         recipientPhone: best.telephone,
-        messageText: `Bonjour ${best.full_name},\nUne nouvelle course vous a été attribuée.\nDépart : ${course.quartier_depart}\nArrivée : ${course.quartier_arrivee}\nMontant : ${course.prix || '?'} F CFA\nConnectez-vous à CDL pour accepter et commencer la course.`,
+        messageText: `🚨 Nouvelle course disponible !\n\n📍 Une course vient de vous être attribuée.\n\n👉 Ouvrez l'application CDL pour accepter ou refuser.\n\n💰 Gagnez de l'argent maintenant !`,
         entityId: courseId,
         entityType: 'course',
         priority: 'urgent',

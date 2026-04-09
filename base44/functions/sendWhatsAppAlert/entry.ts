@@ -1,10 +1,10 @@
 /**
- * CDL — Préparation alertes WhatsApp pour Respond.io
+ * CDL — Alertes WhatsApp via Respond.io (Push to DB / Contact Sync)
  *
- * Stratégie "Push to DB" (sans webhook entrant) :
- * - Chaque événement CDL crée un log dans WhatsAppNotificationLog
- * - whatsapp_ready = true  →  Respond.io surveille ce champ et déclenche son workflow
- * - whatsapp_sent = false  →  Respond.io met ce champ à true après envoi
+ * Stratégie sans webhook entrant :
+ * 1. Reset whatsapp_ready = false sur le User (reset Respond.io)
+ * 2. Remplir whatsapp_message_text, whatsapp_recipient_role, whatsapp_trigger_event
+ * 3. Mettre whatsapp_ready = true → Respond.io détecte le changement et envoie le message
  *
  * Aucun secret WHATSAPP_WEBHOOK_URL / WHATSAPP_API_TOKEN requis.
  */
@@ -17,7 +17,6 @@ function formatPhone(phone) {
   if (digits.startsWith('00226')) return '+' + digits.slice(2);
   if (digits.startsWith('226')) return '+' + digits;
   if (digits.startsWith('0')) return '+226' + digits.slice(1);
-  // numéro 8 chiffres burkinabè sans préfixe
   if (digits.length === 8) return '+226' + digits;
   return '+226' + digits;
 }
@@ -46,67 +45,84 @@ Deno.serve(async (req) => {
 
   const formattedPhone = formatPhone(recipientPhone);
 
-  if (!formattedPhone) {
-    console.warn('[WA] Numéro absent — skip:', eventType, recipientRole);
-    try {
-      await base44.asServiceRole.entities.WhatsAppNotificationLog.create({
-        event_type: eventType,
-        recipient_role: recipientRole,
-        recipient_name: recipientName,
-        recipient_phone: recipientPhone || '',
-        message_text: messageText || '',
-        entity_id: entityId,
-        entity_type: entityType,
-        priority,
-        whatsapp_ready: false,
-        whatsapp_sent: false,
-        status: 'skipped',
-        error_message: 'Numéro manquant',
-        provider: 'respond_io',
-      });
-    } catch (_) {}
-    return Response.json({ skipped: true, reason: 'no_phone' });
-  }
+  // ── 1. Créer le log dans WhatsAppNotificationLog ──────────────────────────
+  let createdLog = null;
+  try {
+    const logPayload = {
+      event_type: eventType,
+      recipient_role: recipientRole,
+      recipient_name: recipientName,
+      recipient_phone: formattedPhone || recipientPhone || '',
+      message_text: messageText || '',
+      entity_id: entityId,
+      entity_type: entityType,
+      priority,
+      whatsapp_ready: !!formattedPhone,
+      whatsapp_sent: false,
+      status: formattedPhone ? 'pending' : 'skipped',
+      error_message: formattedPhone ? null : 'Numéro manquant',
+      provider: 'respond_io',
+    };
 
-  // Si c'est un renvoi → mettre à jour le log existant
-  if (logId) {
-    try {
+    if (logId) {
+      // Renvoi : réactiver un log existant
       await base44.asServiceRole.entities.WhatsAppNotificationLog.update(logId, {
         whatsapp_ready: true,
         whatsapp_sent: false,
         status: 'pending',
         error_message: null,
-        retry_count: 0,
       });
-      console.log(`[WA] ✅ Log ${logId} réactivé pour Respond.io — event: ${eventType}`);
-      return Response.json({ success: true, logId, phone: formattedPhone });
-    } catch (err) {
-      console.error('[WA] Erreur update log:', err.message);
-      return Response.json({ error: err.message }, { status: 500 });
+      createdLog = { id: logId };
+    } else {
+      createdLog = await base44.asServiceRole.entities.WhatsAppNotificationLog.create(logPayload);
     }
+  } catch (err) {
+    console.error('[WA] Erreur log:', err.message);
   }
 
-  // Nouveau log → whatsapp_ready = true pour que Respond.io le détecte
-  try {
-    const log = await base44.asServiceRole.entities.WhatsAppNotificationLog.create({
-      event_type: eventType,
-      recipient_role: recipientRole,
-      recipient_name: recipientName,
-      recipient_phone: formattedPhone,
-      message_text: messageText,
-      entity_id: entityId,
-      entity_type: entityType,
-      priority,
-      whatsapp_ready: true,
-      whatsapp_sent: false,
-      status: 'pending',
-      provider: 'respond_io',
-    });
-    console.log(`[WA] ✅ Log créé pour Respond.io — event: ${eventType}, phone: ${formattedPhone}, id: ${log.id}`);
-    return Response.json({ success: true, logId: log.id, phone: formattedPhone });
-  } catch (err) {
-    console.error('[WA] Erreur création log:', err.message);
-    // Non bloquant : retourner quand même 200
-    return Response.json({ success: false, error: err.message });
+  if (!formattedPhone) {
+    console.warn('[WA] Numéro absent — skip:', eventType, recipientRole);
+    return Response.json({ skipped: true, reason: 'no_phone' });
   }
+
+  // ── 2. Trouver le User par téléphone pour mettre à jour ses champs WA ────
+  // (Respond.io surveille les champs whatsapp_ sur le contact User)
+  try {
+    const users = await base44.asServiceRole.entities.User.filter({ telephone: formattedPhone });
+    const user = users[0] || null;
+
+    if (user) {
+      // Étape A : Reset (whatsapp_ready = false pour forcer le changement)
+      await base44.asServiceRole.entities.User.update(user.id, {
+        whatsapp_ready: false,
+        whatsapp_sent: false,
+      });
+
+      // Étape B : Remplir les données du message
+      await base44.asServiceRole.entities.User.update(user.id, {
+        whatsapp_trigger_event: eventType,
+        whatsapp_message_text: messageText,
+        whatsapp_recipient_role: recipientRole,
+        whatsapp_recipient_phone: formattedPhone,
+      });
+
+      // Étape C : Déclencher Respond.io
+      await base44.asServiceRole.entities.User.update(user.id, {
+        whatsapp_ready: true,
+      });
+
+      console.log(`[WA] ✅ Contact mis à jour pour Respond.io — event: ${eventType}, user: ${user.email}`);
+    } else {
+      console.warn(`[WA] Aucun user trouvé pour le tel ${formattedPhone} — log créé, contact non mis à jour`);
+    }
+  } catch (err) {
+    console.error('[WA] Erreur mise à jour contact:', err.message);
+    // Non bloquant — on continue
+  }
+
+  return Response.json({
+    success: true,
+    logId: createdLog?.id || null,
+    phone: formattedPhone,
+  });
 });

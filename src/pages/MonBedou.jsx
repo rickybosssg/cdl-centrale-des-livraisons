@@ -92,10 +92,10 @@ export default function MonBedou() {
       // WA admin (non bloquant — skippe si admin phone non configuré)
       triggerWhatsAppNotification({
         eventType: 'bedou_topup_requested',
-        recipientRole: 'admin',
-        recipientName: 'Admin CDL',
-        recipientPhone: null,
-        messageText: waMsgBedouTopupRequested({ nom: user?.full_name || user?.email, role: user?.user_type || 'client', montant }),
+        recipientRole: 'client',
+        recipientName: user?.full_name || '',
+        recipientPhone: user?.telephone || null,
+        messageText: waMsgBedouTopupRequested(),
         entityId: user?.id,
         entityType: 'bedou',
         priority: 'high',
@@ -123,10 +123,10 @@ export default function MonBedou() {
       // WA admin (non bloquant)
       triggerWhatsAppNotification({
         eventType: 'bedou_withdraw_requested',
-        recipientRole: 'admin',
-        recipientName: 'Admin CDL',
-        recipientPhone: null,
-        messageText: waMsgBedouWithdrawRequested({ nom: user?.full_name || user?.email, role: user?.user_type || 'client', montant: parseInt(retraitForm.montant) }),
+        recipientRole: 'driver',
+        recipientName: user?.full_name || '',
+        recipientPhone: user?.telephone || null,
+        messageText: waMsgBedouWithdrawRequested(),
         entityId: user?.id,
         entityType: 'bedou',
         priority: 'high',
