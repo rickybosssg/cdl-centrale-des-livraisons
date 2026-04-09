@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
     const c = course[0];
 
     // 2. Vérifier les conditions
-    if (c.statut !== 'acceptee') {
-      return Response.json({ error: 'Course must be accepted' }, { status: 400 });
+    if (!['acceptee', 'en_cours'].includes(c.statut)) {
+      return Response.json({ error: 'Course must be accepted or in progress', statut: c.statut }, { status: 400 });
     }
     if (!c.livreur_email) {
       return Response.json({ error: 'No delivery assigned' }, { status: 400 });

@@ -85,21 +85,23 @@ Deno.serve(async (req) => {
     return Response.json({ skipped: true, reason: 'no_phone' });
   }
 
-  // ── 2. Trouver le User par téléphone pour mettre à jour ses champs WA ────
-  // (Respond.io surveille les champs whatsapp_ sur le contact User)
+  // ── 2. Trouver le User par téléphone et synchroniser le contact Respond.io ──
   try {
     const users = await base44.asServiceRole.entities.User.filter({ telephone: formattedPhone });
     const user = users[0] || null;
 
     if (user) {
-      // Étape A : Reset (whatsapp_ready = false pour forcer le changement)
+      // Étape A : Reset whatsapp_ready = false (force détection changement par Respond.io)
       await base44.asServiceRole.entities.User.update(user.id, {
         whatsapp_ready: false,
         whatsapp_sent: false,
       });
 
-      // Étape B : Remplir les données du message
+      // Étape B : Sync données contact + données message
       await base44.asServiceRole.entities.User.update(user.id, {
+        // Sync contact Respond.io
+        telephone: formattedPhone,
+        // Données WA
         whatsapp_trigger_event: eventType,
         whatsapp_message_text: messageText,
         whatsapp_recipient_role: recipientRole,
@@ -111,13 +113,14 @@ Deno.serve(async (req) => {
         whatsapp_ready: true,
       });
 
-      console.log(`[WA] ✅ Contact mis à jour pour Respond.io — event: ${eventType}, user: ${user.email}`);
+      console.log(`[WA] ✅ Contact synced + Respond.io déclenché — event: ${eventType}, user: ${user.email}`);
     } else {
-      console.warn(`[WA] Aucun user trouvé pour le tel ${formattedPhone} — log créé, contact non mis à jour`);
+      // Contact inconnu — log uniquement, pas d'erreur
+      console.warn(`[WA] Aucun user CDL trouvé pour ${formattedPhone} — log créé uniquement (event: ${eventType})`);
     }
   } catch (err) {
-    console.error('[WA] Erreur mise à jour contact:', err.message);
-    // Non bloquant — on continue
+    console.error('[WA] Erreur sync contact:', err.message);
+    // Non bloquant
   }
 
   return Response.json({

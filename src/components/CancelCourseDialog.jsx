@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 
 export default function CancelCourseDialog({ open, onOpenChange, course, onSuccess }) {
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   if (!course) return null;
 
@@ -15,47 +16,36 @@ export default function CancelCourseDialog({ open, onOpenChange, course, onSucce
   const frais = Math.round(prix * 0.5);
 
   const handleConfirm = async () => {
+    if (loading) return;
+    setErrorMsg(null);
     setLoading(true);
+    console.log('[CancelDialog] Début annulation course:', course.id, 'statut:', course.statut);
     try {
-      const res = await base44.functions.invoke('cancelCourseWithFees', {
-        courseId: course.id,
-      });
+      const res = await base44.functions.invoke('cancelCourseWithFees', { courseId: course.id });
+      console.log('[CancelDialog] Réponse:', res.data);
 
       if (res.data?.error === 'insufficient_balance') {
-        toast.error(`❌ ${res.data.message}`);
+        const msg = res.data.message || `Solde insuffisant`;
+        setErrorMsg(msg);
+        toast.error('❌ ' + msg);
       } else if (res.data?.success) {
         toast.success('✅ Course annulée. Frais prélevés.');
-        // WA client
-        triggerWhatsAppNotification({
-          eventType: 'course_cancelled_by_client',
-          recipientRole: 'client',
-          recipientName: course.client_name || '',
-          recipientPhone: course.telephone_expediteur,
-          messageText: waMsgCourseCancelledClient(),
-          entityId: course.id,
-          entityType: 'course',
-          priority: 'normal',
-        });
-        // WA livreur
+        triggerWhatsAppNotification({ eventType: 'course_cancelled_by_client', recipientRole: 'client', recipientName: course.client_name || '', recipientPhone: course.telephone_expediteur, entityId: course.id, entityType: 'course', priority: 'normal' });
         if (course.livreur_email && course.telephone_livreur) {
-          triggerWhatsAppNotification({
-            eventType: 'course_cancelled_driver',
-            recipientRole: 'driver',
-            recipientName: course.livreur_name || '',
-            recipientPhone: course.telephone_livreur,
-            messageText: waMsgCourseCancelledDriver(),
-            entityId: course.id,
-            entityType: 'course',
-            priority: 'normal',
-          });
+          triggerWhatsAppNotification({ eventType: 'course_cancelled_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur, entityId: course.id, entityType: 'course', priority: 'normal' });
         }
         onOpenChange(false);
         onSuccess?.();
       } else {
-        toast.error(`Erreur: ${res.data?.error || 'Annulation échouée'}`);
+        const msg = res.data?.message || res.data?.error || 'Annulation échouée';
+        console.error('[CancelDialog] Erreur:', msg);
+        setErrorMsg(msg);
+        toast.error('Erreur: ' + msg);
       }
     } catch (err) {
-      toast.error(`Erreur: ${err.message}`);
+      console.error('[CancelDialog] Exception:', err.message);
+      setErrorMsg(err.message);
+      toast.error('Erreur: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -98,12 +88,19 @@ export default function CancelCourseDialog({ open, onOpenChange, course, onSucce
           </p>
         </DialogDescription>
 
+        {errorMsg && (
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            ⚠️ {errorMsg}
+          </div>
+        )}
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)} disabled={loading}>
             Annuler
           </Button>
           <Button variant="destructive" className="flex-1" onClick={handleConfirm} disabled={loading}>
-            {loading ? 'Traitement...' : 'Confirmer annulation'}
+            {loading ? (
+              <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Traitement...</>
+            ) : 'Confirmer annulation'}
           </Button>
         </div>
       </DialogContent>
