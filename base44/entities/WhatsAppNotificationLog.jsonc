@@ -1,0 +1,85 @@
+{
+  "name": "WhatsAppNotificationLog",
+  "type": "object",
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "title": "Type d'\u00e9v\u00e9nement"
+    },
+    "recipient_role": {
+      "type": "string",
+      "title": "R\u00f4le destinataire"
+    },
+    "recipient_name": {
+      "type": "string",
+      "title": "Nom destinataire"
+    },
+    "recipient_phone": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone destinataire"
+    },
+    "message_text": {
+      "type": "string",
+      "title": "Message envoy\u00e9"
+    },
+    "entity_id": {
+      "type": "string",
+      "title": "ID entit\u00e9 li\u00e9e"
+    },
+    "entity_type": {
+      "type": "string",
+      "title": "Type entit\u00e9 (course, profil, bedou...)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "sent",
+        "failed",
+        "skipped"
+      ],
+      "title": "Statut",
+      "default": "pending"
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "respond_io",
+        "whatsapp_cloud_api"
+      ],
+      "title": "Fournisseur"
+    },
+    "provider_response": {
+      "type": "string",
+      "title": "R\u00e9ponse fournisseur (JSON)"
+    },
+    "error_message": {
+      "type": "string",
+      "title": "Message d'erreur"
+    },
+    "retry_count": {
+      "type": "number",
+      "title": "Nombre de tentatives",
+      "default": 0
+    },
+    "sent_at": {
+      "type": "string",
+      "title": "Envoy\u00e9 le"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "high",
+        "urgent"
+      ],
+      "default": "normal"
+    }
+  },
+  "required": [
+    "event_type",
+    "recipient_phone",
+    "message_text",
+    "status"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "WhatsAppNotificationSettings",
+  "type": "object",
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "title": "Type d'\u00e9v\u00e9nement"
+    },
+    "is_enabled": {
+      "type": "boolean",
+      "title": "Activ\u00e9",
+      "default": true
+    },
+    "recipient_mode": {
+      "type": "string",
+      "title": "Mode destinataire (admin, driver, client, all)"
+    },
+    "template_name": {
+      "type": "string",
+      "title": "Nom du template"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "high",
+        "urgent"
+      ],
+      "default": "normal"
+    }
+  },
+  "required": [
+    "event_type"
+  ]
+}
