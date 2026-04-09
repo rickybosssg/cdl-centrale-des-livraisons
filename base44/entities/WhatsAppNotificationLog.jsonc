@@ -20,7 +20,7 @@
     },
     "message_text": {
       "type": "string",
-      "title": "Message envoy\u00e9"
+      "title": "Message \u00e0 envoyer"
     },
     "entity_id": {
       "type": "string",
@@ -29,6 +29,27 @@
     "entity_type": {
       "type": "string",
       "title": "Type entit\u00e9 (course, profil, bedou...)"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "high",
+        "urgent"
+      ],
+      "default": "normal"
+    },
+    "whatsapp_ready": {
+      "type": "boolean",
+      "title": "Pr\u00eat pour Respond.io",
+      "default": false,
+      "description": "Respond.io surveille ce champ pour d\u00e9clencher le workflow"
+    },
+    "whatsapp_sent": {
+      "type": "boolean",
+      "title": "Envoy\u00e9 par Respond.io",
+      "default": false,
+      "description": "Respond.io met ce champ \u00e0 true apr\u00e8s envoi"
     },
     "status": {
       "type": "string",
@@ -40,18 +61,6 @@
       ],
       "title": "Statut",
       "default": "pending"
-    },
-    "provider": {
-      "type": "string",
-      "enum": [
-        "respond_io",
-        "whatsapp_cloud_api"
-      ],
-      "title": "Fournisseur"
-    },
-    "provider_response": {
-      "type": "string",
-      "title": "R\u00e9ponse fournisseur (JSON)"
     },
     "error_message": {
       "type": "string",
@@ -66,20 +75,15 @@
       "type": "string",
       "title": "Envoy\u00e9 le"
     },
-    "priority": {
+    "provider": {
       "type": "string",
-      "enum": [
-        "normal",
-        "high",
-        "urgent"
-      ],
-      "default": "normal"
+      "title": "Fournisseur",
+      "default": "respond_io"
     }
   },
   "required": [
     "event_type",
     "recipient_phone",
-    "message_text",
-    "status"
+    "message_text"
   ]
 }

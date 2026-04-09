@@ -1,18 +1,16 @@
 /**
- * CDL — Helper alertes WhatsApp (côté client)
- * Toutes les fonctions sont NON BLOQUANTES : jamais de throw, jamais d'attente.
- * Un échec WhatsApp ne doit jamais interrompre un flux métier.
+ * CDL — Helper alertes WhatsApp via Respond.io (Push to DB)
+ *
+ * Stratégie :
+ * - triggerWhatsAppNotification crée un log avec whatsapp_ready = true
+ * - Respond.io surveille les contacts/champs et déclenche ses workflows
+ * - Aucun webhook entrant requis, aucun token API côté client
+ * - Toutes les fonctions sont NON BLOQUANTES
  */
 import { base44 } from '@/api/base44Client';
 
-// Numéros admin CDL (lus depuis les settings ou valeurs par défaut)
-export const ADMIN_WHATSAPP_NUMBERS = [
-  // Ajouter les numéros admin ici ou les charger depuis la DB
-];
-
 /**
- * Fonction centrale — appeler partout sans await bloquant
- * Usage: triggerWhatsAppNotification({ eventType, recipientPhone, messageText, ... })
+ * Fonction centrale — appeler sans await bloquant
  */
 export function triggerWhatsAppNotification({
   eventType,
@@ -24,34 +22,29 @@ export function triggerWhatsAppNotification({
   entityType = null,
   priority = 'normal',
 }) {
-  if (!recipientPhone) {
-    console.warn('[WA] Numéro absent, skip:', eventType, recipientRole);
-    return;
-  }
   if (!messageText) {
     console.warn('[WA] Message absent, skip:', eventType);
     return;
   }
-
-  // Fire & forget — non bloquant
+  // Fire & forget — jamais bloquant
   base44.functions.invoke('sendWhatsAppAlert', {
     eventType,
     recipientRole,
     recipientName,
-    recipientPhone,
+    recipientPhone: recipientPhone || null,
     messageText,
     entityId,
     entityType,
     priority,
   }).catch(err => {
-    console.error('[WA] Erreur envoi (non bloquant):', eventType, err?.message);
+    console.error('[WA] Erreur (non bloquant):', eventType, err?.message);
   });
 }
 
-// ─── Templates de messages ──────────────────────────────────────────────────
+// ─── Templates Phase 1 ──────────────────────────────────────────────────────
 
 export function waMsgDriverProfileSubmitted({ nom, telephone, zone }) {
-  return `Bonjour Admin CDL,\nUne nouvelle demande de profil livreur vient d'être soumise.\nNom : ${nom}\nTéléphone : ${telephone}\nVille/Zone : ${zone || 'Non précisée'}\nOuvre CDL pour valider ou refuser la demande.`;
+  return `Bonjour Admin CDL,\nUne nouvelle demande de profil livreur vient d'être soumise.\nNom : ${nom}\nTéléphone : ${telephone || 'Non renseigné'}\nVille/Zone : ${zone || 'Non précisée'}\nOuvre CDL pour valider ou refuser la demande.`;
 }
 
 export function waMsgManualDispatchCourseCreated({ nomClient, depart, arrivee, prix }) {
