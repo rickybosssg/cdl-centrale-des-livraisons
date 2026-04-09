@@ -543,6 +543,12 @@ export default function AdminDashboard() {
             ✅ Checklist Play Store
           </Button>
         </Link>
+        <Link to="/whatsapp-alerts">
+          <Button className="w-full justify-start gap-2" variant="outline">
+            <span className="text-lg">📱</span>
+            Alertes WhatsApp
+          </Button>
+        </Link>
       </div>
 
       {/* GRILLE 2 : Suppression + PUBLICITÉS ADMIN */}

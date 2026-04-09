@@ -332,6 +332,20 @@ Deno.serve(async (req) => {
 
     console.log(`[DISPATCH] Course ${courseId} assignée à ${best.full_name} (${best.email}) — score: ${scored[0].score}`);
 
+    // WA au livreur (non bloquant)
+    if (best.telephone) {
+      base44.asServiceRole.functions.invoke('sendWhatsAppAlert', {
+        eventType: 'driver_course_assigned',
+        recipientRole: 'livreur',
+        recipientName: best.full_name,
+        recipientPhone: best.telephone,
+        messageText: `Bonjour ${best.full_name},\nUne nouvelle course vous a été attribuée.\nDépart : ${course.quartier_depart}\nArrivée : ${course.quartier_arrivee}\nMontant : ${course.prix || '?'} F CFA\nConnectez-vous à CDL pour accepter et commencer la course.`,
+        entityId: courseId,
+        entityType: 'course',
+        priority: 'urgent',
+      }).catch(err => console.warn('[DISPATCH] WA livreur skip:', err?.message));
+    }
+
     return Response.json({
       success: true,
       livreur: { email: best.email, nom: best.full_name },

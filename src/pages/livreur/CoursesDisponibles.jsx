@@ -6,6 +6,7 @@ import CourseCard from "../../components/CourseCard";
 import usePullToRefresh from "../../hooks/usePullToRefresh";
 import { toast } from "sonner";
 import { vibrateSuccess } from "@/lib/vibration";
+import { triggerWhatsAppNotification, waMsgCourseAcceptedByDriver } from "@/lib/whatsappNotifications";
 
 export default function CoursesDisponibles() {
   const [courses, setCourses] = useState([]);
@@ -75,6 +76,17 @@ export default function CoursesDisponibles() {
     });
     vibrateSuccess();
     toast.success("🛥 Course acceptée ! Bonne livraison !");
+    // WA au client (non bloquant)
+    triggerWhatsAppNotification({
+      eventType: 'course_accepted_by_driver',
+      recipientRole: 'client',
+      recipientName: course.client_name || 'Client',
+      recipientPhone: course.telephone_expediteur,
+      messageText: waMsgCourseAcceptedByDriver({ nomClient: course.client_name || 'Client' }),
+      entityId: course.id,
+      entityType: 'course',
+      priority: 'high',
+    });
   };
 
   if (loading) {

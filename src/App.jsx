@@ -90,6 +90,7 @@ import MyReferral from './pages/MyReferral';
 import GestionSignalements from './pages/dispatcher/GestionSignalements';
 import PlayStoreChecklist from './pages/dispatcher/PlayStoreChecklist';
 import PlayStoreValidationFinal from './pages/dispatcher/PlayStoreValidationFinal';
+import WhatsAppAlerts from './pages/dispatcher/WhatsAppAlerts';
 import SpaceSelector from './pages/SpaceSelector';
 import StaffGuard from './components/StaffGuard';
 import StaffDashboard from './pages/staff/StaffDashboard';
@@ -356,6 +357,7 @@ const AuthenticatedApp = () => {
           <Route path="/gestion-signalements" element={<GestionSignalements />} />
           <Route path="/playstore-checklist" element={<PlayStoreChecklist />} />
           <Route path="/playstore-validation" element={<PlayStoreValidationFinal />} />
+          <Route path="/whatsapp-alerts" element={<WhatsAppAlerts />} />
         </Route>
       </Route>
 

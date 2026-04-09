@@ -32,6 +32,29 @@ Deno.serve(async (req) => {
     const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
     if (admins.length === 0) return Response.json({ skipped: true, reason: 'no admins' });
 
+    // WA alerte livreur (non bloquant, uniquement profil livreur)
+    if (profile.profile_type === 'livreur') {
+      let profileData = {};
+      try { profileData = JSON.parse(profile.data_json || '{}'); } catch (_) {}
+      const nomLivreur = profileData.nom_complet || profileData.full_name || profile.user_email;
+      const telephone = profileData.telephone || '';
+      const zone = profileData.quartier || profileData.zone || '';
+      const waMsg = `Bonjour Admin CDL,\nUne nouvelle demande de profil livreur vient d'\u00eatre soumise.\nNom : ${nomLivreur}\nT\u00e9l\u00e9phone : ${telephone}\nVille/Zone : ${zone || 'Non pr\u00e9cis\u00e9e'}\nOuvre CDL pour valider ou refuser la demande.`;
+      const adminPhone = Deno.env.get('WHATSAPP_ADMIN_NUMBER');
+      if (adminPhone) {
+        base44.asServiceRole.functions.invoke('sendWhatsAppAlert', {
+          eventType: 'driver_profile_submitted',
+          recipientRole: 'admin',
+          recipientName: 'Admin CDL',
+          recipientPhone: adminPhone,
+          messageText: waMsg,
+          entityId: profile.id,
+          entityType: 'profile',
+          priority: 'high',
+        }).catch(err => console.warn('[notifyAdmin] WA skip:', err?.message));
+      }
+    }
+
     // Pour chaque admin : DB + FCM
     await Promise.allSettled(admins.map(async (admin) => {
       // 1. Notif DB

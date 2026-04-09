@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import moment from "moment";
 import BeDouHistory from "@/components/BeDouHistory";
+import { triggerWhatsAppNotification, waMsgBedouTopupRequested, waMsgBedouWithdrawRequested } from "@/lib/whatsappNotifications";
 
 const METHODES = [
   { value: "orange_money", label: "Orange Money" },
@@ -88,6 +89,17 @@ export default function MonBedou() {
     setSubmitting(false);
     if (res.data.success) {
       toast.success(`Demande de recharge envoyée ! ${res.data.bonus_applique > 0 ? `Bonus : +${res.data.bonus_applique} F CFA 🎁` : ''}`);
+      // WA admin (non bloquant — skippe si admin phone non configuré)
+      triggerWhatsAppNotification({
+        eventType: 'bedou_topup_requested',
+        recipientRole: 'admin',
+        recipientName: 'Admin CDL',
+        recipientPhone: null,
+        messageText: waMsgBedouTopupRequested({ nom: user?.full_name || user?.email, role: user?.user_type || 'client', montant }),
+        entityId: user?.id,
+        entityType: 'bedou',
+        priority: 'high',
+      });
       setForm({ montant: "", methode: "orange_money", numero_transaction: "", preuve: null });
       setTab("historique");
     } else {
@@ -108,6 +120,17 @@ export default function MonBedou() {
     setSubmitting(false);
     if (res.data.success) {
       toast.success("Demande de retrait envoyée ! L'admin va la traiter.");
+      // WA admin (non bloquant)
+      triggerWhatsAppNotification({
+        eventType: 'bedou_withdraw_requested',
+        recipientRole: 'admin',
+        recipientName: 'Admin CDL',
+        recipientPhone: null,
+        messageText: waMsgBedouWithdrawRequested({ nom: user?.full_name || user?.email, role: user?.user_type || 'client', montant: parseInt(retraitForm.montant) }),
+        entityId: user?.id,
+        entityType: 'bedou',
+        priority: 'high',
+      });
       setRetraitForm({ montant: "", methode: "orange_money", numero_reception: "", nom_compte: "" });
       load();
       setTab("historique");

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
 import { toast } from "sonner";
 import { vibrateSuccess, vibrateMedium, vibrateNotif, playNotificationSound } from "@/lib/vibration";
+import { triggerWhatsAppNotification, waMsgCourseCompletedClient } from "@/lib/whatsappNotifications";
 
 export default function CourseLivreur() {
   const { id } = useParams();
@@ -150,6 +151,17 @@ export default function CourseLivreur() {
 
     vibrateSuccess();
     toast.success(`🎉 Livraison confirmée ! +${gainLivreur} FCFA crédités sur votre Bedou.`);
+    // WA au client (non bloquant)
+    triggerWhatsAppNotification({
+      eventType: 'course_completed',
+      recipientRole: 'client',
+      recipientName: course.client_name || 'Client',
+      recipientPhone: course.telephone_expediteur,
+      messageText: waMsgCourseCompletedClient({ nomClient: course.client_name || 'Client' }),
+      entityId: course.id,
+      entityType: 'course',
+      priority: 'normal',
+    });
     console.log('[CourseLivreur] livrerColis DONE — gainLivreur:', gainLivreur);
     setUpdating(false);
   };
