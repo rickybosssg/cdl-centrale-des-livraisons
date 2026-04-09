@@ -155,21 +155,27 @@ export default function CourseLivreur() {
   };
 
   const marquerCourseEffectuee = async () => {
+    if (!id) {
+      toast.error('Course introuvable');
+      return;
+    }
     setUpdating(true);
-    console.log('[CourseLivreur] marquerCourseEffectuee START');
+    console.log('[CourseLivreur] marquerCourseEffectuee START — course.id:', id);
     try {
+      // Remettre le livreur disponible
       const me = await base44.auth.me();
       await base44.auth.updateMe({
         disponible: true,
         nombre_courses_actives: Math.max(0, (me.nombre_courses_actives || 0) - 1),
       });
-      vibrateSuccess();
-      toast.success('✅ Vous êtes de nouveau disponible pour de nouvelles courses !');
       console.log('[CourseLivreur] marquerCourseEffectuee DONE — livreur remis disponible');
+      vibrateSuccess();
+      toast.success('✅ Course terminée + vous êtes de nouveau disponible !');
       navigate('/mes-livraisons');
     } catch (err) {
       console.error('[CourseLivreur] marquerCourseEffectuee error:', err);
-      toast.error('Erreur : ' + err.message + ' — Réessayez.');
+      toast.error(err.message || 'Erreur inattendue — Réessayez.');
+    } finally {
       setUpdating(false);
     }
   };
@@ -391,13 +397,13 @@ export default function CourseLivreur() {
             </div>
             <Button
               className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 active:scale-[0.98] transition-all"
-              onClick={marquerCourseEffectuee}
+              onClick={() => marquerCourseEffectuee()}
               disabled={updating}
             >
               {updating ? (
-                <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Validation en cours...</>
+                <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Validation...</>
               ) : (
-                <><CheckCircle2 className="h-5 w-5 mr-2" />Je suis disponible — Nouvelles courses</>
+                <><CheckCircle2 className="h-5 w-5 mr-2" />Course terminée</>
               )}
             </Button>
             {!updating && (
