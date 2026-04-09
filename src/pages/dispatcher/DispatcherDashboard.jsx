@@ -16,7 +16,7 @@ export default function DispatcherDashboard() {
   const [courses, setCourses] = useState([]);
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dispatchMode, setDispatchModeState] = useState(getDispatchMode());
+  const [dispatchMode, setDispatchModeState] = useState('auto');
   const [carteVisible, setCarteVisible] = useState(false);
   const [syncingNotifs, setSyncingNotifs] = useState(false);
   const [adminEmail, setAdminEmail] = useState(null);
@@ -45,10 +45,16 @@ export default function DispatcherDashboard() {
     setSyncingNotifs(false);
   };
 
-  const toggleDispatchMode = () => {
+  const toggleDispatchMode = async () => {
     const newMode = dispatchMode === 'auto' ? 'manuel' : 'auto';
-    setDispatchMode(newMode);
     setDispatchModeState(newMode);
+    try {
+      const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
+      if (configs[0]) {
+        const me = await base44.auth.me();
+        await base44.entities.DispatchConfig.update(configs[0].id, { mode: newMode, force_override: true, last_changed_by: me?.email || 'admin' });
+      }
+    } catch (_) {}
   };
 
   useEffect(() => {

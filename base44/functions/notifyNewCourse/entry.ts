@@ -1,10 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
-/**
- * notifyNewCourse — Automation entity Course (create)
- * Notifie tous les livreurs disponibles + validés via DB ET FCM push
- */
-
 const PROJECT_ID = "cdl-app-4743c";
 const FCM_URL = `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`;
 
@@ -87,7 +82,7 @@ Deno.serve(async (req) => {
       statut_validation_livreur: 'valide',
     });
 
-    // Livreurs récemment offline (last_seen < 2h) — pour maximiser la couverture
+    // Livreurs offline recents (last_seen < 2h)
     const deuxHeuresAvant = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const tousLivreurs = await base44.asServiceRole.entities.User.filter({ statut_validation_livreur: 'valide' });
     const livreursRecentOffline = tousLivreurs.filter(l =>
@@ -113,13 +108,13 @@ Deno.serve(async (req) => {
       accessToken = await getAccessToken(serviceAccount).catch(() => null);
     }
 
-    // Pour chaque livreur : DB + FCM (online + offline récents)
+    // Pour chaque livreur : DB + FCM (online + offline recents)
     const tasks = tousCibles.map(async (livreur) => {
       const isOffline = !livreur.disponible;
-      const titreOffline = '💰 Gagne de l’argent maintenant !';
-      const messageOffline = `🚕 Course dispo : ${course.quartier_depart} → ${course.quartier_arrivee} · ${course.prix ? course.prix + ' FCFA' : ''} — Connecte-toi vite !`;
-      const titreOnline  = '🚕 Nouvelle course disponible !';
-      const messageOnline = `${course.quartier_depart} → ${course.quartier_arrivee} · ${course.type_colis}${course.prix ? ` · ${course.prix} FCFA` : ''}`;
+      const titreOffline = "Gagne de l'argent maintenant !";
+      const messageOffline = `Course dispo : ${course.quartier_depart} - ${course.quartier_arrivee}${course.prix ? ' - ' + course.prix + ' FCFA' : ''} - Connecte-toi vite !`;
+      const titreOnline  = 'Nouvelle course disponible !';
+      const messageOnline = `${course.quartier_depart} - ${course.quartier_arrivee} - ${course.type_colis}${course.prix ? ' - ' + course.prix + ' FCFA' : ''}`;
 
       const titre   = isOffline ? titreOffline : titreOnline;
       const message = isOffline ? messageOffline : messageOnline;
@@ -138,7 +133,7 @@ Deno.serve(async (req) => {
         target_screen: route,
       });
 
-      // 2. FCM push (HIGH priority, fonctionne app fermée)
+      // 2. FCM push
       if (!accessToken) return;
       const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email: livreur.email });
       const tokens = tokenRecords.map(r => r.token).filter(Boolean);
@@ -158,7 +153,7 @@ Deno.serve(async (req) => {
     });
 
     await Promise.allSettled(tasks);
-    console.log(`[notifyNewCourse] ${livreursActifs.length} online + ${livreursOfflineRecents.length} offline-récents notifiés (DB+FCM)`);
+    console.log(`[notifyNewCourse] ${livreursActifs.length} online + ${livreursOfflineRecents.length} offline notifies`);
     return Response.json({ notified: tousCibles.length, online: livreursActifs.length, offline_recents: livreursOfflineRecents.length });
 
   } catch (error) {
