@@ -115,7 +115,7 @@ export function resolveNotificationRoute(data) {
     case 'bedou_recharge': case 'bedou_retrait': case 'bedou': return '/mon-bedou';
     case 'course_issue': return '/gestion-signalements';
     case 'profile_request': return target_entity_id ? `/gestion-profils` : '/pending-profiles';
-    case 'bedou_recharge': case 'bedou_retrait': case 'bedou_request': return '/gestion-bedou';
+    case 'bedou_request': return '/gestion-bedou';
     case 'driver_validation': return '/validation-livreurs';
     case 'admin': return '/admin-dashboard';
     case 'commande': return target_entity_id ? `/commande-marketplace/${target_entity_id}` : '/mes-commandes-marketplace';

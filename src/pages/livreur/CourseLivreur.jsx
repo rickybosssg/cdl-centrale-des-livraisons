@@ -68,8 +68,9 @@ export default function CourseLivreur() {
   const livrerColis = async () => {
     setUpdating(true);
     const montant = course.prix || 0;
-    const gainLivreur = Math.round(montant * 0.8);
-    const commissionCdl = montant - gainLivreur;
+    // Utiliser les valeurs pré-calculées à la création (respecte promos, urgences, etc.)
+    const gainLivreur = course.gain_livreur || Math.round(montant * 0.8);
+    const commissionCdl = course.commission_cdl || (montant - gainLivreur);
 
     // Débiter client + créditer livreur via Bedou
     const res = await base44.functions.invoke('bedouEngine', {
