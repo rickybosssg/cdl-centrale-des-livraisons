@@ -67,58 +67,78 @@ export default function CourseLivreur() {
 
   const livrerColis = async () => {
     setUpdating(true);
+    console.log('[CourseLivreur] livrerColis START — course.id:', course.id, 'statut:', course.statut);
     const montant = course.prix || 0;
-    // Utiliser les valeurs pré-calculées à la création (respecte promos, urgences, etc.)
     const gainLivreur = course.gain_livreur || Math.round(montant * 0.8);
     const commissionCdl = course.commission_cdl || (montant - gainLivreur);
 
-    // Débiter client + créditer livreur via Bedou
-    const res = await base44.functions.invoke('bedouEngine', {
-      action: 'finaliser_course',
-      course_id: course.id,
-      client_email: course.client_email,
-      client_nom: course.client_name,
-      livreur_email: course.livreur_email,
-      livreur_nom: course.livreur_name,
-      montant,
-    });
-
-    if (!res.data.success) {
-      if (res.data.insuffisant) {
-        toast.error(`Solde Bedou du client insuffisant (${res.data.solde} FCFA). Contactez l'administration.`);
-      } else {
-        toast.error(res.data.error || 'Erreur lors du règlement Bedou');
+    // 1. Débiter client + créditer livreur via Bedou
+    let bedouOk = false;
+    try {
+      const res = await base44.functions.invoke('bedouEngine', {
+        action: 'finaliser_course',
+        course_id: course.id,
+        client_email: course.client_email,
+        client_nom: course.client_name,
+        livreur_email: course.livreur_email,
+        livreur_nom: course.livreur_name,
+        montant,
+      });
+      console.log('[CourseLivreur] bedouEngine result:', res.data);
+      if (!res.data.success) {
+        if (res.data.insuffisant) {
+          toast.error(`Solde Bedou du client insuffisant (${res.data.solde} FCFA). Contactez l'administration.`);
+        } else {
+          toast.error(res.data.error || 'Erreur lors du règlement Bedou');
+        }
+        setUpdating(false);
+        return;
       }
+      bedouOk = true;
+    } catch (err) {
+      console.error('[CourseLivreur] bedouEngine error:', err);
+      toast.error('Erreur Bedou : ' + err.message + ' — Réessayez.');
       setUpdating(false);
       return;
     }
 
-    // Optimistic UI
-    setCourse(prev => ({ ...prev, statut: 'livree', date_livraison: new Date().toISOString() }));
-    await base44.entities.Course.update(id, {
-      statut: 'livree',
-      date_livraison: new Date().toISOString(),
-      statut_paiement: 'paye',
-      commission_cdl: commissionCdl,
-      gain_livreur: gainLivreur,
-      statut_paiement_livreur: 'Payé',
-    });
-
-    // Mettre à jour stats livreur
-    const livreurs = await base44.entities.User.filter({ email: course.livreur_email });
-    if (livreurs.length > 0) {
-      const livreur = livreurs[0];
-      await base44.entities.User.update(livreur.id, {
-        total_courses_livrees: (livreur.total_courses_livrees || 0) + 1,
-        nombre_courses_actives: Math.max(0, (livreur.nombre_courses_actives || 0) - 1),
+    // 2. Mettre à jour la course en BDD
+    try {
+      await base44.entities.Course.update(id, {
+        statut: 'livree',
+        date_livraison: new Date().toISOString(),
+        statut_paiement: 'paye',
+        commission_cdl: commissionCdl,
+        gain_livreur: gainLivreur,
+        statut_paiement_livreur: 'Payé',
       });
+      console.log('[CourseLivreur] Course mise à jour → livree');
+    } catch (err) {
+      console.error('[CourseLivreur] Course update error:', err);
+      toast.error('Erreur mise à jour course : ' + err.message);
+      setUpdating(false);
+      return;
     }
 
-    // Mettre à jour streak + classement en arrière-plan
+    // 3. Mettre à jour UI localement (après succès BDD)
+    setCourse(prev => ({ ...prev, statut: 'livree', date_livraison: new Date().toISOString(), gain_livreur: gainLivreur }));
+
+    // 4. Stats livreur (fire & forget)
+    base44.entities.User.filter({ email: course.livreur_email }).then(livreurs => {
+      if (livreurs.length > 0) {
+        const livreur = livreurs[0];
+        base44.entities.User.update(livreur.id, {
+          total_courses_livrees: (livreur.total_courses_livrees || 0) + 1,
+          nombre_courses_actives: Math.max(0, (livreur.nombre_courses_actives || 0) - 1),
+        }).catch(e => console.warn('[CourseLivreur] stats livreur err:', e));
+      }
+    }).catch(() => {});
+
+    // 5. Streak (fire & forget)
     base44.functions.invoke('updateLivreurStreak', {}).catch(() => {});
 
-    // Notifier client pour noter
-    await base44.entities.Notification.create({
+    // 6. Notifier client
+    base44.entities.Notification.create({
       destinataire_email: course.client_email,
       destinataire_role: 'client',
       titre: '✅ Colis livré ! Notez votre livreur',
@@ -126,24 +146,32 @@ export default function CourseLivreur() {
       type: 'success',
       lue: false,
       course_id: course.id,
-    });
+    }).catch(() => {});
 
     vibrateSuccess();
     toast.success(`🎉 Livraison confirmée ! +${gainLivreur} FCFA crédités sur votre Bedou.`);
+    console.log('[CourseLivreur] livrerColis DONE — gainLivreur:', gainLivreur);
     setUpdating(false);
   };
 
   const marquerCourseEffectuee = async () => {
     setUpdating(true);
-    const me = await base44.auth.me();
-    await base44.auth.updateMe({
-      disponible: true,
-      nombre_courses_actives: Math.max(0, (me.nombre_courses_actives || 0) - 1),
-    });
-    vibrateSuccess();
-    toast.success("Vous êtes de nouveau disponible pour de nouvelles courses !");
-    navigate("/mes-livraisons");
-    setUpdating(false);
+    console.log('[CourseLivreur] marquerCourseEffectuee START');
+    try {
+      const me = await base44.auth.me();
+      await base44.auth.updateMe({
+        disponible: true,
+        nombre_courses_actives: Math.max(0, (me.nombre_courses_actives || 0) - 1),
+      });
+      vibrateSuccess();
+      toast.success('✅ Vous êtes de nouveau disponible pour de nouvelles courses !');
+      console.log('[CourseLivreur] marquerCourseEffectuee DONE — livreur remis disponible');
+      navigate('/mes-livraisons');
+    } catch (err) {
+      console.error('[CourseLivreur] marquerCourseEffectuee error:', err);
+      toast.error('Erreur : ' + err.message + ' — Réessayez.');
+      setUpdating(false);
+    }
   };
 
   const openMaps = () => {
@@ -350,17 +378,36 @@ export default function CourseLivreur() {
 
       {course.statut === "livree" && (
         <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-4 space-y-3 text-center">
-            <p className="text-green-700 font-semibold text-sm">🎉 Course livrée avec succès !</p>
-            <p className="text-xs text-green-600">Cliquez ci-dessous pour confirmer et vous remettre disponible pour de nouvelles courses.</p>
+          <CardContent className="p-4 space-y-4 text-center">
+            <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="h-9 w-9 text-green-600" />
+            </div>
+            <div>
+              <p className="text-green-700 font-bold text-base">🎉 Course livrée avec succès !</p>
+              {course.gain_livreur > 0 && (
+                <p className="text-green-600 font-semibold text-sm mt-1">+{course.gain_livreur?.toLocaleString()} FCFA crédités sur votre Bedou</p>
+              )}
+              <p className="text-xs text-green-600 mt-2">Appuyez sur le bouton ci-dessous pour vous remettre disponible et accepter de nouvelles courses.</p>
+            </div>
             <Button
-              className="w-full h-12 text-base font-semibold bg-primary"
+              className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 active:scale-[0.98] transition-all"
               onClick={marquerCourseEffectuee}
               disabled={updating}
             >
-              <CheckCircle2 className="h-5 w-5 mr-2" />
-              {updating ? "Mise à jour..." : "✅ Course effectuée — Je suis disponible"}
+              {updating ? (
+                <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Validation en cours...</>
+              ) : (
+                <><CheckCircle2 className="h-5 w-5 mr-2" />Je suis disponible — Nouvelles courses</>
+              )}
             </Button>
+            {!updating && (
+              <button
+                onClick={() => navigate('/mes-livraisons')}
+                className="text-xs text-green-700 underline"
+              >
+                Voir mon historique de livraisons
+              </button>
+            )}
           </CardContent>
         </Card>
       )}
