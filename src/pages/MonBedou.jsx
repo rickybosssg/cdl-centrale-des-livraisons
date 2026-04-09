@@ -355,6 +355,21 @@ export default function MonBedou() {
                 onChange={e => setRetraitForm({ ...retraitForm, montant: e.target.value })}
                 className="w-full mt-1 h-11 rounded-xl border border-input px-3 py-2 text-sm font-medium text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Méthode de réception *</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                {METHODES.filter(m => m.value !== 'cash').map(m => (
+                  <button
+                    key={m.value}
+                    onClick={() => setRetraitForm({ ...retraitForm, methode: m.value })}
+                    className={`p-3 rounded-xl border-2 text-sm font-medium transition-colors ${
+                      retraitForm.methode === m.value ? 'border-primary bg-primary/10 text-primary' : 'border-border'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
               </div>
             </div>
             <div>
@@ -366,7 +381,15 @@ export default function MonBedou() {
                 onChange={e => setRetraitForm({ ...retraitForm, numero_reception: e.target.value })}
                 className="w-full mt-1 h-11 rounded-xl border border-input px-3 py-2 text-sm text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              </div>
+            </div>
+            <Button
+              className="w-full h-12 font-semibold"
+              onClick={handleRetrait}
+              disabled={submitting || !retraitForm.montant || !retraitForm.numero_reception}
+            >
+              {submitting ? 'Envoi en cours...' : 'Envoyer la demande de retrait'}
+            </Button>
+          </div>
         </div>
       )}
 
