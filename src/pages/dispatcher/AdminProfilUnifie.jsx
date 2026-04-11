@@ -207,30 +207,59 @@ export default function AdminProfilUnifie() {
   };
 
   const validerLivreur = async () => {
-    if (!user.telephone) { toast.error("Téléphone manquant, validation impossible"); return; }
     setProcessing(true);
     const now = new Date().toISOString();
+    try {
+      const livreurProf = profiles.find(p => p.profile_type === "livreur");
+      console.log(`[ValiderLivreur] Déclenché pour ${user.email} | profil_id=${livreurProf?.id} | statut_actuel=${livreurProf?.status}`);
 
-    // Synchroniser le UserProfile livreur
-    const livreurProf = profiles.find(p => p.profile_type === "livreur");
-    if (livreurProf) {
-      await base44.entities.UserProfile.update(livreurProf.id, {
-        status: "actif", validated_at: now, validated_by: admin.email, refusal_reason: null,
-      });
+      // Récupérer le téléphone depuis le profil si absent sur User
+      let telephone = user.telephone;
+      if (!telephone && livreurProf?.data_json) {
+        try { const d = JSON.parse(livreurProf.data_json); telephone = d.telephone || ''; } catch (_) {}
+      }
+
+      // 1. Mettre à jour le UserProfile livreur
+      if (livreurProf) {
+        await base44.entities.UserProfile.update(livreurProf.id, {
+          status: 'actif',
+          validated_at: now,
+          validated_by: admin.email,
+          refusal_reason: null,
+        });
+        console.log(`[ValiderLivreur] UserProfile mis à jour → status=actif`);
+      }
+
+      // 2. Synchroniser l'entité User (CRITIQUE pour le dispatch)
+      const userUpdate = {
+        user_type: 'livreur',
+        statut_validation_livreur: 'valide',
+        profil_valide: true,
+        actif: true,
+        date_validation: now,
+      };
+      if (telephone && !user.telephone) userUpdate.telephone = telephone;
+      await base44.entities.User.update(user.id, userUpdate);
+      console.log(`[ValiderLivreur] User synchronisé:`, userUpdate);
+
+      // 3. Notifier le livreur
+      await base44.entities.Notification.create({
+        destinataire_email: user.email,
+        destinataire_role: 'livreur',
+        titre: '✅ Profil livreur validé !',
+        message: `Félicitations ${user.full_name} ! Votre profil livreur a été validé. Vous pouvez maintenant recevoir des courses CDL.`,
+        type: 'success',
+        lue: false,
+      }).catch(() => {});
+
+      toast.success('✅ Profil livreur validé avec succès !');
+      await loadAll();
+    } catch (err) {
+      console.error('[ValiderLivreur] ERREUR:', err);
+      toast.error('Impossible de valider le profil livreur : ' + (err?.message || 'Erreur inconnue'));
+    } finally {
+      setProcessing(false);
     }
-
-    // CRITIQUE : mettre à jour l'entité User pour que le livreur soit visible dans GererLivreurs et le dispatch
-    await base44.entities.User.update(user.id, {
-      user_type: 'livreur',
-      statut_validation_livreur: "valide",
-      profil_valide: true,
-      actif: true,
-      date_validation: now,
-    });
-
-    toast.success("Livreur validé !");
-    await loadAll();
-    setProcessing(false);
   };
 
   const refuserLivreur = async () => {
@@ -255,49 +284,69 @@ export default function AdminProfilUnifie() {
   const validerProfil = async (profile) => {
     setProcessing(true);
     const now = new Date().toISOString();
-    await base44.entities.UserProfile.update(profile.id, {
-      status: 'actif',
-      validated_at: now,
-      validated_by: admin.email,
-      refusal_reason: null,
-    });
-    // Si c'est un partenaire, créer l'entrée Partenaire si inexistante
-    if (profile.profile_type === 'partenaire') {
-      const data = profile.data_json ? (() => { try { return JSON.parse(profile.data_json); } catch { return {}; } })() : {};
-      const existing = await base44.entities.Partenaire.filter({ user_email: profile.user_email });
-      if (existing.length === 0) {
-        await base44.entities.Partenaire.create({
-          user_email: profile.user_email,
-          nom_commerce: data.nom_commerce || user.full_name || profile.user_email,
-          type_commerce: data.type_commerce || '—',
-          telephone: data.telephone || user.telephone || '',
-          statut: 'actif',
-          date_inscription: now,
-        });
-      } else {
-        await base44.entities.Partenaire.update(existing[0].id, { statut: 'actif' });
+    console.log(`[ValiderProfil] Déclenché pour ${user.email} | type=${profile.profile_type} | profil_id=${profile.id}`);
+    try {
+      await base44.entities.UserProfile.update(profile.id, {
+        status: 'actif',
+        validated_at: now,
+        validated_by: admin.email,
+        refusal_reason: null,
+      });
+
+      // Si c'est un livreur, synchroniser aussi l'entité User (CRITIQUE pour le dispatch)
+      if (profile.profile_type === 'livreur') {
+        let telephone = user.telephone;
+        if (!telephone && profile.data_json) {
+          try { const d = JSON.parse(profile.data_json); telephone = d.telephone || ''; } catch (_) {}
+        }
+        const userUpdate = { user_type: 'livreur', statut_validation_livreur: 'valide', profil_valide: true, actif: true, date_validation: now };
+        if (telephone && !user.telephone) userUpdate.telephone = telephone;
+        await base44.entities.User.update(user.id, userUpdate);
+        console.log(`[ValiderProfil] User sync livreur:`, userUpdate);
       }
+
+      // Si c'est un partenaire, créer l'entrée Partenaire si inexistante
+      if (profile.profile_type === 'partenaire') {
+        const data = profile.data_json ? (() => { try { return JSON.parse(profile.data_json); } catch { return {}; } })() : {};
+        const existing = await base44.entities.Partenaire.filter({ user_email: profile.user_email });
+        if (existing.length === 0) {
+          await base44.entities.Partenaire.create({
+            user_email: profile.user_email,
+            nom_commerce: data.nom_commerce || user.full_name || profile.user_email,
+            type_commerce: data.type_commerce || '—',
+            telephone: data.telephone || user.telephone || '',
+            statut: 'actif',
+            date_inscription: now,
+          });
+        } else {
+          await base44.entities.Partenaire.update(existing[0].id, { statut: 'actif' });
+        }
+      }
+      await base44.entities.Notification.create({
+        destinataire_email: user.email,
+        destinataire_role: profile.profile_type,
+        titre: `✅ Profil ${PROFILES.find(p => p.key === profile.profile_type)?.label || profile.profile_type} validé !`,
+        message: `Félicitations ! Votre profil a été validé par l'administration CDL.`,
+        type: 'success',
+        lue: false,
+      });
+      await base44.entities.AdminActionLog.create({
+        admin_email: admin.email,
+        object_type: profile.profile_type,
+        object_id: profile.id,
+        object_name: user.full_name,
+        action: 'validate',
+        reason: `Validation profil ${profile.profile_type}`,
+        target_email: user.email,
+      });
+      toast.success(`✅ Profil livreur validé avec succès !`);
+      await loadAll();
+    } catch (err) {
+      console.error('[ValiderProfil] ERREUR:', err);
+      toast.error('Impossible de valider le profil : ' + (err?.message || 'Erreur inconnue'));
+    } finally {
+      setProcessing(false);
     }
-    await base44.entities.Notification.create({
-      destinataire_email: user.email,
-      destinataire_role: profile.profile_type,
-      titre: `✅ Profil ${PROFILES.find(p => p.key === profile.profile_type)?.label || profile.profile_type} validé !`,
-      message: `Félicitations ! Votre profil a été validé par l'administration CDL.`,
-      type: 'success',
-      lue: false,
-    });
-    await base44.entities.AdminActionLog.create({
-      admin_email: admin.email,
-      object_type: profile.profile_type,
-      object_id: profile.id,
-      object_name: user.full_name,
-      action: 'validate',
-      reason: `Validation profil ${profile.profile_type}`,
-      target_email: user.email,
-    });
-    toast.success(`Profil ${profile.profile_type} validé !`);
-    await loadAll();
-    setProcessing(false);
   };
 
   const refuserProfil = async (profile, motif) => {
