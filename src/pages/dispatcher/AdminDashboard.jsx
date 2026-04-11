@@ -168,9 +168,8 @@ export default function AdminDashboard() {
     const unsubProfile = base44.entities.UserProfile.subscribe(() => { loadData(); });
     const unsubPartenaire = base44.entities.Partenaire.subscribe(() => loadData());
     const unsubs = [];
-    unsubs.push(base44.entities.User.subscribe((event) => {
-      if (['livreur', 'client', 'commercial'].includes(event.data?.user_type)) { loadData(); }
-    }));
+    // Réagir à TOUT changement User, notamment driver_online
+    unsubs.push(base44.entities.User.subscribe(() => { loadData(); }));
     unsubs.push(base44.entities.Partenaire.subscribe(() => loadData()));
     unsubs.push(base44.entities.UserProfile.subscribe(() => loadData()));
     unsubs.push(base44.entities.Course.subscribe(() => loadData()));

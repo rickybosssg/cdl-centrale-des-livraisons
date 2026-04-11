@@ -285,15 +285,29 @@ export default function DispatchMonitor() {
     loadDispatchConfig();
     load();
     const interval = setInterval(load, 20000);
-    return () => clearInterval(interval);
-  }, []);
 
-  useEffect(() => {
-    const unsub = base44.entities.Course.subscribe((event) => {
+    // Temps réel — Courses
+    const unsubCourses = base44.entities.Course.subscribe((event) => {
       if (event.type === "create") setCourses(prev => [event.data, ...prev]);
       else if (event.type === "update") setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
     });
-    return unsub;
+
+    // Temps réel — Livreurs (driver_online, current_role, nombre_courses_actives)
+    const unsubUsers = base44.entities.User.subscribe((event) => {
+      if (event.type === "update" && event.data) {
+        setLivreurs(prev => {
+          const exists = prev.find(l => l.id === event.id);
+          if (exists) return prev.map(l => l.id === event.id ? event.data : l);
+          // Nouveau livreur qui passe en ligne
+          if (event.data.driver_online) return [event.data, ...prev];
+          return prev;
+        });
+      } else if (event.type === "create" && event.data?.driver_online) {
+        setLivreurs(prev => [event.data, ...prev]);
+      }
+    });
+
+    return () => { clearInterval(interval); unsubCourses(); unsubUsers(); };
   }, []);
 
   const isManuel = (dispatchConfig?.mode || 'auto') === 'manuel';

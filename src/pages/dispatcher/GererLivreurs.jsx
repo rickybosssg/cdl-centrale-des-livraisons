@@ -272,8 +272,8 @@ export default function GererLivreurs() {
       l.quartier?.toLowerCase().includes(search) ||
       l.email?.toLowerCase().includes(search);
     if (!matchesSearch) return false;
-    if (filtre === "en_ligne") return l.disponible;
-    if (filtre === "hors_ligne") return !l.disponible;
+    if (filtre === "en_ligne") return l.driver_online && l.current_role === 'livreur';
+    if (filtre === "hors_ligne") return !l.driver_online;
     if (filtre === "bloques") return l.livreur_bloque;
     if (filtre === "en_attente") return !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente";
     if (filtre === "valides") return l.statut_validation_livreur === "valide";
@@ -316,7 +316,7 @@ export default function GererLivreurs() {
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
         <span className="font-medium">{livreurs.length} total</span>
         <span>•</span>
-        <span className="text-green-600">{livreurs.filter(l => l.disponible).length} en ligne</span>
+        <span className="text-green-600">{livreurs.filter(l => l.driver_online && l.current_role === 'livreur').length} en ligne</span>
         <span>•</span>
         <span className="text-amber-600">{livreurs.filter(l => !l.statut_validation_livreur || l.statut_validation_livreur === "en_attente").length} en attente</span>
         <span>•</span>
@@ -377,7 +377,7 @@ export default function GererLivreurs() {
                       {livreur.full_name?.charAt(0) || "?"}
                     </div>
                   )}
-                  <div className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${livreur.disponible ? "bg-green-500" : "bg-muted-foreground"}`} />
+                  <div className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${livreur.driver_online && livreur.current_role === 'livreur' ? "bg-green-500" : "bg-muted-foreground"}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">{livreur.full_name}</p>
@@ -391,8 +391,8 @@ export default function GererLivreurs() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1 items-end">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${livreur.disponible ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-                    {livreur.disponible ? "En ligne" : "Hors ligne"}
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${livreur.driver_online && livreur.current_role === 'livreur' ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                    {livreur.driver_online && livreur.current_role === 'livreur' ? "En ligne" : "Hors ligne"}
                   </span>
                   <StatutValidationBadge statut={livreur.statut_validation_livreur} />
                   <StatutFinancierBadge statut={livreur.statut_financier_livreur || "À jour"} />
