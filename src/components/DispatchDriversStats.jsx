@@ -7,7 +7,7 @@
  * Et liste les raisons pour ceux en ligne mais non dispatchables.
  */
 import { useState, useEffect } from "react";
-import { getDriversDispatchStats } from "@/lib/dispatch";
+import { getDriversDispatchStats, isDriverDispatchable, getDriverDispatchReason } from "@/lib/dispatch";
 import { Users, MapPin, Zap, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
