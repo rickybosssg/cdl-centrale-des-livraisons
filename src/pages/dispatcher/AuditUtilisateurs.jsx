@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, RefreshCw, Wrench, AlertTriangle, CheckCircle2, UserCog, Search } from "lucide-react";
+import { ArrowLeft, RefreshCw, Wrench, AlertTriangle, CheckCircle2, UserCog, Search, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,87 +9,60 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 
 const ADMIN_EMAILS = ["weezyh2@gmail.com"];
-
 const ROLES = ["client", "livreur", "partenaire", "commercial"];
+const ROLE_PRIORITY = ['admin', 'partenaire', 'commercial', 'livreur', 'client'];
 
 const STATUT_CONFIG = {
   OK:              { color: "bg-green-100 text-green-700",  label: "✅ OK" },
-  ROLE_MANQUANT:   { color: "bg-red-100 text-red-700",     label: "🚫 Rôle manquant" },
-  PROFIL_MANQUANT: { color: "bg-amber-100 text-amber-700", label: "⚠️ Profil manquant" },
+  ROLE_MANQUANT:   { color: "bg-red-100 text-red-700",     label: "🚫 Sans profil" },
+  DESYNC:          { color: "bg-purple-100 text-purple-700",label: "🔄 Désynchronisé" },
   INCOMPLET:       { color: "bg-orange-100 text-orange-700",label: "📝 Incomplet" },
   ADMIN:           { color: "bg-blue-100 text-blue-700",   label: "🛡️ Admin" },
 };
 
-function detectStatut(user, clients, partenaires, codes) {
-  if (user.role === "admin" || ADMIN_EMAILS.includes(user.email)) return "ADMIN";
-  if (!user.user_type) return "ROLE_MANQUANT";
-  if (!user.onboarding_completed) return "INCOMPLET";
-
-  if (user.user_type === "client") {
-    const ok = clients.some(c => c.email === user.email);
-    return ok ? "OK" : "PROFIL_MANQUANT";
+function pickPrimaryRole(profileTypes) {
+  for (const r of ROLE_PRIORITY) {
+    if (profileTypes.includes(r)) return r;
   }
-  if (user.user_type === "livreur") return "OK"; // pas de table séparée
-  if (user.user_type === "partenaire") {
-    const ok = partenaires.some(p => p.user_email === user.email);
-    return ok ? "OK" : "PROFIL_MANQUANT";
-  }
-  if (user.user_type === "commercial") {
-    const ok = codes.some(c => c.commercial_email === user.email);
-    return ok ? "OK" : "PROFIL_MANQUANT";
-  }
-  return "INCOMPLET";
+  return profileTypes[0] || null;
 }
 
-async function repairOne(user) {
-  const now = new Date().toISOString();
+// Source de vérité : UserProfile
+function detectStatut(user, profilesByEmail) {
+  if (user.role === "admin" || ADMIN_EMAILS.includes(user.email)) return "ADMIN";
+  const profiles = profilesByEmail[user.email] || [];
+  const profileTypes = profiles.map(p => p.profile_type).filter(Boolean);
 
-  if (user.user_type === "client") {
-    const existing = await base44.entities.Client.filter({ email: user.email });
-    if (existing.length === 0) {
-      await base44.entities.Client.create({
-        nom_complet: user.full_name || "",
-        email: user.email,
-        numero_telephone: user.telephone || "",
-        quartier_principal: user.quartier || "",
-        statut_client: "Actif",
-        date_inscription: now,
-        nombre_total_courses: 0,
-        total_depense: 0,
-      });
-    }
-  } else if (user.user_type === "partenaire") {
-    const existing = await base44.entities.Partenaire.filter({ user_email: user.email });
-    if (existing.length === 0) {
-      await base44.entities.Partenaire.create({
-        user_email: user.email,
-        nom_commerce: user.full_name || "",
-        nom_responsable: user.full_name || "",
-        telephone: user.telephone || "",
-        type_commerce: "Boutique",
-        statut: "en_attente",
-      });
-    }
-  } else if (user.user_type === "commercial") {
-    const existing = await base44.entities.CodePromo.filter({ commercial_email: user.email });
-    if (existing.length === 0) {
-      await base44.entities.CodePromo.create({
-        commercial_email: user.email,
-        commercial_name: user.full_name || "",
-        code: "",
-        statut: "en_attente",
-        actif: false,
-        nombre_utilisations: 0,
-        commission_due: 0,
-        commission_payee: 0,
-        statut_paiement: "À jour",
-      });
-    }
+  if (profileTypes.length === 0) {
+    // Vrai sans profil
+    return "ROLE_MANQUANT";
   }
 
-  if (!user.onboarding_completed && user.user_type) {
-    await base44.entities.User.update(user.id, { onboarding_completed: true });
+  const expectedRole = pickPrimaryRole(profileTypes);
+  if (user.user_type !== expectedRole || !user.onboarding_completed) {
+    return "DESYNC"; // Profil existe mais user_type ne correspond pas
   }
+  if (!user.onboarding_completed) return "INCOMPLET";
+  return "OK";
+}
+
+// Réparer un user : synchroniser user_type depuis ses profils UserProfile réels
+async function repairOne(user, profilesByEmail) {
+  const profiles = profilesByEmail[user.email] || [];
+  const profileTypes = profiles.map(p => p.profile_type).filter(Boolean);
+
+  if (profileTypes.length === 0) {
+    console.log(`[Audit] Aucun profil pour ${user.email} — pas de réparation`);
+    return;
+  }
+
+  const primaryRole = pickPrimaryRole(profileTypes);
+  console.log(`[Audit] Réparation ${user.email} : ${user.user_type || 'null'} → ${primaryRole} (profils: [${profileTypes.join(', ')}])`);
+
+  await base44.entities.User.update(user.id, {
+    user_type: primaryRole,
+    onboarding_completed: true,
+  });
 }
 
 export default function AuditUtilisateurs() {
@@ -110,33 +83,43 @@ export default function AuditUtilisateurs() {
 
   const loadData = async () => {
     setLoading(true);
-    const [usersData, clientsData, partenairesData, codesData, logsData] = await Promise.all([
+    const [usersData, profilesData, logsData] = await Promise.all([
       base44.entities.User.list("-created_date", 500),
-      base44.entities.Client.list("-created_date", 500),
-      base44.entities.Partenaire.list("-created_date", 500),
-      base44.entities.CodePromo.list("-created_date", 500),
-      base44.entities.RepairLog.list("-created_date", 500),
+      base44.entities.UserProfile.filter({ deleted: false }),
+      base44.entities.RepairLog.list("-created_date", 100),
     ]);
     setUsers(usersData);
-    setClients(clientsData);
-    setPartenaires(partenairesData);
-    setCodes(codesData);
+    setProfiles(profilesData);
     setRepairLogs(logsData);
     setLoading(false);
   };
 
   useEffect(() => { loadData(); }, []);
 
-  const enriched = users.map(u => ({
-    ...u,
-    statut: detectStatut(u, clients, partenaires, codes),
-  }));
+  // Index profils par email
+  const profilesByEmail = {};
+  for (const p of profiles) {
+    if (!p.user_email) continue;
+    if (!profilesByEmail[p.user_email]) profilesByEmail[p.user_email] = [];
+    profilesByEmail[p.user_email].push(p);
+  }
+
+  const enriched = users.map(u => {
+    const userProfiles = profilesByEmail[u.email] || [];
+    const profileTypes = userProfiles.map(p => p.profile_type).filter(Boolean);
+    return {
+      ...u,
+      _profiles: userProfiles,
+      _profileTypes: profileTypes,
+      statut: detectStatut(u, profilesByEmail),
+    };
+  });
 
   const counts = {
     TOUS: enriched.length,
     OK: enriched.filter(u => u.statut === "OK").length,
     ROLE_MANQUANT: enriched.filter(u => u.statut === "ROLE_MANQUANT").length,
-    PROFIL_MANQUANT: enriched.filter(u => u.statut === "PROFIL_MANQUANT").length,
+    DESYNC: enriched.filter(u => u.statut === "DESYNC").length,
     INCOMPLET: enriched.filter(u => u.statut === "INCOMPLET").length,
     ADMIN: enriched.filter(u => u.statut === "ADMIN").length,
   };
@@ -148,14 +131,13 @@ export default function AuditUtilisateurs() {
     return matchFiltre && matchSearch;
   });
 
-  const repairableUsers = enriched.filter(u => u.statut === "PROFIL_MANQUANT" || u.statut === "INCOMPLET");
+  const repairableUsers = enriched.filter(u => u.statut === "DESYNC" || u.statut === "INCOMPLET");
 
   const repairUser = async (user) => {
     setRepairing(prev => ({ ...prev, [user.id]: true }));
     try {
-      await repairOne(user);
-      // Log audit manuel
-      try { await base44.entities.RepairLog.create({ user_id: user.id, user_email: user.email, user_type: user.user_type || '', correction: 'audit_manuel', detail: 'Réparation manuelle depuis l’audit admin', contexte: 'audit' }); } catch (_) {}
+      await repairOne(user, profilesByEmail);
+      try { await base44.entities.RepairLog.create({ user_id: user.id, user_email: user.email, user_type: pickPrimaryRole(user._profileTypes || []) || '', correction: 'audit_manuel', detail: `Réparation manuelle : profils [${(user._profileTypes || []).join(', ')}]`, contexte: 'audit' }); } catch (_) {}
       toast.success(`${user.full_name || user.email} réparé`);
       await loadData();
     } catch (err) {
@@ -169,11 +151,28 @@ export default function AuditUtilisateurs() {
     setRepairingAll(true);
     let count = 0;
     for (const user of repairableUsers) {
-      try { await repairOne(user); count++; } catch (_) {}
+      try { await repairOne(user, profilesByEmail); count++; } catch (_) {}
     }
     toast.success(`${count} compte(s) réparé(s)`);
     await loadData();
     setRepairingAll(false);
+  };
+
+  const syncAllViaBackend = async () => {
+    setSyncing(true);
+    try {
+      const res = await base44.functions.invoke('syncUserRoles', {});
+      if (res.data?.success) {
+        const { fixed, noProfile, errors } = res.data.results;
+        toast.success(`✅ Sync terminée : ${fixed} réparé(s), ${noProfile} sans profil, ${errors} erreur(s)`);
+        await loadData();
+      } else {
+        toast.error('Erreur sync : ' + (res.data?.error || 'inconnue'));
+      }
+    } catch (err) {
+      toast.error('Erreur : ' + err.message);
+    }
+    setSyncing(false);
   };
 
   const assignerRole = async () => {
@@ -198,8 +197,8 @@ export default function AuditUtilisateurs() {
 
   const FILTRES = [
     { key: "TOUS", label: "Tous" },
-    { key: "ROLE_MANQUANT", label: "Sans rôle" },
-    { key: "PROFIL_MANQUANT", label: "Sans profil" },
+    { key: "ROLE_MANQUANT", label: "Sans profil" },
+    { key: "DESYNC", label: "Désynchronisé" },
     { key: "INCOMPLET", label: "Incomplet" },
     { key: "OK", label: "OK" },
     { key: "ADMIN", label: "Admin" },
@@ -215,6 +214,12 @@ export default function AuditUtilisateurs() {
         </div>
         <Button variant="outline" size="icon" onClick={loadData}><RefreshCw className="h-4 w-4" /></Button>
       </div>
+
+      {/* Bouton sync globale */}
+      <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={syncAllViaBackend} disabled={syncing}>
+        <Zap className="h-4 w-4 mr-2" />
+        {syncing ? "Synchronisation en cours..." : "🔄 Sync globale des rôles (source: UserProfile)"}
+      </Button>
 
       {/* Compteur réparations */}
       {repairLogs.length > 0 && (
@@ -232,7 +237,7 @@ export default function AuditUtilisateurs() {
       <div className="grid grid-cols-3 gap-2 text-center text-xs">
         <div className="p-3 rounded-xl bg-card border"><p className="font-bold text-lg">{counts.TOUS}</p><p className="text-muted-foreground">Total</p></div>
         <div className="p-3 rounded-xl bg-green-50 border border-green-200"><p className="font-bold text-lg text-green-600">{counts.OK}</p><p className="text-green-700">OK</p></div>
-        <div className="p-3 rounded-xl bg-red-50 border border-red-200"><p className="font-bold text-lg text-red-600">{counts.ROLE_MANQUANT + counts.PROFIL_MANQUANT + counts.INCOMPLET}</p><p className="text-red-700">Problèmes</p></div>
+        <div className="p-3 rounded-xl bg-red-50 border border-red-200"><p className="font-bold text-lg text-red-600">{counts.ROLE_MANQUANT + counts.DESYNC + counts.INCOMPLET}</p><p className="text-red-700">Problèmes</p></div>
       </div>
 
       {/* Bouton réparation massive */}
@@ -280,10 +285,10 @@ export default function AuditUtilisateurs() {
           {filtered.map(user => {
             const cfg = STATUT_CONFIG[user.statut] || STATUT_CONFIG.INCOMPLET;
             const isRepairing = repairing[user.id];
-            const canRepair = user.statut === "PROFIL_MANQUANT" || user.statut === "INCOMPLET";
+            const canRepair = user.statut === "INCOMPLET";
             const needsRole = user.statut === "ROLE_MANQUANT";
             return (
-              <Card key={user.id} className={user.statut === "ROLE_MANQUANT" ? "border-red-200" : user.statut === "PROFIL_MANQUANT" ? "border-amber-200" : ""}>
+              <Card key={user.id} className={user.statut === "ROLE_MANQUANT" ? "border-red-200" : user.statut === "DESYNC" ? "border-purple-200" : ""}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -291,11 +296,17 @@ export default function AuditUtilisateurs() {
                       <p className="text-xs text-muted-foreground">{user.email}</p>
                       {user.telephone && <p className="text-xs text-muted-foreground">{user.telephone}</p>}
                       <p className="text-xs mt-0.5">
-                        <span className="text-muted-foreground">Rôle : </span>
+                        <span className="text-muted-foreground">Rôle actuel : </span>
                         <span className={`font-semibold ${user.user_type ? "text-foreground" : "text-red-500"}`}>
                           {user.user_type || "aucun"}
                         </span>
                       </p>
+                      {user._profileTypes?.length > 0 && (
+                        <p className="text-xs mt-0.5">
+                          <span className="text-muted-foreground">Profils : </span>
+                          <span className="font-semibold text-primary">{user._profileTypes.join(', ')}</span>
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-col gap-1.5 items-end flex-shrink-0">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${cfg.color}`}>{cfg.label}</span>
@@ -309,18 +320,23 @@ export default function AuditUtilisateurs() {
                           <UserCog className="h-3 w-3 mr-1" />Assigner rôle
                         </Button>
                       )}
+                    {user.statut === "DESYNC" && (
+                        <Button size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700" onClick={() => repairUser(user)} disabled={repairing[user.id]}>
+                          <Wrench className="h-3 w-3 mr-1" />{repairing[user.id] ? "..." : "Sync"}
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  {user.statut === "PROFIL_MANQUANT" && (
-                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1">
+                  {user.statut === "DESYNC" && (
+                    <div className="flex items-center gap-2 text-xs text-purple-700 bg-purple-50 rounded-lg px-2 py-1">
                       <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                      Fiche métier manquante pour le rôle « {user.user_type} »
+                      Profil(s) détecté(s) [{user._profileTypes?.join(', ')}] mais user_type=«{user.user_type || 'null'}» — cliquez Sync
                     </div>
                   )}
                   {user.statut === "ROLE_MANQUANT" && (
                     <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 rounded-lg px-2 py-1">
                       <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                      user_type non défini — l'utilisateur sera redirigé vers le choix de rôle à la prochaine connexion
+                      Aucun profil trouvé — utilisateur sans rôle
                     </div>
                   )}
                   {user.statut === "INCOMPLET" && (
