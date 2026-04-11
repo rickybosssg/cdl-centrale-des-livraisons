@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Phone, Package, MapPin, CheckCircle2, Navigation, TrendingUp, Zap } from "lucide-react";
 import MiniChat from "../../components/MiniChat";
+import DispatchTimer from "../../components/DispatchTimer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
@@ -376,6 +377,11 @@ export default function CourseLivreur() {
           Aller à l'arrivée
         </Button>
       </div>
+
+      {/* Timer acceptation */}
+      {course.statut === 'assignee_attente' && (
+        <DispatchTimer heureAssignation={course.heure_assignation} dureeSecondes={60} />
+      )}
 
       {/* Mini Chat */}
       {["acceptee", "en_cours"].includes(course.statut) && (

@@ -39,20 +39,26 @@ function distanceKm(lat1, lng1, lat2, lng2) {
 }
 
 function scoreDriver(driver, course) {
-  // 1. DISTANCE (40 pts)
+  // 1. DISTANCE (30 pts)
   let distScore = 0;
   if (driver.gps_latitude && driver.gps_longitude && course.latitude_depart && course.longitude_depart) {
     const dist = distanceKm(driver.gps_latitude, driver.gps_longitude, course.latitude_depart, course.longitude_depart);
-    distScore = dist <= 1 ? 40 : dist <= 3 ? 32 : dist <= 5 ? 22 : dist <= 10 ? 12 : 4;
+    distScore = dist <= 1 ? 30 : dist <= 3 ? 24 : dist <= 5 ? 16 : dist <= 10 ? 9 : 3;
   } else {
-    if (driver.quartier === course.quartier_depart) distScore = 30;
-    else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier)) distScore = 18;
-    else distScore = 5;
+    if (driver.quartier === course.quartier_depart) distScore = 24;
+    else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier)) distScore = 14;
+    else distScore = 4;
   }
 
-  // 2. CHARGE (20 pts)
-  const actives = driver.nombre_courses_actives || 0;
-  const chargeScore = actives === 0 ? 20 : actives === 1 ? 12 : actives === 2 ? 6 : 0;
+  // 2. PRIX COURSE (30 pts)
+  let prixScore = 0;
+  const prix = course.prix || 0;
+  if (prix >= 3000) prixScore = 30;
+  else if (prix >= 2000) prixScore = 24;
+  else if (prix >= 1500) prixScore = 18;
+  else if (prix >= 1000) prixScore = 12;
+  else if (prix >= 500) prixScore = 6;
+  else prixScore = 2;
 
   // 3. PERFORMANCE (20 pts)
   let perfScore = 10;
@@ -73,19 +79,21 @@ function scoreDriver(driver, course) {
 
   // 5. INACTIVITÉ (10 pts)
   let inactiviteScore = 5;
+  const actives = driver.nombre_courses_actives || 0;
+  if (actives > 0) inactiviteScore = Math.max(0, inactiviteScore - actives * 2);
   if (driver.derniere_course_attribuee_at) {
     const heures = (Date.now() - new Date(driver.derniere_course_attribuee_at).getTime()) / 3600000;
-    inactiviteScore = heures >= 2 ? 10 : heures >= 1 ? 8 : heures >= 0.5 ? 6 : 3;
+    inactiviteScore = Math.min(10, inactiviteScore + (heures >= 2 ? 5 : heures >= 1 ? 3 : 1));
   } else {
     inactiviteScore = 10;
   }
 
-  let total = distScore + chargeScore + perfScore + acceptScore + inactiviteScore;
+  let total = distScore + prixScore + perfScore + acceptScore + inactiviteScore;
 
   // URGENCE
   const urgence = course.urgence || course.niveau_urgence;
-  if (urgence === 'tres_urgent') total += 15;
-  else if (urgence === 'urgent') total += 8;
+  if (urgence === 'tres_urgent') total += 20;
+  else if (urgence === 'urgent') total += 10;
 
   // PÉNALITÉS
   const refusConsecutifs = driver.courses_refusees_consecutives || 0;
@@ -163,8 +171,43 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
 
-    // ── 4. Aucun livreur disponible ────────────────────────────────────────
+    // ── 4. Aucun livreur disponible — Mode attrape-course ou échec ──────────
     if (eligibles.length === 0) {
+      // MODE ATTRAPE-COURSE (urgent/tres_urgent ou force) : envoyer à tous les livreurs en ligne
+      const urgence = course.urgence || course.niveau_urgence;
+      const attrapeMode = forceDispatch || urgence === 'tres_urgent';
+
+      // Notifier livreurs OFFLINE pour les inciter à se connecter
+      const allOnlineDrivers = await base44.asServiceRole.entities.User.filter({ user_type: 'livreur', disponible: true });
+      if (allOnlineDrivers.length > 0) {
+        // Il y a des livreurs en ligne mais non éligibles (trop occupés etc.)
+        for (const d of allOnlineDrivers.slice(0, 5)) {
+          await base44.asServiceRole.entities.Notification.create({
+            destinataire_email: d.email,
+            destinataire_role: 'livreur',
+            titre: '💰 Course disponible !',
+            message: `Course ${course.quartier_depart}→${course.quartier_arrivee} — ${course.prix} FCFA. Libérez-vous pour l'accepter !`,
+            type: 'info',
+            lue: false,
+            course_id: courseId,
+          }).catch(() => {});
+        }
+      } else {
+        // Aucun livreur en ligne — notifier les livreurs offline
+        const offlineDrivers = await base44.asServiceRole.entities.User.filter({ user_type: 'livreur', disponible: false });
+        const targets = offlineDrivers.filter(d => !d.livreur_bloque && validEmails.has(d.email)).slice(0, 10);
+        for (const d of targets) {
+          await base44.asServiceRole.entities.Notification.create({
+            destinataire_email: d.email,
+            destinataire_role: 'livreur',
+            titre: '💰 Courses disponibles — Connecte-toi !',
+            message: `Plusieurs courses en attente dans ta zone. Prix jusqu'à ${course.prix} FCFA. Connecte-toi maintenant !`,
+            type: 'info',
+            lue: false,
+          }).catch(() => {});
+        }
+      }
+
       historique.push({ heure: now, statut: 'aucun_livreur', message: 'Aucun livreur éligible' });
       await base44.asServiceRole.entities.Course.update(courseId, {
         statut: 'aucun_livreur',
@@ -177,7 +220,7 @@ Deno.serve(async (req) => {
           destinataire_email: course.client_email,
           destinataire_role: 'client',
           titre: '😔 Aucun livreur disponible',
-          message: 'Aucun livreur n\'est disponible pour le moment. Réessayez ou augmentez le prix.',
+          message: 'Aucun livreur n\'est disponible pour le moment. Augmentez le prix ou réessayez plus tard.',
           type: 'warning',
           lue: false,
           course_id: courseId,
@@ -191,7 +234,7 @@ Deno.serve(async (req) => {
           destinataire_email: admin.email,
           destinataire_role: 'admin',
           titre: '🚨 Échec dispatch',
-          message: `Course ${course.quartier_depart}→${course.quartier_arrivee} sans livreur (${course.nombre_tentatives || 0} tentatives).`,
+          message: `Course ${course.quartier_depart}→${course.quartier_arrivee} sans livreur (${course.nombre_tentatives || 0} tentatives). Prix: ${course.prix} FCFA.`,
           type: 'danger',
           lue: false,
           course_id: courseId,

@@ -37,26 +37,32 @@ export function distanceKm(lat1, lng1, lat2, lng2) {
 
 /**
  * Score livreur :
- * 40% distance | 20% disponibilité/charge | 20% performance | 10% taux acceptation | 10% inactivité récente
+ * 30% distance | 30% prix course | 20% performance | 10% taux acceptation | 10% inactivité
  */
 export function scoreDriver(driver, course) {
-  // 1. DISTANCE (40 pts)
+  // 1. DISTANCE (30 pts)
   let distScore = 0;
   if (driver.gps_latitude && driver.gps_longitude && course.latitude_depart && course.longitude_depart) {
     const dist = distanceKm(driver.gps_latitude, driver.gps_longitude, course.latitude_depart, course.longitude_depart);
-    distScore = dist <= 1 ? 40 : dist <= 3 ? 32 : dist <= 5 ? 22 : dist <= 10 ? 12 : 4;
+    distScore = dist <= 1 ? 30 : dist <= 3 ? 24 : dist <= 5 ? 16 : dist <= 10 ? 9 : 3;
   } else {
-    if (driver.quartier === course.quartier_depart) distScore = 30;
-    else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier)) distScore = 18;
-    else distScore = 5;
+    if (driver.quartier === course.quartier_depart) distScore = 24;
+    else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier)) distScore = 14;
+    else distScore = 4;
   }
 
-  // 2. CHARGE (20 pts) — moins de courses actives = meilleur
-  const actives = driver.nombre_courses_actives || 0;
-  const chargeScore = actives === 0 ? 20 : actives === 1 ? 12 : actives === 2 ? 6 : 0;
+  // 2. PRIX COURSE (30 pts) — plus le prix est élevé, plus la course est attractive
+  let prixScore = 0;
+  const prix = course.prix || 0;
+  if (prix >= 3000) prixScore = 30;
+  else if (prix >= 2000) prixScore = 24;
+  else if (prix >= 1500) prixScore = 18;
+  else if (prix >= 1000) prixScore = 12;
+  else if (prix >= 500) prixScore = 6;
+  else prixScore = 2;
 
-  // 3. PERFORMANCE (20 pts) — note moyenne + courses totales
-  let perfScore = 10; // neutre par défaut
+  // 3. PERFORMANCE (20 pts)
+  let perfScore = 10;
   const note = driver.note_moyenne || 0;
   if (note >= 4.5) perfScore = 20;
   else if (note >= 4.0) perfScore = 16;
@@ -72,21 +78,23 @@ export function scoreDriver(driver, course) {
     acceptScore = taux >= 0.8 ? 10 : taux >= 0.6 ? 7 : taux >= 0.4 ? 4 : 1;
   }
 
-  // 5. INACTIVITÉ (10 pts) — favorise les livreurs qui attendent depuis longtemps
+  // 5. INACTIVITÉ (10 pts)
   let inactiviteScore = 5;
+  const actives = driver.nombre_courses_actives || 0;
+  if (actives > 0) inactiviteScore = Math.max(0, inactiviteScore - actives * 2);
   if (driver.derniere_course_attribuee_at) {
     const heures = (Date.now() - new Date(driver.derniere_course_attribuee_at).getTime()) / 3600000;
-    inactiviteScore = heures >= 2 ? 10 : heures >= 1 ? 8 : heures >= 0.5 ? 6 : 3;
+    inactiviteScore = Math.min(10, inactiviteScore + (heures >= 2 ? 5 : heures >= 1 ? 3 : 1));
   } else {
-    inactiviteScore = 10; // jamais eu de course → priorité max
+    inactiviteScore = 10;
   }
 
-  let total = distScore + chargeScore + perfScore + acceptScore + inactiviteScore;
+  let total = distScore + prixScore + perfScore + acceptScore + inactiviteScore;
 
   // BONUS URGENCE
   const urgence = course.urgence || course.niveau_urgence;
-  if (urgence === 'tres_urgent') total += 15;
-  else if (urgence === 'urgent') total += 8;
+  if (urgence === 'tres_urgent') total += 20;
+  else if (urgence === 'urgent') total += 10;
 
   // PÉNALITÉS
   const refusConsecutifs = driver.courses_refusees_consecutives || 0;
@@ -148,6 +156,19 @@ export async function reassignerCourse(course) {
     exclure = hist.filter(h => ['refuse', 'no_response'].includes(h.statut)).map(h => h.livreur_email);
   } catch (_) {}
   return lancerDispatch(course, exclure);
+}
+
+/**
+ * Priorité des courses pour le dispatch (ordre de traitement).
+ * 1. très urgent, 2. urgent, 3. prix élevé, 4. normal
+ */
+export function priorityCourseScore(course) {
+  const urgence = course.urgence || course.niveau_urgence;
+  let score = 0;
+  if (urgence === 'tres_urgent') score += 1000;
+  else if (urgence === 'urgent') score += 500;
+  score += (course.prix || 0);
+  return score;
 }
 
 /**

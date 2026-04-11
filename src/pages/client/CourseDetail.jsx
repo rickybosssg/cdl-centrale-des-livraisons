@@ -5,6 +5,7 @@ import { base44 } from "@/api/base44Client";
 import { ArrowLeft, MapPin, Phone, Package, Navigation, Map, AlertTriangle, RefreshCw } from "lucide-react";
 import NotationCourse from "../../components/NotationCourse";
 import MiniChat from "../../components/MiniChat";
+import CourseBoostPanel from "../../components/CourseBoostPanel";
 import MapSuivi from "../../components/MapSuivi";
 import CancelCourseDialog from "../../components/CancelCourseDialog";
 import ReportIssueModal from "../../components/ReportIssueModal";
@@ -311,7 +312,10 @@ export default function CourseDetail() {
         <MiniChat course={course} user={{ email: course.client_email, full_name: course.client_name, user_type: "client" }} />
       )}
 
-      {/* Suggestion augmenter le prix si aucun livreur */}
+      {/* Boost panel — remplace l'ancien formulaire de prix */}
+      <CourseBoostPanel course={course} onBoosted={() => load(true)} />
+
+      {/* Suggestion augmenter le prix si aucun livreur (fallback manuel) */}
       {course.statut === "aucun_livreur" && (
         <Card className="border-red-300 bg-red-50">
           <CardContent className="p-5 space-y-4">
@@ -322,54 +326,21 @@ export default function CourseDetail() {
                 <p className="text-xs text-red-600">{course.nombre_tentatives} tentative(s) effectuée(s)</p>
               )}
             </div>
-
-            <div className="p-3 rounded-lg bg-white/70 border border-red-200 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Prix actuel proposé</span>
-              <span className="font-bold text-primary text-lg">{course.prix?.toLocaleString()} FCFA</span>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 border-red-300 text-red-700 text-xs" onClick={relancerSeul} disabled={relancantSeul}>
+                {relancantSeul ? '⏳...' : '🔄 Relancer'}
+              </Button>
+              <Button className="flex-1 bg-amber-600 hover:bg-amber-700 text-xs" onClick={() => { setShowPrixForm(true); setNouveauPrix(String(Math.round((course.prix || 0) * 1.3))); }}>
+                💰 Nouveau prix
+              </Button>
             </div>
-
-            {!showPrixForm ? (
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="outline"
-                  className="border-red-300 text-red-700 hover:bg-red-100 text-xs h-11"
-                  onClick={relancerSeul}
-                  disabled={relancantSeul}
-                >
-                  {relancantSeul ? "⏳ Relance..." : "🔄 Relancer la recherche"}
-                </Button>
-                <Button
-                  className="bg-amber-600 hover:bg-amber-700 text-xs h-11"
-                  onClick={() => { setShowPrixForm(true); setNouveauPrix(String(Math.round((course.prix || 0) * 1.3))); }}
-                >
-                  💰 Augmenter le prix
-                </Button>
-              </div>
-            ) : (
+            {showPrixForm && (
               <div className="space-y-2">
-                <p className="text-xs text-amber-800 font-semibold">
-                  💡 Prix suggéré : {Math.round((course.prix || 0) * 1.3).toLocaleString()} FCFA (+30%)
-                </p>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    placeholder={`Nouveau prix (min: ${(course.prix || 0) + 1} FCFA)`}
-                    value={nouveauPrix}
-                    onChange={e => { setNouveauPrix(e.target.value); setPrixErreur(""); }}
-                    className="pr-14"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">FCFA</span>
-                </div>
+                <Input type="number" placeholder={`Nouveau prix (min: ${(course.prix || 0) + 1} FCFA)`} value={nouveauPrix} onChange={e => { setNouveauPrix(e.target.value); setPrixErreur(''); }} />
                 {prixErreur && <p className="text-xs text-red-600">{prixErreur}</p>}
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1" onClick={() => { setShowPrixForm(false); setPrixErreur(""); }}>Annuler</Button>
-                  <Button
-                    className="flex-1 bg-amber-600 hover:bg-amber-700"
-                    onClick={relancerAvecNouveauPrix}
-                    disabled={relancant || !nouveauPrix}
-                  >
-                    {relancant ? "⏳..." : "✅ Confirmer et relancer"}
-                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowPrixForm(false); setPrixErreur(''); }}>Annuler</Button>
+                  <Button className="flex-1 bg-amber-600" onClick={relancerAvecNouveauPrix} disabled={relancant || !nouveauPrix}>{relancant ? '⏳...' : 'Confirmer'}</Button>
                 </div>
               </div>
             )}
