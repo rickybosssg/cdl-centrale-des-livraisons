@@ -1,5 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
+/**
+ * Bascule le profil actif d'un utilisateur.
+ * Réinitialise tous les statuts en ligne et active uniquement celui du profil choisi.
+ */
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -8,7 +12,7 @@ Deno.serve(async (req) => {
 
     const { profile_type } = await req.json();
 
-    // Vérifier que le profil existe pour cet utilisateur
+    // Vérifier que le profil existe et est actif pour cet utilisateur
     const profiles = await base44.entities.UserProfile.filter({
       user_email: user.email,
       profile_type,
@@ -19,26 +23,46 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Profil introuvable' }, { status: 404 });
     }
 
-    // Désactiver l'ancien profil actif
+    const targetProfile = profiles.find(p => p.status === 'actif') || profiles[0];
+
+    // Désactiver tous les anciens profils actifs
     const oldActives = await base44.entities.UserProfile.filter({
       user_email: user.email,
       is_active_profile: true,
       deleted: false,
     });
     for (const p of oldActives) {
-      if (p.id !== profiles[0].id) {
+      if (p.id !== targetProfile.id) {
         await base44.entities.UserProfile.update(p.id, { is_active_profile: false });
       }
     }
 
     // Activer le nouveau profil
-    await base44.entities.UserProfile.update(profiles[0].id, { is_active_profile: true });
+    await base44.entities.UserProfile.update(targetProfile.id, { is_active_profile: true });
 
-    // Mettre à jour le user
-    await base44.auth.updateMe({ active_profile_type: profile_type });
+    // Réinitialiser TOUS les statuts en ligne + activer uniquement le rôle choisi
+    const onlineFields = {
+      current_role: profile_type,
+      driver_online: profile_type === 'livreur',
+      client_online: profile_type === 'client',
+      commercial_online: profile_type === 'commercial',
+      partner_online: profile_type === 'partenaire',
+      active_profile_type: profile_type,
+      last_seen: new Date().toISOString(),
+    };
 
-    return Response.json({ success: true, activeProfileType: profile_type });
+    // Pour les livreurs, conserver le champ disponible selon leur préférence
+    if (profile_type !== 'livreur') {
+      onlineFields.disponible = false;
+    }
+
+    await base44.auth.updateMe(onlineFields);
+
+    console.log(`[SwitchProfile] ${user.email} → ${profile_type} | driver_online=${onlineFields.driver_online}`);
+
+    return Response.json({ success: true, activeProfileType: profile_type, onlineFields });
   } catch (error) {
+    console.error('[SwitchProfile] Erreur:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });

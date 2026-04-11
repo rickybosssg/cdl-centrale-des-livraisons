@@ -159,8 +159,9 @@ Deno.serve(async (req) => {
       ...historique.filter(h => ['refuse', 'no_response'].includes(h.statut)).map(h => h.livreur_email),
     ]);
 
+    // Utiliser driver_online comme source de vérité (rôle actif = livreur)
     const eligibles = allDrivers.filter(d =>
-      d.disponible &&
+      d.driver_online &&
       !d.livreur_bloque &&
       d.actif !== false &&
       validEmails.has(d.email) &&

@@ -2,46 +2,55 @@ import { useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 
 const HEARTBEAT_INTERVAL = 30000; // 30s
-const OFFLINE_DELAY = 180000; // 3 minutes sans ping → hors ligne
 
-export default function usePresence(userEmail) {
+/**
+ * usePresence — met à jour last_seen + statut en ligne par rôle actif.
+ * @param {string} userEmail
+ * @param {string} currentRole - 'client' | 'livreur' | 'commercial' | 'partenaire'
+ */
+export default function usePresence(userEmail, currentRole) {
   const intervalRef = useRef(null);
+
+  const buildOnlineFields = (online) => {
+    const fields = { last_seen: online ? new Date().toISOString() : new Date(0).toISOString() };
+    if (!online) {
+      fields.driver_online = false;
+      fields.client_online = false;
+      fields.commercial_online = false;
+      fields.partner_online = false;
+    } else if (currentRole === 'livreur') {
+      fields.driver_online = true;
+    } else if (currentRole === 'client') {
+      fields.client_online = true;
+    } else if (currentRole === 'commercial') {
+      fields.commercial_online = true;
+    } else if (currentRole === 'partenaire') {
+      fields.partner_online = true;
+    }
+    return fields;
+  };
 
   const ping = () => {
     if (!userEmail) return;
-    base44.auth.updateMe({ last_seen: new Date().toISOString() }).catch(() => {});
+    base44.auth.updateMe(buildOnlineFields(true)).catch(() => {});
   };
 
   const markOffline = () => {
     if (!userEmail) return;
-    // On met last_seen à une date ancienne pour le marquer hors ligne immédiatement
-    const offlineTime = new Date(Date.now() - OFFLINE_DELAY).toISOString();
-    base44.auth.updateMe({ last_seen: offlineTime }).catch(() => {});
+    base44.auth.updateMe(buildOnlineFields(false)).catch(() => {});
   };
 
   useEffect(() => {
     if (!userEmail) return;
 
-    // Ping immédiat au mount
     ping();
-
-    // Ping régulier
     intervalRef.current = setInterval(ping, HEARTBEAT_INTERVAL);
 
-    // Retour au premier plan → ping immédiat
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        ping();
-      } else {
-        // Onglet masqué → marquer hors ligne
-        markOffline();
-      }
+      if (document.visibilityState === "visible") ping();
+      else markOffline();
     };
-
-    // Fermeture de page → marquer hors ligne
-    const onBeforeUnload = () => {
-      markOffline();
-    };
+    const onBeforeUnload = () => markOffline();
 
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("beforeunload", onBeforeUnload);
@@ -50,8 +59,7 @@ export default function usePresence(userEmail) {
       clearInterval(intervalRef.current);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("beforeunload", onBeforeUnload);
-      // Marquer hors ligne au démontage
       markOffline();
     };
-  }, [userEmail]);
+  }, [userEmail, currentRole]);
 }

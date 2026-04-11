@@ -52,7 +52,7 @@ export default function AdminDashboard() {
       const today = new Date().toDateString();
       const [courses, livreurs, users, partenaires, profiles, countsRes, allClients] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 100),
-        base44.entities.User.filter({ user_type: "livreur", disponible: true }),
+        base44.entities.User.filter({ driver_online: true }), // source de vérité : rôle actif
         base44.entities.User.list("-created_date", 100),
         base44.entities.Partenaire.list('-created_date', 200),
         base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),
@@ -65,7 +65,7 @@ export default function AdminDashboard() {
       const revenueToday = coursesData
         .filter(c => new Date(c.created_date).toDateString() === today && c.statut === 'livree')
         .reduce((sum, c) => sum + (c.commission_cdl || 0), 0);
-      const livreursOnline = (livreurs || []).length;
+      const livreursOnline = (livreurs || []).length; // driver_online=true
       const livreursDisponibles = (livreurs || []).filter(l => !l.livreur_bloque).length;
       const fiveMinAgo = new Date(Date.now() - 3 * 60 * 1000); // 3 minutes = 2x heartbeat (30s) + marge
       const onlineClients = (allClients || []).filter(c => c.last_seen && new Date(c.last_seen) > fiveMinAgo);

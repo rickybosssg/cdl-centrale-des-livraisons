@@ -181,8 +181,9 @@ export async function classifyDriversForCourse(course) {
   });
   const validEmails = new Set(activeProfiles.map(p => p.user_email));
 
+  // Utiliser driver_online (rôle actif = livreur) comme source de vérité
   const eligibles = allDrivers.filter(d =>
-    d.disponible &&
+    d.driver_online &&
     !d.livreur_bloque &&
     validEmails.has(d.email) &&
     (d.nombre_courses_actives || 0) < 3 &&

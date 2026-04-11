@@ -197,16 +197,14 @@ export default function DispatchMonitor() {
     if (!dispatchConfig) return;
     setTogglingMode(true);
     const newMode = dispatchConfig.mode === 'auto' ? 'manuel' : 'auto';
-    const me = await base44.auth.me();
     try {
-      await base44.entities.DispatchConfig.update(dispatchConfig.id, {
-        mode: newMode,
-        force_override: true,
-        last_changed_by: me?.email || 'admin',
-        last_changed_reason: `Changé par admin (${me?.email})`,
-      });
-      setDispatchConfig(prev => ({ ...prev, mode: newMode }));
+      // Utiliser la fonction backend sécurisée (vérification admin côté serveur)
+      const res = await base44.functions.invoke('setDispatchMode', { mode: newMode });
+      if (!res.data?.success) throw new Error(res.data?.error || 'Erreur');
+      // Recharger depuis la BDD pour avoir la source de vérité
+      await loadDispatchConfig();
       toast.success(newMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
+      console.log(`[DispatchMonitor] Mode changé → ${newMode}`);
     } catch (err) {
       toast.error('Erreur: ' + err.message);
     }
@@ -295,8 +293,9 @@ export default function DispatchMonitor() {
   }, []);
 
   const isManuel = (dispatchConfig?.mode || 'auto') === 'manuel';
-  const livreursOnline = livreurs.filter(l => l.disponible && !l.livreur_bloque);
-  const livreursDispatchables = livreurs.filter(l => l.disponible && !l.livreur_bloque && (l.nombre_courses_actives || 0) < 3);
+  // Utiliser driver_online comme source de vérité (pas disponible qui mélange les rôles)
+  const livreursOnline = livreurs.filter(l => l.driver_online && !l.livreur_bloque);
+  const livreursDispatchables = livreurs.filter(l => l.driver_online && !l.livreur_bloque && (l.nombre_courses_actives || 0) < 3);
 
   const coursesEnAttente = courses.filter(c => ['en_attente', 'en_attente_dispatch'].includes(c.statut));
   const coursesProposees = courses.filter(c => c.statut === 'assignee_attente');
@@ -343,12 +342,16 @@ export default function DispatchMonitor() {
                 {!isManuel ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé'}
               </p>
               <p className={`text-xs ${!isManuel ? 'text-green-700' : 'text-amber-700'}`}>
-                {!isManuel
-                  ? 'Courses assignées automatiquement selon le score'
-                  : 'Toutes les courses attendent votre assignation manuelle'}
+                {!isManuel ? 'Courses assignées automatiquement selon le score' : 'Toutes les courses attendent votre assignation manuelle'}
               </p>
+              {dispatchConfig?.last_changed_by && (
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Modifié par {dispatchConfig.last_changed_by}
+                  {dispatchConfig.last_changed_at ? ` · ${moment(dispatchConfig.last_changed_at).format('DD/MM HH:mm')}` : ''}
+                </p>
+              )}
               <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                <Lock className="h-2.5 w-2.5" /> Changeable uniquement par admin
+                <Lock className="h-2.5 w-2.5" /> Source : BDD — ne se réinitialise jamais seul
               </p>
             </div>
           </div>
@@ -356,13 +359,11 @@ export default function DispatchMonitor() {
             onClick={toggleMode}
             disabled={togglingMode}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 disabled:opacity-50 ${
-              !isManuel
-                ? 'border-amber-400 text-amber-700 bg-white hover:bg-amber-50'
-                : 'border-green-400 text-green-700 bg-white hover:bg-green-50'
+              !isManuel ? 'border-amber-400 text-amber-700 bg-white hover:bg-amber-50' : 'border-green-400 text-green-700 bg-white hover:bg-green-50'
             }`}
           >
             {!isManuel ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-            {togglingMode ? '...' : !isManuel ? 'Activer manuel' : 'Activer auto'}
+            {togglingMode ? 'Sauvegarde...' : !isManuel ? 'Activer manuel' : 'Activer auto'}
           </button>
         </div>
       </div>

@@ -10,6 +10,36 @@
       ],
       "default": "user"
     },
+    "current_role": {
+      "type": "string",
+      "title": "R\u00f4le actif actuel (client, livreur, commercial, partenaire)",
+      "enum": [
+        "client",
+        "livreur",
+        "commercial",
+        "partenaire"
+      ]
+    },
+    "driver_online": {
+      "type": "boolean",
+      "title": "Livreur en ligne (actif dans ce r\u00f4le)",
+      "default": false
+    },
+    "client_online": {
+      "type": "boolean",
+      "title": "Client en ligne",
+      "default": false
+    },
+    "commercial_online": {
+      "type": "boolean",
+      "title": "Commercial en ligne",
+      "default": false
+    },
+    "partner_online": {
+      "type": "boolean",
+      "title": "Partenaire en ligne",
+      "default": false
+    },
     "whatsapp_trigger_event": {
       "type": "string",
       "title": "Dernier \u00e9v\u00e9nement WA"
@@ -36,5 +66,6 @@
       "title": "Envoy\u00e9 par Respond.io",
       "default": false
     }
-  }
+  },
+  "required": []
 }
