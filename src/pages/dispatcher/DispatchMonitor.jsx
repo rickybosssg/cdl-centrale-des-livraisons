@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import DispatchStatsWidget from "@/components/DispatchStatsWidget";
+import DispatchDriversStats from "@/components/DispatchDriversStats";
 import { toast } from "sonner";
 import moment from "moment";
 
@@ -84,6 +85,9 @@ function CourseDispatchCard({ course, livreurs, isManuel, onAssign, onRelancer, 
             </p>
             {(course.nombre_tentatives || 0) > 0 && (
               <p className="text-xs text-amber-600 font-medium">{course.nombre_tentatives} tentative(s)</p>
+            )}
+            {course.dispatch_fail_reason && (
+              <p className="text-[10px] text-red-600 italic mt-0.5">⚠️ {course.dispatch_fail_reason}</p>
             )}
           </div>
           <button onClick={handleExpand} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-muted/50">
@@ -408,6 +412,12 @@ export default function DispatchMonitor() {
         </Card>
       </div>
 
+      {/* Vue détaillée livreurs */}
+      <DispatchDriversStats />
+
+      <div className="grid grid-cols-3 gap-2" style={{display:'none'}}>
+      </div>
+
       {/* Courses à dispatcher */}
       {aDispatcher.length > 0 && (
         <div className="space-y-3">
@@ -482,7 +492,7 @@ export default function DispatchMonitor() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            Livreurs en ligne ({livreursOnline.length} / {livreurs.length})
+            Livreurs en ligne ({livreursOnline.length}) — dispatchables ({livreursDispatchables.length})
           </CardTitle>
         </CardHeader>
         <CardContent>

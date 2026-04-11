@@ -172,25 +172,66 @@ export function priorityCourseScore(course) {
 }
 
 /**
+ * Critères unifiés "livreur dispatchable" — identiques au moteur backend.
+ * Un livreur est dispatchable si :
+ *   driver_online=true, current_role=livreur, profil actif, non bloqué,
+ *   <3 courses actives, GPS ou quartier connu.
+ */
+export function isDriverDispatchable(driver, validEmails) {
+  return (
+    driver.driver_online === true &&
+    driver.current_role === 'livreur' &&
+    !driver.livreur_bloque &&
+    validEmails.has(driver.email) &&
+    (driver.nombre_courses_actives || 0) < 3 &&
+    (driver.gps_latitude || driver.gps_longitude || driver.quartier)
+  );
+}
+
+export function getDriverDispatchReason(driver, validEmails) {
+  if (!driver.driver_online) return 'hors ligne';
+  if (driver.current_role !== 'livreur') return `rôle actif: ${driver.current_role || 'non défini'}`;
+  if (driver.livreur_bloque) return 'compte bloqué';
+  if (!validEmails.has(driver.email)) return 'profil livreur inactif';
+  if ((driver.nombre_courses_actives || 0) >= 3) return `trop occupé (${driver.nombre_courses_actives} courses)`;
+  if (!driver.gps_latitude && !driver.gps_longitude && !driver.quartier) return 'pas de GPS ni quartier';
+  return 'dispatchable';
+}
+
+/**
  * Classe les livreurs éligibles pour une course donnée (usage frontend/admin).
  */
 export async function classifyDriversForCourse(course) {
-  const allDrivers = await base44.entities.User.filter({ user_type: 'livreur' });
-  const activeProfiles = await base44.entities.UserProfile.filter({
-    profile_type: 'livreur', status: 'actif', deleted: false,
-  });
+  const [allDrivers, activeProfiles] = await Promise.all([
+    base44.entities.User.list('-updated_date', 500),
+    base44.entities.UserProfile.filter({ profile_type: 'livreur', status: 'actif', deleted: false }),
+  ]);
   const validEmails = new Set(activeProfiles.map(p => p.user_email));
 
-  // Utiliser driver_online (rôle actif = livreur) comme source de vérité
-  const eligibles = allDrivers.filter(d =>
-    d.driver_online &&
-    !d.livreur_bloque &&
-    validEmails.has(d.email) &&
-    (d.nombre_courses_actives || 0) < 3 &&
-    (d.quartier || d.gps_latitude)
-  );
+  const eligibles = allDrivers.filter(d => isDriverDispatchable(d, validEmails));
 
   return eligibles
     .map(d => ({ driver: d, score: scoreDriver(d, course) }))
     .sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Retourne les compteurs détaillés pour le dashboard admin.
+ */
+export async function getDriversDispatchStats() {
+  const [allDrivers, activeProfiles] = await Promise.all([
+    base44.entities.User.list('-updated_date', 500),
+    base44.entities.UserProfile.filter({ profile_type: 'livreur', status: 'actif', deleted: false }),
+  ]);
+  const validEmails = new Set(activeProfiles.map(p => p.user_email));
+
+  const enLigne = allDrivers.filter(d => d.driver_online);
+  const avecGPS = allDrivers.filter(d => d.driver_online && d.gps_latitude && d.gps_longitude);
+  const dispatchables = allDrivers.filter(d => isDriverDispatchable(d, validEmails));
+
+  const nonDispatchables = enLigne
+    .filter(d => !isDriverDispatchable(d, validEmails))
+    .map(d => ({ email: d.email, nom: d.full_name, raison: getDriverDispatchReason(d, validEmails) }));
+
+  return { enLigne: enLigne.length, avecGPS: avecGPS.length, dispatchables: dispatchables.length, nonDispatchables };
 }
