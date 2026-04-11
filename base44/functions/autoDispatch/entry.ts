@@ -244,7 +244,7 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, message: 'Aucun livreur disponible' });
     }
 
-    // ── 5. Scorer et choisir le meilleur ───────────────────────────────────
+    // ── 5. Scorer et choisir le(s) meilleur(s) ────────────────────────────
     // Dispatch par rayon progressif si GPS disponible
     let candidates = eligibles;
     if (course.latitude_depart && course.longitude_depart) {
@@ -253,16 +253,75 @@ Deno.serve(async (req) => {
           d.gps_latitude && d.gps_longitude &&
           distanceKm(d.gps_latitude, d.gps_longitude, course.latitude_depart, course.longitude_depart) <= rayon
         );
-        if (dansRayon.length > 0) {
-          candidates = dansRayon;
-          break;
-        }
+        if (dansRayon.length > 0) { candidates = dansRayon; break; }
       }
     }
 
     const scored = candidates
       .map(d => ({ driver: d, score: scoreDriver(d, course) }))
       .sort((a, b) => b.score - a.score);
+
+    const urgence = course.urgence || course.niveau_urgence;
+    const attrapeMode = forceDispatch || urgence === 'tres_urgent' || (course.nombre_tentatives || 0) >= 3;
+
+    // ── MODE ATTRAPE-COURSE : envoyer à plusieurs en simultané ─────────────
+    if (attrapeMode && scored.length >= 2) {
+      const topN = scored.slice(0, Math.min(5, scored.length));
+      const expireAt = new Date(Date.now() + 90000).toISOString();
+      const histEntry = topN.map(({ driver, score }) => ({
+        livreur_email: driver.email,
+        livreur_nom: driver.full_name,
+        heure: now,
+        heure_expiration: expireAt,
+        statut: 'attrape_proposee',
+        score,
+      }));
+      historique.push(...histEntry);
+
+      // Remettre en en_attente pour que le premier à accepter gagne
+      await base44.asServiceRole.entities.Course.update(courseId, {
+        statut: 'en_attente',
+        livreur_email: '',
+        livreur_name: '',
+        heure_assignation: now,
+        mode_assignation: 'attrape_course',
+        nombre_tentatives: (course.nombre_tentatives || 0) + 1,
+        historique_assignation: JSON.stringify(historique),
+      });
+
+      // Notifier tous les top N livreurs
+      for (const { driver, score } of topN) {
+        await base44.asServiceRole.entities.Notification.create({
+          destinataire_email: driver.email,
+          destinataire_role: 'livreur',
+          titre: '🏆 Course disponible — Premier arrivé !',
+          message: `ATTRAPE-COURSE : ${course.quartier_depart} → ${course.quartier_arrivee}. ${course.type_colis}. Prix: ${course.prix} FCFA. Premier à accepter gagne !`,
+          type: 'success',
+          lue: false,
+          course_id: courseId,
+          target_screen: `/courses-disponibles`,
+        }).catch(() => {});
+        if (driver.telephone) {
+          base44.asServiceRole.functions.invoke('sendWhatsAppAlert', {
+            eventType: 'attrape_course',
+            recipientRole: 'livreur',
+            recipientName: driver.full_name,
+            recipientPhone: driver.telephone,
+            messageText: `🏆 ATTRAPE-COURSE ! ${course.quartier_depart}→${course.quartier_arrivee} — ${course.prix} FCFA. Premier à accepter gagne sur l'app CDL !`,
+            entityId: courseId,
+            entityType: 'course',
+            priority: 'urgent',
+          }).catch(() => {});
+        }
+      }
+
+      console.log(`[Dispatch] ⚡ MODE ATTRAPE-COURSE — course ${courseId} envoyée à ${topN.length} livreurs`);
+      return Response.json({
+        success: true,
+        mode: 'attrape_course',
+        livreurs: topN.map(({ driver, score }) => ({ email: driver.email, nom: driver.full_name, score })),
+      });
+    }
 
     const best = scored[0].driver;
 

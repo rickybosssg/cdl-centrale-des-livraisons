@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import DispatchStatsWidget from "@/components/DispatchStatsWidget";
 import { toast } from "sonner";
 import moment from "moment";
 
@@ -529,6 +530,12 @@ export default function DispatchMonitor() {
       <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/50 border text-sm">
         <TrendingUp className="h-4 w-4 text-green-600" />
         <span><strong className="text-green-700">{livreesToday.length}</strong> livraison(s) effectuée(s) aujourd'hui</span>
+      </div>
+
+      {/* Stats d'optimisation */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">📈 Analyse & optimisation</p>
+        <DispatchStatsWidget />
       </div>
     </div>
   );
