@@ -68,16 +68,15 @@ async function repairOne(user, profilesByEmail) {
 export default function AuditUtilisateurs() {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [partenaires, setPartenaires] = useState([]);
-  const [codes, setCodes] = useState([]);
+  const [profiles, setProfiles] = useState([]);
   const [repairLogs, setRepairLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [repairing, setRepairing] = useState({});
   const [repairingAll, setRepairingAll] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [filterStatut, setFilterStatut] = useState("TOUS");
   const [search, setSearch] = useState("");
-  const [assignDialog, setAssignDialog] = useState(null); // user object
+  const [assignDialog, setAssignDialog] = useState(null);
   const [assignRole, setAssignRole] = useState("client");
   const [assigning, setAssigning] = useState(false);
 
