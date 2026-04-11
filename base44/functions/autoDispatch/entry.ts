@@ -1,6 +1,13 @@
+/**
+ * CDL — Moteur de dispatch backend (Deno)
+ * 
+ * RÈGLE ABSOLUE :
+ * - Si mode = 'manuel' → AUCUN dispatch automatique (sauf force=true par admin)
+ * - Anti-doublon : vérifier statut course avant assignation
+ * - Un seul livreur proposé à la fois
+ */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
-// Carte des zones proches à Ouagadougou
 const ZONES_PROCHES = {
   "Ouaga 2000": ["Patte d'Oie", "Zone 1", "Kossodo", "Pissy"],
   "Zone 1": ["Koulouba", "Zogona", "Gounghin", "Ouaga 2000"],
@@ -31,108 +38,69 @@ function distanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function scoreDriver(driver, course, zoneBoost = 0) {
-  // ── SCORING INTELLIGENT (100 pts base + bonus/pénalités) ─────────────────
-  // 40% distance | 30% taux acceptation | 20% temps réponse | 10% activité
-
-  // ── 1. DISTANCE (40 pts max) ─────────────────────────────────────────
+function scoreDriver(driver, course) {
+  // 1. DISTANCE (40 pts)
   let distScore = 0;
   if (driver.gps_latitude && driver.gps_longitude && course.latitude_depart && course.longitude_depart) {
     const dist = distanceKm(driver.gps_latitude, driver.gps_longitude, course.latitude_depart, course.longitude_depart);
-    if (dist <= 1)       distScore = 40;
-    else if (dist <= 3)  distScore = 32;
-    else if (dist <= 5)  distScore = 22;
-    else if (dist <= 10) distScore = 12;
-    else                 distScore = 4;
+    distScore = dist <= 1 ? 40 : dist <= 3 ? 32 : dist <= 5 ? 22 : dist <= 10 ? 12 : 4;
   } else {
-    if (driver.quartier === course.quartier_depart)                              distScore = 30;
-    else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier))  distScore = 18;
-    else                                                                          distScore = 8;
+    if (driver.quartier === course.quartier_depart) distScore = 30;
+    else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier)) distScore = 18;
+    else distScore = 5;
   }
 
-  // ── 2. TAUX D'ACCEPTATION (30 pts max) ───────────────────────────────
-  let acceptScore = 0;
+  // 2. CHARGE (20 pts)
+  const actives = driver.nombre_courses_actives || 0;
+  const chargeScore = actives === 0 ? 20 : actives === 1 ? 12 : actives === 2 ? 6 : 0;
+
+  // 3. PERFORMANCE (20 pts)
+  let perfScore = 10;
+  const note = driver.note_moyenne || 0;
+  if (note >= 4.5) perfScore = 20;
+  else if (note >= 4.0) perfScore = 16;
+  else if (note >= 3.5) perfScore = 12;
+  else if (note > 0) perfScore = 8;
+
+  // 4. TAUX ACCEPTATION (10 pts)
+  let acceptScore = 5;
   const proposees = driver.courses_proposees || 0;
   const acceptees = driver.courses_acceptees || (driver.total_courses_livrees || 0);
-  const taux = proposees > 0 ? Math.min(acceptees / proposees, 1) : null;
+  if (proposees >= 5) {
+    const taux = acceptees / proposees;
+    acceptScore = taux >= 0.8 ? 10 : taux >= 0.6 ? 7 : taux >= 0.4 ? 4 : 1;
+  }
 
-  if (taux !== null) {
-    acceptScore = Math.round(taux * 30);
-  } else if (acceptees > 0) {
-    acceptScore = 20;
+  // 5. INACTIVITÉ (10 pts)
+  let inactiviteScore = 5;
+  if (driver.derniere_course_attribuee_at) {
+    const heures = (Date.now() - new Date(driver.derniere_course_attribuee_at).getTime()) / 3600000;
+    inactiviteScore = heures >= 2 ? 10 : heures >= 1 ? 8 : heures >= 0.5 ? 6 : 3;
   } else {
-    acceptScore = 15; // nouveau livreur : neutre
+    inactiviteScore = 10;
   }
 
-  // ── 3. TEMPS DE RÉPONSE (20 pts max) ─────────────────────────────────
-  let reponseScore = 0;
-  const tempsReponseMoyen = driver.temps_reponse_moyen_sec || null;
-  if (tempsReponseMoyen !== null) {
-    if (tempsReponseMoyen <= 15)       reponseScore = 20;
-    else if (tempsReponseMoyen <= 30)  reponseScore = 16;
-    else if (tempsReponseMoyen <= 45)  reponseScore = 12;
-    else if (tempsReponseMoyen <= 60)  reponseScore = 8;
-    else                               reponseScore = 4;
-  } else {
-    reponseScore = 10;
-  }
+  let total = distScore + chargeScore + perfScore + acceptScore + inactiviteScore;
 
-  // ── 4. ACTIVITÉ RÉCENTE + DISPONIBILITÉ (10 pts max) ───────────────────
-  let activiteScore = 0;
-  const derniereActivite = driver.derniere_course_attribuee_at || driver.updated_date;
-  if (derniereActivite) {
-    const heuresDepuis = (Date.now() - new Date(derniereActivite).getTime()) / 3600000;
-    if (heuresDepuis <= 1)       activiteScore = 10;
-    else if (heuresDepuis <= 4)  activiteScore = 8;
-    else if (heuresDepuis <= 12) activiteScore = 5;
-    else if (heuresDepuis <= 24) activiteScore = 3;
-    else                         activiteScore = 1;
-  } else {
-    activiteScore = 5;
-  }
-
-  // Bonus disponibilité continue : livreur en ligne depuis longtemps sans course
-  if (driver.en_ligne_depuis) {
-    const heuresEnLigne = (Date.now() - new Date(driver.en_ligne_depuis).getTime()) / 3600000;
-    if (heuresEnLigne >= 1 && (driver.nombre_courses_actives || 0) === 0) {
-      activiteScore = Math.min(activiteScore + 3, 10); // attend depuis + de 1h sans course
-    }
-  }
-
-  let baseScore = distScore + acceptScore + reponseScore + activiteScore;
-
-  // ── BONUS PERFORMANCE (comportement excellent) ──────────────────────────
-  if (taux !== null && taux >= 0.8) baseScore += 15;          // taux acceptation > 80%
-  if (tempsReponseMoyen !== null && tempsReponseMoyen < 30) baseScore += 10; // réponse rapide
-  if ((driver.note_moyenne || 0) >= 4.5) baseScore += 8;      // excellente note
-
-  // ── PÉNALITÉS AUTOMATIQUES (mauvais comportement) ───────────────────────
-  if (tempsReponseMoyen !== null && tempsReponseMoyen > 60) {
-    baseScore = Math.round(baseScore * 0.90); // -10% si temps > 1 min
-  }
-  if (taux !== null && proposees >= 5 && taux < 0.5) {
-    baseScore = Math.round(baseScore * 0.80); // -20% si refus répétés
-  }
-  if ((driver.courses_refusees_consecutives || 0) >= 3) {
-    baseScore = Math.round(baseScore * 0.75); // -25% si 3 refus consécutifs
-  }
-
-  // ── BOOST DE ZONE (forte demande, peu de livreurs) ─────────────────────
-  baseScore += zoneBoost;
-
-  // ── BONUS URGENCE ────────────────────────────────────────────────────
+  // URGENCE
   const urgence = course.urgence || course.niveau_urgence;
-  if (urgence === 'tres_urgent') baseScore += 20;
-  else if (urgence === 'urgent') baseScore += 10;
+  if (urgence === 'tres_urgent') total += 15;
+  else if (urgence === 'urgent') total += 8;
 
-  return baseScore;
+  // PÉNALITÉS
+  const refusConsecutifs = driver.courses_refusees_consecutives || 0;
+  if (refusConsecutifs >= 3) total = Math.round(total * 0.7);
+  if (proposees >= 5 && acceptees / proposees < 0.4) total = Math.round(total * 0.8);
+
+  return total;
 }
 
 Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const courseId = body.course_id || body.event?.entity_id;
-    const forceDispatch = body.force === true; // Admin peut forcer même en mode manuel
+    const forceDispatch = body.force === true;
+    const excludeEmails = body.exclude_emails || [];
 
     if (!courseId) {
       return Response.json({ error: 'course_id manquant' }, { status: 400 });
@@ -140,149 +108,122 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
 
-    // ── Vérification du mode de dispatch ────────────────────────────────────
+    // ── 1. Vérification mode dispatch ──────────────────────────────────────
     const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
-    const config = configs[0] || { mode: 'auto', force_override: true };
+    const config = configs[0] || { mode: 'auto' };
+    const mode = config.mode || 'auto';
 
-    console.log(`MODE ACTIF : ${(config.mode || 'auto').toUpperCase()}`);
+    console.log(`[Dispatch] MODE: ${mode.toUpperCase()}${forceDispatch ? ' (FORCÉ)' : ''}`);
 
-    if (config.mode === 'manuel' && !forceDispatch) {
-      console.log('AUTO DISPATCH BLOQUÉ (MODE MANUEL)');
-      return Response.json({ success: false, blocked: true, reason: 'mode_manuel', message: 'Dispatch automatique désactivé — mode manuel activé par admin' });
+    if (mode === 'manuel' && !forceDispatch) {
+      console.log('[Dispatch] BLOQUÉ — mode manuel actif');
+      return Response.json({ success: false, blocked: true, reason: 'mode_manuel' });
     }
 
-    // Récupérer la course
+    // ── 2. Récupérer la course — vérification anti-doublon ─────────────────
     const courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });
     if (!courses || courses.length === 0) {
       return Response.json({ error: 'Course introuvable' }, { status: 404 });
     }
     const course = courses[0];
 
-    // Ne dispatcher que si la course est en attente ou aucun_livreur
-    if (!['en_attente', 'aucun_livreur'].includes(course.statut)) {
-      return Response.json({ message: 'Course non éligible au dispatch', statut: course.statut });
+    // Statuts éligibles au dispatch
+    const ELIGIBLE_STATUTS = ['en_attente', 'aucun_livreur', 'en_attente_dispatch', 'echec_dispatch'];
+    if (!ELIGIBLE_STATUTS.includes(course.statut)) {
+      console.log(`[Dispatch] Course non éligible — statut: ${course.statut}`);
+      return Response.json({ success: false, message: `Statut non éligible: ${course.statut}`, statut: course.statut });
     }
 
-    // Déterminer les livreurs à exclure (refus précédents)
-    let excludeEmails = [];
-    if (course.historique_assignation) {
-      try {
-        const hist = JSON.parse(course.historique_assignation);
-        excludeEmails = hist
-          .filter(h => h.statut === 'refuse' || h.statut === 'no_response')
-          .map(h => h.livreur_email);
-      } catch (_) {}
-    }
+    // ── 3. Récupérer livreurs éligibles ────────────────────────────────────
+    const [allDrivers, activeProfiles] = await Promise.all([
+      base44.asServiceRole.entities.User.filter({ user_type: 'livreur' }),
+      base44.asServiceRole.entities.UserProfile.filter({ profile_type: 'livreur', status: 'actif', deleted: false }),
+    ]);
+    const validEmails = new Set(activeProfiles.map(p => p.user_email));
 
-    // Récupérer les profils livreur actifs (source de vérité multi-profils)
-    const activeProfiles = await base44.asServiceRole.entities.UserProfile.filter({
-      profile_type: 'livreur',
-      status: 'actif',
-      deleted: false,
-    });
-    const activeLibvreurEmails = new Set(activeProfiles.map(p => p.user_email));
+    // Historique des livreurs contactés pour cette course
+    let historique = [];
+    try {
+      if (course.historique_assignation) historique = JSON.parse(course.historique_assignation);
+    } catch (_) {}
+    const dejaContactes = new Set([
+      ...excludeEmails,
+      ...historique.filter(h => ['refuse', 'no_response'].includes(h.statut)).map(h => h.livreur_email),
+    ]);
 
-    // Récupérer tous les livreurs
-    const allDrivers = await base44.asServiceRole.entities.User.filter({ user_type: 'livreur' });
-
-    // Filtrer les livreurs éligibles (profil actif + en ligne + non bloqué + taux refus acceptable)
-    const eligibles = allDrivers.filter(d => {
-      if (!d.disponible || d.actif === false) return false;
-      if (!activeLibvreurEmails.has(d.email)) return false;
-      if (d.livreur_bloque) return false;
-      if ((d.nombre_courses_actives || 0) >= 5) return false;
-      if (excludeEmails.includes(d.email)) return false;
-      if (!(d.quartier || d.gps_latitude)) return false;
-      // Exclure livreurs avec taux de refus > 70% (si suffisamment de données)
-      const proposees = d.courses_proposees || 0;
-      const acceptees = d.courses_acceptees || (d.total_courses_livrees || 0);
-      if (proposees >= 5 && acceptees / proposees < 0.3) return false;
-      return true;
-    });
+    const eligibles = allDrivers.filter(d =>
+      d.disponible &&
+      !d.livreur_bloque &&
+      d.actif !== false &&
+      validEmails.has(d.email) &&
+      (d.nombre_courses_actives || 0) < 3 &&
+      !dejaContactes.has(d.email) &&
+      (d.quartier || d.gps_latitude)
+    );
 
     const now = new Date().toISOString();
-    const historique = [];
-    try {
-      if (course.historique_assignation) {
-        const parsed = JSON.parse(course.historique_assignation);
-        historique.push(...parsed);
-      }
-    } catch (_) {}
 
+    // ── 4. Aucun livreur disponible ────────────────────────────────────────
     if (eligibles.length === 0) {
-      // Aucun livreur disponible
       historique.push({ heure: now, statut: 'aucun_livreur', message: 'Aucun livreur éligible' });
       await base44.asServiceRole.entities.Course.update(courseId, {
         statut: 'aucun_livreur',
         nombre_tentatives: (course.nombre_tentatives || 0) + 1,
         historique_assignation: JSON.stringify(historique),
       });
-      // Notifier le client
+      // Notifier client
       if (course.client_email) {
-        try {
-          await base44.asServiceRole.entities.Notification.create({
-            destinataire_email: course.client_email,
-            destinataire_role: 'client',
-            titre: '😔 Aucun livreur disponible',
-            message: 'Aucun livreur n\'est disponible pour le moment. Réessayez plus tard ou augmentez le prix de la livraison.',
-            type: 'warning',
-            lue: false,
-            course_id: courseId,
-            target_screen: `/course/${courseId}`,
-            target_entity_id: courseId,
-            target_entity_type: 'course',
-          });
-        } catch (_) {}
+        await base44.asServiceRole.entities.Notification.create({
+          destinataire_email: course.client_email,
+          destinataire_role: 'client',
+          titre: '😔 Aucun livreur disponible',
+          message: 'Aucun livreur n\'est disponible pour le moment. Réessayez ou augmentez le prix.',
+          type: 'warning',
+          lue: false,
+          course_id: courseId,
+          target_screen: `/course/${courseId}`,
+        }).catch(() => {});
       }
-      console.log(`[DISPATCH] Aucun livreur disponible pour la course ${courseId}`);
+      // Notifier admins
+      const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
+      for (const admin of admins.slice(0, 3)) {
+        await base44.asServiceRole.entities.Notification.create({
+          destinataire_email: admin.email,
+          destinataire_role: 'admin',
+          titre: '🚨 Échec dispatch',
+          message: `Course ${course.quartier_depart}→${course.quartier_arrivee} sans livreur (${course.nombre_tentatives || 0} tentatives).`,
+          type: 'danger',
+          lue: false,
+          course_id: courseId,
+          target_screen: `/dispatch-monitor`,
+        }).catch(() => {});
+      }
       return Response.json({ success: false, message: 'Aucun livreur disponible' });
     }
 
-    // ── DISPATCH PAR RAYON PROGRESSIF (GPS prioritaire) ─────────────────────
-    // Si la course a des coordonnées GPS, filtrer par rayon d'abord
+    // ── 5. Scorer et choisir le meilleur ───────────────────────────────────
+    // Dispatch par rayon progressif si GPS disponible
     let candidates = eligibles;
-
     if (course.latitude_depart && course.longitude_depart) {
-      const RAYONS = [3, 5, 10]; // km progressifs
-      for (const rayon of RAYONS) {
-        const dansRayon = eligibles.filter(d => {
-          if (!d.gps_latitude || !d.gps_longitude) return false;
-          const dist = distanceKm(d.gps_latitude, d.gps_longitude, course.latitude_depart, course.longitude_depart);
-          return dist <= rayon;
-        });
+      for (const rayon of [3, 5, 10]) {
+        const dansRayon = eligibles.filter(d =>
+          d.gps_latitude && d.gps_longitude &&
+          distanceKm(d.gps_latitude, d.gps_longitude, course.latitude_depart, course.longitude_depart) <= rayon
+        );
         if (dansRayon.length > 0) {
           candidates = dansRayon;
-          console.log(`[DISPATCH] ${dansRayon.length} livreur(s) dans un rayon de ${rayon} km`);
           break;
         }
-        console.log(`[DISPATCH] Aucun livreur dans ${rayon} km — élargissement...`);
-      }
-      // Si toujours personne avec GPS, fallback sur tous les éligibles (par quartier)
-      if (candidates === eligibles && eligibles.filter(d => d.gps_latitude).length === 0) {
-        console.log('[DISPATCH] Aucun GPS disponible — dispatch par quartier');
       }
     }
 
-    // ── CALCUL BOOST DE ZONE ─────────────────────────────────────────────────
-    // Zone boost : si forte demande (>3 courses en attente) et peu de livreurs (<3)
-    let zoneBoostValue = 0;
-    const zoneDepart = course.quartier_depart;
-    const livreursInZone = candidates.filter(d => d.quartier === zoneDepart || (
-      d.gps_latitude && d.gps_longitude && course.latitude_depart && course.longitude_depart &&
-      distanceKm(d.gps_latitude, d.gps_longitude, course.latitude_depart, course.longitude_depart) <= 3
-    )).length;
-    const coursesZone = 1; // la course actuelle, on pourrait charger les autres mais c'est suffisant
-    if (livreursInZone <= 2) zoneBoostValue = 20; // zone sous-couverte
-    else if (livreursInZone <= 4) zoneBoostValue = 10;
-    console.log(`[DISPATCH] Zone ${zoneDepart}: ${livreursInZone} livreur(s) → boost +${zoneBoostValue}`);
-
-    // Scorer et trier les candidats
     const scored = candidates
-      .map(d => ({ driver: d, score: scoreDriver(d, course, zoneBoostValue) }))
+      .map(d => ({ driver: d, score: scoreDriver(d, course) }))
       .sort((a, b) => b.score - a.score);
 
     const best = scored[0].driver;
 
+    // ── 6. Proposer au meilleur livreur (1 seul à la fois) ─────────────────
     const expireAt = new Date(Date.now() + 60000).toISOString();
     historique.push({
       livreur_email: best.email,
@@ -290,70 +231,65 @@ Deno.serve(async (req) => {
       heure: now,
       heure_expiration: expireAt,
       statut: 'proposee',
+      score: scored[0].score,
     });
 
-    // Mettre à jour la course
     await base44.asServiceRole.entities.Course.update(courseId, {
       statut: 'assignee_attente',
       livreur_email: best.email,
       livreur_name: best.full_name,
       telephone_livreur: best.telephone || '',
       heure_assignation: now,
-      mode_assignation: 'auto',
+      mode_assignation: forceDispatch ? 'force' : 'auto',
       nombre_tentatives: (course.nombre_tentatives || 0) + 1,
       historique_assignation: JSON.stringify(historique),
-      livreur_photo: best.photo_profil || null,
-      livreur_note_moyenne: best.note_moyenne || null,
-      livreur_note_semaine: best.note_semaine || null,
     });
 
-    // Mettre à jour le livreur (métriques d'apprentissage)
+    // Métriques livreur
     await base44.asServiceRole.entities.User.update(best.id, {
       nombre_courses_actives: (best.nombre_courses_actives || 0) + 1,
-      derniere_course_attribuee_at: now,
       courses_proposees: (best.courses_proposees || 0) + 1,
-      // Réinitialiser le compteur de refus consécutifs à la prochaine proposition
       derniere_proposition_at: now,
     });
 
-    // Notifier le livreur (déclenche aussi la notification navigateur)
+    // Notifier le livreur
     await base44.asServiceRole.entities.Notification.create({
       destinataire_email: best.email,
       destinataire_role: 'livreur',
       titre: '🛵 Nouvelle course disponible !',
-      message: `Course de ${course.quartier_depart} → ${course.quartier_arrivee}. Colis: ${course.type_colis}. Ouvrez l'app pour accepter.`,
+      message: `Course de ${course.quartier_depart} → ${course.quartier_arrivee}. ${course.type_colis}. Prix: ${course.prix} FCFA. Vous avez 60 secondes.`,
       type: 'success',
       lue: false,
       course_id: courseId,
       target_screen: `/course-livreur/${courseId}`,
       target_entity_id: courseId,
       target_entity_type: 'course',
-    });
+    }).catch(() => {});
 
-    console.log(`[DISPATCH] Course ${courseId} assignée à ${best.full_name} (${best.email}) — score: ${scored[0].score}`);
-
-    // WA au livreur (non bloquant)
+    // WA livreur (non bloquant)
     if (best.telephone) {
       base44.asServiceRole.functions.invoke('sendWhatsAppAlert', {
         eventType: 'driver_course_assigned',
         recipientRole: 'livreur',
         recipientName: best.full_name,
         recipientPhone: best.telephone,
-        messageText: `🚨 Nouvelle course disponible !\n\n📍 Une course vient de vous être attribuée.\n\n👉 Ouvrez l'application CDL pour accepter ou refuser.\n\n💰 Gagnez de l'argent maintenant !`,
+        messageText: `🚨 Nouvelle course ! ${course.quartier_depart}→${course.quartier_arrivee} — ${course.prix} FCFA. Ouvrez CDL pour accepter (60s).`,
         entityId: courseId,
         entityType: 'course',
         priority: 'urgent',
-      }).catch(err => console.warn('[DISPATCH] WA livreur skip:', err?.message));
+      }).catch(() => {});
     }
+
+    console.log(`[Dispatch] ✅ Course ${courseId} → ${best.full_name} (score: ${scored[0].score})`);
 
     return Response.json({
       success: true,
-      livreur: { email: best.email, nom: best.full_name },
-      score: scored[0].score,
+      livreur: { email: best.email, nom: best.full_name, score: scored[0].score },
+      mode,
     });
 
   } catch (error) {
-    console.error('[DISPATCH] Erreur:', error.message);
+    console.error('[Dispatch] Erreur:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });

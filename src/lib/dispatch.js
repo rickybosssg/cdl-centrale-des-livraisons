@@ -1,7 +1,11 @@
+/**
+ * CDL — Moteur de dispatch frontend
+ * Source de vérité : DispatchConfig en BDD (jamais localStorage).
+ * RÈGLE : si mode = 'manuel', AUCUN dispatch auto autorisé.
+ */
 import { base44 } from "@/api/base44Client";
 
-// Carte de zones proches à Ouagadougou
-const ZONES_PROCHES = {
+export const ZONES_PROCHES = {
   "Ouaga 2000": ["Patte d'Oie", "Zone 1", "Kossodo", "Pissy"],
   "Zone 1": ["Koulouba", "Zogona", "Gounghin", "Ouaga 2000"],
   "Cissin": ["Karpala", "Wemtenga", "Dassasgho", "Zone 1"],
@@ -21,135 +25,150 @@ const ZONES_PROCHES = {
   "Nagrin": ["Kossodo", "Tampouy", "Tanghin"],
 };
 
-function distanceKm(lat1, lng1, lat2, lng2) {
+export function distanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function scoreDriver(driver, course) {
-  let score = 0;
-  const quartierDepart = course.quartier_depart;
-
-  // Priorité 1: même quartier
-  if (driver.quartier === quartierDepart) score += 100;
-  // Priorité 5: zone proche
-  else if (ZONES_PROCHES[quartierDepart]?.includes(driver.quartier)) score += 50;
-
-  // Priorité 2: GPS
+/**
+ * Score livreur :
+ * 40% distance | 20% disponibilité/charge | 20% performance | 10% taux acceptation | 10% inactivité récente
+ */
+export function scoreDriver(driver, course) {
+  // 1. DISTANCE (40 pts)
+  let distScore = 0;
   if (driver.gps_latitude && driver.gps_longitude && course.latitude_depart && course.longitude_depart) {
     const dist = distanceKm(driver.gps_latitude, driver.gps_longitude, course.latitude_depart, course.longitude_depart);
-    score += Math.max(0, 30 - dist * 3);
-  }
-
-  // Priorité 3: moins de courses actives
-  const actives = driver.nombre_courses_actives || 0;
-  score += (3 - actives) * 10;
-
-  // Priorité 4: attend depuis longtemps
-  if (driver.derniere_course_attribuee_at) {
-    const heuresAttente = (Date.now() - new Date(driver.derniere_course_attribuee_at).getTime()) / 3600000;
-    score += Math.min(heuresAttente, 5);
+    distScore = dist <= 1 ? 40 : dist <= 3 ? 32 : dist <= 5 ? 22 : dist <= 10 ? 12 : 4;
   } else {
-    score += 5; // jamais eu de course = priorité max
+    if (driver.quartier === course.quartier_depart) distScore = 30;
+    else if (ZONES_PROCHES[course.quartier_depart]?.includes(driver.quartier)) distScore = 18;
+    else distScore = 5;
   }
 
-  return score;
+  // 2. CHARGE (20 pts) — moins de courses actives = meilleur
+  const actives = driver.nombre_courses_actives || 0;
+  const chargeScore = actives === 0 ? 20 : actives === 1 ? 12 : actives === 2 ? 6 : 0;
+
+  // 3. PERFORMANCE (20 pts) — note moyenne + courses totales
+  let perfScore = 10; // neutre par défaut
+  const note = driver.note_moyenne || 0;
+  if (note >= 4.5) perfScore = 20;
+  else if (note >= 4.0) perfScore = 16;
+  else if (note >= 3.5) perfScore = 12;
+  else if (note > 0) perfScore = 8;
+
+  // 4. TAUX ACCEPTATION (10 pts)
+  let acceptScore = 5;
+  const proposees = driver.courses_proposees || 0;
+  const acceptees = driver.courses_acceptees || (driver.total_courses_livrees || 0);
+  if (proposees >= 5) {
+    const taux = acceptees / proposees;
+    acceptScore = taux >= 0.8 ? 10 : taux >= 0.6 ? 7 : taux >= 0.4 ? 4 : 1;
+  }
+
+  // 5. INACTIVITÉ (10 pts) — favorise les livreurs qui attendent depuis longtemps
+  let inactiviteScore = 5;
+  if (driver.derniere_course_attribuee_at) {
+    const heures = (Date.now() - new Date(driver.derniere_course_attribuee_at).getTime()) / 3600000;
+    inactiviteScore = heures >= 2 ? 10 : heures >= 1 ? 8 : heures >= 0.5 ? 6 : 3;
+  } else {
+    inactiviteScore = 10; // jamais eu de course → priorité max
+  }
+
+  let total = distScore + chargeScore + perfScore + acceptScore + inactiviteScore;
+
+  // BONUS URGENCE
+  const urgence = course.urgence || course.niveau_urgence;
+  if (urgence === 'tres_urgent') total += 15;
+  else if (urgence === 'urgent') total += 8;
+
+  // PÉNALITÉS
+  const refusConsecutifs = driver.courses_refusees_consecutives || 0;
+  if (refusConsecutifs >= 3) total = Math.round(total * 0.7);
+  if (proposees >= 5 && acceptees / proposees < 0.4) total = Math.round(total * 0.8);
+
+  return total;
 }
 
-export async function lancerDispatch(course, excludeEmails = []) {
-  // ── Vérification STRICTE du mode dispatch ────────────────────────────────
-  // Le mode admin est TOUJOURS prioritaire. En cas de doute = bloquer.
+/**
+ * Récupère le mode de dispatch depuis la BDD.
+ * Retourne 'auto' par défaut si aucune config.
+ */
+export async function getDispatchMode() {
   try {
     const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-    const config = configs[0];
+    return configs[0]?.mode || 'auto';
+  } catch {
+    return 'auto'; // tolérance lecture
+  }
+}
 
-    // Pas de config = on ne sait pas → bloquer pour sécurité
-    if (!config) {
-      console.log('AUTO DISPATCH BLOQUÉ (aucune config trouvée — sécurité)');
-      return null;
-    }
-
-    console.log(`MODE ACTIF : ${config.mode.toUpperCase()}`);
-
-    if (config.mode === 'manuel') {
-      console.log('AUTO DISPATCH BLOQUÉ (MODE MANUEL)');
+/**
+ * Lance le dispatch depuis le frontend.
+ * BLOQUÉ si mode = 'manuel'.
+ */
+export async function lancerDispatch(course, excludeEmails = []) {
+  try {
+    const mode = await getDispatchMode();
+    if (mode === 'manuel') {
+      console.log('[Dispatch] BLOQUÉ — mode manuel actif');
       return null;
     }
   } catch (e) {
-    // En cas d'erreur de lecture → bloquer (sécurité > confort)
-    console.warn('AUTO DISPATCH BLOQUÉ (erreur lecture config — sécurité):', e.message);
+    console.warn('[Dispatch] Erreur lecture mode — dispatch bloqué:', e.message);
     return null;
   }
 
   try {
-    const allDrivers = await base44.entities.User.filter({ user_type: "livreur" });
-
-    const eligibles = allDrivers.filter(d =>
-      d.disponible === true &&
-      d.actif !== false &&
-      d.statut_validation_livreur === "valide" &&
-      !d.livreur_bloque &&
-      (d.nombre_courses_actives || 0) < 3 &&
-      !excludeEmails.includes(d.email) &&
-      (d.quartier || d.gps_latitude)
-    );
-
-    if (eligibles.length === 0) {
-      await base44.entities.Course.update(course.id, {
-        statut: "aucun_livreur",
-        nombre_tentatives: (course.nombre_tentatives || 0) + 1,
-      });
-      return null;
-    }
-
-    // Bonus urgence sur le score global (priorise les courses urgentes dans le scoring)
-    const urgenceBonus = course.urgence === 'tres_urgent' ? 200 : course.urgence === 'urgent' ? 100 : 0;
-
-    const scored = eligibles
-      .map(d => ({ driver: d, score: scoreDriver(d, course) + urgenceBonus }))
-      .sort((a, b) => b.score - a.score);
-
-    const best = scored[0].driver;
-    const now = new Date().toISOString();
-
-    const historique = course.historique_assignation
-      ? JSON.parse(course.historique_assignation)
-      : [];
-    historique.push({
-      livreur_email: best.email,
-      livreur_nom: best.full_name,
-      heure: now,
-      statut: "proposee",
+    const res = await base44.functions.invoke('autoDispatch', {
+      course_id: course.id,
+      exclude_emails: excludeEmails,
     });
-
-    await base44.entities.Course.update(course.id, {
-      statut: "assignee_attente",
-      livreur_email: best.email,
-      livreur_name: best.full_name,
-      heure_assignation: now,
-      mode_assignation: "auto",
-      nombre_tentatives: (course.nombre_tentatives || 0) + 1,
-      historique_assignation: JSON.stringify(historique),
-    });
-
-    return best;
+    if (res.data?.success) return res.data.livreur;
+    return null;
   } catch (e) {
-    console.error("Erreur dispatch:", e);
+    console.error('[Dispatch] Erreur appel autoDispatch:', e);
     return null;
   }
 }
 
+/**
+ * Réassigne une course (exclut les livreurs ayant déjà refusé).
+ */
 export async function reassignerCourse(course) {
   let exclure = [];
   try {
     const hist = course.historique_assignation ? JSON.parse(course.historique_assignation) : [];
-    exclure = hist.map(h => h.livreur_email);
+    exclure = hist.filter(h => ['refuse', 'no_response'].includes(h.statut)).map(h => h.livreur_email);
   } catch (_) {}
   return lancerDispatch(course, exclure);
 }
 
-// ⚠️ SUPPRIMÉ : getDispatchMode / setDispatchMode localStorage
-// La seule source de vérité est l'entité DispatchConfig en BDD.
+/**
+ * Classe les livreurs éligibles pour une course donnée (usage frontend/admin).
+ */
+export async function classifyDriversForCourse(course) {
+  const allDrivers = await base44.entities.User.filter({ user_type: 'livreur' });
+  const activeProfiles = await base44.entities.UserProfile.filter({
+    profile_type: 'livreur', status: 'actif', deleted: false,
+  });
+  const validEmails = new Set(activeProfiles.map(p => p.user_email));
+
+  const eligibles = allDrivers.filter(d =>
+    d.disponible &&
+    !d.livreur_bloque &&
+    validEmails.has(d.email) &&
+    (d.nombre_courses_actives || 0) < 3 &&
+    (d.quartier || d.gps_latitude)
+  );
+
+  return eligibles
+    .map(d => ({ driver: d, score: scoreDriver(d, course) }))
+    .sort((a, b) => b.score - a.score);
+}
