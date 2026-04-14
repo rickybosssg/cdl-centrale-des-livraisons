@@ -14,18 +14,24 @@ export default function usePresence(userEmail, currentRole) {
   const buildOnlineFields = (online) => {
     const fields = { last_seen: online ? new Date().toISOString() : new Date(0).toISOString() };
     if (!online) {
+      // Mise hors ligne : réinitialiser TOUS les statuts en ligne
       fields.driver_online = false;
       fields.client_online = false;
       fields.commercial_online = false;
       fields.partner_online = false;
-    } else if (currentRole === 'livreur') {
-      fields.driver_online = true;
-    } else if (currentRole === 'client') {
-      fields.client_online = true;
-    } else if (currentRole === 'commercial') {
-      fields.commercial_online = true;
-    } else if (currentRole === 'partenaire') {
-      fields.partner_online = true;
+      // NE PAS effacer current_role — il est géré par switchActiveProfile
+    } else {
+      // ⚠️ Toujours synchroniser current_role avec le rôle actif lors du heartbeat
+      fields.current_role = currentRole;
+      if (currentRole === 'livreur') {
+        fields.driver_online = true;
+      } else if (currentRole === 'client') {
+        fields.client_online = true;
+      } else if (currentRole === 'commercial') {
+        fields.commercial_online = true;
+      } else if (currentRole === 'partenaire') {
+        fields.partner_online = true;
+      }
     }
     return fields;
   };

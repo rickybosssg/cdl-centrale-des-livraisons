@@ -52,7 +52,7 @@ export default function AdminDashboard() {
       const today = new Date().toDateString();
       const [courses, livreurs, users, partenaires, profiles, countsRes, allClients] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 100),
-        base44.entities.User.filter({ driver_online: true }), // source de vérité : rôle actif
+        base44.entities.User.filter({ driver_online: true, current_role: 'livreur' }), // ⚠️ critères stricts dispatch
         base44.entities.User.list("-created_date", 100),
         base44.entities.Partenaire.list('-created_date', 200),
         base44.entities.UserProfile.filter({ status: "en_attente", deleted: false }),

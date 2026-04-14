@@ -187,12 +187,17 @@ export default function DispatchMonitor() {
   }, []);
 
   const load = useCallback(async () => {
-    const [coursesData, livreursData] = await Promise.all([
+    const [coursesData, allUsers] = await Promise.all([
       base44.entities.Course.list("-created_date", 150),
-      base44.entities.User.filter({ user_type: "livreur" }),
+      // Charger tous les users — le filtre strict se fait côté JS
+      base44.entities.User.list('-updated_date', 500),
     ]);
     setCourses(coursesData || []);
-    setLivreurs(livreursData || []);
+    // ⚠️ Critères stricts : driver_online=true + current_role=livreur
+    const livreursData = (allUsers || []).filter(u =>
+      u.driver_online === true && u.current_role === 'livreur'
+    );
+    setLivreurs(livreursData);
     setLastRefresh(new Date());
     setLoading(false);
   }, []);
@@ -311,9 +316,10 @@ export default function DispatchMonitor() {
   }, []);
 
   const isManuel = (dispatchConfig?.mode || 'auto') === 'manuel';
-  // Utiliser driver_online comme source de vérité (pas disponible qui mélange les rôles)
-  const livreursOnline = livreurs.filter(l => l.driver_online && !l.livreur_bloque);
-  const livreursDispatchables = livreurs.filter(l => l.driver_online && !l.livreur_bloque && (l.nombre_courses_actives || 0) < 3);
+  // ⚠️ Critères stricts : driver_online=true + current_role=livreur + non bloqué
+  // (livreurs est déjà pré-filtré driver_online+current_role au chargement)
+  const livreursOnline = livreurs.filter(l => !l.livreur_bloque);
+  const livreursDispatchables = livreurs.filter(l => !l.livreur_bloque && (l.nombre_courses_actives || 0) < 2);
 
   const coursesEnAttente = courses.filter(c => ['en_attente', 'en_attente_dispatch'].includes(c.statut));
   const coursesProposees = courses.filter(c => c.statut === 'assignee_attente');

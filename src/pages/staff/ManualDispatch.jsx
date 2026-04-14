@@ -116,16 +116,21 @@ export default function ManualDispatch() {
       const perms = await base44.entities.StaffPermission.filter({ userEmail: actor.email, isActive: true });
       if (!perms[0]?.canManualDispatch) { toast.error("Accès refusé"); navigate("/staff"); return; }
     }
-    const [cEnAttente, cSansLivreur, l] = await Promise.all([
+    const [cEnAttente, cSansLivreur, allUsers] = await Promise.all([
       base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 100),
       base44.entities.Course.filter({ statut: "aucun_livreur" }, "-created_date", 50),
-      base44.entities.User.filter({ user_type: "livreur", disponible: true }),
+      base44.entities.User.list('-updated_date', 500),
     ]);
     // Priorité: sans livreur d'abord, puis par ancienneté (plus ancienne = en haut)
     const sansLivreur = (cSansLivreur || []).sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
     const enAttente   = (cEnAttente   || []).sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
     const allCourses  = [...sansLivreur, ...enAttente];
-    const livreursFiltered = (l || []).filter(x => !x.livreur_bloque);
+    // ⚠️ Critères stricts : driver_online=true + current_role=livreur + non bloqué
+    const livreursFiltered = (allUsers || []).filter(x =>
+      x.driver_online === true &&
+      x.current_role === 'livreur' &&
+      !x.livreur_bloque
+    );
     setCourses(allCourses);
     setLivreurs(livreursFiltered);
     setLoading(false);

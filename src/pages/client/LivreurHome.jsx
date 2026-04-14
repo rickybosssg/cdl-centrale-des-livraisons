@@ -99,7 +99,8 @@ export default function LivreurHome({ user }) {
         const pending = await base44.entities.Course.filter({ statut: 'en_attente' }, '-created_date', 20);
         if (isMounted) setZoneChaudeCount(Array.isArray(pending) ? pending.length : 0);
         // Compter livreurs actifs pour détection forte demande
-        const livActifs = await base44.entities.User.filter({ user_type: 'livreur', disponible: true });
+        // Critères stricts : driver_online=true + current_role=livreur
+        const livActifs = await base44.entities.User.filter({ driver_online: true, current_role: 'livreur' });
         if (isMounted) setLivreursActifsCount(Array.isArray(livActifs) ? livActifs.length : 0);
       } catch (err) {
         console.error('[LivreurHome] Load error:', err);
@@ -148,7 +149,14 @@ export default function LivreurHome({ user }) {
     const newVal = !disponible;
     setDisponible(newVal);
     try {
-      await base44.auth.updateMe({ disponible: newVal });
+      // ⚠️ Synchroniser driver_online + current_role en même temps que disponible
+      // pour que le dispatch utilise une source de vérité unique
+      await base44.auth.updateMe({
+        disponible: newVal,
+        driver_online: newVal,
+        current_role: newVal ? 'livreur' : undefined,
+        last_seen: new Date().toISOString(),
+      });
       toast.success(newVal ? '🟢 En ligne' : '🔴 Hors ligne');
     } catch (err) {
       setDisponible(!newVal);
