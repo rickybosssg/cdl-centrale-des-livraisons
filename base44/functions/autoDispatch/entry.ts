@@ -64,9 +64,11 @@ Deno.serve(async (req) => {
     // ── 4. Récupérer les livreurs éligibles (critères simples) ────────────
     const allUsers = await base44.asServiceRole.entities.User.list('-updated_date', 500);
 
+    // ⚠️ 4 critères stricts : driver_online + current_role + profil_valide + non bloqué
     const eligibles = allUsers.filter(d =>
       d.driver_online === true &&
       d.current_role === 'livreur' &&
+      d.profil_valide === true &&
       (d.nombre_courses_actives || 0) < 2 &&
       !d.livreur_bloque &&
       !dejaContactes.has(d.email)

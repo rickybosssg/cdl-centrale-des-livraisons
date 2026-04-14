@@ -43,7 +43,7 @@ export default function RoleSetup({ onComplete }) {
 
   useEffect(() => {
     if (pendingRole === 'partenaire') setShowPartenaire(true);
-    base44.entities.User.filter({ user_type: 'livreur', disponible: true })
+    base44.entities.User.filter({ driver_online: true, current_role: 'livreur' })
       .then(res => setLivreursActifs(res.length))
       .catch(() => {});
     

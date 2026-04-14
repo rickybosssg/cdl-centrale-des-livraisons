@@ -151,10 +151,11 @@ export default function LivreurHome({ user }) {
     try {
       // ⚠️ Synchroniser driver_online + current_role en même temps que disponible
       // pour que le dispatch utilise une source de vérité unique
+      // ⚠️ current_role reste "livreur" même hors ligne — seul driver_online change
+      // (current_role est la source de vérité du profil actif, indépendant de la disponibilité)
       await base44.auth.updateMe({
         disponible: newVal,
         driver_online: newVal,
-        current_role: newVal ? 'livreur' : undefined,
         last_seen: new Date().toISOString(),
       });
       toast.success(newVal ? '🟢 En ligne' : '🔴 Hors ligne');

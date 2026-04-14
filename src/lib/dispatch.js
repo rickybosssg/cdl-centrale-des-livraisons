@@ -94,11 +94,19 @@ export function priorityCourseScore(course) {
   return score;
 }
 
-// Critères simples — phase lancement : driver_online, current_role=livreur, pas bloqué, pas occupé
+/**
+ * Critères stricts dispatch (4 conditions cumulatives) :
+ *   1. driver_online = true          (en ligne)
+ *   2. current_role = 'livreur'      (profil actif = livreur)
+ *   3. profil_valide = true          (compte validé par admin)
+ *   4. !livreur_bloque               (non bloqué)
+ *   + nombre_courses_actives < 2     (pas surchargé)
+ */
 export function isDriverDispatchable(driver) {
   return (
     driver.driver_online === true &&
     driver.current_role === 'livreur' &&
+    driver.profil_valide === true &&
     !driver.livreur_bloque &&
     (driver.nombre_courses_actives || 0) < 2
   );
@@ -107,6 +115,7 @@ export function isDriverDispatchable(driver) {
 export function getDriverDispatchReason(driver) {
   if (!driver.driver_online) return 'hors ligne';
   if (driver.current_role !== 'livreur') return `rôle actif: ${driver.current_role || 'non défini'}`;
+  if (!driver.profil_valide) return 'compte non validé';
   if (driver.livreur_bloque) return 'compte bloqué';
   if ((driver.nombre_courses_actives || 0) >= 2) return `occupé (${driver.nombre_courses_actives} courses)`;
   return 'dispatchable';
