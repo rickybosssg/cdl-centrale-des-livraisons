@@ -13,7 +13,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
 
 export default function ClientHome({ user }) {
-  // ⚠️ GUARD STRICTE : Aucun state/effect ne doit s'exécuter si user pas complet
+  const navigate = useNavigate();
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showMessages, setShowMessages] = useState(false);
+  const [courseANoter, setCourseANoter] = useState(null);
+
+  // Guard après tous les hooks
   if (!user || !user?.email || !user?.id) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -21,14 +27,6 @@ export default function ClientHome({ user }) {
       </div>
     );
   }
-
-  const navigate = useNavigate();
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showMessages, setShowMessages] = useState(false);
-  const [courseANoter, setCourseANoter] = useState(null);
-
-  // Présence gérée centralement par usePresence dans AppLayout
 
   // Demande géolocalisation
   useEffect(() => {

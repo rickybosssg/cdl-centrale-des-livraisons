@@ -112,7 +112,7 @@ export default function BaseLivreurs() {
           return (
             <Card key={livreur.id} className={`hover:shadow-md transition-shadow ${livreur.livreur_bloque ? 'border-red-200 bg-red-50/30' : ''}`}>
               <CardContent className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-2" onClick={() => setSelectedLivreur(livreur)}>
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0 cursor-pointer">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-sm truncate">{livreur.full_name}</p>

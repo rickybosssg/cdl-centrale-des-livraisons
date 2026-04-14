@@ -18,15 +18,6 @@ import NewCourseAlert from "../../components/NewCourseAlert";
 import ForteDemandeBanner from "../../components/ForteDemandeBanner";
 
 export default function LivreurHome({ user }) {
-  // Guard immédiate
-  if (!user?.email) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-sm text-muted-foreground">Profil non chargé</p>
-      </div>
-    );
-  }
-
   const [courses, setCourses] = useState([]);
   const [disponible, setDisponible] = useState(user?.disponible !== false);
   const [loading, setLoading] = useState(true);
@@ -75,8 +66,12 @@ export default function LivreurHome({ user }) {
     );
   };
 
+  // Guard après tous les hooks
+  // (useEffect ci-dessous sont tous protégés par user?.email en interne)
+
   // Demande GPS au mount + retour depuis paramètres
   useEffect(() => {
+    if (!user?.email) return;
     activerGPS();
     const onVisible = () => {
       if (document.visibilityState === 'visible' && gpsErrorMsg) activerGPS();
@@ -160,6 +155,15 @@ export default function LivreurHome({ user }) {
       toast.error('Erreur statut');
     }
   };
+
+  // Guard après tous les hooks
+  if (!user?.email) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-sm text-muted-foreground">Profil non chargé</p>
+      </div>
+    );
+  }
 
   const coursesArray = Array.isArray(courses) ? courses : [];
   const activeCourse = coursesArray.find(c => ["acceptee", "en_cours"].includes(c?.statut));

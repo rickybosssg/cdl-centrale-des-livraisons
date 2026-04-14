@@ -24,15 +24,6 @@ const TABS = [
 ];
 
 export default function DashboardPartenaire({ user }) {
-  // Guard immédiate
-  if (!user?.email) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-sm text-muted-foreground">Profil non chargé</p>
-      </div>
-    );
-  }
-
   const navigate = useNavigate();
   const [partenaire, setPartenaire] = useState(null);
   const [produits, setProduits] = useState([]);
@@ -49,7 +40,6 @@ export default function DashboardPartenaire({ user }) {
 
   useEffect(() => {
     const load = async () => {
-      if (!user?.email) return;
       const parts = await base44.entities.Partenaire.filter({ user_email: user.email });
       if (parts.length > 0) {
         const p = parts[0];
@@ -148,6 +138,14 @@ export default function DashboardPartenaire({ user }) {
     toast.success("Logo mis à jour !");
     setUploadingPhoto(false);
   };
+
+  if (!user?.email) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-sm text-muted-foreground">Profil non chargé</p>
+      </div>
+    );
+  }
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>;
 

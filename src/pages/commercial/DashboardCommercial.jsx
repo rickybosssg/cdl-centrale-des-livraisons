@@ -25,15 +25,6 @@ export default function DashboardCommercial({ user }) {
   const [error, setError] = useState(null);
   const [bedou, setBedou] = useState(null);
 
-  // Guard: sécuriser user
-  if (!user?.email) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-sm text-muted-foreground">Profil non disponible</p>
-      </div>
-    );
-  }
-
   // Charger code au mount
   useEffect(() => {
     if (user?.email) {
@@ -161,6 +152,15 @@ export default function DashboardCommercial({ user }) {
       setCreating(false);
     }
   };
+
+  // Guard après tous les hooks
+  if (!user?.email) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-sm text-muted-foreground">Profil non disponible</p>
+      </div>
+    );
+  }
 
   // Calculs sécurisés
   const clientsArray = Array.isArray(clients) ? clients : [];

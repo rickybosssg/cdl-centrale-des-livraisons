@@ -58,16 +58,7 @@ class MallErrorBoundary extends Component {
 
 // Mes commandes Mall
 function MesCommandesMall({ userEmail }) {
-  // Guard strict sur userEmail AVANT tout rendu
   const safeUserEmail = userEmail ? String(userEmail).trim() : "";
-  if (!safeUserEmail || !safeUserEmail.includes("@")) {
-    return (
-      <div className="text-center py-12 text-sm text-muted-foreground">
-        Connexion requise pour voir vos commandes.
-      </div>
-    );
-  }
-
   const [commandes, setCommandes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState("tous");
@@ -90,6 +81,14 @@ function MesCommandesMall({ userEmail }) {
     };
     load();
   }, [safeUserEmail]);
+
+  if (!safeUserEmail || !safeUserEmail.includes("@")) {
+    return (
+      <div className="text-center py-12 text-sm text-muted-foreground">
+        Connexion requise pour voir vos commandes.
+      </div>
+    );
+  }
 
   const FILTRES = [
     { val: "tous", label: "Toutes" },
@@ -176,8 +175,6 @@ function MesCommandesMall({ userEmail }) {
 
 // Vue boutiques
 function MallBoutiques({ isAdmin }) {
-  if (typeof isAdmin !== "boolean") return null;
-
   const navigate = useNavigate();
   const [partenaires, setPartenaires] = useState([]);
   const [search, setSearch] = useState("");
@@ -198,6 +195,8 @@ function MallBoutiques({ isAdmin }) {
     };
     load();
   }, []);
+
+  if (typeof isAdmin !== "boolean") return null;
 
   const safePartenaires = Array.isArray(partenaires) ? partenaires : [];
   const filtered = safePartenaires

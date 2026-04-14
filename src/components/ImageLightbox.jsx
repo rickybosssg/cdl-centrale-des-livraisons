@@ -5,11 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function ImageLightbox({ images = [], initialIndex = 0, onClose }) {
   const [current, setCurrent] = useState(initialIndex);
   const validImages = images.filter(Boolean);
-  
-  if (!validImages.length) return null;
 
-  const goNext = () => setCurrent((current + 1) % validImages.length);
-  const goPrev = () => setCurrent((current - 1 + validImages.length) % validImages.length);
+  const goNext = () => setCurrent((c) => (c + 1) % Math.max(validImages.length, 1));
+  const goPrev = () => setCurrent((c) => (c - 1 + Math.max(validImages.length, 1)) % Math.max(validImages.length, 1));
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -20,6 +18,8 @@ export default function ImageLightbox({ images = [], initialIndex = 0, onClose }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [current]);
+
+  if (!validImages.length) return null;
 
   return (
     <AnimatePresence>

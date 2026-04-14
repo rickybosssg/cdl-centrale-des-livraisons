@@ -916,7 +916,7 @@ export default function AdminProfilUnifie() {
             </Select>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => setBlocageDialog(false)}>Annuler</Button>
-              <Button variant="destructive" className="flex-1" onClick={() => { if (isCommercial) blocquerCommercial(); else bloquer(); }} disabled={processing}>Confirmer</Button>
+              <Button variant="destructive" className="flex-1" onClick={bloquer} disabled={processing}>Confirmer</Button>
             </div>
           </div>
         </DialogContent>

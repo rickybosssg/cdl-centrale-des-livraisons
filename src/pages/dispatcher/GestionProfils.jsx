@@ -72,7 +72,7 @@ export default function GestionProfils() {
         console.error('[GestionProfils] Erreur chargement:', err);
         toast.error('Erreur lors du chargement');
         setUsers([]);
-        setUserProfiles([]);
+        setAllProfiles([]);
       } finally {
         setLoading(false);
       }

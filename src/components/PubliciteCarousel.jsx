@@ -8,13 +8,11 @@ export default function PubliciteCarousel({ images = [], titre = '', isVideo = f
 
   // Validar images
   const validImages = Array.isArray(images) ? images.filter(img => img && typeof img === 'string') : [];
-  if (validImages.length === 0) return null;
+  const currentImage = validImages[currentIndex] || '';
+  const hasMultiple = validImages.length > 1 && !isVideo;
 
-  const currentImage = validImages[currentIndex];
-  const hasMultiple = validImages.length > 1 && !isVideo; // No carousel for video
-
-  const next = () => setCurrentIndex((currentIndex + 1) % validImages.length);
-  const prev = () => setCurrentIndex((currentIndex - 1 + validImages.length) % validImages.length);
+  const next = () => setCurrentIndex((currentIndex + 1) % Math.max(validImages.length, 1));
+  const prev = () => setCurrentIndex((currentIndex - 1 + Math.max(validImages.length, 1)) % Math.max(validImages.length, 1));
 
   // Optional: Auto-scroll lent (commenté par défaut)
   useEffect(() => {
@@ -22,6 +20,8 @@ export default function PubliciteCarousel({ images = [], titre = '', isVideo = f
     const timer = setInterval(next, 6000);
     return () => clearInterval(timer);
   }, [currentIndex, isAutoPlay, hasMultiple]);
+
+  if (validImages.length === 0) return null;
 
   return (
     <div className="relative w-full bg-black rounded-2xl overflow-hidden group">

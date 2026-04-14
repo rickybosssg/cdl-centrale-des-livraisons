@@ -73,16 +73,17 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
   const goNext = () => setCurrentIndex((currentIndex + 1) % ads.length);
   const goPrev = () => setCurrentIndex((currentIndex - 1 + ads.length) % ads.length);
 
+  // Auto-rotate (toujours appelé — avant tout return conditionnel)
+  useEffect(() => {
+    if (ads.length === 0) return;
+    const timer = setInterval(goNext, 8000);
+    return () => clearInterval(timer);
+  }, [currentIndex, ads.length]);
+
   if (loading || ads.length === 0 || error) return null;
 
   const current = ads?.[currentIndex];
   if (!current) return null;
-
-  // Auto-rotate
-  useEffect(() => {
-    const timer = setInterval(goNext, 8000);
-    return () => clearInterval(timer);
-  }, [currentIndex, ads.length]);
 
   return (
     <PubliciteTracker publiciteId={current.id} userRole={userRole}>
