@@ -79,6 +79,14 @@ export default function ClientHome({ user }) {
     };
   }, [user?.email]);
 
+  // Détecter courses terminées non notées au chargement (cas client qui revient)
+  useEffect(() => {
+    if (!loading && courses.length > 0 && !courseANoter) {
+      const aNoter = courses.find(c => c?.statut === 'livree' && c?.livreur_email && !c?.note_donnee);
+      if (aNoter) setCourseANoter(aNoter);
+    }
+  }, [loading]);
+
   // Guard après tous les hooks
   if (!user || !user?.email || !user?.id) {
     return (
@@ -91,14 +99,6 @@ export default function ClientHome({ user }) {
   const safeCourses = Array.isArray(courses) ? courses : [];
   const activeCourses = safeCourses.filter(c => !['livree', 'annulee'].includes(c?.statut));
   const completedCount = safeCourses.filter(c => c?.statut === 'livree').length;
-
-  // Détecter courses terminées non notées au chargement (cas client qui revient)
-  useEffect(() => {
-    if (!loading && safeCourses.length > 0 && !courseANoter) {
-      const aNoter = safeCourses.find(c => c?.statut === 'livree' && c?.livreur_email && !c?.note_donnee);
-      if (aNoter) setCourseANoter(aNoter);
-    }
-  }, [loading]);
 
   return (
     <div className="space-y-0">
