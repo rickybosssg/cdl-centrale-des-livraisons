@@ -1,21 +1,28 @@
 /**
  * CDL — Vérification des assignations en attente (timeout 60s)
  *
- * Tournée toutes les 5 minutes (automation schedulée).
- * Pour chaque course en statut "assignee_attente" depuis plus de 60s :
- *   1. Vérifier que le livreur est toujours valide
- *   2. Si invalide ou timeout → marquer no_response, passer au suivant
+ * RÈGLE D'ÉLIGIBILITÉ v2 (sans current_role) :
+ *   Un livreur reste valide pendant l'attente si :
+ *   - driver_online = true
+ *   - profil_valide = true
+ *   - !livreur_bloque && !livreur_suspendu
+ *   - nombre_courses_actives < 2
+ *
+ * Le champ current_role n'est plus utilisé.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 const TIMEOUT_MS = 60 * 1000; // 60 secondes
 
+/**
+ * NOUVELLE RÈGLE — sans current_role.
+ */
 function isDriverStillValid(driver) {
   return (
     driver.driver_online === true &&
-    driver.current_role === 'livreur' &&
     driver.profil_valide === true &&
     !driver.livreur_bloque &&
+    !driver.livreur_suspendu &&
     (driver.nombre_courses_actives || 0) < 2
   );
 }
@@ -55,7 +62,7 @@ Deno.serve(async (req) => {
         const drivers = await base44.asServiceRole.entities.User.filter({ email: course.livreur_email });
         if (drivers.length > 0 && !isDriverStillValid(drivers[0])) {
           livreurInvalide = true;
-          console.log(`[CHECK] Livreur ${course.livreur_email} invalide pendant attente — passage au suivant`);
+          console.log(`[CHECK] Livreur ${course.livreur_email} invalide pendant attente (online=${drivers[0].driver_online}, valide=${drivers[0].profil_valide}) — passage au suivant`);
         }
       }
 

@@ -1,12 +1,16 @@
 /**
  * CDL — Moteur de dispatch automatique
  *
- * CRITÈRES LIVREUR ÉLIGIBLE (5 conditions cumulatives) :
+ * RÈGLE D'ÉLIGIBILITÉ v2 (sans current_role) :
  *   1. driver_online = true          (en ligne)
- *   2. current_role = "livreur"      (profil actif = livreur)
- *   3. profil_valide = true          (compte validé admin)
- *   4. !livreur_bloque               (non bloqué)
+ *   2. profil_valide = true          (profil livreur validé par admin)
+ *   3. !livreur_bloque               (non bloqué)
+ *   4. !livreur_suspendu             (non suspendu)
  *   5. nombre_courses_actives < 2    (pas surchargé)
+ *
+ * Le champ current_role n'est PAS utilisé — un utilisateur multi-profil
+ * (client+livreur, commercial+livreur, etc.) reste éligible au dispatch
+ * dès qu'il est en ligne avec un profil livreur valide.
  *
  * TRI : par proximité GPS si disponible, sinon par note puis charge.
  * TIMER : 60 secondes par livreur (géré par checkPendingAssignments).
@@ -23,12 +27,16 @@ function distanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * NOUVELLE RÈGLE — sans current_role.
+ * Un livreur est éligible si son profil livreur est valide ET il est en ligne.
+ */
 function isDriverDispatchable(d) {
   return (
     d.driver_online === true &&
-    d.current_role === 'livreur' &&
     d.profil_valide === true &&
     !d.livreur_bloque &&
+    !d.livreur_suspendu &&
     (d.nombre_courses_actives || 0) < 2
   );
 }
@@ -100,22 +108,23 @@ Deno.serve(async (req) => {
     ]);
 
     // ── 4. Récupérer et filtrer les livreurs éligibles ────────────────────
+    // NOUVELLE LOGIQUE : on filtre uniquement sur driver_online + profil_valide
+    // sans current_role — les utilisateurs multi-profil sont inclus
     const allUsers = await base44.asServiceRole.entities.User.list('-updated_date', 500);
     const eligibles = allUsers.filter(d => isDriverDispatchable(d) && !dejaContactes.has(d.email));
 
-    console.log(`[Dispatch] Total: ${allUsers.length} | driver_online: ${allUsers.filter(d => d.driver_online).length} | current_role=livreur: ${allUsers.filter(d => d.driver_online && d.current_role === 'livreur').length} | Éligibles: ${eligibles.length}`);
+    const totalOnline = allUsers.filter(d => d.driver_online).length;
+    const totalValides = allUsers.filter(d => d.driver_online && d.profil_valide).length;
+    console.log(`[Dispatch] Total: ${allUsers.length} | driver_online: ${totalOnline} | profil_valide+online: ${totalValides} | Éligibles: ${eligibles.length}`);
 
     const now = new Date().toISOString();
 
     // ── 5. Aucun livreur disponible ────────────────────────────────────────
     if (eligibles.length === 0) {
-      const totalOnline = allUsers.filter(d => d.driver_online).length;
-      const totalBonRole = allUsers.filter(d => d.driver_online && d.current_role === 'livreur').length;
-
       let failReason = 'Aucun livreur disponible pour le moment';
       if (totalOnline === 0) failReason = 'Aucun livreur connecté';
-      else if (totalBonRole === 0) failReason = `${totalOnline} livreur(s) connecté(s) mais aucun avec le profil livreur actif`;
-      else failReason = `${totalBonRole} livreur(s) connecté(s) mais tous occupés ou déjà contactés`;
+      else if (totalValides === 0) failReason = `${totalOnline} livreur(s) connecté(s) mais aucun avec un profil valide`;
+      else failReason = `${totalValides} livreur(s) valide(s) en ligne mais tous occupés ou déjà contactés`;
 
       console.log(`[Dispatch] ❌ ${failReason}`);
 
@@ -154,7 +163,7 @@ Deno.serve(async (req) => {
         }).catch(() => {});
       }
 
-      return Response.json({ success: false, reason: failReason, online: totalOnline, bon_role: totalBonRole });
+      return Response.json({ success: false, reason: failReason, online: totalOnline, valides: totalValides });
     }
 
     // ── 6. Trier par proximité GPS (puis note, puis charge) ───────────────
@@ -163,9 +172,9 @@ Deno.serve(async (req) => {
 
     if (course.latitude_depart && choisi.gps_latitude) {
       const dist = distanceKm(choisi.gps_latitude, choisi.gps_longitude, parseFloat(course.latitude_depart), parseFloat(course.longitude_depart));
-      console.log(`[Dispatch] Livreur le plus proche: ${choisi.email} (${dist.toFixed(1)} km)`);
+      console.log(`[Dispatch] Livreur le plus proche: ${choisi.email} (rôle_actuel=${choisi.current_role || 'non défini'}, dist=${dist.toFixed(1)} km)`);
     } else {
-      console.log(`[Dispatch] Pas de GPS — premier éligible: ${choisi.email}`);
+      console.log(`[Dispatch] Pas de GPS — premier éligible: ${choisi.email} (rôle_actuel=${choisi.current_role || 'non défini'})`);
     }
 
     // ── 7. Proposer au livreur choisi (timer 60s) ─────────────────────────

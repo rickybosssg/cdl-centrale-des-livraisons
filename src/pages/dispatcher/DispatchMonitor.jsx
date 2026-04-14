@@ -193,9 +193,12 @@ export default function DispatchMonitor() {
       base44.entities.User.list('-updated_date', 500),
     ]);
     setCourses(coursesData || []);
-    // ⚠️ Critères stricts : driver_online=true + current_role=livreur
+    // RÈGLE v2 : profil livreur valide + en ligne — sans current_role
     const livreursData = (allUsers || []).filter(u =>
-      u.driver_online === true && u.current_role === 'livreur'
+      u.driver_online === true &&
+      u.profil_valide === true &&
+      !u.livreur_bloque &&
+      !u.livreur_suspendu
     );
     setLivreurs(livreursData);
     setLastRefresh(new Date());
@@ -297,17 +300,18 @@ export default function DispatchMonitor() {
       else if (event.type === "update") setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
     });
 
-    // Temps réel — Livreurs (driver_online, current_role, nombre_courses_actives)
+    // Temps réel — Livreurs (driver_online, profil_valide, nombre_courses_actives)
     const unsubUsers = base44.entities.User.subscribe((event) => {
       if (event.type === "update" && event.data) {
+        const d = event.data;
+        const eligible = d.driver_online && d.profil_valide && !d.livreur_bloque && !d.livreur_suspendu;
         setLivreurs(prev => {
           const exists = prev.find(l => l.id === event.id);
-          if (exists) return prev.map(l => l.id === event.id ? event.data : l);
-          // Nouveau livreur qui passe en ligne
-          if (event.data.driver_online) return [event.data, ...prev];
-          return prev;
+          if (!eligible) return prev.filter(l => l.id !== event.id); // retiré si plus éligible
+          if (exists) return prev.map(l => l.id === event.id ? d : l);
+          return [d, ...prev]; // nouveau livreur éligible
         });
-      } else if (event.type === "create" && event.data?.driver_online) {
+      } else if (event.type === "create" && event.data?.driver_online && event.data?.profil_valide) {
         setLivreurs(prev => [event.data, ...prev]);
       }
     });
@@ -316,10 +320,9 @@ export default function DispatchMonitor() {
   }, []);
 
   const isManuel = (dispatchConfig?.mode || 'auto') === 'manuel';
-  // ⚠️ Critères stricts : driver_online=true + current_role=livreur + non bloqué
-  // (livreurs est déjà pré-filtré driver_online+current_role au chargement)
-  const livreursOnline = livreurs.filter(l => !l.livreur_bloque);
-  const livreursDispatchables = livreurs.filter(l => !l.livreur_bloque && (l.nombre_courses_actives || 0) < 2);
+  // livreurs est déjà pré-filtré (driver_online + profil_valide + non bloqué/suspendu) au chargement
+  const livreursOnline = livreurs;
+  const livreursDispatchables = livreurs.filter(l => (l.nombre_courses_actives || 0) < 2);
 
   const coursesEnAttente = courses.filter(c => ['en_attente', 'en_attente_dispatch'].includes(c.statut));
   const coursesProposees = courses.filter(c => c.statut === 'assignee_attente');

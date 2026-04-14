@@ -125,11 +125,14 @@ export default function ManualDispatch() {
     const sansLivreur = (cSansLivreur || []).sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
     const enAttente   = (cEnAttente   || []).sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
     const allCourses  = [...sansLivreur, ...enAttente];
-    // ⚠️ Critères stricts : driver_online=true + current_role=livreur + non bloqué
+    // RÈGLE v2 : profil livreur valide + en ligne — sans current_role
+    // Les utilisateurs multi-profil (client+livreur, etc.) sont inclus
     const livreursFiltered = (allUsers || []).filter(x =>
       x.driver_online === true &&
-      x.current_role === 'livreur' &&
-      !x.livreur_bloque
+      x.profil_valide === true &&
+      !x.livreur_bloque &&
+      !x.livreur_suspendu &&
+      (x.nombre_courses_actives || 0) < 2
     );
     setCourses(allCourses);
     setLivreurs(livreursFiltered);

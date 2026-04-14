@@ -1,14 +1,18 @@
 /**
  * CDL — Moteur de dispatch frontend
- * Source de vérité : DispatchConfig en BDD.
+ * Source de vérité : profil livreur validé + statut opérationnel.
  *
- * CHAMPS BDD RÉELS :
- *   driver_online    → livreur en ligne
- *   current_role     → profil actif ('livreur', 'client', etc.)
- *   profil_valide    → compte validé par admin
- *   livreur_bloque   → compte bloqué
- *   gps_latitude/gps_longitude → position GPS
- *   nombre_courses_actives → charge actuelle
+ * RÈGLE D'ÉLIGIBILITÉ v2 — sans current_role :
+ *   Un livreur est éligible si :
+ *     1. driver_online = true          (en ligne)
+ *     2. profil_valide = true          (profil livreur validé par admin)
+ *     3. !livreur_bloque               (non bloqué)
+ *     4. !livreur_suspendu             (non suspendu)
+ *     5. nombre_courses_actives < 2    (pas surchargé)
+ *
+ *   Le champ current_role n'est JAMAIS utilisé dans cette logique.
+ *   Un utilisateur multi-profil (client+livreur, commercial+livreur, etc.)
+ *   reste éligible dès qu'il a un profil livreur valide et est en ligne.
  */
 import { base44 } from "@/api/base44Client";
 
@@ -23,29 +27,28 @@ export function distanceKm(lat1, lng1, lat2, lng2) {
 }
 
 /**
- * FONCTION CENTRALE — utilisée partout dans l'app.
- * 5 critères cumulatifs obligatoires :
- *   1. driver_online = true          (en ligne)
- *   2. current_role = 'livreur'      (profil actif = livreur)
- *   3. profil_valide = true          (compte validé admin)
- *   4. !livreur_bloque               (non bloqué)
- *   5. nombre_courses_actives < 2    (pas surchargé)
+ * RÈGLE D'ÉLIGIBILITÉ CENTRALE — utilisée partout dans l'app.
+ * Ne jamais utiliser current_role ici.
  */
 export function isDriverDispatchable(driver) {
   return (
     driver.driver_online === true &&
-    driver.current_role === 'livreur' &&
     driver.profil_valide === true &&
     !driver.livreur_bloque &&
+    !driver.livreur_suspendu &&
     (driver.nombre_courses_actives || 0) < 2
   );
 }
 
+/**
+ * Raison d'exclusion — pour diagnostic admin.
+ * Affiche "rôle actuel" à titre informatif seulement, ce n'est PAS un critère bloquant.
+ */
 export function getDriverDispatchReason(driver) {
   if (!driver.driver_online) return 'hors ligne';
-  if (driver.current_role !== 'livreur') return `rôle actif: ${driver.current_role || 'non défini'}`;
-  if (!driver.profil_valide) return 'compte non validé';
+  if (!driver.profil_valide) return 'profil non validé';
   if (driver.livreur_bloque) return 'compte bloqué';
+  if (driver.livreur_suspendu) return 'compte suspendu';
   if ((driver.nombre_courses_actives || 0) >= 2) return `occupé (${driver.nombre_courses_actives} courses)`;
   return 'dispatchable';
 }
@@ -57,7 +60,6 @@ export function getDriverDispatchReason(driver) {
 export function sortDriversByProximity(drivers, course) {
   const hasGPS = course?.latitude_depart && course?.longitude_depart;
   if (!hasGPS) {
-    // Fallback : note puis charge
     return [...drivers].sort((a, b) => {
       const noteDiff = (b.note_moyenne || 0) - (a.note_moyenne || 0);
       if (noteDiff !== 0) return noteDiff;
@@ -68,7 +70,6 @@ export function sortDriversByProximity(drivers, course) {
   const lat1 = parseFloat(course.latitude_depart);
   const lng1 = parseFloat(course.longitude_depart);
 
-  // Séparer ceux avec GPS et sans GPS
   const avecGPS = drivers.filter(d => d.gps_latitude && d.gps_longitude);
   const sansGPS = drivers.filter(d => !d.gps_latitude || !d.gps_longitude);
 
@@ -78,7 +79,6 @@ export function sortDriversByProximity(drivers, course) {
     return da - db;
   });
 
-  // Ceux sans GPS passent après ceux avec GPS
   return [...avecGPS, ...sansGPS];
 }
 
@@ -163,6 +163,7 @@ export function priorityCourseScore(course) {
 
 /**
  * Classifie et trie les livreurs pour une course donnée.
+ * Utilise la nouvelle règle sans current_role.
  */
 export async function classifyDriversForCourse(course) {
   const allUsers = await base44.entities.User.list('-updated_date', 500);
@@ -171,6 +172,10 @@ export async function classifyDriversForCourse(course) {
   return sorted.map(d => ({ driver: d, score: scoreDriver(d, course) }));
 }
 
+/**
+ * Stats livreurs dispatch pour le dashboard admin.
+ * Note : current_role est affiché à titre informatif seulement.
+ */
 export async function getDriversDispatchStats() {
   const allUsers = await base44.entities.User.list('-updated_date', 500);
   const enLigne = allUsers.filter(d => d.driver_online);
@@ -178,6 +183,11 @@ export async function getDriversDispatchStats() {
   const dispatchables = enLigne.filter(d => isDriverDispatchable(d));
   const nonDispatchables = enLigne
     .filter(d => !isDriverDispatchable(d))
-    .map(d => ({ email: d.email, nom: d.full_name, raison: getDriverDispatchReason(d) }));
+    .map(d => ({
+      email: d.email,
+      nom: d.full_name,
+      raison: getDriverDispatchReason(d),
+      current_role: d.current_role || 'non défini', // informatif uniquement
+    }));
   return { enLigne: enLigne.length, avecGPS: avecGPS.length, dispatchables: dispatchables.length, nonDispatchables };
 }
