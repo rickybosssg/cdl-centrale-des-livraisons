@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { vibrateLight } from "@/lib/vibration";
-import { Package, Home, Clock, Users, BarChart3, Truck, Plus, TrendingUp, Database, Store, Sparkles, Megaphone, Tag, MessageCircle, ShieldCheck } from "lucide-react";
+import { Package, Home, Clock, Users, BarChart3, Truck, Plus, TrendingUp, Database, Store, Sparkles, Megaphone, Tag, MessageCircle, ShieldCheck, Zap, Wallet } from "lucide-react";
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
@@ -26,10 +26,10 @@ const NAV_ITEMS = {
     { path: "/mes-discussions", icon: MessageCircle, label: "Messages" },
   ],
   admin: [
-    { path: "/", icon: Home, label: "Accueil" },
+    { path: "/", icon: Home, label: "Dashboard" },
     { path: "/gerer-courses", icon: Package, label: "Courses" },
-    { path: "/gerer-livreurs", icon: Users, label: "Livreurs" },
-    { path: "/mall", icon: Store, label: "MALL" },
+    { path: "/dispatch-monitor", icon: Zap, label: "Dispatch" },
+    { path: "/profils", icon: Users, label: "Profils" },
     { path: "/messages-admin", icon: MessageCircle, label: "Messages" },
   ],
   commercial: [

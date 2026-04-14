@@ -91,6 +91,13 @@ import GestionSignalements from './pages/dispatcher/GestionSignalements';
 import PlayStoreChecklist from './pages/dispatcher/PlayStoreChecklist';
 import PlayStoreValidationFinal from './pages/dispatcher/PlayStoreValidationFinal';
 import WhatsAppAlerts from './pages/dispatcher/WhatsAppAlerts';
+import AdminDashboardPro from './pages/dispatcher/AdminDashboardPro';
+import ProfilsHub from './pages/dispatcher/ProfilsHub';
+import ProfilsLivreurs from './pages/dispatcher/ProfilsLivreurs';
+import ProfilsClients from './pages/dispatcher/ProfilsClients';
+import ProfilsCommerciaux from './pages/dispatcher/ProfilsCommerciaux';
+import ProfilsPartenaires from './pages/dispatcher/ProfilsPartenaires';
+import ProfilsAnnonceurs from './pages/dispatcher/ProfilsAnnonceurs';
 import SpaceSelector from './pages/SpaceSelector';
 import StaffGuard from './components/StaffGuard';
 import StaffDashboard from './pages/staff/StaffDashboard';
@@ -358,6 +365,14 @@ const AuthenticatedApp = () => {
           <Route path="/playstore-checklist" element={<PlayStoreChecklist />} />
           <Route path="/playstore-validation" element={<PlayStoreValidationFinal />} />
           <Route path="/whatsapp-alerts" element={<WhatsAppAlerts />} />
+          {/* Dashboard PRO & Profils centralisés */}
+          <Route path="/admin-pro" element={<AdminDashboardPro />} />
+          <Route path="/profils" element={<ProfilsHub />} />
+          <Route path="/profils/livreurs" element={<ProfilsLivreurs />} />
+          <Route path="/profils/clients" element={<ProfilsClients />} />
+          <Route path="/profils/commerciaux" element={<ProfilsCommerciaux />} />
+          <Route path="/profils/partenaires" element={<ProfilsPartenaires />} />
+          <Route path="/profils/annonceurs" element={<ProfilsAnnonceurs />} />
         </Route>
       </Route>
 

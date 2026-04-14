@@ -12,6 +12,7 @@ import IncompleteProfileGuard from "../components/IncompleteProfileGuard";
 import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
+import AdminDashboardPro from "./dispatcher/AdminDashboardPro";
 import DashboardPartenaire from "./partenaire/DashboardPartenaire";
 import DashboardCommercial from "./commercial/DashboardCommercial";
 import DashboardAnnonceur from "./annonceur/DashboardAnnonceur";
@@ -215,17 +216,8 @@ export default function Home() {
   const isAdmin = user?.role === 'admin' || user?.user_type === 'admin' || ADMIN_EMAILS.includes(user?.email);
   console.log('[HOME] IS ADMIN?', isAdmin);
   if (isAdmin) {
-    console.log('[HOME] Rendering DispatcherDashboard');
-    return (
-      <div className="space-y-0">
-        <div className="flex justify-end items-center pb-3 px-4 pt-4">
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/settings')}>
-            <User className="h-4 w-4" /> Mon compte
-          </Button>
-        </div>
-        <DispatcherDashboard />
-      </div>
-    );
+    console.log('[HOME] Rendering AdminDashboardPro');
+    return <AdminDashboardPro />;
   }
 
   // Multi-profil — SOURCE DE VÉRITÉ : current_role en BDD
