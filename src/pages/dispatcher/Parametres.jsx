@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import SyncRolesButton from "@/components/SyncRolesButton";
 import { ArrowLeft, Save, Trash2, AlertTriangle, ShieldAlert, Bell, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -261,11 +262,12 @@ export default function Parametres() {
 
       {/* Audit utilisateurs */}
       <Card className="border-blue-200 bg-blue-50/50">
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-2">
           <Button variant="outline" className="w-full border-blue-300 text-blue-700" onClick={() => navigate('/audit-utilisateurs')}>
             <ShieldAlert className="h-4 w-4 mr-2" /> Audit utilisateurs
           </Button>
-          <p className="text-xs text-blue-600 mt-2 text-center">Détecter et réparer les comptes sans profil</p>
+          <p className="text-xs text-blue-600 text-center">Détecter et réparer les comptes sans profil</p>
+          <SyncRolesButton />
         </CardContent>
       </Card>
 

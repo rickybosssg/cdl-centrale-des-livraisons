@@ -19,14 +19,24 @@ import AttentePage from "./AttentePage";
 
 const ADMIN_EMAILS = ["weezyh2@gmail.com", "admin@cdl.local"];
 
-function resolveActiveProfile(profiles, storedId) {
+function resolveActiveProfile(profiles, storedId, currentRole) {
   if (!Array.isArray(profiles) || profiles.length === 0) return null;
+  // Priorité 1 : le profil correspondant au current_role BDD (source de vérité)
+  if (currentRole) {
+    const byRole = profiles.find(p => p?.profile_type === currentRole && !p?.deleted);
+    if (byRole) {
+      if (byRole.id !== storedId) localStorage.setItem('activeProfileId', byRole.id);
+      return byRole;
+    }
+  }
+  // Priorité 2 : le profil mémorisé en localStorage
   if (storedId) {
-    const byId = profiles.find(p => p?.id === storedId);
+    const byId = profiles.find(p => p?.id === storedId && !p?.deleted);
     if (byId) return byId;
     localStorage.removeItem('activeProfileId');
   }
-  const fallback = profiles.find(p => p?.status === 'actif') || profiles[0];
+  // Priorité 3 : premier profil actif
+  const fallback = profiles.find(p => p?.status === 'actif' && !p?.deleted) || profiles.find(p => !p?.deleted);
   if (fallback?.id) localStorage.setItem('activeProfileId', fallback.id);
   return fallback || null;
 }
@@ -52,10 +62,8 @@ export default function Home() {
   const [cancelingProfile, setCancelingProfile] = useState(null);
 
   const loadUser = async () => {
-    console.log('[HOME] loadUser START');
     try {
       const me = await base44.auth.me();
-      console.log('[HOME] ME loaded:', me?.email);
       if (!me) {
         setUser(null);
         setAllProfiles([]);
@@ -64,25 +72,55 @@ export default function Home() {
       }
       
       setUser(me);
-      console.log('[HOME] setUser done');
       const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
       const profsArray = Array.isArray(profs) ? profs : [];
-      console.log('[HOME] profiles loaded:', profsArray.length);
       setAllProfiles(profsArray);
-      
-      const storedId = localStorage.getItem('activeProfileId');
-      const resolved = resolveActiveProfile(profsArray, storedId);
-      console.log('[HOME] resolved profile:', resolved?.id);
-      if (resolved?.id) {
-        setActiveProfileId(resolved.id);
-        console.log('[HOME] setActiveProfileId done');
+
+      // ── SOURCE DE VÉRITÉ : current_role en BDD ──────────────────────────
+      // current_role est la SEULE source de vérité pour le profil actif.
+      // Le localStorage ne sert qu'à mémoriser l'ID du profil pour l'UX,
+      // mais le dashboard rendu se base toujours sur current_role.
+      const trueRole = me.current_role || me.active_profile_type;
+
+      if (trueRole && profsArray.length > 0) {
+        // Chercher le profil UserProfile correspondant au current_role réel
+        const matchingProfile = profsArray.find(p => p.profile_type === trueRole && !p.deleted);
+        if (matchingProfile) {
+          // Synchroniser localStorage sur la vraie valeur BDD
+          localStorage.setItem('activeProfileId', matchingProfile.id);
+          setActiveProfileId(matchingProfile.id);
+          console.log(`[Home] Sync current_role=${trueRole} → profileId=${matchingProfile.id}`);
+        } else {
+          // current_role pointe vers un profil inexistant → fallback propre
+          console.warn(`[Home] current_role=${trueRole} mais pas de UserProfile correspondant`);
+          const fallback = profsArray.find(p => p.status === 'actif') || profsArray[0];
+          if (fallback?.id) {
+            localStorage.setItem('activeProfileId', fallback.id);
+            setActiveProfileId(fallback.id);
+            // Corriger current_role en BDD pour pointer vers le vrai profil actif
+            if (fallback.profile_type !== trueRole) {
+              base44.functions.invoke('switchActiveProfile', { profile_type: fallback.profile_type }).catch(() => {});
+              console.log(`[Home] Correction current_role: ${trueRole} → ${fallback.profile_type}`);
+            }
+          }
+        }
+      } else {
+        // Pas de current_role en BDD — fallback localStorage puis premier profil
+        const storedId = localStorage.getItem('activeProfileId');
+        const resolved = resolveActiveProfile(profsArray, storedId);
+        if (resolved?.id) {
+          setActiveProfileId(resolved.id);
+          // Synchroniser current_role en BDD
+          if (resolved.profile_type && resolved.profile_type !== me.current_role) {
+            base44.functions.invoke('switchActiveProfile', { profile_type: resolved.profile_type }).catch(() => {});
+          }
+        }
       }
     } catch (err) {
       console.error('[Home] Erreur chargement:', err);
       setUser(null);
       setAllProfiles([]);
     } finally {
-      console.log('[HOME] loadUser DONE');
       setLoading(false);
     }
   };
@@ -123,30 +161,33 @@ export default function Home() {
     return () => { if (unsubscribe) unsubscribe(); };
   }, [user?.email]);
 
-  // Sync localStorage quand le profil change — une seule fois après chargement
+  // Resynchronisation automatique : si current_role change en BDD, mettre à jour l'UI
   useEffect(() => {
-    if (!Array.isArray(allProfiles) || allProfiles.length === 0) return;
-    const activeProfile = resolveActiveProfile(allProfiles, activeProfileId);
-    // Vérifier si le profil actif actuel est valide. Ne jamais recalculer automatiquement.
-    // La seule source de vérité : ce qui est dans localStorage + activeProfileId state
-    if (!activeProfile || !activeProfile?.id) {
-      // Si pas de profil actif valide, et on a des profils disponibles, résoudre une seule fois
-      const resolved = allProfiles.find(p => p?.id === activeProfileId) || allProfiles[0];
-      if (resolved?.id && resolved.id !== activeProfileId) {
-        setActiveProfileId(resolved.id);
-        localStorage.setItem('activeProfileId', resolved.id);
-      }
+    if (!user?.email || !Array.isArray(allProfiles) || allProfiles.length === 0) return;
+    const trueRole = user?.current_role || user?.active_profile_type;
+    if (!trueRole) return;
+    const matchingProfile = allProfiles.find(p => p?.profile_type === trueRole && !p?.deleted);
+    if (matchingProfile && matchingProfile.id !== activeProfileId) {
+      console.log(`[Home] Resync current_role=${trueRole} → profileId=${matchingProfile.id}`);
+      setActiveProfileId(matchingProfile.id);
+      localStorage.setItem('activeProfileId', matchingProfile.id);
     }
-  }, [allProfiles.length, activeProfileId]); // ✅ Dépendances correctes
+  }, [user?.current_role, user?.active_profile_type, allProfiles.length]);
 
-  const switchProfile = (profileId) => {
-    localStorage.setItem('activeProfileId', profileId);
+  const switchProfile = async (profileId) => {
     setShowSwitch(false);
     const prof = allProfiles?.find(p => p?.id === profileId);
-    if (prof?.profile_type) {
-      base44.functions.invoke('switchActiveProfile', { profile_type: prof.profile_type }).catch(() => {});
+    if (!prof?.profile_type) return;
+    // Attendre la confirmation backend AVANT de recharger
+    // pour garantir que current_role est bien à jour en BDD
+    try {
+      await base44.functions.invoke('switchActiveProfile', { profile_type: prof.profile_type });
+      localStorage.setItem('activeProfileId', profileId);
+      console.log(`[Home] Switch confirmé → ${prof.profile_type}`);
+    } catch (err) {
+      console.error('[Home] Erreur switchProfile:', err);
     }
-    setTimeout(() => { window.location.href = '/'; }, 200);
+    window.location.href = '/';
   };
 
   if (loading) {
@@ -187,13 +228,12 @@ export default function Home() {
     );
   }
 
-  // Multi-profil
-  console.log('[HOME] MULTI-PROFILE - allProfiles:', allProfiles.length, 'activeId:', activeProfileId);
+  // Multi-profil — SOURCE DE VÉRITÉ : current_role en BDD
   const activeUserProfile = resolveActiveProfile(
     Array.isArray(allProfiles) ? allProfiles : [],
-    activeProfileId
+    activeProfileId,
+    user?.current_role || user?.active_profile_type  // source de vérité BDD
   );
-  console.log('[HOME] activeUserProfile:', activeUserProfile?.profile_type, activeUserProfile?.id);
 
   // Pas de profil
   if (!activeUserProfile) {

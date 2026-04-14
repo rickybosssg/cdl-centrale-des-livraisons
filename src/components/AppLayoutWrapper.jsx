@@ -51,24 +51,46 @@ export default function AppLayoutWrapper({ user }) {
         if (me.email === 'weezyh2@gmail.com' || me.role === 'admin') {
           setUserRole('admin');
         } else {
-          const storedId = localStorage.getItem('activeProfileId');
+          // ── SOURCE DE VÉRITÉ : current_role en BDD ─────────────────────
+          // Ne jamais utiliser le localStorage seul pour déterminer le rôle affiché.
+          // current_role BDD est la vérité absolue.
+          const trueRole = me.current_role || me.active_profile_type;
+
           try {
             const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
             if (!isMounted) return;
-            const activeProf = profs.find(p => p.id === storedId) || profs.find(p => p.status === 'actif') || profs[0];
-            if (activeProf) {
-              const detectedRole = activeProf.profile_type;
-              setUserRole(detectedRole);
-              localStorage.setItem('activeProfileId', activeProf.id);
-              // Synchroniser current_role + driver_online en BDD si divergence
-              if (me.current_role !== detectedRole) {
-                base44.functions.invoke('switchActiveProfile', { profile_type: detectedRole }).catch(() => {});
+
+            if (trueRole) {
+              // Trouver le profil UserProfile correspondant au current_role BDD
+              const matchingProf = profs.find(p => p.profile_type === trueRole && !p.deleted);
+              if (matchingProf) {
+                setUserRole(trueRole);
+                localStorage.setItem('activeProfileId', matchingProf.id);
+              } else {
+                // current_role pointe vers un profil inexistant → corriger
+                const fallback = profs.find(p => p.status === 'actif') || profs[0];
+                if (fallback) {
+                  setUserRole(fallback.profile_type);
+                  localStorage.setItem('activeProfileId', fallback.id);
+                  base44.functions.invoke('switchActiveProfile', { profile_type: fallback.profile_type }).catch(() => {});
+                } else {
+                  setUserRole(trueRole);
+                }
               }
             } else {
-              setUserRole(me.current_role || me.user_type || 'client');
+              // Pas de current_role → fallback localStorage puis premier profil actif
+              const storedId = localStorage.getItem('activeProfileId');
+              const fallback = profs.find(p => p.id === storedId) || profs.find(p => p.status === 'actif') || profs[0];
+              if (fallback) {
+                setUserRole(fallback.profile_type);
+                localStorage.setItem('activeProfileId', fallback.id);
+                base44.functions.invoke('switchActiveProfile', { profile_type: fallback.profile_type }).catch(() => {});
+              } else {
+                setUserRole('client');
+              }
             }
           } catch (_) {
-            setUserRole(me.current_role || me.user_type || 'client');
+            setUserRole(trueRole || 'client');
           }
         }
 
