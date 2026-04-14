@@ -57,13 +57,18 @@ export default function AppLayoutWrapper({ user }) {
             if (!isMounted) return;
             const activeProf = profs.find(p => p.id === storedId) || profs.find(p => p.status === 'actif') || profs[0];
             if (activeProf) {
-              setUserRole(activeProf.profile_type);
+              const detectedRole = activeProf.profile_type;
+              setUserRole(detectedRole);
               localStorage.setItem('activeProfileId', activeProf.id);
+              // Synchroniser current_role + driver_online en BDD si divergence
+              if (me.current_role !== detectedRole) {
+                base44.functions.invoke('switchActiveProfile', { profile_type: detectedRole }).catch(() => {});
+              }
             } else {
-              setUserRole(me.user_type || 'client');
+              setUserRole(me.current_role || me.user_type || 'client');
             }
           } catch (_) {
-            setUserRole(me.user_type || 'client');
+            setUserRole(me.current_role || me.user_type || 'client');
           }
         }
 

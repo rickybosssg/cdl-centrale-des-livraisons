@@ -44,10 +44,21 @@ export default function SpaceSelector() {
     return isAdmin || profileTypes.includes(s.key);
   });
 
-  const enter = (space) => {
-    if (space.key !== "admin" && space.key !== "staff") {
-      localStorage.setItem("activeProfileId", profiles.find(p => p.profile_type === space.key)?.id || "");
+  const [switching, setSwitching] = useState(false);
+
+  const enter = async (space) => {
+    if (space.key === "admin" || space.key === "staff") {
+      navigate(space.route);
+      return;
     }
+    setSwitching(space.key);
+    const profileId = profiles.find(p => p.profile_type === space.key)?.id || "";
+    localStorage.setItem("activeProfileId", profileId);
+    // Synchroniser current_role + driver_online en BDD immédiatement
+    try {
+      await base44.functions.invoke('switchActiveProfile', { profile_type: space.key });
+    } catch (_) {}
+    setSwitching(false);
     navigate(space.route);
   };
 
@@ -81,18 +92,19 @@ export default function SpaceSelector() {
         )}
         {visibleSpaces.map(space => {
           const Icon = space.icon;
+          const isLoading = switching === space.key;
           return (
             <div
               key={space.key}
-              onClick={() => enter(space)}
-              className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 flex items-center gap-4 cursor-pointer hover:bg-white/20 active:scale-95 transition-all"
+              onClick={() => !switching && enter(space)}
+              className={`bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 flex items-center gap-4 cursor-pointer hover:bg-white/20 active:scale-95 transition-all ${switching && !isLoading ? 'opacity-50 pointer-events-none' : ''}`}
             >
               <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${space.color} flex items-center justify-center flex-shrink-0`}>
-                <Icon className="h-6 w-6 text-white" />
+                {isLoading ? <Loader2 className="h-6 w-6 text-white animate-spin" /> : <Icon className="h-6 w-6 text-white" />}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-white text-sm">{space.label}</p>
-                <p className="text-slate-300 text-xs">{space.desc}</p>
+                <p className="text-slate-300 text-xs">{isLoading ? 'Activation en cours...' : space.desc}</p>
               </div>
               <ChevronRight className="h-5 w-5 text-slate-400 flex-shrink-0" />
             </div>

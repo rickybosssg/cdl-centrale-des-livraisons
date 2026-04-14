@@ -58,8 +58,8 @@ export default function AppLayout({ userRole, userEmail }) {
   const items = NAV_ITEMS[userRole] || NAV_ITEMS.client;
   const hasUnread = useMessageCount(userEmail, userRole) || false;
 
-  // Présence temps réel (tous rôles)
-  usePresence(userEmail);
+  // Présence temps réel — passer le rôle actuel pour que driver_online soit correct
+  usePresence(userEmail, userRole);
   const [courseBadge, setCourseBadge] = useState(0);
 
   // Badge courses disponibles (livreur uniquement)
