@@ -103,13 +103,33 @@ export async function onForegroundMessage(callback) {
 // Deep link: résoudre route depuis données FCM
 export function resolveNotificationRoute(data) {
   if (!data) return null;
-  const { route, type, courseId, target_screen, target_entity_id, target_entity_type } = data;
+  const { route, type, courseId, target_screen, target_entity_id, target_role } = data;
+  // Route explicite en priorité absolue
   if (route && route.startsWith('/')) return route;
   if (target_screen && target_screen.startsWith('/')) return target_screen;
   switch (type) {
-    case 'new_course': case 'course_accepted': case 'course_update': case 'course_cancelled':
+    // Livreur ciblé → page acceptation avec timer 60s
+    case 'new_delivery_request':
+      return courseId ? `/course-livreur/${courseId}` : '/courses-disponibles';
+    // Client → suivi en temps réel
+    case 'delivery_accepted': case 'delivery_started':
+      return courseId ? `/course/${courseId}/track` : '/mes-courses';
+    // Client → détail
+    case 'delivery_completed': case 'delivery_cancelled': case 'no_driver_found':
       return courseId ? `/course/${courseId}` : '/mes-courses';
-    case 'course_tracking': return courseId ? `/course/${courseId}/track` : '/mes-courses';
+    // Livreur → ses livraisons
+    case 'delivery_reassigned':
+      return target_role === 'livreur' && courseId ? `/course-livreur/${courseId}` : '/mes-livraisons';
+    // Admin
+    case 'admin_dispatch_alert':
+      return courseId ? `/dispatch-monitor` : '/admin-dashboard';
+    // Legacy types
+    case 'new_course': case 'course_accepted': case 'course_update':
+      return courseId ? `/course/${courseId}` : '/mes-courses';
+    case 'course_cancelled':
+      return target_role === 'livreur' ? '/mes-livraisons' : (courseId ? `/course/${courseId}` : '/mes-courses');
+    case 'course_tracking':
+      return courseId ? `/course/${courseId}/track` : '/mes-courses';
     case 'new_message': return '/mes-messages';
     case 'profile_validated': case 'profile_rejected': return '/settings';
     case 'bedou_recharge': case 'bedou_retrait': case 'bedou': return '/mon-bedou';

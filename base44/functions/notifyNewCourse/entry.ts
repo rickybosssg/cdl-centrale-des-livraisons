@@ -1,3 +1,14 @@
+/**
+ * notifyNewCourse — Automation entity Course (create)
+ *
+ * RÔLE : Notifier le client que sa demande est reçue + notifier les admins.
+ * 
+ * ⚠️ Ce handler NE notifie PAS les livreurs directement.
+ * La notification au livreur ciblé est gérée par autoDispatch (dispatch ciblé).
+ * 
+ * Aligné sur l'architecture multi-profils CDL :
+ *   - driver_online + current_role + profil_valide (jamais disponible/user_type)
+ */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 const PROJECT_ID = "cdl-app-4743c";
@@ -32,7 +43,7 @@ async function getAccessToken(serviceAccount) {
   return tokenData.access_token;
 }
 
-async function sendFcmPush(accessToken, fcmToken, title, body, route) {
+async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = false) {
   const res = await fetch(FCM_URL, {
     method: "POST",
     headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -42,19 +53,20 @@ async function sendFcmPush(accessToken, fcmToken, title, body, route) {
         notification: { title, body },
         data: { route, notif_route: route },
         android: {
-          priority: 'HIGH',
+          priority: isHigh ? 'HIGH' : 'NORMAL',
           notification: {
             channel_id: 'cdl_courses',
             color: '#1a73e8',
-            notification_priority: 'PRIORITY_HIGH',
+            notification_priority: isHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
             visibility: 'PUBLIC',
           },
         },
         webpush: {
           notification: {
             icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-            vibrate: [300, 100, 300, 100, 300],
-            requireInteraction: true,
+            badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
+            vibrate: isHigh ? [300, 100, 300, 100, 300] : [200, 100, 200],
+            requireInteraction: isHigh,
           },
           fcm_options: { link: route },
         },
@@ -66,41 +78,49 @@ async function sendFcmPush(accessToken, fcmToken, title, body, route) {
   return { ok: res.ok, invalidToken };
 }
 
+async function notifyAndPush(base44, accessToken, { email, role, titre, message, type, route, courseId, isHigh = false }) {
+  // 1. Notification DB (in-app fallback)
+  await base44.asServiceRole.entities.Notification.create({
+    destinataire_email: email,
+    destinataire_role: role,
+    titre,
+    message,
+    type,
+    lue: false,
+    ...(courseId ? { course_id: courseId, target_entity_id: courseId, target_entity_type: 'course' } : {}),
+    ...(route ? { target_screen: route } : {}),
+  }).catch(() => {});
+
+  // 2. FCM push
+  if (!accessToken) return;
+  const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email });
+  const tokens = tokenRecords.map(r => r.token).filter(Boolean);
+  if (tokens.length === 0) return;
+
+  const results = await Promise.allSettled(
+    tokens.map(t => sendFcmPush(accessToken, t, titre, message, route, isHigh))
+  );
+
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.status === 'fulfilled' && r.value?.invalidToken && tokenRecords[i]?.id) {
+      await base44.asServiceRole.entities.FcmToken.delete(tokenRecords[i].id).catch(() => {});
+    }
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
     const course = body.data;
 
-    if (!course || course.statut !== 'en_attente') {
-      return Response.json({ skipped: true });
+    if (!course) return Response.json({ skipped: true, reason: 'no_data' });
+    // Ne traiter que les nouvelles courses en attente
+    if (!['en_attente', 'en_attente_dispatch'].includes(course.statut)) {
+      return Response.json({ skipped: true, reason: 'not_en_attente' });
     }
 
-    // Livreurs en ligne (disponibles)
-    const livreursOnline = await base44.asServiceRole.entities.User.filter({
-      disponible: true,
-      statut_validation_livreur: 'valide',
-    });
-
-    // Livreurs offline recents (last_seen < 2h)
-    const deuxHeuresAvant = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const tousLivreurs = await base44.asServiceRole.entities.User.filter({ statut_validation_livreur: 'valide' });
-    const livreursRecentOffline = tousLivreurs.filter(l =>
-      !l.disponible && !l.livreur_bloque &&
-      l.last_seen && l.last_seen > deuxHeuresAvant
-    );
-
-    const livreursActifs = (livreursOnline || []).filter(l => !l.livreur_bloque);
-    const livreursOfflineRecents = livreursRecentOffline || [];
-    const tousCibles = [...livreursActifs, ...livreursOfflineRecents];
-
-    if (tousCibles.length === 0) {
-      return Response.json({ notified: 0, reason: 'no_drivers' });
-    }
-
-    const route = `/courses-disponibles`;
-
-    // Obtenir access token FCM
     let accessToken = null;
     const rawJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON") || '';
     if (rawJson) {
@@ -108,53 +128,41 @@ Deno.serve(async (req) => {
       accessToken = await getAccessToken(serviceAccount).catch(() => null);
     }
 
-    // Pour chaque livreur : DB + FCM (online + offline recents)
-    const tasks = tousCibles.map(async (livreur) => {
-      const isOffline = !livreur.disponible;
-      const titreOffline = "Gagne de l'argent maintenant !";
-      const messageOffline = `Course dispo : ${course.quartier_depart} - ${course.quartier_arrivee}${course.prix ? ' - ' + course.prix + ' FCFA' : ''} - Connecte-toi vite !`;
-      const titreOnline  = 'Nouvelle course disponible !';
-      const messageOnline = `${course.quartier_depart} - ${course.quartier_arrivee} - ${course.type_colis}${course.prix ? ' - ' + course.prix + ' FCFA' : ''}`;
+    const courseRoute = `/course/${course.id}`;
+    const tasks = [];
 
-      const titre   = isOffline ? titreOffline : titreOnline;
-      const message = isOffline ? messageOffline : messageOnline;
+    // ── 1. Notifier le CLIENT : confirmation de réception ────────────────────
+    if (course.client_email) {
+      tasks.push(notifyAndPush(base44, accessToken, {
+        email: course.client_email,
+        role: 'client',
+        titre: '📦 Demande reçue !',
+        message: `Votre demande a été envoyée. Recherche d'un livreur en cours pour ${course.quartier_depart} → ${course.quartier_arrivee}.`,
+        type: 'info',
+        route: courseRoute,
+        courseId: course.id,
+        isHigh: false,
+      }));
+    }
 
-      // 1. Notif DB
-      await base44.asServiceRole.entities.Notification.create({
-        destinataire_email: livreur.email,
-        destinataire_role: 'livreur',
-        titre,
-        message,
-        type: 'success',
-        lue: false,
-        course_id: course.id,
-        target_entity_id: course.id,
-        target_entity_type: 'course',
-        target_screen: route,
-      });
-
-      // 2. FCM push
-      if (!accessToken) return;
-      const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email: livreur.email });
-      const tokens = tokenRecords.map(r => r.token).filter(Boolean);
-      if (tokens.length === 0) return;
-
-      const results = await Promise.allSettled(
-        tokens.map(t => sendFcmPush(accessToken, t, titre, message, route))
-      );
-
-      // Nettoyer tokens invalides
-      for (let i = 0; i < results.length; i++) {
-        const r = results[i];
-        if (r.status === 'fulfilled' && r.value?.invalidToken && tokenRecords[i]?.id) {
-          await base44.asServiceRole.entities.FcmToken.delete(tokenRecords[i].id).catch(() => {});
-        }
-      }
-    });
+    // ── 2. Notifier les ADMINS : nouvelle course à dispatcher ────────────────
+    const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' }).catch(() => []);
+    for (const admin of admins.slice(0, 3)) {
+      tasks.push(notifyAndPush(base44, accessToken, {
+        email: admin.email,
+        role: 'admin',
+        titre: '📋 Nouvelle course en attente',
+        message: `${course.quartier_depart} → ${course.quartier_arrivee} · ${course.type_colis} · ${course.prix} FCFA`,
+        type: 'info',
+        route: '/dispatch-monitor',
+        courseId: course.id,
+        isHigh: false,
+      }));
+    }
 
     await Promise.allSettled(tasks);
-    console.log(`[notifyNewCourse] ${livreursActifs.length} online + ${livreursOfflineRecents.length} offline notifies`);
-    return Response.json({ notified: tousCibles.length, online: livreursActifs.length, offline_recents: livreursOfflineRecents.length });
+    console.log(`[notifyNewCourse] Course ${course.id} — client + ${admins.length} admins notifiés`);
+    return Response.json({ success: true, sent: tasks.length });
 
   } catch (error) {
     console.error('[notifyNewCourse] ERROR:', error.message);
