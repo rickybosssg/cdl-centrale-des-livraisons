@@ -19,15 +19,6 @@ export default function ClientHome({ user }) {
   const [showMessages, setShowMessages] = useState(false);
   const [courseANoter, setCourseANoter] = useState(null);
 
-  // Guard après tous les hooks
-  if (!user || !user?.email || !user?.id) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-sm text-muted-foreground">Profil non chargé</p>
-      </div>
-    );
-  }
-
   // Demande géolocalisation
   useEffect(() => {
     if (!user?.email || user?.gps_latitude || !navigator.geolocation) return;
@@ -87,6 +78,15 @@ export default function ClientHome({ user }) {
       if (unsub) unsub(); 
     };
   }, [user?.email]);
+
+  // Guard après tous les hooks
+  if (!user || !user?.email || !user?.id) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-sm text-muted-foreground">Profil non chargé</p>
+      </div>
+    );
+  }
 
   const safeCourses = Array.isArray(courses) ? courses : [];
   const activeCourses = safeCourses.filter(c => !['livree', 'annulee'].includes(c?.statut));
