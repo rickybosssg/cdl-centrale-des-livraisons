@@ -57,7 +57,7 @@ export default function DispatchDriversStats() {
             </div>
             <p className="text-xl font-bold text-blue-700">{enLigne}</p>
             <p className="text-[10px] text-blue-600 font-medium">En ligne</p>
-            <p className="text-[9px] text-blue-500">driver_online=true</p>
+            <p className="text-[9px] text-blue-500">tous profils confondus</p>
           </div>
           <div className="text-center p-2.5 rounded-xl bg-cyan-50 border border-cyan-200">
             <div className="flex items-center justify-center gap-1 mb-1">
@@ -73,7 +73,7 @@ export default function DispatchDriversStats() {
             </div>
             <p className={`text-xl font-bold ${dispatchables > 0 ? 'text-green-700' : 'text-red-600'}`}>{dispatchables}</p>
             <p className={`text-[10px] font-medium ${dispatchables > 0 ? 'text-green-600' : 'text-red-600'}`}>Dispatchables</p>
-            <p className={`text-[9px] ${dispatchables > 0 ? 'text-green-500' : 'text-red-500'}`}>tous critères OK</p>
+            <p className={`text-[9px] ${dispatchables > 0 ? 'text-green-500' : 'text-red-500'}`}>profil+online+dispo</p>
           </div>
         </div>
 

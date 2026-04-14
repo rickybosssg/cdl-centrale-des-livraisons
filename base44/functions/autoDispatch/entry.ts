@@ -1,16 +1,16 @@
 /**
- * CDL — Moteur de dispatch automatique
+ * CDL — Moteur de dispatch automatique (v2)
  *
- * RÈGLE D'ÉLIGIBILITÉ v2 (sans current_role) :
- *   1. driver_online = true          (en ligne)
- *   2. profil_valide = true          (profil livreur validé par admin)
- *   3. !livreur_bloque               (non bloqué)
- *   4. !livreur_suspendu             (non suspendu)
- *   5. nombre_courses_actives < 2    (pas surchargé)
+ * RÈGLE D'ÉLIGIBILITÉ (SANS current_role) :
+ *   Un livreur est dispatchable si et seulement si :
+ *     1. driver_online = true          → en ligne
+ *     2. profil_valide = true          → profil livreur validé
+ *     3. !livreur_bloque               → non bloqué
+ *     4. !livreur_suspendu             → non suspendu
+ *     5. disponible != false           → disponible (true ou non défini)
+ *     6. nombre_courses_actives < 2   → pas surchargé
  *
- * Le champ current_role n'est PAS utilisé — un utilisateur multi-profil
- * (client+livreur, commercial+livreur, etc.) reste éligible au dispatch
- * dès qu'il est en ligne avec un profil livreur valide.
+ *  ⚠️ current_role n'est JAMAIS utilisé pour le dispatch.
  *
  * TRI : par proximité GPS si disponible, sinon par note puis charge.
  * TIMER : 60 secondes par livreur (géré par checkPendingAssignments).
@@ -28,8 +28,9 @@ function distanceKm(lat1, lng1, lat2, lng2) {
 }
 
 /**
- * NOUVELLE RÈGLE — sans current_role.
- * Un livreur est éligible si son profil livreur est valide ET il est en ligne.
+ * Règle unique d'éligibilité — N'utilise JAMAIS current_role.
+ * Un utilisateur multi-profils (client+livreur, commercial+livreur, etc.)
+ * est éligible dès qu'il a un profil livreur valide et qu'il est en ligne.
  */
 function isDriverDispatchable(d) {
   return (
@@ -37,6 +38,7 @@ function isDriverDispatchable(d) {
     d.profil_valide === true &&
     !d.livreur_bloque &&
     !d.livreur_suspendu &&
+    d.disponible !== false &&
     (d.nombre_courses_actives || 0) < 2
   );
 }
@@ -108,23 +110,37 @@ Deno.serve(async (req) => {
     ]);
 
     // ── 4. Récupérer et filtrer les livreurs éligibles ────────────────────
-    // NOUVELLE LOGIQUE : on filtre uniquement sur driver_online + profil_valide
-    // sans current_role — les utilisateurs multi-profil sont inclus
+    // ⚠️ Filtre SANS current_role — basé uniquement sur profil_valide + driver_online
     const allUsers = await base44.asServiceRole.entities.User.list('-updated_date', 500);
     const eligibles = allUsers.filter(d => isDriverDispatchable(d) && !dejaContactes.has(d.email));
 
-    const totalOnline = allUsers.filter(d => d.driver_online).length;
-    const totalValides = allUsers.filter(d => d.driver_online && d.profil_valide).length;
-    console.log(`[Dispatch] Total: ${allUsers.length} | driver_online: ${totalOnline} | profil_valide+online: ${totalValides} | Éligibles: ${eligibles.length}`);
+    // Diagnostic détaillé (sans current_role)
+    const onlineCount = allUsers.filter(d => d.driver_online).length;
+    const validCount = allUsers.filter(d => d.driver_online && d.profil_valide).length;
+    console.log(`[Dispatch] Total: ${allUsers.length} | driver_online: ${onlineCount} | profil_valide+online: ${validCount} | Éligibles: ${eligibles.length}`);
 
     const now = new Date().toISOString();
 
     // ── 5. Aucun livreur disponible ────────────────────────────────────────
     if (eligibles.length === 0) {
       let failReason = 'Aucun livreur disponible pour le moment';
-      if (totalOnline === 0) failReason = 'Aucun livreur connecté';
-      else if (totalValides === 0) failReason = `${totalOnline} livreur(s) connecté(s) mais aucun avec un profil valide`;
-      else failReason = `${totalValides} livreur(s) valide(s) en ligne mais tous occupés ou déjà contactés`;
+      if (onlineCount === 0) {
+        failReason = 'Aucun livreur connecté';
+      } else if (validCount === 0) {
+        failReason = `${onlineCount} livreur(s) connecté(s) mais aucun avec un profil livreur validé`;
+      } else {
+        const autresRaisons = allUsers
+          .filter(d => d.driver_online && d.profil_valide && !dejaContactes.has(d.email))
+          .map(d => {
+            if (d.livreur_bloque) return 'bloqué';
+            if (d.livreur_suspendu) return 'suspendu';
+            if (d.disponible === false) return 'indisponible';
+            if ((d.nombre_courses_actives || 0) >= 2) return 'occupé';
+            return 'exclu';
+          });
+        const occupes = autresRaisons.filter(r => r === 'occupé').length;
+        failReason = `${validCount} livreur(s) valide(s) mais tous occupés ou déjà contactés (${occupes} occupés)`;
+      }
 
       console.log(`[Dispatch] ❌ ${failReason}`);
 
@@ -163,7 +179,7 @@ Deno.serve(async (req) => {
         }).catch(() => {});
       }
 
-      return Response.json({ success: false, reason: failReason, online: totalOnline, valides: totalValides });
+      return Response.json({ success: false, reason: failReason, online: onlineCount, valides: validCount });
     }
 
     // ── 6. Trier par proximité GPS (puis note, puis charge) ───────────────
@@ -172,12 +188,26 @@ Deno.serve(async (req) => {
 
     if (course.latitude_depart && choisi.gps_latitude) {
       const dist = distanceKm(choisi.gps_latitude, choisi.gps_longitude, parseFloat(course.latitude_depart), parseFloat(course.longitude_depart));
-      console.log(`[Dispatch] Livreur le plus proche: ${choisi.email} (rôle_actuel=${choisi.current_role || 'non défini'}, dist=${dist.toFixed(1)} km)`);
+      console.log(`[Dispatch] Livreur le plus proche: ${choisi.email} (${dist.toFixed(1)} km) | rôle actuel: ${choisi.current_role || 'non défini'}`);
     } else {
-      console.log(`[Dispatch] Pas de GPS — premier éligible: ${choisi.email} (rôle_actuel=${choisi.current_role || 'non défini'})`);
+      console.log(`[Dispatch] Pas de GPS — premier éligible: ${choisi.email} | rôle actuel: ${choisi.current_role || 'non défini'}`);
     }
 
-    // ── 7. Proposer au livreur choisi (timer 60s) ─────────────────────────
+    // ── 7. Vérification finale atomique avant assignation ─────────────────
+    const freshDrivers = await base44.asServiceRole.entities.User.filter({ email: choisi.email });
+    const freshDriver = freshDrivers[0];
+    if (!freshDriver || !isDriverDispatchable(freshDriver)) {
+      console.log(`[Dispatch] ⚠️ Livreur ${choisi.email} n'est plus éligible (vérification finale) — relance sans lui`);
+      return base44.asServiceRole.functions.invoke('autoDispatch', {
+        course_id: courseId,
+        exclude_emails: [...Array.from(dejaContactes), choisi.email],
+        force: forceDispatch,
+      }).then(r => r).catch(() =>
+        Response.json({ success: false, reason: 'Livreur sélectionné non disponible à la confirmation' })
+      );
+    }
+
+    // ── 8. Proposer au livreur choisi (timer 60s) ─────────────────────────
     const expireAt = new Date(Date.now() + 60000).toISOString();
     historique.push({
       livreur_email: choisi.email,
@@ -247,7 +277,7 @@ Deno.serve(async (req) => {
       }).catch(() => {});
     }
 
-    console.log(`[Dispatch] ✅ ${courseId} → ${choisi.full_name} (${choisi.email})`);
+    console.log(`[Dispatch] ✅ ${courseId} → ${choisi.full_name} (${choisi.email}) | rôle actuel affiché: ${choisi.current_role || 'non défini'}`);
 
     return Response.json({
       success: true,

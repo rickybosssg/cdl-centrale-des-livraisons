@@ -212,11 +212,12 @@ Deno.serve(async (req) => {
       const drivers = await base44.asServiceRole.entities.User.filter({ email: course.livreur_email }).catch(() => []);
       const driver = drivers[0];
 
+      // Vérification SANS current_role — basée sur profil_valide + driver_online
       const livreurValide = driver &&
         driver.driver_online === true &&
-        driver.current_role === 'livreur' &&
         driver.profil_valide === true &&
-        !driver.livreur_bloque;
+        !driver.livreur_bloque &&
+        !driver.livreur_suspendu;
 
       if (newStatut === 'assignee_attente' && livreurValide) {
         // ⚠️ Notification haute priorité — livreur ciblé par dispatch

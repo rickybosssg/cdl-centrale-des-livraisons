@@ -1,18 +1,18 @@
 /**
  * CDL — Moteur de dispatch frontend
- * Source de vérité : profil livreur validé + statut opérationnel.
+ * Source de vérité : DispatchConfig en BDD.
  *
- * RÈGLE D'ÉLIGIBILITÉ v2 — sans current_role :
- *   Un livreur est éligible si :
- *     1. driver_online = true          (en ligne)
- *     2. profil_valide = true          (profil livreur validé par admin)
- *     3. !livreur_bloque               (non bloqué)
- *     4. !livreur_suspendu             (non suspendu)
- *     5. nombre_courses_actives < 2    (pas surchargé)
+ * RÈGLE D'ÉLIGIBILITÉ (v2 — SANS current_role) :
+ *   Un livreur est dispatchable si et seulement si :
+ *     1. driver_online = true          → en ligne
+ *     2. profil_valide = true          → profil livreur validé par admin
+ *     3. !livreur_bloque               → non bloqué
+ *     4. !livreur_suspendu             → non suspendu
+ *     5. disponible = true             → disponible
+ *     6. nombre_courses_actives < 2   → pas surchargé
  *
- *   Le champ current_role n'est JAMAIS utilisé dans cette logique.
- *   Un utilisateur multi-profil (client+livreur, commercial+livreur, etc.)
- *   reste éligible dès qu'il a un profil livreur valide et est en ligne.
+ *  ⚠️ current_role n'est JAMAIS utilisé pour le dispatch.
+ *  Il sert uniquement à l'affichage de l'interface utilisateur.
  */
 import { base44 } from "@/api/base44Client";
 
@@ -27,8 +27,12 @@ export function distanceKm(lat1, lng1, lat2, lng2) {
 }
 
 /**
- * RÈGLE D'ÉLIGIBILITÉ CENTRALE — utilisée partout dans l'app.
- * Ne jamais utiliser current_role ici.
+ * FONCTION CENTRALE — source de vérité du dispatch.
+ * N'utilise JAMAIS current_role.
+ * Critères basés uniquement sur :
+ *   - le statut opérationnel du profil livreur (profil_valide, non bloqué, non suspendu)
+ *   - la disponibilité réelle (driver_online, disponible)
+ *   - la charge actuelle (nombre_courses_actives)
  */
 export function isDriverDispatchable(driver) {
   return (
@@ -36,20 +40,22 @@ export function isDriverDispatchable(driver) {
     driver.profil_valide === true &&
     !driver.livreur_bloque &&
     !driver.livreur_suspendu &&
+    driver.disponible !== false &&           // disponible = true par défaut si non défini
     (driver.nombre_courses_actives || 0) < 2
   );
 }
 
 /**
- * Raison d'exclusion — pour diagnostic admin.
- * Affiche "rôle actuel" à titre informatif seulement, ce n'est PAS un critère bloquant.
+ * Raison humaine pourquoi un livreur n'est pas dispatchable.
+ * N'utilise JAMAIS current_role comme critère.
  */
 export function getDriverDispatchReason(driver) {
   if (!driver.driver_online) return 'hors ligne';
   if (!driver.profil_valide) return 'profil non validé';
   if (driver.livreur_bloque) return 'compte bloqué';
   if (driver.livreur_suspendu) return 'compte suspendu';
-  if ((driver.nombre_courses_actives || 0) >= 2) return `occupé (${driver.nombre_courses_actives} courses)`;
+  if (driver.disponible === false) return 'marqué indisponible';
+  if ((driver.nombre_courses_actives || 0) >= 2) return `occupé (${driver.nombre_courses_actives} courses actives)`;
   return 'dispatchable';
 }
 
@@ -163,7 +169,7 @@ export function priorityCourseScore(course) {
 
 /**
  * Classifie et trie les livreurs pour une course donnée.
- * Utilise la nouvelle règle sans current_role.
+ * N'utilise JAMAIS current_role.
  */
 export async function classifyDriversForCourse(course) {
   const allUsers = await base44.entities.User.list('-updated_date', 500);
@@ -173,8 +179,7 @@ export async function classifyDriversForCourse(course) {
 }
 
 /**
- * Stats livreurs dispatch pour le dashboard admin.
- * Note : current_role est affiché à titre informatif seulement.
+ * Stats dispatch — N'utilise JAMAIS current_role.
  */
 export async function getDriversDispatchStats() {
   const allUsers = await base44.entities.User.list('-updated_date', 500);
@@ -183,11 +188,6 @@ export async function getDriversDispatchStats() {
   const dispatchables = enLigne.filter(d => isDriverDispatchable(d));
   const nonDispatchables = enLigne
     .filter(d => !isDriverDispatchable(d))
-    .map(d => ({
-      email: d.email,
-      nom: d.full_name,
-      raison: getDriverDispatchReason(d),
-      current_role: d.current_role || 'non défini', // informatif uniquement
-    }));
+    .map(d => ({ email: d.email, nom: d.full_name, raison: getDriverDispatchReason(d) }));
   return { enLigne: enLigne.length, avecGPS: avecGPS.length, dispatchables: dispatchables.length, nonDispatchables };
 }
