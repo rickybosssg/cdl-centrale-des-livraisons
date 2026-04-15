@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { X, Send, Sparkles, Loader2, ChevronDown } from "lucide-react";
+import { X, Send, Sparkles, Loader2, ChevronDown, MessageCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 // Suggestions contextuelles par rôle
@@ -52,6 +52,16 @@ const GREETINGS = {
   annonceur:  "Bonjour ! Je suis ARIA 📢\nComment optimiser vos campagnes ?",
 };
 
+// Contexte intelligent par rôle
+const CONTEXT_LABELS = {
+  client:     "💬 Besoin d'aide ? ARIA est là",
+  livreur:    "🛵 Trouver une course",
+  commercial: "💰 Gagner de l'argent",
+  partenaire: "🏪 Gérer ma boutique",
+  admin:      "⚙️ Voir alertes",
+  annonceur:  "📢 Optimiser campagnes",
+};
+
 export default function AriaButton({ userRole = "client" }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -59,12 +69,35 @@ export default function AriaButton({ userRole = "client" }) {
   const [loading, setLoading] = useState(false);
   const [conversation, setConversation] = useState(null);
   const [initDone, setInitDone] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(true);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const inactivityTimer = useRef(null);
 
   const role = userRole || "client";
   const suggestions = SUGGESTIONS[role] || SUGGESTIONS.client;
   const greeting = GREETINGS[role] || GREETINGS.client;
+  const contextLabel = CONTEXT_LABELS[role] || CONTEXT_LABELS.client;
+
+  // Tooltip visible 3s au chargement, puis réapparaît après 30s d'inactivité
+  useEffect(() => {
+    setShowTooltip(true);
+    const timer = setTimeout(() => setShowTooltip(false), 3000);
+
+    const resetInactivity = () => {
+      clearTimeout(inactivityTimer.current);
+      inactivityTimer.current = setTimeout(() => setShowTooltip(true), 30000);
+    };
+
+    const events = ['click', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(e => document.addEventListener(e, resetInactivity));
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(inactivityTimer.current);
+      events.forEach(e => document.removeEventListener(e, resetInactivity));
+    };
+  }, []);
 
   // Initialiser la conversation à l'ouverture
   useEffect(() => {
@@ -137,35 +170,62 @@ export default function AriaButton({ userRole = "client" }) {
 
   return (
     <>
-      {/* ── Bouton flottant ── */}
+      {/* Styles animations */}
+      <style>{`
+        @keyframes pulse-glow {
+          0%, 100% { box-shadow: 0 0 20px rgba(29,113,205,0.6), 0 8px 24px rgba(29,113,205,0.35); }
+          50% { box-shadow: 0 0 30px rgba(29,113,205,0.8), 0 8px 32px rgba(29,113,205,0.45); }
+        }
+        @keyframes subtle-bounce {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-4px); }
+        }
+        .aria-fab { animation: pulse-glow 3s ease-in-out infinite, subtle-bounce 2s ease-in-out infinite; }
+        .aria-tooltip { animation: fadeIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(8px); } }
+      `}</style>
+
+      {/* ── Tooltip contextuel ── */}
+      {showTooltip && !open && (
+        <div className="aria-tooltip fixed bottom-32 right-4 z-40 bg-gradient-to-r from-primary to-blue-700 text-white px-4 py-2.5 rounded-2xl shadow-xl text-sm font-semibold whitespace-nowrap pointer-events-none">
+          {contextLabel}
+          <div className="absolute -bottom-1 right-6 w-3 h-3 bg-gradient-to-r from-primary to-blue-700 rotate-45" />
+        </div>
+      )}
+
+      {/* ── Bouton FAB circulaire premium ── */}
       <button
-        onClick={() => setOpen(v => !v)}
-        className={`fixed bottom-20 right-4 z-50 flex items-center gap-2 shadow-xl transition-all duration-300 active:scale-95 ${
+        onClick={() => {
+          setOpen(v => !v);
+          setShowTooltip(false);
+        }}
+        className={`aria-fab fixed bottom-24 right-5 z-50 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 flex-shrink-0 ${
           open
-            ? "bg-gray-800 text-white px-3 py-2.5 rounded-2xl"
-            : "bg-gradient-to-br from-primary to-blue-700 text-white px-4 py-3 rounded-2xl"
+            ? "h-12 w-12 bg-gray-800 text-white"
+            : "h-16 w-16 bg-gradient-to-br from-primary via-blue-600 to-violet-600 text-white hover:scale-110"
         }`}
-        style={{ boxShadow: "0 4px 24px rgba(29,113,205,0.45)" }}
+        style={{
+          boxShadow: open
+            ? "0 4px 16px rgba(0,0,0,0.2)"
+            : "0 8px 32px rgba(29,113,205,0.45), 0 0 20px rgba(29,113,205,0.3)",
+        }}
+        title={open ? "Fermer" : "Ouvrir ARIA"}
       >
         {open ? (
-          <><X className="h-4 w-4" /><span className="text-xs font-bold">Fermer</span></>
+          <X className="h-6 w-6" />
         ) : (
-          <><Sparkles className="h-4 w-4" /><span className="text-sm font-bold">ARIA</span></>
+          <MessageCircle className="h-8 w-8 drop-shadow-lg" />
         )}
       </button>
 
       {/* ── Panel chat ── */}
-      {open && (
+       {open && (
         <div
-          className="fixed bottom-36 right-4 z-50 w-[calc(100vw-2rem)] max-w-sm bg-white rounded-3xl shadow-2xl border border-border flex flex-col overflow-hidden"
-          style={{ height: "420px", animation: "slideUp 0.25s ease" }}
+          className="fixed bottom-32 right-5 z-50 w-[calc(100vw-2.5rem)] max-w-sm bg-white rounded-3xl shadow-2xl border border-border flex flex-col overflow-hidden"
+          style={{ height: "480px", animation: "slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}
         >
-          <style>{`
-            @keyframes slideUp {
-              from { opacity: 0; transform: translateY(16px); }
-              to   { opacity: 1; transform: translateY(0); }
-            }
-          `}</style>
+
 
           {/* Header */}
           <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-primary to-blue-700 flex-shrink-0">
