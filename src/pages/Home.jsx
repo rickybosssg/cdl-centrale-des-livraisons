@@ -10,7 +10,7 @@ import LivreurDocuments from "../components/LivreurDocuments";
 import PendingProfiles from "../components/PendingProfiles";
 import IncompleteProfileGuard from "../components/IncompleteProfileGuard";
 import ClientHome from "./client/ClientHome";
-import LivreurHome from "./client/LivreurHome";
+import LivreurHome from "./client/LivreurHome.jsx";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
 import AdminDashboardPro from "./dispatcher/AdminDashboardPro";
 import DashboardPartenaire from "./partenaire/DashboardPartenaire";
