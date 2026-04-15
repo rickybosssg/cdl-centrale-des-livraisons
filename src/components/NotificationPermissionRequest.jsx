@@ -43,33 +43,43 @@ async function getFcmToken() {
   const messaging = getMessaging(app);
   console.log('[getFcmToken] ✅ Firebase initialisé');
   
-  // 4️⃣ Enregistrer le SW
-  console.log('[getFcmToken] ⏳ register SW');
-  const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+  // 4️⃣ Unregister anciens SW (éviter cache)
+  console.log('[getFcmToken] ⏳ Nettoyage anciens SW...');
+  const allRegs = await navigator.serviceWorker.getRegistrations();
+  for (const oldReg of allRegs) {
+    console.log('[getFcmToken] 🗑️ Unregister ancien SW:', oldReg.scope);
+    await oldReg.unregister();
+  }
+  
+  // 5️⃣ Enregistrer le nouveau SW
+  console.log('[getFcmToken] ⏳ Enregistrement nouveau SW');
+  const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
   console.log('[getFcmToken] ✅ SW enregistré:', reg.scope);
   
   await navigator.serviceWorker.ready;
   console.log('[getFcmToken] ✅ SW ready');
   
-  // 5️⃣ Envoyer config au SW via postMessage
-  const controller = navigator.serviceWorker.controller;
-  if (controller) {
-    console.log('[getFcmToken] ⏳ postMessage FIREBASE_CONFIG au SW');
-    console.log('[getFcmToken] Config being sent:', {
-      apiKey: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 8) + '...' : '❌',
-      messagingSenderId: firebaseConfig.messagingSenderId ? firebaseConfig.messagingSenderId.substring(0, 8) + '...' : '❌',
-      appId: firebaseConfig.appId ? firebaseConfig.appId.substring(0, 8) + '...' : '❌',
-      vapidKey: firebaseConfig.vapidKey ? firebaseConfig.vapidKey.substring(0, 8) + '...' : '❌',
-    });
-    controller.postMessage({
-      type: 'FIREBASE_CONFIG',
-      config: firebaseConfig,
-    });
-    await new Promise(r => setTimeout(r, 500));
-    console.log('[getFcmToken] ✅ postMessage envoyé et traité');
-  } else {
-    console.warn('[getFcmToken] ⚠️ SW controller non disponible');
+  // 6️⃣ Envoyer config au bon SW controller (active, waiting ou installing)
+  let targetWorker = reg.active || reg.waiting || reg.installing;
+  if (!targetWorker) {
+    console.error('[getFcmToken] ❌ Pas de SW worker trouvé');
+    throw new Error('Service Worker not available');
   }
+  
+  console.log('[getFcmToken] ⏳ postMessage FIREBASE_CONFIG au SW');
+  console.log('[getFcmToken] Config being sent:', {
+    apiKey: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 8) + '...' : '❌ EMPTY',
+    messagingSenderId: firebaseConfig.messagingSenderId ? firebaseConfig.messagingSenderId.substring(0, 8) + '...' : '❌ EMPTY',
+    appId: firebaseConfig.appId ? firebaseConfig.appId.substring(0, 8) + '...' : '❌ EMPTY',
+    vapidKey: firebaseConfig.vapidKey ? firebaseConfig.vapidKey.substring(0, 8) + '...' : '❌ EMPTY',
+    worker: targetWorker.state,
+  });
+  targetWorker.postMessage({
+    type: 'FIREBASE_CONFIG',
+    config: firebaseConfig,
+  });
+  await new Promise(r => setTimeout(r, 1000));
+  console.log('[getFcmToken] ✅ postMessage envoyé au SW state=' + targetWorker.state);
   
   // 6️⃣ Générer le token
   console.log('[getFcmToken] ⏳ getToken()');
