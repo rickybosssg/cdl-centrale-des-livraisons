@@ -1,90 +1,103 @@
 /**
- * Service Worker avec Firebase minimal
- * Étape 2 : Initialisation Firebase dans le SW
+ * Service Worker minimal et stable
+ * SANS Firebase — gestion basique des notifications via push
  */
 
 console.log('[SW] 🟢 Démarrage Service Worker...');
 console.log('[SW] Scope:', self.location.href);
 
 // ─────────────────────────────────────────────────────────────────
-// FIREBASE INITIALIZATION
-// ─────────────────────────────────────────────────────────────────
-
-// Importer Firebase modules
-importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
-importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js');
-
-console.log('[SW] ✅ Firebase scripts importés');
-
-// Config temporaire pour test
-const firebaseConfig = {
-  apiKey: 'AIzaSyA_example_test_key',
-  projectId: 'cdl-ouaga',
-  messagingSenderId: '123456789',
-  appId: '1:123456789:web:abcdef123456',
-};
-
-console.log('[SW] Initialisation Firebase...');
-try {
-  firebase.initializeApp(firebaseConfig);
-  console.log('[SW] ✅ Firebase initialisé');
-
-  // Récupérer l'instance de Messaging
-  const messaging = firebase.messaging();
-  console.log('[SW] ✅ Firebase Messaging activé');
-
-  // Handler pour messages en arrière-plan
-  messaging.onBackgroundMessage((payload) => {
-    console.log('[SW] 📨 Message background reçu:', payload);
-    const notificationTitle = payload.notification?.title || 'CDL Notification';
-    const notificationOptions = {
-      body: payload.notification?.body || 'Vous avez un nouveau message',
-      icon: '/logo.png',
-      tag: 'fcm-notification',
-    };
-    self.registration.showNotification(notificationTitle, notificationOptions);
-  });
-
-  console.log('[SW] ✅ onBackgroundMessage handler attaché');
-} catch (err) {
-  console.error('[SW] ❌ Erreur Firebase:', err.message);
-}
-
-// ─────────────────────────────────────────────────────────────────
-// LIFECYCLE
+// LIFECYCLE EVENTS
 // ─────────────────────────────────────────────────────────────────
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] 📦 Install event triggered');
+  console.log('[SW] 📦 Install event');
   self.skipWaiting();
-  console.log('[SW] ✅ skipWaiting() appelé');
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] 🔄 Activate event triggered');
+  console.log('[SW] 🔄 Activate event');
   event.waitUntil(clients.claim());
-  console.log('[SW] ✅ claim() appelé — SW maintenant contrôleur');
 });
 
 // ─────────────────────────────────────────────────────────────────
-// MESSAGES
+// PUSH NOTIFICATIONS (simple)
+// ─────────────────────────────────────────────────────────────────
+
+self.addEventListener('push', (event) => {
+  console.log('[SW] 📬 Push event reçu');
+  
+  let notificationTitle = 'CDL Notification';
+  let notificationOptions = {
+    body: 'Vous avez un nouveau message',
+    icon: '/logo.png',
+    tag: 'cdl-notification',
+  };
+
+  // Si le push a des données, les utiliser
+  if (event.data) {
+    try {
+      const data = event.data.json();
+      notificationTitle = data.title || notificationTitle;
+      notificationOptions.body = data.body || notificationOptions.body;
+      notificationOptions.data = data.data || {};
+    } catch (e) {
+      console.log('[SW] Pas de JSON dans le push, utiliser texte brut');
+      notificationOptions.body = event.data.text();
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(notificationTitle, notificationOptions)
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────
+// NOTIFICATION CLICK
+// ─────────────────────────────────────────────────────────────────
+
+self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] 🔔 Notification click');
+  event.notification.close();
+
+  // Récupérer la route cible si elle existe
+  const route = event.notification.data?.route || '/';
+  
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Si une fenêtre existe, focus et navigue
+      for (let i = 0; i < clientList.length; i++) {
+        if (clientList[i].url === self.location.origin + route && 'focus' in clientList[i]) {
+          return clientList[i].focus();
+        }
+      }
+      // Sinon ouvrir une nouvelle fenêtre
+      if (clients.openWindow) {
+        return clients.openWindow(route);
+      }
+    })
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────
+// MESSAGE HANDLING
 // ─────────────────────────────────────────────────────────────────
 
 self.addEventListener('message', (event) => {
-  console.log('[SW] 📨 Message reçu de client:', event.data);
+  console.log('[SW] 💬 Message reçu:', event.data?.type);
+  
   if (event.data?.type === 'ping') {
-    console.log('[SW] ✅ PING reçu — SW est actif');
     event.ports[0].postMessage({ status: 'pong', timestamp: new Date().toISOString() });
   }
 });
 
 // ─────────────────────────────────────────────────────────────────
-// FETCH
+// FETCH (passthrough)
 // ─────────────────────────────────────────────────────────────────
 
 self.addEventListener('fetch', (event) => {
-  // Passthrough
+  // Passthrough — pas de caching pour le moment
 });
 
-console.log('[SW] ✅ Service Worker prêt avec Firebase');
-console.log('[SW] ===== FIN INITIALISATION =====');
+console.log('[SW] ✅ Service Worker prêt (mode minimal — SANS Firebase)');
+console.log('[SW] Événements disponibles: install, activate, push, message');
