@@ -19,7 +19,7 @@ import ResetAdmin from './pages/ResetAdmin';
 import CreateCourse from './pages/client/CreateCourse';
 import MesCourses from './pages/client/MesCourses';
 import CourseDetail from './pages/client/CourseDetail';
-import CourseTracking from './pages/client/CourseTracking';
+import CourseTracking from './pages/client/CourseTracking.jsx';
 import EffectuerDeplacement from './pages/client/EffectuerDeplacement';
 import Vitrines from './pages/client/Vitrines';
 import CoursesDisponibles from './pages/livreur/CoursesDisponibles';
