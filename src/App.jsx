@@ -86,6 +86,7 @@ import TestMallE2E from './pages/dispatcher/TestMallE2E';
 import Mall from './pages/Mall';
 import DashboardAnnonceur from './pages/annonceur/DashboardAnnonceur';
 import CreerPublicite from './pages/annonceur/CreerPublicite';
+import MesPublicitesAnnonceur from './pages/annonceur/MesPublicites';
 import MyReferral from './pages/MyReferral';
 import GestionSignalements from './pages/dispatcher/GestionSignalements';
 import PlayStoreChecklist from './pages/dispatcher/PlayStoreChecklist';
@@ -294,6 +295,7 @@ const AuthenticatedApp = () => {
         {/* Annonceur */}
         <Route path="/dashboard-annonceur" element={<DashboardAnnonceur />} />
         <Route path="/creer-publicite" element={<CreerPublicite />} />
+        <Route path="/mes-publicites-annonceur" element={<MesPublicitesAnnonceur />} />
 
         {/* Livreur */}
         <Route path="/courses-disponibles" element={<CoursesDisponibles />} />

@@ -18,6 +18,7 @@ export default function CreerPublicite({ user }) {
   const [bedou, setBedou] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const [form, setForm] = useState({
     titre: "",
@@ -34,16 +35,22 @@ export default function CreerPublicite({ user }) {
   useEffect(() => {
     const load = async () => {
       try {
+        if (!user?.email) {
+          setError('Utilisateur non authentifié');
+          setLoading(false);
+          return;
+        }
         const res = await base44.functions.invoke("bedouEngine", { action: "get_bedou" });
         setBedou(res.data?.bedou || null);
       } catch (e) {
         console.error("[CreerPublicite] bedou error:", e);
+        setError('Erreur lors du chargement du solde');
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, []);
+  }, [user?.email]);
 
   const handleImageUpload = async (file, isMulti = false) => {
     try {
@@ -99,6 +106,11 @@ export default function CreerPublicite({ user }) {
       return;
     }
 
+    if (!user?.email) {
+      toast.error("Utilisateur non authentifié");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const dateDebut = new Date();
@@ -122,6 +134,7 @@ export default function CreerPublicite({ user }) {
         cout: TARIF,
         impressions: 0,
         clics: 0,
+        created_by: user.email,
       });
 
       toast.success("Publicité créée ! En attente de validation admin");
@@ -138,6 +151,15 @@ export default function CreerPublicite({ user }) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 space-y-4">
+        <p className="text-red-600 font-semibold">{error}</p>
+        <Button onClick={() => window.location.reload()}>Réessayer</Button>
       </div>
     );
   }
