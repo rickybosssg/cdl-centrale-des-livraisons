@@ -16,52 +16,19 @@ export function isNativeApp() {
     window.Capacitor.isNativePlatform();
 }
 
-// Canaux Android — importance haute pour les critiques
+// Canaux Android — 'default' OBLIGATOIRE en importance 5 pour app fermée
+// Le channel_id dans le payload FCM doit correspondre exactement
 const ANDROID_CHANNELS = [
   {
-    id: 'cdl_courses',
-    name: 'Courses & Livraisons',
-    description: 'Nouvelles courses, assignations, annulations',
-    importance: 5, // IMPORTANCE_HIGH
+    // Canal principal utilisé par tous les payloads FCM (channel_id: 'default')
+    id: 'default',
+    name: 'CDL Notifications',
+    description: 'Toutes les notifications CDL',
+    importance: 5, // IMPORTANCE_HIGH — requis pour affichage app fermée
     sound: 'default',
     vibration: true,
     lights: true,
-  },
-  {
-    id: 'cdl_messages',
-    name: 'Messages',
-    description: 'Nouveaux messages de l\'administration',
-    importance: 4,
-    sound: 'default',
-    vibration: true,
-    lights: false,
-  },
-  {
-    id: 'cdl_bedou',
-    name: 'Bedou & Transactions',
-    description: 'Recharges, retraits, gains Bedou',
-    importance: 4,
-    sound: 'default',
-    vibration: false,
-    lights: false,
-  },
-  {
-    id: 'cdl_admin',
-    name: 'Compte & Validation',
-    description: 'Validation profil, alertes admin',
-    importance: 4,
-    sound: 'default',
-    vibration: false,
-    lights: false,
-  },
-  {
-    id: 'cdl_general',
-    name: 'Général',
-    description: 'Notifications générales CDL',
-    importance: 3,
-    sound: null,
-    vibration: false,
-    lights: false,
+    lightColor: '#1a73e8',
   },
 ];
 
@@ -69,10 +36,11 @@ async function createAndroidChannels(PushNotifications) {
   try {
     for (const ch of ANDROID_CHANNELS) {
       await PushNotifications.createChannel(ch);
+      console.log('[NativePush] Canal créé:', ch.id, 'importance:', ch.importance);
     }
-    console.log('[NativePush] ✅ Canaux Android créés:', ANDROID_CHANNELS.map(c => c.id).join(', '));
+    console.log('[NativePush] ✅ Canal "default" importance 5 créé');
   } catch (err) {
-    console.warn('[NativePush] Canaux Android non supportés (normal sur iOS):', err?.message);
+    console.warn('[NativePush] createChannel non supporté:', err?.message);
   }
 }
 
