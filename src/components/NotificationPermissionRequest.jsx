@@ -3,34 +3,51 @@ import { Bell, Settings, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-
-const FIREBASE_CONFIG = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: "cdl-app-4743c.firebaseapp.com",
-  projectId: "cdl-app-4743c",
-  storageBucket: "cdl-app-4743c.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-};
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+import { getFirebaseConfig } from "@/lib/firebaseConfig";
 
 async function getFcmToken() {
   const { getToken } = await import('firebase/messaging');
   const { initializeApp, getApps } = await import('firebase/app');
   const { getMessaging } = await import('firebase/messaging');
-  const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
+  
+  // Charger la config depuis le backend
+  const firebaseConfig = await getFirebaseConfig();
+  
+  if (!firebaseConfig || !firebaseConfig.apiKey) {
+    throw new Error('Firebase config incomplete: missing apiKey');
+  }
+  if (!firebaseConfig.messagingSenderId) {
+    throw new Error('Firebase config incomplete: missing messagingSenderId');
+  }
+  if (!firebaseConfig.appId) {
+    throw new Error('Firebase config incomplete: missing appId');
+  }
+  if (!firebaseConfig.vapidKey) {
+    throw new Error('Firebase config incomplete: missing vapidKey');
+  }
+
+  // Initialiser Firebase avec la config complète
+  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
   const messaging = getMessaging(app);
-  const params = new URLSearchParams({
-    apiKey: FIREBASE_CONFIG.apiKey || '',
-    authDomain: FIREBASE_CONFIG.authDomain,
-    projectId: FIREBASE_CONFIG.projectId,
-    storageBucket: FIREBASE_CONFIG.storageBucket,
-    messagingSenderId: FIREBASE_CONFIG.messagingSenderId || '',
-    appId: FIREBASE_CONFIG.appId || '',
-  });
-  const reg = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${params}`);
+  
+  // Enregistrer le SW et lui injecter la config via message
+  const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
   await navigator.serviceWorker.ready;
-  const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+  
+  // Envoyer la config au SW via message
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({
+      type: 'FIREBASE_CONFIG',
+      config: firebaseConfig,
+    });
+  }
+  
+  // Générer le token
+  const token = await getToken(messaging, { 
+    vapidKey: firebaseConfig.vapidKey, 
+    serviceWorkerRegistration: reg 
+  });
+  
   return token;
 }
 
@@ -58,8 +75,8 @@ export default function NotificationPermissionRequest({ onSuccess, variant = "ca
             toast.success("✅ Notifications activées avec succès !");
           }
         } catch (e) {
-          console.warn('FCM Token error:', e);
-          toast.warning("⚠️ Notifications autorisées, mais erreur token FCM. Rechargez la page.");
+          console.error('FCM Token error:', e);
+          toast.error(`❌ Erreur token FCM: ${e.message}`);
         }
         if (tokenGenerated) onSuccess?.();
       } else if (perm === 'denied') {

@@ -5,16 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, XCircle, Loader2, RefreshCw, AlertTriangle, Smartphone, Globe, Bell } from "lucide-react";
 import { toast } from "sonner";
 import NotificationPermissionRequest from "@/components/NotificationPermissionRequest";
-
-const FIREBASE_CONFIG = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: "cdl-app-4743c.firebaseapp.com",
-  projectId: "cdl-app-4743c",
-  storageBucket: "cdl-app-4743c.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
-};
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || '';
+import { getFirebaseConfig } from "@/lib/firebaseConfig";
 
 async function getFcmToken() {
   const { getToken } = await import('firebase/messaging');
@@ -184,22 +175,25 @@ export default function FcmDiagnostic() {
         return;
       }
 
-      setStep('secrets', { label: "Secrets VITE_ configurés", status: "loading" });
-      const missing = [];
-      if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === 'undefined') missing.push('VITE_FIREBASE_API_KEY');
-      if (!FIREBASE_CONFIG.messagingSenderId || FIREBASE_CONFIG.messagingSenderId === 'undefined') missing.push('VITE_FIREBASE_MESSAGING_SENDER_ID');
-      if (!FIREBASE_CONFIG.appId || FIREBASE_CONFIG.appId === 'undefined') missing.push('VITE_FIREBASE_APP_ID');
-      if (!VAPID_KEY || VAPID_KEY === 'undefined') missing.push('VITE_FIREBASE_VAPID_KEY');
-      
-      if (missing.length > 0) {
+      setStep('secrets', { label: "Secrets Firebase (backend)", status: "loading" });
+      try {
+        const configRes = await base44.functions.invoke('getFirebaseConfig', {});
+        if (configRes.data?.complete) {
+          const cfg = configRes.data.config;
+          setStep('secrets', { 
+            status: "ok", 
+            detail: `✅ apiKey=${cfg.apiKey.substring(0,8)}... | messagingSenderId=${cfg.messagingSenderId.substring(0,8)}... | appId=${cfg.appId.substring(0,8)}... | vapidKey=${cfg.vapidKey.substring(0,8)}...` 
+          });
+        } else {
+          setStep('secrets', { 
+            status: "error", 
+            detail: `Manquants: ${(configRes.data?.missing || []).join(', ')}` 
+          });
+        }
+      } catch (err) {
         setStep('secrets', { 
           status: "error", 
-          detail: `Manquants: ${missing.join(', ')}` 
-        });
-      } else {
-        setStep('secrets', { 
-          status: "ok", 
-          detail: `✅ apiKey=${FIREBASE_CONFIG.apiKey.substring(0,8)}... | messagingSenderId=${FIREBASE_CONFIG.messagingSenderId.substring(0,8)}... | appId=${FIREBASE_CONFIG.appId.substring(0,8)}...` 
+          detail: `Erreur: ${err.message}` 
         });
       }
 
@@ -215,26 +209,52 @@ export default function FcmDiagnostic() {
           }
         }
         
-        const { token, reg } = await getFcmToken();
+        // Charger la config Firebase
+        const firebaseConfig = await getFirebaseConfig();
+        if (!firebaseConfig) {
+          throw new Error('Firebase config not available from backend');
+        }
         
-        // Wait for SW to be ready
+        // Enregistrer le SW
+        const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
         await navigator.serviceWorker.ready;
-        const swReg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+        
+        // Envoyer la config au SW
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'FIREBASE_CONFIG',
+            config: firebaseConfig,
+          });
+        }
+        
+        // Générer le token
+        const { getToken } = await import('firebase/messaging');
+        const { initializeApp, getApps } = await import('firebase/app');
+        const { getMessaging } = await import('firebase/messaging');
+        
+        const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+        const messaging = getMessaging(app);
+        const token = await getToken(messaging, { 
+          vapidKey: firebaseConfig.vapidKey, 
+          serviceWorkerRegistration: reg 
+        });
         
         setStep('sw', { 
           status: "ok", 
-          detail: `Scope: ${reg.scope} | SW actif: ${swReg?.active?.state || 'activé'} | Cache invalidé` 
+          detail: `Scope: ${reg.scope} | État: ${reg.active?.state || 'activé'}` 
         });
+        
         if (token) {
           setWebToken(token);
           await base44.functions.invoke('saveFcmToken', { token });
           setStep('token', { status: "ok", detail: `${token.substring(0, 50)}…` });
         } else {
-          setStep('token', { status: "error", detail: "Token vide — vérifiez VAPID_KEY" });
+          setStep('token', { status: "error", detail: "Token vide" });
         }
       } catch (e) {
-        setStep('sw', { status: "error", detail: `Erreur SW: ${e.message}` });
-        setStep('token', { status: "error", detail: "SW non chargé ou VAPID_KEY invalide" });
+        console.error('[FcmDiagnostic] Error:', e);
+        setStep('sw', { status: "error", detail: `Erreur: ${e.message}` });
+        setStep('token', { status: "error", detail: `Erreur: ${e.message}` });
       }
     }
 
