@@ -46,7 +46,8 @@ export default function BedouWidget({ user, compact = false }) {
     );
   }
 
-  const role = user?.user_type;
+  // Support multi-rôles : active_profile_type > current_role > user_type
+  const role = user?.active_profile_type || user?.current_role || user?.user_type;
   const canRetrait = ['livreur', 'partenaire', 'commercial'].includes(role);
 
   if (compact) {

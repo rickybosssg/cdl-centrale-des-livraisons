@@ -34,6 +34,11 @@ Deno.serve(async (req) => {
     const montant = parseFloat(tx.montant) || 0;
     if (montant <= 0) return Response.json({ skipped: true, reason: 'montant_zero' });
 
+    // Vérifier IMMÉDIATEMENT si déjà crédité (avant tout accès au solde)
+    if (tx.bedou_credited === true) {
+      return Response.json({ skipped: true, reason: 'already_credited' });
+    }
+
     // Récupérer le Bedou du livreur
     const bedouList = await base44.asServiceRole.entities.Bedou.filter({
       user_email: tx.user_email,
@@ -59,12 +64,6 @@ Deno.serve(async (req) => {
     const soldeDispo = parseFloat(bedou.solde_disponible) || 0;
     const soldeTotal = parseFloat(bedou.solde) || 0;
     const gainsTotaux = parseFloat(bedou.gains_totaux) || 0;
-
-    // Vérifier si déjà crédité : on cherche si le solde inclut déjà ce montant
-    // Vérification : si la transaction a un champ bedou_credited = true, skip
-    if (tx.bedou_credited === true) {
-      return Response.json({ skipped: true, reason: 'already_credited' });
-    }
 
     // Créditer le Bedou
     await base44.asServiceRole.entities.Bedou.update(bedou.id, {

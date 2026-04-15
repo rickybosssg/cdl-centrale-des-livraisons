@@ -26,8 +26,11 @@ const STATUT_CFG = {
   aucun_livreur:    { label: "Aucun livreur disponible",   color: "bg-red-500",   text: "text-red-700",   bg: "bg-red-50",    emoji: "😔" },
 };
 
-const FREE_CANCEL  = ["en_attente", "assignee_attente", "aucun_livreur"];
-const FEE_CANCEL   = ["acceptee"];
+// Annulation gratuite : pas encore de livreur assigné
+const FREE_CANCEL = ["en_attente", "assignee_attente", "aucun_livreur"];
+// Annulation avec frais 50% : livreur a accepté mais colis non encore récupéré
+const FEE_CANCEL  = ["acceptee"];
+// en_cours : colis déjà récupéré → plus d'annulation possible côté client
 
 export default function CourseTracking() {
   const { id } = useParams();
