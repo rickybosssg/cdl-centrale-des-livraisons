@@ -1,35 +1,56 @@
 /**
- * Configuration Firebase centralisée
- * Chargée depuis le backend via getFirebaseConfig pour éviter les doublons
+ * Configuration Firebase — Source unique et fiable
+ * Chargée une seule fois du backend, cachée en mémoire
  */
 
 let cachedConfig = null;
 
 export async function getFirebaseConfig() {
-  if (cachedConfig) return cachedConfig;
-
-  try {
-    const { base44 } = await import('@/api/base44Client');
-    const res = await base44.functions.invoke('getFirebaseConfig', {});
-    
-    if (res.data?.success && res.data.config) {
-      cachedConfig = res.data.config;
-      
-      // Log la config (sans exposer les secrets complètement)
-      console.log('[firebaseConfig] Loaded:', {
-        apiKey: res.data.config.apiKey ? res.data.config.apiKey.substring(0, 8) + '...' : 'MISSING',
-        messagingSenderId: res.data.config.messagingSenderId ? res.data.config.messagingSenderId.substring(0, 8) + '...' : 'MISSING',
-        appId: res.data.config.appId ? res.data.config.appId.substring(0, 8) + '...' : 'MISSING',
-        vapidKey: res.data.config.vapidKey ? res.data.config.vapidKey.substring(0, 8) + '...' : 'MISSING',
-        complete: res.data.complete,
-        missing: res.data.missing,
-      });
-      
-      return cachedConfig;
-    }
-  } catch (err) {
-    console.error('[firebaseConfig] Error loading config:', err.message);
+  if (cachedConfig) {
+    console.log('[firebaseConfig] Config retournée du cache');
+    return cachedConfig;
   }
 
-  return null;
+  try {
+    console.log('[firebaseConfig] ⏳ Chargement du backend...');
+    const { base44 } = await import('@/api/base44Client');
+    const res = await base44.functions.invoke('getFirebaseConfig', {});
+
+    if (!res.data?.success) {
+      console.error('[firebaseConfig] ❌ Erreur backend:', res.data?.error);
+      return null;
+    }
+
+    if (!res.data.config) {
+      console.error('[firebaseConfig] ❌ Pas de config dans la réponse');
+      return null;
+    }
+
+    // Valider que les 3 champs essentiels sont présents
+    const { apiKey, messagingSenderId, appId, vapidKey } = res.data.config;
+    if (!apiKey || !messagingSenderId || !appId || !vapidKey) {
+      console.error('[firebaseConfig] ❌ Config incomplète:', {
+        apiKey: !!apiKey,
+        messagingSenderId: !!messagingSenderId,
+        appId: !!appId,
+        vapidKey: !!vapidKey,
+      });
+      return null;
+    }
+
+    cachedConfig = res.data.config;
+    console.log('[firebaseConfig] ✅ Config valide et cachée');
+    return cachedConfig;
+  } catch (err) {
+    console.error('[firebaseConfig] ❌ Erreur:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Invalider le cache (pour tests, redéploiement, etc.)
+ */
+export function clearFirebaseConfigCache() {
+  cachedConfig = null;
+  console.log('[firebaseConfig] Cache vidé');
 }

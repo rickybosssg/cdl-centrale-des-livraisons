@@ -1,227 +1,221 @@
-import { useState } from "react";
-import { Bell, Settings, AlertCircle, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { toast } from "sonner";
-import { getFirebaseConfig } from "@/lib/firebaseConfig";
+/**
+ * NotificationPermissionRequest — Simple et minimaliste
+ * Activation notifications navigateur + génération token FCM
+ */
 
-async function getFcmToken() {
-  console.log('[getFcmToken] START');
-  
-  const { getToken } = await import('firebase/messaging');
+import { useState } from 'react';
+import { Bell, Settings, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { toast } from 'sonner';
+import { getFirebaseConfig } from '@/lib/firebaseConfig';
+
+/**
+ * Fonction minimaliste : enregistrer SW + générer token FCM
+ */
+async function generateFcmToken() {
+  console.log('[generateFcmToken] START');
+
+  // 1. Charger config depuis backend (source unique)
+  console.log('[generateFcmToken] ⏳ Chargement config Firebase...');
+  const firebaseConfig = await getFirebaseConfig();
+  if (!firebaseConfig) {
+    throw new Error('Firebase config non disponible du backend');
+  }
+  console.log('[generateFcmToken] ✅ Config reçue');
+
+  // 2. Importer Firebase modules
+  console.log('[generateFcmToken] ⏳ Import Firebase...');
   const { initializeApp, getApps } = await import('firebase/app');
   const { getMessaging } = await import('firebase/messaging');
-  
-  // 1️⃣ Charger la config depuis le backend
-  console.log('[getFcmToken] ⏳ Appel getFirebaseConfig()');
-  const firebaseConfig = await getFirebaseConfig();
-  console.log('[getFcmToken] ✅ Config reçue:', {
-    apiKey: firebaseConfig?.apiKey ? '✅' : '❌',
-    messagingSenderId: firebaseConfig?.messagingSenderId ? '✅' : '❌',
-    appId: firebaseConfig?.appId ? '✅' : '❌',
-    vapidKey: firebaseConfig?.vapidKey ? '✅' : '❌',
-  });
-  
-  // 2️⃣ Valider complétude
-  if (!firebaseConfig || !firebaseConfig.apiKey) {
-    throw new Error('Firebase config incomplete: missing apiKey');
-  }
-  if (!firebaseConfig.messagingSenderId) {
-    throw new Error('Firebase config incomplete: missing messagingSenderId');
-  }
-  if (!firebaseConfig.appId) {
-    throw new Error('Firebase config incomplete: missing appId');
-  }
-  if (!firebaseConfig.vapidKey) {
-    throw new Error('Firebase config incomplete: missing vapidKey');
-  }
-  console.log('[getFcmToken] ✅ Config valide');
+  const { getToken } = await import('firebase/messaging');
+  console.log('[generateFcmToken] ✅ Firebase importé');
 
-  // 3️⃣ Initialiser Firebase
-  console.log('[getFcmToken] ⏳ initializeApp()');
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  // 3. Initialiser Firebase app (une seule fois)
+  console.log('[generateFcmToken] ⏳ initializeApp...');
+  const app =
+    getApps().length === 0
+      ? initializeApp(firebaseConfig)
+      : getApps()[0];
   const messaging = getMessaging(app);
-  console.log('[getFcmToken] ✅ Firebase initialisé');
-  
-  // 4️⃣ Unregister anciens SW (éviter cache)
-  console.log('[getFcmToken] ⏳ Nettoyage anciens SW...');
+  console.log('[generateFcmToken] ✅ Firebase app initialisé');
+
+  // 4. Enregistrer Service Worker
+  console.log('[generateFcmToken] ⏳ Nettoyage anciens SW...');
   const allRegs = await navigator.serviceWorker.getRegistrations();
-  for (const oldReg of allRegs) {
-    console.log('[getFcmToken] 🗑️ Unregister ancien SW:', oldReg.scope);
-    await oldReg.unregister();
+  for (const reg of allRegs) {
+    console.log('[generateFcmToken] 🗑️ Unregister:', reg.scope);
+    await reg.unregister();
   }
-  
-  // 5️⃣ Enregistrer le nouveau SW
-  console.log('[getFcmToken] ⏳ Enregistrement nouveau SW');
-  const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
-  console.log('[getFcmToken] ✅ SW enregistré:', reg.scope);
-  
+  console.log('[generateFcmToken] ⏳ Enregistrement nouveau SW...');
+  const swReg = await navigator.serviceWorker.register(
+    '/firebase-messaging-sw.js',
+    { scope: '/' }
+  );
+  console.log('[generateFcmToken] ✅ SW enregistré:', swReg.scope);
+
   await navigator.serviceWorker.ready;
-  console.log('[getFcmToken] ✅ SW ready');
-  
-  // 6️⃣ Envoyer config au bon SW controller (active, waiting ou installing)
-  let targetWorker = reg.active || reg.waiting || reg.installing;
-  if (!targetWorker) {
-    console.error('[getFcmToken] ❌ Pas de SW worker trouvé');
-    throw new Error('Service Worker not available');
+  console.log('[generateFcmToken] ✅ SW ready');
+
+  // 5. Générer token FCM
+  console.log('[generateFcmToken] ⏳ Génération token FCM...');
+  const token = await getToken(messaging, {
+    vapidKey: firebaseConfig.vapidKey,
+    serviceWorkerRegistration: swReg,
+  });
+
+  if (!token) {
+    throw new Error('Token FCM vide');
   }
-  
-  console.log('[getFcmToken] ⏳ postMessage FIREBASE_CONFIG au SW');
-  console.log('[getFcmToken] Config being sent:', {
-    apiKey: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 8) + '...' : '❌ EMPTY',
-    messagingSenderId: firebaseConfig.messagingSenderId ? firebaseConfig.messagingSenderId.substring(0, 8) + '...' : '❌ EMPTY',
-    appId: firebaseConfig.appId ? firebaseConfig.appId.substring(0, 8) + '...' : '❌ EMPTY',
-    vapidKey: firebaseConfig.vapidKey ? firebaseConfig.vapidKey.substring(0, 8) + '...' : '❌ EMPTY',
-    worker: targetWorker.state,
-  });
-  targetWorker.postMessage({
-    type: 'FIREBASE_CONFIG',
-    config: firebaseConfig,
-  });
-  await new Promise(r => setTimeout(r, 1000));
-  console.log('[getFcmToken] ✅ postMessage envoyé au SW state=' + targetWorker.state);
-  
-  // 6️⃣ Générer le token
-  console.log('[getFcmToken] ⏳ getToken()');
-  const token = await getToken(messaging, { 
-    vapidKey: firebaseConfig.vapidKey, 
-    serviceWorkerRegistration: reg 
-  });
-  console.log('[getFcmToken] ✅ Token généré:', token.substring(0, 50) + '...');
-  
+
+  console.log('[generateFcmToken] ✅ Token généré:', token.substring(0, 50) + '...');
   return token;
 }
 
-export default function NotificationPermissionRequest({ onSuccess, variant = "card" }) {
-   const [requesting, setRequesting] = useState(false);
-   const [permission, setPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
+export default function NotificationPermissionRequest({
+  onSuccess,
+  variant = 'card',
+}) {
+  const [requesting, setRequesting] = useState(false);
+  const [permission, setPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
 
-  const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
+  const isNative =
+    typeof window !== 'undefined' &&
+    window.Capacitor?.isNativePlatform?.();
 
-  const requestPermissionWeb = async () => {
+  // Flux Web : permission + token FCM
+  const handleRequestWeb = async () => {
     setRequesting(true);
     try {
+      console.log('[NotificationPermissionRequest] ⏳ Demande permission...');
       const perm = await Notification.requestPermission();
       setPermission(perm);
 
-      if (perm === 'granted') {
-        // Générer et enregistrer le token FCM
-        let tokenGenerated = false;
-        try {
-          const token = await getFcmToken();
-          if (token) {
-            const { base44 } = await import('@/api/base44Client');
-            await base44.functions.invoke('saveFcmToken', { token });
-            tokenGenerated = true;
-            toast.success("✅ Notifications activées avec succès !");
-          }
-        } catch (e) {
-          console.error('FCM Token error:', e);
-          toast.error(`❌ Erreur token FCM: ${e.message}`);
-        }
-        if (tokenGenerated) onSuccess?.();
-      } else if (perm === 'denied') {
-        toast.error("❌ Les notifications ont été refusées. Ouvrez les paramètres pour les autoriser.");
+      if (perm !== 'granted') {
+        toast.error('❌ Notifications refusées');
+        setRequesting(false);
+        return;
       }
-    } catch (e) {
-      toast.error("Erreur: " + e.message);
+
+      console.log('[NotificationPermissionRequest] ✅ Permission accordée');
+
+      // Générer token
+      console.log('[NotificationPermissionRequest] ⏳ Génération token...');
+      const token = await generateFcmToken();
+
+      // Sauvegarder token
+      const { base44 } = await import('@/api/base44Client');
+      await base44.functions.invoke('saveFcmToken', { token });
+
+      toast.success('✅ Notifications activées !');
+      onSuccess?.();
+    } catch (err) {
+      console.error('[NotificationPermissionRequest] ❌', err);
+      toast.error(`Erreur: ${err.message}`);
+    } finally {
+      setRequesting(false);
     }
-    setRequesting(false);
   };
 
-  const requestPermissionNative = async () => {
+  // Flux Natif (Capacitor)
+  const handleRequestNative = async () => {
     setRequesting(true);
     try {
-      const { PushNotifications } = await import('@capacitor/push-notifications');
-      
-      // Créer le canal
+      const { PushNotifications } = await import(
+        '@capacitor/push-notifications'
+      );
+
+      // Créer canal Android
       await PushNotifications.createChannel({
         id: 'default',
         name: 'CDL Notifications',
-        description: 'Toutes les notifications CDL',
+        description: 'Notifications CDL',
         importance: 5,
         sound: 'default',
         vibration: true,
-        lights: true,
-        lightColor: '#1a73e8',
       }).catch(() => {});
 
       // Demander permission
       const perm = await PushNotifications.requestPermissions();
-      
-      if (perm.receive === 'granted') {
-        // Enregistrer pour obtenir le token
-        await PushNotifications.register();
-        
-        // Attendre le token
-        const token = await new Promise((resolve) => {
-          PushNotifications.addListener('registration', (t) => resolve(t.value));
-          setTimeout(() => resolve(null), 8000);
-        });
-
-        if (token) {
-          const { base44 } = await import('@/api/base44Client');
-          await base44.functions.invoke('saveFcmToken', { token });
-          toast.success("✅ Notifications activées avec succès !");
-          onSuccess?.();
-        }
-      } else {
-        toast.error("Les notifications ont été refusées. Ouvrez les paramètres pour les autoriser.");
+      if (perm.receive !== 'granted') {
+        toast.error('❌ Notifications refusées');
+        setRequesting(false);
+        return;
       }
-    } catch (e) {
-      toast.error("Erreur: " + e.message);
+
+      // Enregistrer et attendre token
+      await PushNotifications.register();
+      const token = await new Promise((resolve) => {
+        PushNotifications.addListener('registration', (t) =>
+          resolve(t.value)
+        );
+        setTimeout(() => resolve(null), 8000);
+      });
+
+      if (!token) {
+        throw new Error('Token natif non reçu');
+      }
+
+      // Sauvegarder
+      const { base44 } = await import('@/api/base44Client');
+      await base44.functions.invoke('saveFcmToken', { token });
+
+      toast.success('✅ Notifications activées !');
+      onSuccess?.();
+    } catch (err) {
+      console.error('[NotificationPermissionRequest] ❌', err);
+      toast.error(`Erreur: ${err.message}`);
+    } finally {
+      setRequesting(false);
     }
-    setRequesting(false);
-  };
-
-  const openSettingsWeb = () => {
-    toast.info("📱 Guide d'activation :\n1. Cliquez sur le cadenas dans la barre d'adresse\n2. Notifications → Autoriser\n3. Recharger la page\n4. Cliquez à nouveau sur 'Activer les notifications'", { duration: 8000 });
-  };
-
-  const openSettingsNative = async () => {
-    // Pour APK natif, afficher simplement le guide car on peut pas ouvrir les paramètres directement
-    toast.info("📱 Allez à : Paramètres → Apps → CDL → Notifications");
   };
 
   if (permission === 'granted') return null;
 
-  if (variant === "banner") {
-    // Bannière simple pour pages critiques
+  const handleRequest = isNative ? handleRequestNative : handleRequestWeb;
+
+  if (variant === 'banner') {
     return (
       <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-l-4 border-amber-500 p-4 rounded-r-lg space-y-2">
         <div className="flex items-start gap-2">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="font-semibold text-sm text-amber-900">Activez les notifications</p>
+            <p className="font-semibold text-sm text-amber-900">
+              Activez les notifications
+            </p>
             <p className="text-xs text-amber-700 mt-0.5">
-              Recevez les nouvelles courses, messages et alertes en temps réel.
+              Recevez les courses, messages et alertes en temps réel.
             </p>
           </div>
         </div>
         <Button
           size="sm"
           className="w-full bg-amber-600 hover:bg-amber-700 text-white"
-          onClick={isNative ? requestPermissionNative : requestPermissionWeb}
+          onClick={handleRequest}
           disabled={requesting}
         >
           <Bell className="h-3.5 w-3.5 mr-1.5" />
-          {requesting ? "Activation..." : "Activer maintenant"}
+          {requesting ? 'Activation...' : 'Activer maintenant'}
         </Button>
       </div>
     );
   }
 
-  if (variant === "card") {
-    // Carte pour pages diagnostiques
+  if (variant === 'card') {
     return (
       <Card className="border-amber-200 bg-amber-50">
         <CardContent className="p-4 space-y-3">
           <div className="flex items-start gap-3">
             <Bell className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-sm text-amber-900">🔔 Activer les notifications</p>
+              <p className="font-semibold text-sm text-amber-900">
+                🔔 Activer les notifications
+              </p>
               <p className="text-xs text-amber-700 mt-1">
-                Sans notifications, CDL ne peut pas vous envoyer les nouvelles courses, messages, alertes et validations.
+                CDL vous envoie les courses, messages et alertes en temps
+                réel.
               </p>
             </div>
           </div>
@@ -229,18 +223,24 @@ export default function NotificationPermissionRequest({ onSuccess, variant = "ca
             <Button
               size="sm"
               className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
-              onClick={isNative ? requestPermissionNative : requestPermissionWeb}
+              onClick={handleRequest}
               disabled={requesting}
             >
               <Bell className="h-3.5 w-3.5 mr-1.5" />
-              {requesting ? "Activation..." : "Activer"}
+              {requesting ? 'Activation...' : 'Activer'}
             </Button>
             {permission === 'denied' && (
               <Button
                 size="sm"
                 variant="outline"
                 className="flex-1 border-amber-300"
-                onClick={isNative ? openSettingsNative : openSettingsWeb}
+                onClick={() =>
+                  toast.info(
+                    isNative
+                      ? '📱 Paramètres → Apps → CDL → Notifications'
+                      : '📱 Cliquez le cadenas dans la barre → Notifications → Autoriser'
+                  )
+                }
               >
                 <Settings className="h-3.5 w-3.5 mr-1.5" />
                 Paramètres
@@ -252,17 +252,16 @@ export default function NotificationPermissionRequest({ onSuccess, variant = "ca
     );
   }
 
-  if (variant === "button") {
-    // Bouton simple
+  if (variant === 'button') {
     return (
       <Button
         size="sm"
         className="bg-primary hover:bg-primary/90 gap-2"
-        onClick={isNative ? requestPermissionNative : requestPermissionWeb}
+        onClick={handleRequest}
         disabled={requesting}
       >
         <Bell className="h-4 w-4" />
-        {requesting ? "Activation..." : "Activer les notifications"}
+        {requesting ? 'Activation...' : 'Activer les notifications'}
       </Button>
     );
   }
