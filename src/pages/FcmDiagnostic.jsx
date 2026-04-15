@@ -66,18 +66,28 @@ export default function FcmDiagnostic() {
       return;
     }
 
-    // ── Service Account backend ───────────────────────────────────────────────
-    setStep('sa', { label: "FIREBASE_SERVICE_ACCOUNT_JSON (backend)", status: "loading" });
+    // ── Test complet du setup Firebase ────────────────────────────────────────
+    setStep('firebase_setup', { label: "Setup Firebase complet (backend)", status: "loading" });
     try {
-      const res = await base44.functions.invoke('testFcm', { ping: true });
-      const d = res.data;
-      if (d.ok && d.sa_client_email) {
-        setStep('sa', { status: "ok", detail: d.sa_client_email });
+      const res = await base44.functions.invoke('testFirebaseSetup', {});
+      if (res.data?.success && res.data.ready) {
+        const d = res.data.diagnostics.tests;
+        const msgs = [];
+        if (d.secrets_vite?.all_present) msgs.push('VITE_* ✅');
+        if (d.service_account?.valid) msgs.push('Service Account ✅');
+        setStep('firebase_setup', { 
+          status: "ok", 
+          detail: msgs.join(' | ') || 'Config complète'
+        });
       } else {
-        setStep('sa', { status: "error", detail: d.error || "JSON invalide" });
+        const missing = res.data?.diagnostics.tests.token_generation_ready?.missing_secrets || [];
+        setStep('firebase_setup', { 
+          status: "error", 
+          detail: `Manquants: ${missing.join(', ')}`
+        });
       }
     } catch (e) {
-      setStep('sa', { status: "error", detail: e.message });
+      setStep('firebase_setup', { status: "error", detail: e.message });
     }
 
     const native = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
