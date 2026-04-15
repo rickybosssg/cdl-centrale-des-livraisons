@@ -1,0 +1,171 @@
+import { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { AlertTriangle, Trash2, XCircle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+
+/**
+ * AdminCourseActions — Boutons + modals Annuler / Supprimer une course (admin uniquement)
+ * Props:
+ *   course     : objet Course
+ *   onDone     : callback après action réussie
+ *   size       : "sm" | "default"
+ */
+export default function AdminCourseActions({ course, onDone, size = "sm" }) {
+  const [mode, setMode] = useState(null); // "cancel" | "delete" | null
+  const [raison, setRaison] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (!course) return null;
+
+  const isAlreadyCancelled = ["annulee", "annulee_par_admin"].includes(course.statut);
+  const isDeleted = !!course.is_deleted;
+
+  if (isDeleted) return null; // course supprimée = non affichée
+
+  const handleConfirm = async () => {
+    if (!raison.trim()) { toast.error("Veuillez saisir une raison"); return; }
+    setLoading(true);
+    try {
+      const res = await base44.functions.invoke("adminCourseAction", {
+        course_id: course.id,
+        action: mode,
+        raison: raison.trim(),
+      });
+      if (!res?.data?.success) throw new Error(res?.data?.error || "Erreur inconnue");
+      toast.success(mode === "cancel" ? "✅ Course annulée" : "✅ Course supprimée");
+      setMode(null);
+      setRaison("");
+      onDone?.();
+    } catch (err) {
+      toast.error("Erreur : " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      {/* ── Boutons inline ── */}
+      <div className="flex gap-1.5">
+        {!isAlreadyCancelled && (
+          <Button
+            size={size}
+            variant="outline"
+            className="border-orange-300 text-orange-700 hover:bg-orange-50 gap-1"
+            onClick={() => { setMode("cancel"); setRaison(""); }}
+          >
+            <XCircle className="h-3.5 w-3.5" />
+            {size !== "sm" && "Annuler"}
+          </Button>
+        )}
+        <Button
+          size={size}
+          variant="outline"
+          className="border-red-300 text-red-700 hover:bg-red-50 gap-1"
+          onClick={() => { setMode("delete"); setRaison(""); }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          {size !== "sm" && "Supprimer"}
+        </Button>
+      </div>
+
+      {/* ── Modal confirmation ── */}
+      <Dialog open={!!mode} onOpenChange={(open) => { if (!open) setMode(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {mode === "cancel" ? (
+                <><XCircle className="h-5 w-5 text-orange-600" /> Annuler la course</>
+              ) : (
+                <><Trash2 className="h-5 w-5 text-red-600" /> Supprimer la course</>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Résumé course */}
+            <div className="p-3 rounded-xl bg-muted/50 border text-sm space-y-1">
+              <p className="font-semibold text-xs text-muted-foreground">Course concernée</p>
+              <p className="font-medium">
+                {course.quartier_depart} → {course.quartier_arrivee}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {course.client_name} · {course.prix?.toLocaleString()} FCFA · {course.statut}
+              </p>
+              {course.livreur_name && (
+                <p className="text-xs text-muted-foreground">🛵 {course.livreur_name}</p>
+              )}
+            </div>
+
+            {/* Impact */}
+            <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
+              mode === "cancel"
+                ? "bg-orange-50 border-orange-200 text-orange-800"
+                : "bg-red-50 border-red-200 text-red-800"
+            }`}>
+              <div className="flex items-center gap-1.5 font-bold">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Impact de cette action
+              </div>
+              {mode === "cancel" ? (
+                <ul className="space-y-1 ml-5 list-disc">
+                  <li>Statut → <strong>annulee_par_admin</strong></li>
+                  <li>Dispatch en cours stoppé immédiatement</li>
+                  {course.livreur_name && <li>Livreur <strong>{course.livreur_name}</strong> libéré</li>}
+                  <li>Client et livreur notifiés</li>
+                  <li>Course conservée dans l'historique</li>
+                </ul>
+              ) : (
+                <ul className="space-y-1 ml-5 list-disc">
+                  <li>Masquée des listes standards</li>
+                  <li>Suppression <strong>logique</strong> (données préservées)</li>
+                  <li>Traçabilité admin conservée</li>
+                  <li>Aucune relation brisée</li>
+                </ul>
+              )}
+            </div>
+
+            {/* Raison */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold">
+                Raison {mode === "cancel" ? "d'annulation" : "de suppression"} *
+              </label>
+              <Textarea
+                placeholder={
+                  mode === "cancel"
+                    ? "Ex: Course en double, erreur de saisie, demande client..."
+                    : "Ex: Test, doublon, données incorrectes..."
+                }
+                value={raison}
+                onChange={(e) => setRaison(e.target.value)}
+                rows={3}
+                className="text-sm"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setMode(null)} disabled={loading}>
+                Annuler
+              </Button>
+              <Button
+                className={`flex-1 gap-2 ${
+                  mode === "cancel"
+                    ? "bg-orange-600 hover:bg-orange-700 text-white"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+                onClick={handleConfirm}
+                disabled={loading || !raison.trim()}
+              >
+                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {loading ? "Traitement..." : mode === "cancel" ? "Confirmer l'annulation" : "Confirmer la suppression"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

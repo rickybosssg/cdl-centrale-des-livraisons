@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, UserPlus, X, RefreshCw, Eye, Clock, Zap, User } from "lucide-react";
+import AdminCourseActions from "../../components/AdminCourseActions";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -167,10 +168,12 @@ export default function GererCourses() {
     });
   };
 
-  const enAttente = sortByUrgence(filterCourses(courses.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport)));
-  const assignees = filterCourses(courses.filter(c => c.statut === "assignee_attente" && !c.moyen_transport));
-  const enCours = filterCourses(courses.filter(c => ["acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport));
-  const terminees = filterCourses(courses.filter(c => ["livree", "annulee"].includes(c.statut) && !c.moyen_transport));
+  // Exclure les courses supprimées logiquement des listes normales
+  const visibles = courses.filter(c => !c.is_deleted);
+  const enAttente = sortByUrgence(filterCourses(visibles.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport)));
+  const assignees = filterCourses(visibles.filter(c => c.statut === "assignee_attente" && !c.moyen_transport));
+  const enCours = filterCourses(visibles.filter(c => ["acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport));
+  const terminees = filterCourses(visibles.filter(c => ["livree", "annulee", "annulee_par_admin"].includes(c.statut) && !c.moyen_transport));
 
   const deplacementsMoto = courses.filter(c => c.moyen_transport === "moto");
   const deplotementsVehicule = courses.filter(c => c.moyen_transport === "vehicule");
@@ -350,9 +353,7 @@ export default function GererCourses() {
                         <UserPlus className="h-3 w-3 mr-1" />
                         Manuel
                       </Button>
-                      <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => changerStatut(course.id, "annulee")}>
-                        <X className="h-3 w-3" />
-                      </Button>
+                      <AdminCourseActions course={course} onDone={loadData} />
                     </>
                   }
                 />
@@ -398,9 +399,7 @@ export default function GererCourses() {
                           Marquer livré
                         </Button>
                       )}
-                      <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => changerStatut(course.id, "annulee")}>
-                        <X className="h-3 w-3" />
-                      </Button>
+                      <AdminCourseActions course={course} onDone={loadData} />
                     </>
                   }
                 />
@@ -410,7 +409,11 @@ export default function GererCourses() {
 
             <TabsContent value="terminees" className="space-y-3 mt-3">
               {terminees.map((course) => (
-                <CourseRow key={course.id} course={course} />
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  actions={<AdminCourseActions course={course} onDone={loadData} />}
+                />
               ))}
               {terminees.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course terminée</p>}
             </TabsContent>
@@ -506,6 +509,14 @@ export default function GererCourses() {
                   )}
                 </div>
               )}
+              {/* Actions admin dans le détail */}
+              <div className="pt-2 border-t flex gap-2">
+                <Button size="sm" variant="outline" className="flex-1" onClick={() => { setDetailDialog(false); setSelectedCourse(selectedCourse); setAssignDialog(true); }}>
+                  <UserPlus className="h-3.5 w-3.5 mr-1" />Assigner
+                </Button>
+                <AdminCourseActions course={selectedCourse} size="default" onDone={() => { setDetailDialog(false); loadData(); }} />
+              </div>
+
               {selectedCourse.historique_assignation && (() => {
                 try {
                   const hist = JSON.parse(selectedCourse.historique_assignation);
