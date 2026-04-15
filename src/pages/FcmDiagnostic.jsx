@@ -7,26 +7,6 @@ import { toast } from "sonner";
 import NotificationPermissionRequest from "@/components/NotificationPermissionRequest";
 import { getFirebaseConfig } from "@/lib/firebaseConfig";
 
-async function getFcmToken() {
-  const { getToken } = await import('firebase/messaging');
-  const { initializeApp, getApps } = await import('firebase/app');
-  const { getMessaging } = await import('firebase/messaging');
-  const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
-  const messaging = getMessaging(app);
-  const params = new URLSearchParams({
-    apiKey: FIREBASE_CONFIG.apiKey || '',
-    authDomain: FIREBASE_CONFIG.authDomain,
-    projectId: FIREBASE_CONFIG.projectId,
-    storageBucket: FIREBASE_CONFIG.storageBucket,
-    messagingSenderId: FIREBASE_CONFIG.messagingSenderId || '',
-    appId: FIREBASE_CONFIG.appId || '',
-  });
-  const reg = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${params}`);
-  await navigator.serviceWorker.ready;
-  const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
-  return { token, reg };
-}
-
 function StatusRow({ label, status, detail }) {
   const icons = {
     loading: <Loader2 className="h-5 w-5 text-muted-foreground animate-spin mt-0.5 flex-shrink-0" />,
@@ -48,7 +28,7 @@ function StatusRow({ label, status, detail }) {
 export default function FcmDiagnostic() {
   const [steps, setSteps] = useState([]);
   const [running, setRunning] = useState(false);
-  const [sending, setSending] = useState(null); // 'foreground'|'background'|'killed'|null
+  const [sending, setSending] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
   const [isNative, setIsNative] = useState(false);
   const [nativeToken, setNativeToken] = useState(null);
@@ -62,7 +42,6 @@ export default function FcmDiagnostic() {
     });
 
   useEffect(() => {
-    // Détecter contexte natif
     const native = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
     setIsNative(!!native);
     runDiagnostic();
