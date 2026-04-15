@@ -6,13 +6,23 @@ import { toast } from "sonner";
 import { getFirebaseConfig } from "@/lib/firebaseConfig";
 
 async function getFcmToken() {
+  console.log('[getFcmToken] START');
+  
   const { getToken } = await import('firebase/messaging');
   const { initializeApp, getApps } = await import('firebase/app');
   const { getMessaging } = await import('firebase/messaging');
   
-  // Charger la config depuis le backend
+  // 1️⃣ Charger la config depuis le backend
+  console.log('[getFcmToken] ⏳ Appel getFirebaseConfig()');
   const firebaseConfig = await getFirebaseConfig();
+  console.log('[getFcmToken] ✅ Config reçue:', {
+    apiKey: firebaseConfig?.apiKey ? '✅' : '❌',
+    messagingSenderId: firebaseConfig?.messagingSenderId ? '✅' : '❌',
+    appId: firebaseConfig?.appId ? '✅' : '❌',
+    vapidKey: firebaseConfig?.vapidKey ? '✅' : '❌',
+  });
   
+  // 2️⃣ Valider complétude
   if (!firebaseConfig || !firebaseConfig.apiKey) {
     throw new Error('Firebase config incomplete: missing apiKey');
   }
@@ -25,37 +35,49 @@ async function getFcmToken() {
   if (!firebaseConfig.vapidKey) {
     throw new Error('Firebase config incomplete: missing vapidKey');
   }
+  console.log('[getFcmToken] ✅ Config valide');
 
-  // Initialiser Firebase avec la config complète
+  // 3️⃣ Initialiser Firebase
+  console.log('[getFcmToken] ⏳ initializeApp()');
   const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
   const messaging = getMessaging(app);
+  console.log('[getFcmToken] ✅ Firebase initialisé');
   
-  // Enregistrer le SW et lui injecter la config via message
+  // 4️⃣ Enregistrer le SW
+  console.log('[getFcmToken] ⏳ register SW');
   const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-  console.log('[NotificationPermissionRequest] SW enregistré:', reg.scope);
+  console.log('[getFcmToken] ✅ SW enregistré:', reg.scope);
   
   await navigator.serviceWorker.ready;
-  console.log('[NotificationPermissionRequest] SW ready');
+  console.log('[getFcmToken] ✅ SW ready');
   
-  // Envoyer la config au SW via message (wait pour s'assurer que le controller existe)
+  // 5️⃣ Envoyer config au SW via postMessage
   const controller = navigator.serviceWorker.controller;
   if (controller) {
-    console.log('[NotificationPermissionRequest] Envoi config au SW');
+    console.log('[getFcmToken] ⏳ postMessage FIREBASE_CONFIG au SW');
+    console.log('[getFcmToken] Config being sent:', {
+      apiKey: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 8) + '...' : '❌',
+      messagingSenderId: firebaseConfig.messagingSenderId ? firebaseConfig.messagingSenderId.substring(0, 8) + '...' : '❌',
+      appId: firebaseConfig.appId ? firebaseConfig.appId.substring(0, 8) + '...' : '❌',
+      vapidKey: firebaseConfig.vapidKey ? firebaseConfig.vapidKey.substring(0, 8) + '...' : '❌',
+    });
     controller.postMessage({
       type: 'FIREBASE_CONFIG',
       config: firebaseConfig,
     });
-    // Petit délai pour s'assurer que le SW a reçu le message
     await new Promise(r => setTimeout(r, 500));
+    console.log('[getFcmToken] ✅ postMessage envoyé et traité');
   } else {
-    console.warn('[NotificationPermissionRequest] ⚠️ SW controller non disponible');
+    console.warn('[getFcmToken] ⚠️ SW controller non disponible');
   }
   
-  // Générer le token
+  // 6️⃣ Générer le token
+  console.log('[getFcmToken] ⏳ getToken()');
   const token = await getToken(messaging, { 
     vapidKey: firebaseConfig.vapidKey, 
     serviceWorkerRegistration: reg 
   });
+  console.log('[getFcmToken] ✅ Token généré:', token.substring(0, 50) + '...');
   
   return token;
 }

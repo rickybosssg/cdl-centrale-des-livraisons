@@ -31,7 +31,13 @@ Deno.serve(async (req) => {
     if (!config.appId) missing.push('VITE_FIREBASE_APP_ID');
     if (!config.vapidKey) missing.push('VITE_FIREBASE_VAPID_KEY');
 
-    console.log(`[getFirebaseConfig] apiKey=${config.apiKey.substring(0, 8)}... | messagingSenderId=${config.messagingSenderId.substring(0, 8)}... | vapidKey=${config.vapidKey.substring(0, 8)}...`);
+    // Log détaillé pour débogage
+    console.log('[getFirebaseConfig] Config brute de Deno.env:', {
+      apiKey: apiKey ? apiKey.substring(0, 8) + '...' : '❌ EMPTY',
+      messagingSenderId: messagingSenderId ? messagingSenderId.substring(0, 8) + '...' : '❌ EMPTY',
+      appId: appId ? appId.substring(0, 8) + '...' : '❌ EMPTY',
+      vapidKey: vapidKey ? vapidKey.substring(0, 8) + '...' : '❌ EMPTY',
+    });
 
     return Response.json({
       success: true,
