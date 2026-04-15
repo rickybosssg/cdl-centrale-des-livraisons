@@ -118,6 +118,16 @@ export default function CourseTracking() {
     try {
       if (FREE_CANCEL.includes(course.statut)) {
         await base44.entities.Course.update(course.id, { statut: "annulee", annulee_par: "client", frais_annulation: 0 });
+        // Libérer le livreur s'il était en attente de confirmation
+        if (course.livreur_email && course.statut === "assignee_attente") {
+          base44.entities.User.filter({ email: course.livreur_email }).then(livs => {
+            if (livs?.[0]) {
+              base44.entities.User.update(livs[0].id, {
+                nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 1) - 1),
+              }).catch(() => {});
+            }
+          }).catch(() => {});
+        }
         toast.success("Course annulée");
         setCourse(c => ({ ...c, statut: "annulee" }));
       } else {
