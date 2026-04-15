@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { ArrowLeft, PlayCircle, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, PlayCircle, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -64,6 +64,19 @@ export default function BedouAudit() {
         </CardContent>
       </Card>
 
+      {/* État audit en cours */}
+      {running && (
+        <Card className="border-blue-200 bg-blue-50 animate-pulse">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+            <div>
+              <p className="font-semibold text-sm text-blue-700">🔄 Audit en cours...</p>
+              <p className="text-xs text-blue-600">Vérification des wallets et transactions</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Résultats */}
       {result && (
         <div className="space-y-4">
@@ -82,30 +95,58 @@ export default function BedouAudit() {
             </CardContent>
           </Card>
 
-          {/* Stats */}
+          {/* Stats principales */}
           <div className="grid grid-cols-2 gap-2">
-            <Card>
+            <Card className="border-blue-200 bg-blue-50">
               <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold text-primary">{result.stats.totalBedou}</p>
-                <p className="text-[10px] text-muted-foreground">Bedou actifs</p>
+                <p className="text-2xl font-bold text-blue-600">{result.stats.totalBedou}</p>
+                <p className="text-[10px] text-muted-foreground">Wallets vérifiés</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-purple-200 bg-purple-50">
               <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold">{result.stats.totalTransactions}</p>
+                <p className="text-2xl font-bold text-purple-600">{result.stats.totalTransactions}</p>
                 <p className="text-[10px] text-muted-foreground">Transactions</p>
               </CardContent>
             </Card>
+            <Card className="border-green-200 bg-green-50">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-green-600">{result.stats.bedouCreated || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Bedou créés</p>
+              </CardContent>
+            </Card>
+            <Card className="border-orange-200 bg-orange-50">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-orange-600">{result.stats.soldeErrorsFixed || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Soldes recalculés</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Stats détaillées */}
+          <div className="grid grid-cols-2 gap-2">
             <Card>
               <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold text-green-600">{result.stats.bedouCreated}</p>
-                <p className="text-[10px] text-muted-foreground">Bedou créés</p>
+                <p className="text-lg font-bold text-red-600">{result.stats.duplicates || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Doublons</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold text-orange-600">{result.stats.soldeErrorsFixed}</p>
-                <p className="text-[10px] text-muted-foreground">Soldes corrigés</p>
+                <p className="text-lg font-bold text-red-500">{result.stats.orphanedTransactions || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Transactions orphelines</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3 text-center">
+                <p className="text-lg font-bold text-amber-600">{result.stats.totalIssuesFound || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Incohérences trouvées</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3 text-center">
+                <p className="text-lg font-bold text-red-700">{result.stats.errorsRemaining || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Erreurs restantes</p>
               </CardContent>
             </Card>
           </div>
