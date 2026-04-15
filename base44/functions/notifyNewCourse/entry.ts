@@ -78,7 +78,27 @@ async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = f
   return { ok: res.ok, invalidToken };
 }
 
+// Déduplication : retourne true si déjà envoyé dans les 30 dernières secondes
+async function isDuplicate(base44, email, notifKey) {
+  const since30s = new Date(Date.now() - 30000).toISOString();
+  const existing = await base44.asServiceRole.entities.Notification.filter({
+    destinataire_email: email,
+    notification_key: notifKey,
+  }).catch(() => []);
+  if (!existing || existing.length === 0) return false;
+  return existing.some(n => n.created_date && n.created_date > since30s);
+}
+
 async function notifyAndPush(base44, accessToken, { email, role, titre, message, type, route, courseId, isHigh = false }) {
+  const notifKey = `${email}__${type}__${courseId || 'none'}__${titre.slice(0, 20)}`;
+
+  // Guard déduplication 30s
+  const alreadySent = await isDuplicate(base44, email, notifKey);
+  if (alreadySent) {
+    console.log(`[notifyNewCourse] SKIP duplicate: ${notifKey}`);
+    return;
+  }
+
   // 1. Notification DB (in-app fallback)
   await base44.asServiceRole.entities.Notification.create({
     destinataire_email: email,
@@ -87,6 +107,7 @@ async function notifyAndPush(base44, accessToken, { email, role, titre, message,
     message,
     type,
     lue: false,
+    notification_key: notifKey,
     ...(courseId ? { course_id: courseId, target_entity_id: courseId, target_entity_type: 'course' } : {}),
     ...(route ? { target_screen: route } : {}),
   }).catch(() => {});
@@ -94,17 +115,23 @@ async function notifyAndPush(base44, accessToken, { email, role, titre, message,
   // 2. FCM push
   if (!accessToken) return;
   const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email });
-  const tokens = tokenRecords.map(r => r.token).filter(Boolean);
-  if (tokens.length === 0) return;
+  // Dédupliquer les tokens
+  const seenTokens = new Set();
+  const uniqueTokenRecords = tokenRecords.filter(r => {
+    if (!r.token || seenTokens.has(r.token)) return false;
+    seenTokens.add(r.token);
+    return true;
+  });
+  if (uniqueTokenRecords.length === 0) return;
 
   const results = await Promise.allSettled(
-    tokens.map(t => sendFcmPush(accessToken, t, titre, message, route, isHigh))
+    uniqueTokenRecords.map(r => sendFcmPush(accessToken, r.token, titre, message, route, isHigh))
   );
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
-    if (r.status === 'fulfilled' && r.value?.invalidToken && tokenRecords[i]?.id) {
-      await base44.asServiceRole.entities.FcmToken.delete(tokenRecords[i].id).catch(() => {});
+    if (r.status === 'fulfilled' && r.value?.invalidToken && uniqueTokenRecords[i]?.id) {
+      await base44.asServiceRole.entities.FcmToken.delete(uniqueTokenRecords[i].id).catch(() => {});
     }
   }
 }

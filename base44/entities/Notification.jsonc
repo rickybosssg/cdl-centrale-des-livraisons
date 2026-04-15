@@ -52,6 +52,11 @@
     "target_section": {
       "type": "string",
       "title": "Section admin (gestion-profils, gestion-transactions\u2026)"
+    },
+    "notification_key": {
+      "type": "string",
+      "title": "Cl\u00e9 de d\u00e9duplication (email__type__entityId__titre)",
+      "description": "Cl\u00e9 unique pour \u00e9viter les doublons dans une fen\u00eatre de 30 secondes"
     }
   },
   "required": [

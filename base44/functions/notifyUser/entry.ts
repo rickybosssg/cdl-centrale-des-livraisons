@@ -185,6 +185,19 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
+    // Guard déduplication 30s
+    const notifKey = `${user_email}__${type}__${course_id || 'none'}__${titre.slice(0, 20)}`;
+    const since30s = new Date(Date.now() - 30000).toISOString();
+    const existing = await base44.asServiceRole.entities.Notification.filter({
+      destinataire_email: user_email,
+      notification_key: notifKey,
+    }).catch(() => []);
+    const isDuplicate = existing && existing.some(n => n.created_date && n.created_date > since30s);
+    if (isDuplicate) {
+      console.log(`[notifyUser] SKIP duplicate: ${notifKey}`);
+      return Response.json({ success: true, skipped: true, reason: 'duplicate_30s' });
+    }
+
     // 1. TOUJOURS créer la notification en base (fallback in-app)
     const notifData = {
       destinataire_email: user_email,
@@ -193,6 +206,7 @@ Deno.serve(async (req) => {
       message,
       type,
       lue: false,
+      notification_key: notifKey,
       ...(course_id ? { course_id } : {}),
       // Deep-link fields
       ...(target_screen ? { target_screen } : route ? { target_screen: route } : {}),
