@@ -44,39 +44,46 @@ async function getAccessToken(serviceAccount) {
 }
 
 async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = false) {
+  const tag = `cdl-new-course-${route}`;
   const res = await fetch(FCM_URL, {
     method: "POST",
     headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-    message: {
-    token: fcmToken,
-    notification: { title, body },
-    data: { route, notif_route: route },
-    android: {
-      priority: isHigh ? 'HIGH' : 'NORMAL',
-      ttl: isHigh ? '86400s' : '604800s',
-      notification: {
-        channel_id: 'cdl_courses',
-        color: '#1a73e8',
-        sound: 'default',
-        vibrate_timings_millis: isHigh ? [0, 300, 100, 300, 100, 300] : [0, 200, 100, 200],
-        notification_priority: isHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
-        visibility: 'PUBLIC',
-        tag: `cdl-new-course-${route}`,
+      message: {
+        token: fcmToken,
+        // OBLIGATOIRE pour affichage Android app fermée
+        notification: { title, body },
+        data: { route, notif_route: route },
+        android: {
+          priority: 'HIGH',
+          ttl: '86400s',
+          notification: {
+            channel_id: 'default',
+            color: '#1a73e8',
+            sound: 'default',
+            vibrate_timings_millis: isHigh ? [0, 300, 100, 300, 100, 300] : [0, 200, 100, 200],
+            notification_priority: isHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
+            visibility: 'PUBLIC',
+            tag,
+          },
+        },
+        webpush: {
+          headers: { Urgency: isHigh ? 'high' : 'normal' },
+          notification: {
+            icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
+            badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
+            vibrate: isHigh ? [300, 100, 300, 100, 300] : [200, 100, 200],
+            requireInteraction: isHigh,
+            renotify: true,
+            tag,
+          },
+          fcm_options: { link: route },
+        },
+        apns: {
+          headers: { 'apns-priority': isHigh ? '10' : '5' },
+          payload: { aps: { sound: 'default', badge: 1, 'content-available': 1 } },
+        },
       },
-    },
-    webpush: {
-      notification: {
-        icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-        badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-        vibrate: isHigh ? [300, 100, 300, 100, 300] : [200, 100, 200],
-        requireInteraction: isHigh,
-        renotify: true,
-        tag: `cdl-new-course-${route}`,
-      },
-      fcm_options: { link: route },
-    },
-    },
     }),
   });
   const result = await res.json();

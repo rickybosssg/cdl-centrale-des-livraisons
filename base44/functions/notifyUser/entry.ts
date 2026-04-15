@@ -124,17 +124,15 @@ async function sendFcmPush(accessToken, fcmToken, title, body, data = {}) {
         ),
         // ── Android : notification système native ─────────────────────────
         android: {
-          priority: isHighPriority ? 'HIGH' : 'NORMAL',
-          ttl: isHighPriority ? '86400s' : '604800s', // 1j ou 7j
+          priority: 'HIGH',
+          ttl: '86400s',
           notification: {
-            channel_id: channelId,
+            channel_id: 'default',
             color: '#1a73e8',
-            // Pas de custom sound sur APK WebView (pas de res/raw)
             sound: 'default',
             vibrate_timings_millis: isHighPriority ? [0, 300, 100, 300, 100, 300] : [0, 200, 100, 200],
             notification_priority: isHighPriority ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
             visibility: 'PUBLIC',
-            // Tag de déduplication Android
             tag: `cdl-${data.type || 'notif'}-${data.courseId || data.course_id || 'gen'}`,
           },
         },

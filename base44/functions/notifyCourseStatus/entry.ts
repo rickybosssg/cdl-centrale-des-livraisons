@@ -46,12 +46,14 @@ async function getAccessToken(serviceAccount) {
 }
 
 async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = false, extraData = {}) {
+  const tag = `cdl-course-${extraData.courseId || 'gen'}`;
   const res = await fetch(FCM_URL, {
     method: "POST",
     headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       message: {
         token: fcmToken,
+        // OBLIGATOIRE pour affichage Android app fermée
         notification: { title, body },
         data: {
           route,
@@ -59,16 +61,16 @@ async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = f
           ...Object.fromEntries(Object.entries(extraData).map(([k, v]) => [k, String(v || '')])),
         },
         android: {
-          priority: isHigh ? 'HIGH' : 'NORMAL',
-          ttl: isHigh ? '86400s' : '604800s',
+          priority: 'HIGH',
+          ttl: '86400s',
           notification: {
-            channel_id: 'cdl_courses',
+            channel_id: 'default',
             color: '#1a73e8',
             sound: 'default',
             notification_priority: isHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
             visibility: 'PUBLIC',
             vibrate_timings_millis: isHigh ? [0, 400, 100, 400, 100, 400] : [0, 200, 100, 200],
-            tag: `cdl-course-${extraData.courseId || 'gen'}`,
+            tag,
           },
         },
         webpush: {
@@ -79,9 +81,13 @@ async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = f
             vibrate: isHigh ? [400, 100, 400, 100, 400] : [200, 100, 200],
             requireInteraction: isHigh,
             renotify: true,
-            tag: `cdl-course-${extraData.courseId || Date.now()}`,
+            tag,
           },
           fcm_options: { link: route },
+        },
+        apns: {
+          headers: { 'apns-priority': isHigh ? '10' : '5' },
+          payload: { aps: { sound: 'default', badge: 1, 'content-available': 1 } },
         },
       },
     }),
