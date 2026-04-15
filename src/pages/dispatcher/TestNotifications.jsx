@@ -16,37 +16,80 @@ export default function TestNotifications() {
   const [testLogs, setTestLogs] = useState([]);
   const [lastResult, setLastResult] = useState(null);
 
-  // Charger les utilisateurs
+  // Charger les utilisateurs avec token FCM (connectés sur l'APK)
   useEffect(() => {
     const load = async () => {
       try {
-        const admins = await base44.asServiceRole.entities.User.filter(
-          { role: 'admin' },
-          '-created_date',
-          20
+        console.log('[TestNotifications] Chargement des utilisateurs avec token FCM...');
+        
+        // Charger TOUS les tokens FCM enregistrés
+        const fcmTokens = await base44.asServiceRole.entities.FcmToken.filter(
+          { is_active: true },
+          '-registered_at',
+          100
         );
-        const profiles = await base44.asServiceRole.entities.UserProfile.filter(
-          { status: 'actif' },
-          '-created_date',
-          50
-        );
+        console.log('[TestNotifications] Tokens trouvés:', fcmTokens.length);
+
+        if (fcmTokens.length === 0) {
+          console.warn('[TestNotifications] ⚠️ Aucun token FCM — aucun utilisateur connecté sur l\'APK');
+          setUsers([]);
+          setLoading(false);
+          toast.warning('Aucun utilisateur connecté sur l\'APK avec tokens');
+          return;
+        }
+
+        // Récupérer les infos utilisateur pour chaque token
         const uniqueUsers = new Map();
-        admins.forEach(u => {
-          uniqueUsers.set(u.email, { email: u.email, role: 'admin', full_name: u.full_name });
-        });
-        profiles.forEach(p => {
-          if (!uniqueUsers.has(p.user_email)) {
-            uniqueUsers.set(p.user_email, {
-              email: p.user_email,
-              role: p.profile_type,
-              full_name: p.user_nom || 'N/A',
-            });
+        
+        for (const token of fcmTokens) {
+          try {
+            // Charger l'utilisateur User
+            const userList = await base44.asServiceRole.entities.User.filter(
+              { email: token.user_email },
+              null,
+              1
+            );
+            
+            if (userList.length > 0) {
+              const user = userList[0];
+              uniqueUsers.set(token.user_email, {
+                email: token.user_email,
+                role: user.role === 'admin' ? 'admin' : 'admin_other',
+                full_name: user.full_name || 'Admin',
+                token_device: token.device_type,
+                token_registered: token.registered_at,
+              });
+            } else {
+              // Chercher dans UserProfile si pas en User
+              const profileList = await base44.asServiceRole.entities.UserProfile.filter(
+                { user_email: token.user_email, status: 'actif' },
+                null,
+                1
+              );
+              
+              if (profileList.length > 0) {
+                const profile = profileList[0];
+                uniqueUsers.set(token.user_email, {
+                  email: token.user_email,
+                  role: profile.profile_type,
+                  full_name: profile.user_nom || 'N/A',
+                  token_device: token.device_type,
+                  token_registered: token.registered_at,
+                });
+              }
+            }
+          } catch (err) {
+            console.warn('[TestNotifications] Erreur loading user:', token.user_email, err.message);
           }
-        });
-        setUsers(Array.from(uniqueUsers.values()));
+        }
+
+        const userArray = Array.from(uniqueUsers.values());
+        console.log('[TestNotifications] Utilisateurs chargés:', userArray.length);
+        setUsers(userArray);
         setLoading(false);
       } catch (err) {
-        toast.error('Erreur chargement utilisateurs: ' + err.message);
+        console.error('[TestNotifications] Erreur:', err.message);
+        toast.error('Erreur chargement: ' + err.message);
         setLoading(false);
       }
     };
@@ -143,13 +186,31 @@ export default function TestNotifications() {
         <h1 className="text-lg font-bold">🧪 Test Notifications APK</h1>
       </div>
 
+      {/* Status tokens */}
+      <Card className={users.length > 0 ? 'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'}>
+        <CardContent className="p-4 space-y-2 text-sm">
+          {users.length > 0 ? (
+            <>
+              <p className="font-semibold text-green-900">✅ {users.length} utilisateur(s) trouvé(s) avec token FCM actif</p>
+              <p className="text-green-800">Ces utilisateurs sont connectés sur l'APK et recevront les notifications.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold text-orange-900">⚠️ Aucun utilisateur avec token FCM</p>
+              <p className="text-orange-800">
+                <strong>Action requise :</strong> Connecte-toi sur l'APK, autorise les notifications, et attends que le token soit enregistré (~5 sec).
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Guide */}
       <Card className="border-blue-200 bg-blue-50">
         <CardContent className="p-4 space-y-2 text-sm">
           <p className="font-semibold text-blue-900">📝 Comment tester :</p>
           <ol className="space-y-1 text-blue-800 ml-4 list-decimal">
-            <li>Sélectionne un utilisateur (livreur/admin)</li>
-            <li>L'utilisateur doit être connecté sur l'APK</li>
+            <li>Sélectionne un utilisateur (déjà connecté sur l'APK)</li>
             <li>Clique "Envoyer test" — la notification doit arriver en <strong>5 sec max</strong></li>
             <li>Teste dans les 3 cas : app ouverte, background, fermée</li>
             <li>Vérifie les logs pour confirmer token → envoi → réception</li>
