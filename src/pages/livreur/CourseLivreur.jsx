@@ -378,9 +378,48 @@ export default function CourseLivreur() {
         </Button>
       </div>
 
-      {/* Timer acceptation */}
+      {/* Timer + Refus pour assignee_attente */}
       {course.statut === 'assignee_attente' && (
-        <DispatchTimer heureAssignation={course.heure_assignation} dureeSecondes={60} />
+        <>
+          <DispatchTimer heureAssignation={course.heure_assignation} dureeSecondes={60} />
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+              disabled={updating}
+              onClick={async () => {
+                setUpdating(true);
+                const me = await base44.auth.me();
+                let historique = [];
+                try { if (course.historique_assignation) historique = JSON.parse(course.historique_assignation); } catch (_) {}
+                historique = historique.map(h =>
+                  h.livreur_email === me.email && h.statut === 'proposee'
+                    ? { ...h, statut: 'refuse', heure_refus: new Date().toISOString() }
+                    : h
+                );
+                await base44.entities.Course.update(id, {
+                  statut: 'en_attente',
+                  livreur_email: null,
+                  livreur_name: null,
+                  telephone_livreur: null,
+                  heure_assignation: null,
+                  historique_assignation: JSON.stringify(historique),
+                });
+                await base44.auth.updateMe({
+                  nombre_courses_actives: Math.max(0, (me.nombre_courses_actives || 1) - 1),
+                  courses_refusees: (me.courses_refusees || 0) + 1,
+                  courses_refusees_consecutives: (me.courses_refusees_consecutives || 0) + 1,
+                }).catch(() => {});
+                base44.functions.invoke('autoDispatch', { course_id: id, exclude_emails: [me.email], force: true }).catch(() => {});
+                toast.info("Course refusée — dispatch vers le prochain livreur");
+                navigate(-1);
+                setUpdating(false);
+              }}
+            >
+              ❌ Refuser cette course
+            </Button>
+          </div>
+        </>
       )}
 
       {/* Mini Chat */}

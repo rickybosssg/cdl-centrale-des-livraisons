@@ -57,6 +57,47 @@ export default function NewCourseAlert({ course, onClose, user }) {
     };
   }, [course?.id]);
 
+  const handleRefuse = async () => {
+    if (!course || !user) return;
+    clearInterval(intervalRef.current);
+    // 1. UI — fermer immédiatement
+    onClose();
+    // 2. Mettre à jour l'historique et relancer le dispatch
+    try {
+      const fresh = await base44.entities.Course.filter({ id: course.id });
+      const c = fresh?.[0];
+      if (!c || c.statut !== "assignee_attente" || c.livreur_email !== user.email) return;
+      let historique = [];
+      try { if (c.historique_assignation) historique = JSON.parse(c.historique_assignation); } catch (_) {}
+      historique = historique.map(h =>
+        h.livreur_email === user.email && h.statut === 'proposee'
+          ? { ...h, statut: 'refuse', heure_refus: new Date().toISOString() }
+          : h
+      );
+      // Remettre la course en attente, exclure ce livreur
+      await base44.entities.Course.update(course.id, {
+        statut: 'en_attente',
+        livreur_email: null,
+        livreur_name: null,
+        telephone_livreur: null,
+        heure_assignation: null,
+        historique_assignation: JSON.stringify(historique),
+      });
+      // Décrémenter nombre_courses_actives du livreur
+      await base44.auth.updateMe({
+        nombre_courses_actives: Math.max(0, (user.nombre_courses_actives || 1) - 1),
+        courses_refusees: (user.courses_refusees || 0) + 1,
+        courses_refusees_consecutives: (user.courses_refusees_consecutives || 0) + 1,
+      }).catch(() => {});
+      // Relancer dispatch en excluant ce livreur
+      base44.functions.invoke('autoDispatch', {
+        course_id: course.id,
+        exclude_emails: [user.email],
+        force: true,
+      }).catch(() => {});
+    } catch (_) {}
+  };
+
   const handleAccept = async () => {
     if (!course || !user) return;
     setAccepting(true);
@@ -189,11 +230,11 @@ export default function NewCourseAlert({ course, onClose, user }) {
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  className="flex-1 border-gray-300 text-gray-500 h-11"
-                  onClick={onClose}
+                  className="flex-1 border-red-300 text-red-500 h-11"
+                  onClick={handleRefuse}
                   disabled={accepting}
                 >
-                  Refuser
+                  ❌ Refuser
                 </Button>
                 <Button
                   className="flex-[2] h-14 bg-green-500 hover:bg-green-600 text-white font-black text-lg shadow-lg"
