@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Bell } from "lucide-react";
 import { vibrateNotif, playNotificationSound } from "@/lib/vibration";
-import { requestNotificationPermission, registerFcmToken, onForegroundMessage, sendPushNotification } from "@/lib/pushNotifications";
+
 import { motion } from "framer-motion";
 import NotificationPanel from "./NotificationPanel";
 import { useTopNotification } from "@/context/TopNotificationContext";
@@ -22,31 +22,6 @@ export default function NotificationBell({ userEmail }) {
     }
   };
 
-  const initFcm = async () => {
-    try {
-      const granted = await requestNotificationPermission();
-      if (!granted) return;
-      const token = await registerFcmToken();
-      if (token) {
-        await base44.functions.invoke('saveFcmToken', { token });
-        onForegroundMessage((payload) => {
-          if (payload.notification) {
-            vibrateNotif();
-            playNotificationSound();
-            showNotification({
-              title: payload.notification.title,
-              message: payload.notification.body,
-              type: 'info',
-              autoCloseDuration: 8000,
-            });
-          }
-        });
-      }
-    } catch (err) {
-      console.debug('[FCM] Init error:', err?.message);
-    }
-  };
-
   useEffect(() => {
     if (!userEmail) return;
     let isMounted = true;
@@ -54,8 +29,6 @@ export default function NotificationBell({ userEmail }) {
     const initialTimer = setTimeout(() => {
       if (isMounted) loadNotifs();
     }, 500);
-
-    initFcm();
 
     const interval = setInterval(() => {
       if (isMounted) loadNotifs();
@@ -73,7 +46,7 @@ export default function NotificationBell({ userEmail }) {
           type: event.data.type === 'danger' ? 'error' : (event.data.type || 'info'),
           autoCloseDuration: event.data.priority === 'high' ? 12000 : 7000,
         });
-        sendPushNotification(event.data.titre, event.data.message);
+
       } else if (event.type === 'update') {
         setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
       }
