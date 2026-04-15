@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, XCircle, Loader2, RefreshCw, AlertTriangle, Smartphone, Globe, Bell } from "lucide-react";
 import { toast } from "sonner";
+import NotificationPermissionRequest from "@/components/NotificationPermissionRequest";
 
 const FIREBASE_CONFIG = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -283,8 +284,16 @@ export default function FcmDiagnostic() {
         </Button>
       </div>
 
+      {/* Permission notifications */}
+      {!running && (
+        <NotificationPermissionRequest 
+          variant="card"
+          onSuccess={() => runDiagnostic()}
+        />
+      )}
+
       {/* Status global */}
-      {!running && steps.length > 0 && (
+       {!running && steps.length > 0 && (
         <div className={`rounded-xl p-3 text-sm font-semibold text-center ${
           allOk ? 'bg-green-50 text-green-700 border border-green-200' :
           hasError ? 'bg-red-50 text-red-700 border border-red-200' :

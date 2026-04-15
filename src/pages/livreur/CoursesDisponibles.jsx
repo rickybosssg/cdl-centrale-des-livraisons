@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import CourseCard from "../../components/CourseCard";
+import NotificationPermissionBanner from "../../components/NotificationPermissionBanner";
 import usePullToRefresh from "../../hooks/usePullToRefresh";
 import { toast } from "sonner";
 import { vibrateSuccess } from "@/lib/vibration";
@@ -147,8 +148,11 @@ export default function CoursesDisponibles() {
 
   return (
     <div className="space-y-4 pb-20">
+      {/* Bannière notifications */}
+      <NotificationPermissionBanner />
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Opportunités & Gains</h1>
           <p className="text-xs text-muted-foreground">

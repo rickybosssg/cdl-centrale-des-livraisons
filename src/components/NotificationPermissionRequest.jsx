@@ -1,0 +1,218 @@
+import { useState } from "react";
+import { Bell, Settings, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "sonner";
+
+const FIREBASE_CONFIG = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: "cdl-app-4743c.firebaseapp.com",
+  projectId: "cdl-app-4743c",
+  storageBucket: "cdl-app-4743c.appspot.com",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+
+async function getFcmToken() {
+  const { getToken } = await import('firebase/messaging');
+  const { initializeApp, getApps } = await import('firebase/app');
+  const { getMessaging } = await import('firebase/messaging');
+  const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
+  const messaging = getMessaging(app);
+  const params = new URLSearchParams({
+    apiKey: FIREBASE_CONFIG.apiKey || '',
+    authDomain: FIREBASE_CONFIG.authDomain,
+    projectId: FIREBASE_CONFIG.projectId,
+    storageBucket: FIREBASE_CONFIG.storageBucket,
+    messagingSenderId: FIREBASE_CONFIG.messagingSenderId || '',
+    appId: FIREBASE_CONFIG.appId || '',
+  });
+  const reg = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${params}`);
+  await navigator.serviceWorker.ready;
+  const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+  return token;
+}
+
+export default function NotificationPermissionRequest({ onSuccess, variant = "card" }) {
+  const [requesting, setRequesting] = useState(false);
+  const [permission, setPermission] = useState(Notification.permission);
+
+  const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
+
+  const requestPermissionWeb = async () => {
+    setRequesting(true);
+    try {
+      const perm = await Notification.requestPermission();
+      setPermission(perm);
+      
+      if (perm === 'granted') {
+        // Générer et enregistrer le token FCM
+        try {
+          const token = await getFcmToken();
+          if (token) {
+            const { base44 } = await import('@/api/base44Client');
+            await base44.functions.invoke('saveFcmToken', { token });
+            toast.success("✅ Notifications activées avec succès !");
+            onSuccess?.();
+          }
+        } catch (e) {
+          toast.warning("Notifications autorisées, mais erreur token FCM : " + e.message);
+        }
+      } else if (perm === 'denied') {
+        toast.error("Les notifications ont été refusées. Ouvrez les paramètres pour les autoriser.");
+      }
+    } catch (e) {
+      toast.error("Erreur: " + e.message);
+    }
+    setRequesting(false);
+  };
+
+  const requestPermissionNative = async () => {
+    setRequesting(true);
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+      
+      // Créer le canal
+      await PushNotifications.createChannel({
+        id: 'default',
+        name: 'CDL Notifications',
+        description: 'Toutes les notifications CDL',
+        importance: 5,
+        sound: 'default',
+        vibration: true,
+        lights: true,
+        lightColor: '#1a73e8',
+      }).catch(() => {});
+
+      // Demander permission
+      const perm = await PushNotifications.requestPermissions();
+      
+      if (perm.receive === 'granted') {
+        // Enregistrer pour obtenir le token
+        await PushNotifications.register();
+        
+        // Attendre le token
+        const token = await new Promise((resolve) => {
+          PushNotifications.addListener('registration', (t) => resolve(t.value));
+          setTimeout(() => resolve(null), 8000);
+        });
+
+        if (token) {
+          const { base44 } = await import('@/api/base44Client');
+          await base44.functions.invoke('saveFcmToken', { token });
+          toast.success("✅ Notifications activées avec succès !");
+          onSuccess?.();
+        }
+      } else {
+        toast.error("Les notifications ont été refusées. Ouvrez les paramètres pour les autoriser.");
+      }
+    } catch (e) {
+      toast.error("Erreur: " + e.message);
+    }
+    setRequesting(false);
+  };
+
+  const openSettingsWeb = () => {
+    toast.info("📱 Guide d'activation :\n1. Cliquez sur le cadenas dans la barre d'adresse\n2. Notifications → Autoriser\n3. Recharger la page\n4. Cliquez à nouveau sur 'Activer les notifications'", { duration: 8000 });
+  };
+
+  const openSettingsNative = async () => {
+    try {
+      const { App } = await import('@capacitor/app');
+      await App.openUrl({
+        url: 'package://com.android.settings/Settings$AppNotificationSettingsActivity?app_package=' + (window.location.hostname || 'io.cdl.app'),
+      }).catch(() => {
+        toast.info("📱 Allez à : Paramètres → Apps → CDL → Notifications");
+      });
+    } catch (_) {
+      toast.info("📱 Allez à : Paramètres → Apps → CDL → Notifications");
+    }
+  };
+
+  if (permission === 'granted') return null;
+
+  if (variant === "banner") {
+    // Bannière simple pour pages critiques
+    return (
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-l-4 border-amber-500 p-4 rounded-r-lg space-y-2">
+        <div className="flex items-start gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-sm text-amber-900">Activez les notifications</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Recevez les nouvelles courses, messages et alertes en temps réel.
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+          onClick={isNative ? requestPermissionNative : requestPermissionWeb}
+          disabled={requesting}
+        >
+          <Bell className="h-3.5 w-3.5 mr-1.5" />
+          {requesting ? "Activation..." : "Activer maintenant"}
+        </Button>
+      </div>
+    );
+  }
+
+  if (variant === "card") {
+    // Carte pour pages diagnostiques
+    return (
+      <Card className="border-amber-200 bg-amber-50">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <Bell className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-sm text-amber-900">🔔 Activer les notifications</p>
+              <p className="text-xs text-amber-700 mt-1">
+                Sans notifications, CDL ne peut pas vous envoyer les nouvelles courses, messages, alertes et validations.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={isNative ? requestPermissionNative : requestPermissionWeb}
+              disabled={requesting}
+            >
+              <Bell className="h-3.5 w-3.5 mr-1.5" />
+              {requesting ? "Activation..." : "Activer"}
+            </Button>
+            {permission === 'denied' && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 border-amber-300"
+                onClick={isNative ? openSettingsNative : openSettingsWeb}
+              >
+                <Settings className="h-3.5 w-3.5 mr-1.5" />
+                Paramètres
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (variant === "button") {
+    // Bouton simple
+    return (
+      <Button
+        size="sm"
+        className="bg-primary hover:bg-primary/90 gap-2"
+        onClick={isNative ? requestPermissionNative : requestPermissionWeb}
+        disabled={requesting}
+      >
+        <Bell className="h-4 w-4" />
+        {requesting ? "Activation..." : "Activer les notifications"}
+      </Button>
+    );
+  }
+
+  return null;
+}

@@ -9,6 +9,7 @@ import RoleSetup from "../components/RoleSetup";
 import LivreurDocuments from "../components/LivreurDocuments";
 import PendingProfiles from "../components/PendingProfiles";
 import IncompleteProfileGuard from "../components/IncompleteProfileGuard";
+import NotificationPermissionBanner from "../components/NotificationPermissionBanner";
 import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome.jsx";
 import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
@@ -299,8 +300,15 @@ export default function Home() {
 
   return (
     <div className="space-y-0">
+      {/* Bannière notifications */}
+      {user && (
+        <div className="px-4 pt-4 pb-2">
+          <NotificationPermissionBanner />
+        </div>
+      )}
+
       {/* Profils en attente */}
-      {pendingProfiles.length > 0 && (
+       {pendingProfiles.length > 0 && (
         <div className="px-4 pt-4 pb-2">
           <PendingProfiles pendingProfiles={pendingProfiles} onProfileChange={loadUser} />
         </div>
