@@ -9,6 +9,7 @@ import { useTabNavigation } from "@/hooks/useTabNavigation";
 import { useMessageCount } from "@/hooks/useMessageCount";
 import usePresence from "@/hooks/usePresence";
 import AppHeader from "./AppHeader";
+import AriaButton from "./AriaButton";
 
 const NAV_ITEMS = {
   client: [
@@ -104,6 +105,9 @@ export default function AppLayout({ userRole, userEmail }) {
       >
         <PageTransition />
       </main>
+
+      {/* ARIA — Assistante flottante */}
+      <AriaButton userRole={userRole} />
 
       {/* Bottom Nav */}
       <nav className="sticky bottom-0 z-50 bg-card border-t shadow-lg bottom-nav safe-bottom">
