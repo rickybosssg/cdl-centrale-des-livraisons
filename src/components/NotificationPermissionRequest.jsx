@@ -118,16 +118,8 @@ export default function NotificationPermissionRequest({ onSuccess, variant = "ca
   };
 
   const openSettingsNative = async () => {
-    try {
-      const { App } = await import('@capacitor/app');
-      await App.openUrl({
-        url: 'package://com.android.settings/Settings$AppNotificationSettingsActivity?app_package=' + (window.location.hostname || 'io.cdl.app'),
-      }).catch(() => {
-        toast.info("📱 Allez à : Paramètres → Apps → CDL → Notifications");
-      });
-    } catch (_) {
-      toast.info("📱 Allez à : Paramètres → Apps → CDL → Notifications");
-    }
+    // Pour APK natif, afficher simplement le guide car on peut pas ouvrir les paramètres directement
+    toast.info("📱 Allez à : Paramètres → Apps → CDL → Notifications");
   };
 
   if (permission === 'granted') return null;
