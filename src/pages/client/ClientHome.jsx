@@ -7,10 +7,9 @@ import {
   Shield, Zap, Headphones, ChevronRight, Navigation, Eye
 } from "lucide-react";
 import NotationCourse from "../../components/NotationCourse";
-import PubliciteHomeBanner from "@/components/PubliciteHomeBanner";
 import BedouWidget from "../../components/BedouWidget";
 import ChatAdmin from "@/components/ChatAdmin";
-import AdCarousel from "@/components/AdCarousel";
+import PubCDLBanner from "@/components/PubCDLBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link as RouterLink } from "react-router-dom";
@@ -301,10 +300,9 @@ export default function ClientHome({ user }) {
           </div>
         </div>
 
-        {/* ── Publicité ── */}
+        {/* ── Publicité CDL ── */}
         <div className="px-4">
-          <AdCarousel placement="accueil" userRole="client" />
-          <PubliciteHomeBanner userRole="client" userId={user.id} userEmail={user.email} />
+          <PubCDLBanner placement="dashboard_client" userRole="client" />
         </div>
 
         {/* ── 4. COURSE(S) ACTIVE(S) ── */}

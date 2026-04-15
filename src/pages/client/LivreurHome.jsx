@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import NewCourseAlert from "../../components/NewCourseAlert";
 import ChatAdmin from "@/components/ChatAdmin";
+import PubCDLBanner from "@/components/PubCDLBanner";
 import moment from "moment";
 
 // ── GPS ───────────────────────────────────────────────────────────────────────
@@ -319,6 +320,9 @@ export default function LivreurHome({ user }) {
           <p className="text-[10px] text-muted-foreground mt-0.5">Total</p>
         </div>
       </div>
+
+      {/* ── Publicité CDL ── */}
+      <PubCDLBanner placement="dashboard_livreur" userRole="livreur" />
 
       {/* ── Message motivant si hors ligne ── */}
       {!disponible && (

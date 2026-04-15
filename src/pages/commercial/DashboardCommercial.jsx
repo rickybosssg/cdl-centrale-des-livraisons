@@ -9,16 +9,27 @@ import {
   Lightbulb, AlertCircle
 } from "lucide-react";
 import ChatAdmin from "@/components/ChatAdmin";
+import PubCDLBanner from "@/components/PubCDLBanner";
 import { toast } from "sonner";
 import moment from "moment";
 import { fmt } from "@/lib/formatMoney";
 
-// ─── Statut dynamique du code ────────────────────────────────────────────────
-function getCodeStatut(code) {
+// ─── Statut dynamique du code (correction rétroactive) ───────────────────────
+// Un code est considéré "actif" si :
+// - explicitement marqué actif ET valide, OU
+// - a déjà des utilisations (lien parrainage déjà utilisé), OU
+// - profil commercial validé (actif) avec un code existant
+function getCodeStatut(code, profileActif = false) {
   if (!code) return null;
-  if (code.actif && code.statut === "valide") return "actif";
+  // Bloqué/refusé en priorité
+  if (code.statut === "refuse" || code.statut === "bloque") return "bloque";
+  // Actif si marqué actif, OU si utilisations > 0, OU si profil validé avec code
+  const hasUsages = (code.nombre_utilisations || 0) > 0;
+  const isExplicitlyActive = code.actif === true;
+  const isValidStatut = !code.statut || code.statut === "valide" || code.statut === "actif" || code.statut === "en_attente";
+  if (isExplicitlyActive || hasUsages || (profileActif && isValidStatut)) return "actif";
   if (code.statut === "refuse") return "bloque";
-  return "attente"; // en_attente ou tout autre cas
+  return "attente";
 }
 
 const CODE_STATUT_CFG = {
@@ -57,6 +68,7 @@ export default function DashboardCommercial({ user }) {
   const [loadingPerf, setLoadingPerf] = useState(false);
   const [error, setError] = useState(null);
   const [bedou, setBedou] = useState(null);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     if (user?.email) loadCode();
@@ -66,13 +78,20 @@ export default function DashboardCommercial({ user }) {
     try {
       setError(null);
       setLoading(true);
-      const [codes, bedouRecords] = await Promise.all([
+      const [codes, bedouRecords, profiles] = await Promise.all([
         base44.entities.CodePromo.filter({ commercial_email: user.email }),
         base44.entities.Bedou.filter({ user_email: user.email }),
+        base44.entities.UserProfile.filter({ user_email: user.email, profile_type: "commercial" }),
       ]);
       const c = codes?.[0] || null;
+      const prof = profiles?.[0] || null;
       setCode(c);
       setBedou(bedouRecords?.[0] || null);
+      setProfile(prof);
+      // Correction rétroactive : si le code existe, que le profil est validé et que le code n'est pas encore actif → l'activer
+      if (c && prof?.status === "actif" && !c.actif && c.statut !== "refuse") {
+        base44.entities.CodePromo.update(c.id, { actif: true, statut: "valide" }).catch(() => {});
+      }
       if (c?.code) await loadPerformances(c.code);
     } catch (err) {
       console.error('[DashboardCommercial] loadCode error:', err);
@@ -170,7 +189,8 @@ export default function DashboardCommercial({ user }) {
   const targetAmount = 5000;
   const progressPercent = Math.min(100, (gainBloque / targetAmount) * 100);
   const canWithdraw = gainBloque >= targetAmount;
-  const codeStatut = getCodeStatut(code);
+  const profileActif = profile?.status === "actif";
+  const codeStatut = getCodeStatut(code, profileActif);
   const statutCfg = CODE_STATUT_CFG[codeStatut] || CODE_STATUT_CFG.attente;
   const isCodeActif = codeStatut === "actif";
   const shareLink = `https://cdl.base44.app/signup?ref=${code?.code}`;
@@ -418,6 +438,11 @@ export default function DashboardCommercial({ user }) {
           </div>
         </>
       )}
+
+      {/* ── Publicité CDL ── */}
+      <div className="px-4">
+        <PubCDLBanner placement="dashboard_commercial" userRole="commercial" />
+      </div>
 
       {/* ── 6. CONSEILS DYNAMIQUES ── */}
       <div className="px-4 space-y-2">
