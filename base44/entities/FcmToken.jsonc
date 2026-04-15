@@ -4,19 +4,36 @@
   "properties": {
     "user_email": {
       "type": "string",
-      "title": "Email utilisateur"
+      "title": "Email utilisateur",
+      "index": true
     },
     "token": {
       "type": "string",
-      "title": "Token FCM"
+      "title": "Token FCM",
+      "index": true
     },
-    "user_role": {
+    "device_type": {
       "type": "string",
-      "title": "R\u00f4le utilisateur"
+      "enum": [
+        "android_native",
+        "web",
+        "ios"
+      ],
+      "title": "Type d'appareil",
+      "default": "android_native"
     },
-    "last_seen": {
+    "registered_at": {
       "type": "string",
-      "title": "Derni\u00e8re activit\u00e9"
+      "title": "Date d'enregistrement"
+    },
+    "last_used": {
+      "type": "string",
+      "title": "Derni\u00e8re utilisation"
+    },
+    "is_active": {
+      "type": "boolean",
+      "title": "Token actif",
+      "default": true
     }
   },
   "required": [

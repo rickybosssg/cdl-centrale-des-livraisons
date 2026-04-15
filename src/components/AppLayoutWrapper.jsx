@@ -147,11 +147,14 @@ export default function AppLayoutWrapper({ user }) {
           console.log('[FCM] Mode natif Capacitor détecté');
           const { cleanup, permissionStatus } = await initCapacitorPush({
 
-            onToken: (token) => {
-              console.log('[FCM] Token natif reçu → sauvegarde backend');
-              base44.functions.invoke('saveFcmToken', { token }).catch((e) => {
-                console.error('[FCM] Erreur sauvegarde token:', e?.message);
-              });
+            onToken: async (token) => {
+              console.log('[FCM] ✅ Token natif reçu → sauvegarde backend');
+              try {
+                const res = await base44.functions.invoke('saveFcmToken', { token });
+                console.log('[FCM] ✅ Token sauvegardé en BDD:', res.data?.token_id);
+              } catch (e) {
+                console.error('[FCM] ❌ Erreur sauvegarde token:', e?.message);
+              }
             },
 
             onForegroundNotif: (notification) => {

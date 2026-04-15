@@ -67,6 +67,15 @@ async function sendToToken(accessToken, fcmToken, title, body, data = {}) {
         token: fcmToken,
         notification: { title, body },
         data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+        // Android spécifique — canal et priorité pour app fermée
+        android: {
+          priority: "high",
+          notification: {
+            channel_id: "default",
+            sound: "default",
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          },
+        },
         webpush: {
           notification: {
             icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
@@ -112,12 +121,21 @@ Deno.serve(async (req) => {
 
     let fcmTokens = directTokens || [];
     if (user_email && fcmTokens.length === 0) {
-      const profiles = await base44.asServiceRole.entities.FcmToken.filter({ user_email });
+      const profiles = await base44.asServiceRole.entities.FcmToken.filter({
+        user_email,
+        is_active: true,
+      });
       fcmTokens = profiles.map(p => p.token).filter(Boolean);
+      console.log(`[sendFcmNotification] Tokens trouvés pour ${user_email}:`, fcmTokens.length);
     }
 
     if (fcmTokens.length === 0) {
-      return Response.json({ sent: 0, message: "Aucun token FCM trouvé pour " + user_email });
+      console.warn(`[sendFcmNotification] ⚠️ Aucun token FCM pour ${user_email}`);
+      return Response.json({
+        sent: 0,
+        message: `Aucun token FCM trouvé pour ${user_email}`,
+        note: 'L\'utilisateur doit être connecté et avoir autorisé les notifications',
+      });
     }
 
     const results = await Promise.allSettled(
