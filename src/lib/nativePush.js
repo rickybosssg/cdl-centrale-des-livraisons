@@ -63,83 +63,125 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
     return { cleanup: () => {}, permissionStatus: 'unavailable' };
   }
 
-  // ── 1. Créer les canaux Android AVANT de demander la permission ──────────
-  await createAndroidChannels(PushNotifications);
+  console.log('\n[NativePush] 🔴 ════════════════════════════════════');
+  console.log('[NativePush] 🔴 INIT CAPACITOR PUSH NOTIFICATIONS');
 
-  // ── 2. Vérifier la permission actuelle ───────────────────────────────────
+  // ── 1. Créer les canaux Android AVANT de demander la permission ──────────
+  console.log('[NativePush] 🟡 STEP 1: Creating Android channels...');
+  await createAndroidChannels(PushNotifications);
+  console.log('[NativePush] ✅ Android channels created');
+
+  // ── 2. Vérifier la permission ACTUELLE ───────────────────────────────────
+  console.log('[NativePush] 🟡 STEP 2: Checking current permission status...');
   let permResult;
   try {
     permResult = await PushNotifications.checkPermissions();
-    console.log('[NativePush] Permission actuelle:', permResult.receive);
-  } catch (_) {
+    console.log('[NativePush] 📋 Permission status:', permResult.receive);
+  } catch (checkErr) {
+    console.warn('[NativePush] ⚠️ checkPermissions failed:', checkErr?.message);
     permResult = { receive: 'prompt' };
   }
 
+  // ── 3. Si la permission est REFUSÉE définitivement → retour ──────────────
   if (permResult.receive === 'denied') {
-    console.warn('[NativePush] Permission définitivement refusée');
+    console.log('[NativePush] ❌ STEP 3: Permission is PERMANENTLY DENIED');
+    console.log('[NativePush] ❌ User must enable in Settings → Apps → CDL → Notifications');
     if (onPermissionDenied) onPermissionDenied('denied');
+    console.log('[NativePush] ❌ ════════════════════════════════════\n');
     return { cleanup: () => {}, permissionStatus: 'denied' };
   }
 
+  // ── 4. Si pas encore accordée → DEMANDER la permission native ───────────
   if (permResult.receive !== 'granted') {
-    // ── 3. Demander la permission (Android 13+) ───────────────────────────
-    const reqResult = await PushNotifications.requestPermissions();
-    console.log('[NativePush] Permission demandée:', reqResult.receive);
-    if (reqResult.receive !== 'granted') {
-      console.warn('[NativePush] Permission refusée par l\'utilisateur');
-      if (onPermissionDenied) onPermissionDenied('prompt_denied');
-      return { cleanup: () => {}, permissionStatus: 'prompt_denied' };
+    console.log('[NativePush] 🟡 STEP 3: Requesting permission from user...');
+    console.log('[NativePush] 🟡 Android native permission dialog should appear now');
+    
+    let reqResult;
+    try {
+      reqResult = await PushNotifications.requestPermissions();
+      console.log('[NativePush] 📋 User response:', reqResult.receive);
+    } catch (reqErr) {
+      console.error('[NativePush] ❌ requestPermissions error:', reqErr?.message);
+      if (onPermissionDenied) onPermissionDenied('request_error');
+      console.log('[NativePush] ❌ ════════════════════════════════════\n');
+      return { cleanup: () => {}, permissionStatus: 'error' };
     }
+
+    if (reqResult.receive !== 'granted') {
+      console.log('[NativePush] ❌ STEP 4: User DENIED the permission');
+      console.log('[NativePush] ❌ Cannot proceed without permission');
+      if (onPermissionDenied) onPermissionDenied('user_denied');
+      console.log('[NativePush] ❌ ════════════════════════════════════\n');
+      return { cleanup: () => {}, permissionStatus: 'user_denied' };
+    }
+
+    console.log('[NativePush] ✅ STEP 4: User GRANTED the permission');
+  } else {
+    console.log('[NativePush] ✅ STEP 3: Permission already GRANTED');
   }
 
-  // ── 4. Enregistrer l'appareil auprès de FCM ──────────────────────────────
-  console.log('[NativePush] Enregistrement FCM...');
-  await PushNotifications.register();
+  // ── 5. Enregistrer l'appareil auprès de FCM ──────────────────────────────
+  console.log('[NativePush] 🟡 STEP 5: Registering device with FCM...');
+  try {
+    await PushNotifications.register();
+    console.log('[NativePush] ✅ Device registered, waiting for token...');
+  } catch (regErr) {
+    console.error('[NativePush] ❌ register() failed:', regErr?.message);
+    console.log('[NativePush] ❌ ════════════════════════════════════\n');
+    return { cleanup: () => {}, permissionStatus: 'register_error' };
+  }
 
   const listeners = [];
 
-  // ── 5. Token reçu → sauvegarder ─────────────────────────────────────────
+  // ── 6. Token reçu → callback ─────────────────────────────────────────────
   const tokenListener = await PushNotifications.addListener('registration', (token) => {
     const tokenValue = token.value;
-    console.log('[NativePush] ✅ TOKEN FCM GÉNÉRÉ:', tokenValue?.substring(0, 25) + '...');
-    console.log('[NativePush] Token complet (256 chars):', tokenValue?.substring(0, 256));
+    console.log('[NativePush] ✅ ════════════════════════════════════');
+    console.log('[NativePush] ✅ STEP 6: FCM TOKEN GENERATED');
+    console.log('[NativePush] ✅ Token start (25 chars):', tokenValue?.substring(0, 25) + '...');
+    console.log('[NativePush] ✅ Token full (256 chars):', tokenValue?.substring(0, 256));
+    console.log('[NativePush] ✅ ════════════════════════════════════');
+    
     if (onToken) {
-      console.log('[NativePush] Appel onToken callback...');
+      console.log('[NativePush] 🟢 Calling onToken callback...');
       onToken(tokenValue);
     } else {
-      console.warn('[NativePush] ⚠️ onToken callback non fourni!');
+      console.warn('[NativePush] ⚠️ onToken callback NOT PROVIDED!');
     }
   });
   listeners.push(tokenListener);
 
-  // Erreur d'enregistrement → retry après 5s
+  // Erreur d'enregistrement → retry
   const errorListener = await PushNotifications.addListener('registrationError', (err) => {
-    console.error('[NativePush] ❌ Erreur enregistrement FCM:', err.error);
+    console.error('[NativePush] ❌ Registration error event:', err.error);
     setTimeout(async () => {
-      console.log('[NativePush] Retry enregistrement FCM...');
-      try { await PushNotifications.register(); } catch (_) {}
+      console.log('[NativePush] 🔄 Retrying FCM registration...');
+      try { 
+        await PushNotifications.register();
+        console.log('[NativePush] ✅ Retry successful');
+      } catch (retryErr) {
+        console.error('[NativePush] ❌ Retry failed:', retryErr?.message);
+      }
     }, 5000);
   });
   listeners.push(errorListener);
 
-  // ── 6. Notification reçue en FOREGROUND (app ouverte) ───────────────────
+  // ── 7. Notification reçue en FOREGROUND ──────────────────────────────────
   const foregroundListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
-    console.log('[NativePush] Notification foreground:', notification.title, '| data:', JSON.stringify(notification.data || {}));
+    console.log('[NativePush] 📬 Foreground notification:', notification.title);
+    console.log('[NativePush] 📬 Data:', JSON.stringify(notification.data || {}));
     if (onForegroundNotif) onForegroundNotif(notification);
   });
   listeners.push(foregroundListener);
 
-  // ── 7. Tap notification (background OU app fermée) → deep link ───────────
-  // CORRECTION CRITIQUE : utiliser postMessage au lieu de window.location.href
-  // pour que React Router gère la navigation sans rechargement
+  // ── 8. Tap notification ──────────────────────────────────────────────────
   const tapListener = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
     const data = action.notification?.data || {};
     const route = data.notif_route || data.route || data.target_screen || null;
-    console.log('[NativePush] ✅ Tap notification → route:', route, '| data:', JSON.stringify(data));
+    console.log('[NativePush] 👆 Notification tapped → route:', route);
     if (onNotificationTap) {
       onNotificationTap({ route, data });
     }
-    // Stocker en sessionStorage pour que FcmDeepLinkHandler le capte si le composant n'est pas encore monté
     if (route && route.startsWith('/')) {
       try {
         sessionStorage.setItem('cdl_notif_route', route);
@@ -148,7 +190,10 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   });
   listeners.push(tapListener);
 
-  console.log('[NativePush] ✅ Push Capacitor initialisé avec succès');
+  console.log('[NativePush] ✅ ════════════════════════════════════');
+  console.log('[NativePush] ✅ ALL LISTENERS REGISTERED');
+  console.log('[NativePush] ✅ CAPACITOR PUSH FULLY INITIALIZED');
+  console.log('[NativePush] ✅ ════════════════════════════════════\n');
 
   // Cleanup
   const cleanup = async () => {
