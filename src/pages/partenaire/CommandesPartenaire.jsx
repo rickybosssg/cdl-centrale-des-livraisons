@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { vibrateSuccess, vibrateLight } from "@/lib/vibration";
 import { lancerDispatch } from "@/lib/dispatch";
 import moment from "moment";
-import { useState, useEffect, useRef } from "react";
 import ContactCard from "@/components/ContactCard";
 
 const STATUT_CONFIG = {

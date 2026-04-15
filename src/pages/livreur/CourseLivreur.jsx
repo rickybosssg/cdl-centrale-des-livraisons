@@ -11,7 +11,6 @@ import StatusBadge from "../../components/StatusBadge";
 import { toast } from "sonner";
 import { vibrateSuccess, vibrateMedium, vibrateNotif, playNotificationSound } from "@/lib/vibration";
 import { triggerWhatsAppNotification, waMsgCourseCompletedClient, waMsgCourseCompletedDriver } from "@/lib/whatsappNotifications";
-import { useState, useEffect } from "react";
 import ContactCard from "@/components/ContactCard";
 
 export default function CourseLivreur() {
