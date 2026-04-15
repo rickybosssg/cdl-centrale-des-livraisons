@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { registerSW } from "@/lib/swRegister";
 import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
@@ -120,6 +121,18 @@ export default function AppLayoutWrapper({ user }) {
     load();
     return () => { isMounted = false; };
   }, [initialized, userReady]);
+
+  // Service Worker minimal — étape 1 du setup FCM
+  useEffect(() => {
+    console.log('[AppLayoutWrapper] Enregistrement SW minimal');
+    registerSW().then(reg => {
+      if (reg) {
+        console.log('[AppLayoutWrapper] ✅ SW enregistré avec succès');
+      }
+    }).catch(err => {
+      console.error('[AppLayoutWrapper] ❌ Erreur SW:', err);
+    });
+  }, []);
 
   // FCM — détection native (APK) vs web (PWA)
   useEffect(() => {
