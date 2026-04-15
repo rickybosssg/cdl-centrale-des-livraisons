@@ -385,9 +385,23 @@ function PubAdminCard({ pub, onEdit, onToggle, onDelete, deleting }) {
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
-        {pub.image_url && (
-          <div className="relative h-20 bg-muted">
-            <img src={pub.image_url} alt={pub.titre} className="w-full h-full object-cover" />
+        {(pub.image_url || pub.video_url) && (
+          <div className="relative bg-gray-50 flex items-center justify-center" style={{ minHeight: "80px", maxHeight: "160px" }}>
+            {pub.video_url ? (
+              <video
+                src={pub.video_url}
+                muted loop playsInline
+                className="max-w-full max-h-40 object-contain"
+                style={{ display: "block" }}
+              />
+            ) : (
+              <img
+                src={pub.image_url}
+                alt={pub.titre}
+                className="max-w-full max-h-40 object-contain"
+                style={{ display: "block" }}
+              />
+            )}
             {pub.video_url && (
               <span className="absolute top-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">▶ Vidéo</span>
             )}

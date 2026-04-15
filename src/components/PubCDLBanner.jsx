@@ -51,7 +51,7 @@ export default function PubCDLBanner({ placement, userRole = "client" }) {
   if (!pub || dismissed) return null;
 
   return (
-    <div className="relative rounded-2xl overflow-hidden shadow-sm border border-border">
+    <div className="relative rounded-2xl overflow-hidden shadow-sm border border-border bg-black/5">
       {/* Badge pub */}
       <span className="absolute top-2 left-2 z-10 bg-black/50 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
         📢 Publicité
@@ -64,21 +64,30 @@ export default function PubCDLBanner({ placement, userRole = "client" }) {
         <X className="h-3 w-3" />
       </button>
 
-      {/* Vidéo ou Image */}
+      {/* Vidéo */}
       {pub.video_url ? (
-        <video
-          src={pub.video_url}
-          autoPlay muted loop playsInline
-          className="w-full max-h-40 object-cover cursor-pointer"
-          onClick={handleClick}
-        />
+        <div className="w-full bg-black" style={{ aspectRatio: "16/9" }}>
+          <video
+            src={pub.video_url}
+            autoPlay muted loop playsInline
+            className="w-full h-full object-contain cursor-pointer"
+            onClick={handleClick}
+          />
+        </div>
       ) : pub.image_url ? (
-        <img
-          src={pub.image_url}
-          alt={pub.titre}
-          className="w-full max-h-40 object-cover cursor-pointer"
+        /* Image — fond neutre + contain pour ne jamais rogner */
+        <div
+          className="w-full flex items-center justify-center bg-gray-50 cursor-pointer"
+          style={{ minHeight: "120px", maxHeight: "240px" }}
           onClick={handleClick}
-        />
+        >
+          <img
+            src={pub.image_url}
+            alt={pub.titre}
+            className="max-w-full max-h-60 object-contain"
+            style={{ display: "block" }}
+          />
+        </div>
       ) : null}
 
       {/* Titre + CTA */}
