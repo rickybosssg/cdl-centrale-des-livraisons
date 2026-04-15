@@ -1,15 +1,16 @@
-import { Phone, MessageCircle } from "lucide-react";
+import { Phone, MessageCircle, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
  * ContactCard — Carte de contact style Uber
- * Affiche nom, téléphone, statut + boutons appel/WhatsApp
+ * Affiche nom, téléphone, statut + note moyenne + boutons appel/WhatsApp
  */
 export default function ContactCard({ 
   name, 
   phone, 
   status, 
   avatar = null,
+  rating = null,
   className = "" 
 }) {
   // Validation téléphone
@@ -54,9 +55,20 @@ export default function ContactCard({
           </div>
         )}
 
-        {/* Nom et statut */}
+        {/* Nom, statut et note */}
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm text-foreground truncate">{name || "Utilisateur"}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-bold text-sm text-foreground truncate">{name || "Utilisateur"}</p>
+            {rating && rating.note_moyenne > 0 && (
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                <span className="text-xs font-bold text-amber-600">{rating.note_moyenne}</span>
+                {rating.nombre_notes && (
+                  <span className="text-[10px] text-muted-foreground">({rating.nombre_notes})</span>
+                )}
+              </div>
+            )}
+          </div>
           {status && (
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />

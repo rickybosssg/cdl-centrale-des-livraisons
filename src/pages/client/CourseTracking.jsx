@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import moment from "moment";
 import ReportIssueModal from "@/components/ReportIssueModal";
+import RatingModal from "@/components/RatingModal";
 import ContactCard from "@/components/ContactCard";
 
 const STATUT_CFG = {
@@ -39,6 +40,7 @@ export default function CourseTracking() {
 
   const [course, setCourse]         = useState(null);
   const [livreur, setLivreur]       = useState(null);
+  const [livreurRating, setLivreurRating] = useState(null);
   const [loading, setLoading]       = useState(true);
   const [eta, setEta]               = useState(null);
   const [distance, setDistance]     = useState(null);
@@ -50,6 +52,7 @@ export default function CourseTracking() {
   const [cancelling, setCancelling] = useState(false);
   const [cancelFees, setCancelFees] = useState(0);
   const [panelOpen, setPanelOpen]   = useState(true);
+  const [ratingOpen, setRatingOpen] = useState(false);
 
   useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
 
@@ -63,7 +66,14 @@ export default function CourseTracking() {
       setLastUpdate(new Date());
       if (c.livreur_email) {
         const livs = await base44.entities.User.filter({ email: c.livreur_email });
-        if (livs?.length) setLivreur(livs[0]);
+        if (livs?.length) {
+          setLivreur(livs[0]);
+          // Charger les notes du livreur
+          setLivreurRating({
+            note_moyenne: livs[0].note_moyenne || 0,
+            nombre_notes: livs[0].nombre_notes || 0,
+          });
+        }
       }
     } catch (err) { if (!silent) toast.error(err.message); }
     finally { setLoading(false); setRefreshing(false); }
@@ -271,13 +281,24 @@ export default function CourseTracking() {
             )}
           </div>
 
-          {/* Carte contact livreur */}
+          {/* Carte contact livreur + bouton notation si livré */}
           {isAssigned && panelOpen && (
-            <ContactCard
-              name={livreurNom}
-              phone={livreurPhone}
-              status={course.statut === "livree" ? `Livré le ${moment(course.date_livraison).format("DD/MM à HH:mm")}` : "En route"}
-            />
+            <>
+              <ContactCard
+                name={livreurNom}
+                phone={livreurPhone}
+                status={course.statut === "livree" ? `Livré le ${moment(course.date_livraison).format("DD/MM à HH:mm")}` : "En route"}
+                rating={livreurRating}
+              />
+              {course.statut === "livree" && (
+                <Button
+                  className="w-full gap-2 bg-amber-600 hover:bg-amber-700"
+                  onClick={() => setRatingOpen(true)}
+                >
+                  ⭐ Noter cette livraison
+                </Button>
+              )}
+            </>
           )}
 
           {/* Trajet résumé */}
@@ -348,6 +369,7 @@ export default function CourseTracking() {
       )}
 
       <ReportIssueModal open={reportOpen} onOpenChange={setReportOpen} course={course} user={user} />
+      <RatingModal open={ratingOpen} onOpenChange={setRatingOpen} course={course} user={user} />
     </div>
   );
 }

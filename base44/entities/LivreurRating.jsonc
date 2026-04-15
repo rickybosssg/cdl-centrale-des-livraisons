@@ -2,65 +2,41 @@
   "name": "LivreurRating",
   "type": "object",
   "properties": {
+    "course_id": {
+      "type": "string",
+      "title": "ID de la course"
+    },
     "livreur_email": {
       "type": "string",
       "title": "Email du livreur"
+    },
+    "livreur_name": {
+      "type": "string",
+      "title": "Nom du livreur"
     },
     "client_email": {
       "type": "string",
       "title": "Email du client"
     },
-    "course_id": {
+    "client_name": {
       "type": "string",
-      "title": "ID de la course"
+      "title": "Nom du client"
     },
-    "rating": {
+    "note": {
       "type": "number",
+      "title": "Note (1-5 \u00e9toiles)",
       "minimum": 1,
-      "maximum": 5,
-      "title": "Note (1-5)"
+      "maximum": 5
     },
-    "comment": {
+    "commentaire": {
       "type": "string",
-      "title": "Commentaire"
-    },
-    "week_start_date": {
-      "type": "string",
-      "title": "D\u00e9but de la semaine"
+      "title": "Commentaire optionnel"
     }
   },
   "required": [
+    "course_id",
     "livreur_email",
     "client_email",
-    "course_id",
-    "rating"
-  ],
-  "rls": {
-    "create": {
-      "created_by": "{{user.email}}"
-    },
-    "read": {
-      "$or": [
-        {
-          "data.client_email": "{{user.email}}"
-        },
-        {
-          "data.livreur_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
-    },
-    "update": {
-      "created_by": "{{user.email}}"
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+    "note"
+  ]
 }
