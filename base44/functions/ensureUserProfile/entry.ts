@@ -35,6 +35,18 @@ Deno.serve(async (req) => {
     const onboardingOk = user.onboarding_completed || body.onboarding_completed;
     if (!onboardingOk) {
       console.log(`[ensureUserProfile] onboarding_completed=false pour userId=${user.id}`);
+      // Audit log
+      try {
+        await base44.asServiceRole.functions.invoke('auditLoginAttempt', {
+          step: 'success',
+          method: 'session',
+          identifier: user.email,
+          user_id: user.id,
+          user_email: user.email,
+          error_code: 'onboarding_incomplete',
+          error_message: 'Onboarding non terminé',
+        });
+      } catch (_) {}
       return Response.json({ status: 'needs_onboarding', needs_onboarding: true, reason: 'ONBOARDING NON TERMINE' });
     }
 
@@ -118,9 +130,37 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
 
+    // Audit log succès
+    try {
+      await base44.asServiceRole.functions.invoke('auditLoginAttempt', {
+        step: 'success',
+        method: 'session',
+        identifier: user.email,
+        user_id: user.id,
+        user_email: user.email,
+        user_role: user.role,
+        profile_status: created ? 'created' : 'exists',
+        current_profile_type: userType,
+      });
+    } catch (_) {}
+
     return Response.json({ status: 'ok', needs_onboarding: false, user_type: userType, fiche_created: created });
   } catch (error) {
     console.error(`[ensureUserProfile] ERREUR:`, error.message);
+    
+    // Audit log erreur
+    try {
+      const user = await base44.auth.me();
+      await base44.asServiceRole.functions.invoke('auditLoginAttempt', {
+        step: 'error',
+        method: 'session',
+        identifier: user?.email,
+        user_id: user?.id,
+        error_code: 'profile_load_error',
+        error_message: error.message,
+      });
+    } catch (_) {}
+    
     return Response.json({ error: error.message }, { status: 500 });
   }
 });

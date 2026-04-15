@@ -253,14 +253,54 @@ Deno.serve(async (req) => {
     const payload = await req.json();
 
     const { step, phone, otp, otp_key } = payload;
+    const normalized = phone ? normalizePhone(phone) : null;
+
+    // Log chaque tentative
+    const auditLog = {
+      step,
+      method: 'phone',
+      identifier: normalized || phone,
+      timestamp: new Date().toISOString(),
+    };
 
     if (step === "request") {
       const result = await handleRequestOTP(base44, phone);
+      
+      // Enregistrer la tentative
+      try {
+        await base44.asServiceRole.functions.invoke('auditLoginAttempt', {
+          ...auditLog,
+          error_code: result.success ? null : 'invalid_format',
+          error_message: result.error || null,
+        });
+      } catch (_) {}
+      
       return Response.json(result);
     }
 
     if (step === "verify") {
       const result = await handleVerifyOTP(base44, phone, otp, otp_key);
+      
+      // Enregistrer la tentative
+      try {
+        let errorCode = null;
+        if (!result.success) {
+          if (result.error.includes('Code expiré')) errorCode = 'expired_code';
+          else if (result.error.includes('Code incorrect')) errorCode = 'wrong_code';
+          else if (result.error.includes('Trop de tentatives')) errorCode = 'too_many_attempts';
+        }
+        
+        await base44.asServiceRole.functions.invoke('auditLoginAttempt', {
+          ...auditLog,
+          step: 'verify',
+          error_code: errorCode,
+          error_message: result.error || null,
+          user_id: result.user?.id,
+          user_email: result.user?.email,
+          user_phone: normalized,
+        });
+      } catch (_) {}
+      
       return Response.json(result);
     }
 

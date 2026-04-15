@@ -1,0 +1,88 @@
+{
+  "name": "LoginAuditLog",
+  "type": "object",
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "title": "Timestamp"
+    },
+    "step": {
+      "type": "string",
+      "enum": [
+        "request",
+        "verify",
+        "success",
+        "error"
+      ],
+      "title": "\u00c9tape de connexion"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "email",
+        "phone",
+        "google"
+      ],
+      "title": "M\u00e9thode utilis\u00e9e"
+    },
+    "identifier": {
+      "type": "string",
+      "title": "Email ou t\u00e9l\u00e9phone utilis\u00e9"
+    },
+    "error_code": {
+      "type": "string",
+      "title": "Code erreur si applicable"
+    },
+    "error_message": {
+      "type": "string",
+      "title": "Message d'erreur si applicable"
+    },
+    "user_id": {
+      "type": "string",
+      "title": "ID utilisateur si trouv\u00e9"
+    },
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur si trouv\u00e9"
+    },
+    "user_phone": {
+      "type": "string",
+      "title": "T\u00e9l\u00e9phone utilisateur si trouv\u00e9"
+    },
+    "profile_status": {
+      "type": "string",
+      "enum": [
+        "created",
+        "exists",
+        "missing",
+        "corrupted"
+      ],
+      "title": "\u00c9tat du profil CDL"
+    },
+    "user_role": {
+      "type": "string",
+      "title": "R\u00f4le utilisateur"
+    },
+    "profiles_count": {
+      "type": "number",
+      "title": "Nombre de profils CDL"
+    },
+    "current_profile_type": {
+      "type": "string",
+      "title": "Type de profil actif"
+    },
+    "ip_address": {
+      "type": "string",
+      "title": "Adresse IP"
+    },
+    "user_agent": {
+      "type": "string",
+      "title": "User Agent"
+    }
+  },
+  "required": [
+    "timestamp",
+    "step",
+    "method"
+  ]
+}

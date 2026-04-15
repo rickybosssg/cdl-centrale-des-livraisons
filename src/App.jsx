@@ -110,6 +110,7 @@ import PubCommercial from './pages/staff/PubCommercial';
 import StaffAdmin from './pages/staff/StaffAdmin';
 import AuditLogs from './pages/staff/AuditLogs';
 import AdminDiagnostics from './pages/dispatcher/AdminDiagnostics';
+import AdminAuthDiagnostics from './pages/dispatcher/AdminAuthDiagnostics';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -369,6 +370,7 @@ const AuthenticatedApp = () => {
           <Route path="/playstore-validation" element={<PlayStoreValidationFinal />} />
           <Route path="/whatsapp-alerts" element={<WhatsAppAlerts />} />
           <Route path="/admin-diagnostics" element={<AdminDiagnostics />} />
+          <Route path="/admin-auth-diagnostics" element={<AdminAuthDiagnostics />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
           <Route path="/profils" element={<ProfilsHub />} />
