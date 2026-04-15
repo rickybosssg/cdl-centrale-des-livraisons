@@ -168,25 +168,7 @@ function FcmDeepLinkHandler() {
       navigator.serviceWorker.addEventListener('message', onSwMsg);
     }
 
-    // CAS 3 : App ouverte (foreground web) → Firebase onMessage
-    let unsubFcm = null;
-    import('./lib/pushNotifications').then(({ onForegroundMessage }) => {
-      onForegroundMessage((payload) => {
-        const data = payload.data || {};
-        const title = payload.notification?.title || data.title || 'CDL';
-        const body = payload.notification?.body || data.body || '';
-        import('sonner').then(({ toast }) => {
-          toast(title, {
-            description: body,
-            duration: 8000,
-            action: data.route ? { label: 'Voir', onClick: () => navigate(data.route) } : undefined,
-          });
-        });
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      }).then(unsub => { unsubFcm = unsub; }).catch(() => {});
-    }).catch(() => {});
-
-    // CAS 4 : APK natif Capacitor → notifications au lancement à froid
+    // CAS 3 & 4 : APK natif Capacitor → notifications au lancement à froid
     import('./lib/nativePush').then(({ isNativeApp, getDeliveredNotifications }) => {
       if (!isNativeApp()) return;
       getDeliveredNotifications().then((notifs) => {
@@ -204,7 +186,6 @@ function FcmDeepLinkHandler() {
 
     return () => {
       if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onSwMsg);
-      if (unsubFcm) unsubFcm();
     };
   }, []);
 
