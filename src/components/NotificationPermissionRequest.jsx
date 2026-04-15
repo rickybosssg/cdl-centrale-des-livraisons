@@ -35,8 +35,8 @@ async function getFcmToken() {
 }
 
 export default function NotificationPermissionRequest({ onSuccess, variant = "card" }) {
-  const [requesting, setRequesting] = useState(false);
-  const [permission, setPermission] = useState(Notification.permission);
+   const [requesting, setRequesting] = useState(false);
+   const [permission, setPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
 
   const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
 
@@ -45,22 +45,25 @@ export default function NotificationPermissionRequest({ onSuccess, variant = "ca
     try {
       const perm = await Notification.requestPermission();
       setPermission(perm);
-      
+
       if (perm === 'granted') {
         // Générer et enregistrer le token FCM
+        let tokenGenerated = false;
         try {
           const token = await getFcmToken();
           if (token) {
             const { base44 } = await import('@/api/base44Client');
             await base44.functions.invoke('saveFcmToken', { token });
+            tokenGenerated = true;
             toast.success("✅ Notifications activées avec succès !");
-            onSuccess?.();
           }
         } catch (e) {
-          toast.warning("Notifications autorisées, mais erreur token FCM : " + e.message);
+          console.warn('FCM Token error:', e);
+          toast.warning("⚠️ Notifications autorisées, mais erreur token FCM. Rechargez la page.");
         }
+        if (tokenGenerated) onSuccess?.();
       } else if (perm === 'denied') {
-        toast.error("Les notifications ont été refusées. Ouvrez les paramètres pour les autoriser.");
+        toast.error("❌ Les notifications ont été refusées. Ouvrez les paramètres pour les autoriser.");
       }
     } catch (e) {
       toast.error("Erreur: " + e.message);

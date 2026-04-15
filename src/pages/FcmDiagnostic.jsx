@@ -284,12 +284,27 @@ export default function FcmDiagnostic() {
         </Button>
       </div>
 
-      {/* Permission notifications */}
+      {/* Permission notifications + Token display */}
       {!running && (
-        <NotificationPermissionRequest 
-          variant="card"
-          onSuccess={() => runDiagnostic()}
-        />
+        <>
+          <NotificationPermissionRequest 
+            variant="card"
+            onSuccess={() => runDiagnostic()}
+          />
+          
+          {/* Affichage du token actuel */}
+          {(webToken || nativeToken) && (
+            <Card className="border-green-200 bg-green-50">
+              <CardContent className="p-4 space-y-2">
+                <p className="text-xs font-bold text-green-800">✅ Token FCM actuel</p>
+                <div className="bg-white rounded-lg p-3 text-xs font-mono break-all text-green-700 border border-green-200 max-h-20 overflow-auto">
+                  {webToken || nativeToken}
+                </div>
+                <p className="text-[10px] text-green-600">Enregistré automatiquement. Vous pouvez maintenant tester les notifications.</p>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       {/* Status global */}
@@ -378,9 +393,12 @@ export default function FcmDiagnostic() {
           </div>
 
           {!activeToken && !running && (
-            <p className="text-xs text-amber-600 text-center font-medium">
-              ⚠️ Token FCM manquant — complétez les checks ci-dessus d'abord
-            </p>
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-center space-y-2">
+              <p className="text-xs text-red-700 font-bold">❌ Token FCM manquant</p>
+              <p className="text-xs text-red-600">1. Activez les notifications via le bouton ci-dessus</p>
+              <p className="text-xs text-red-600">2. Rechargez la page</p>
+              <p className="text-xs text-red-600">3. Relancez le diagnostic</p>
+            </div>
           )}
         </CardContent>
       </Card>
