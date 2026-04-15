@@ -60,12 +60,15 @@ async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = f
         },
         android: {
           priority: isHigh ? 'HIGH' : 'NORMAL',
+          ttl: isHigh ? '86400s' : '604800s',
           notification: {
-            channel_id: isHigh ? 'cdl_courses_urgent' : 'cdl_courses',
+            channel_id: 'cdl_courses',
             color: '#1a73e8',
-            notification_priority: isHigh ? 'PRIORITY_MAX' : 'PRIORITY_DEFAULT',
+            sound: 'default',
+            notification_priority: isHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
             visibility: 'PUBLIC',
             vibrate_timings_millis: isHigh ? [0, 400, 100, 400, 100, 400] : [0, 200, 100, 200],
+            tag: `cdl-course-${extraData.courseId || 'gen'}`,
           },
         },
         webpush: {

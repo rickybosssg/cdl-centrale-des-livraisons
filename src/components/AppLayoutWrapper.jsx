@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
+import NotificationPermissionBanner from "./NotificationPermissionBanner";
 
 export default function AppLayoutWrapper({ user }) {
   // ⚠️ Tous les hooks d'abord — jamais après un return conditionnel (Rules of Hooks)
@@ -122,59 +123,104 @@ export default function AppLayoutWrapper({ user }) {
 
   // FCM — détection native (APK) vs web (PWA)
   useEffect(() => {
+    let nativeCleanup = null;
+
     const initFcm = async () => {
       try {
-        // ── CAS 1 : APK Android (Capacitor natif) ──────────────────────
         const { isNativeApp, initCapacitorPush } = await import('@/lib/nativePush');
+
+        // ── CAS 1 : APK Android (Capacitor natif) ──────────────────────────
         if (isNativeApp()) {
           console.log('[FCM] Mode natif Capacitor détecté');
-          await initCapacitorPush({
+          const { cleanup, permissionStatus } = await initCapacitorPush({
+
             onToken: (token) => {
-              // Sauvegarder le token FCM natif en backend
-              base44.functions.invoke('saveFcmToken', { token }).catch(() => {});
+              console.log('[FCM] Token natif reçu → sauvegarde backend');
+              base44.functions.invoke('saveFcmToken', { token }).catch((e) => {
+                console.error('[FCM] Erreur sauvegarde token:', e?.message);
+              });
             },
+
             onForegroundNotif: (notification) => {
-              // App ouverte : afficher un toast avec lien
+              // App ouverte → toast avec navigation React Router (pas window.location)
               const data = notification.data || {};
-              const route = data.notif_route || data.route || data.target_screen;
+              const route = data.notif_route || data.route || data.target_screen || null;
+              console.log('[FCM] Foreground notification:', notification.title, '→', route);
               import('sonner').then(({ toast }) => {
                 toast(notification.title || 'CDL', {
                   description: notification.body || '',
                   duration: 8000,
                   action: route ? {
                     label: 'Voir',
-                    // Navigation React Router compatible
-                    onClick: () => { window.location.href = window.location.origin + route; },
+                    // postMessage → FcmDeepLinkHandler dans App.jsx gère la navigation
+                    onClick: () => {
+                      window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
+                    },
                   } : undefined,
                 });
               });
               if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
             },
-            onNotificationTap: ({ route }) => {
-              // Tap depuis background/app fermée → naviguer directement
+
+            onNotificationTap: ({ route, data }) => {
+              // Tap depuis background/app fermée
+              // sessionStorage déjà stocké dans nativePush.js
+              // On tente aussi une navigation directe si React est déjà monté
+              console.log('[FCM] Tap notification → route:', route);
               if (route && route.startsWith('/')) {
-                window.location.href = window.location.origin + route;
+                window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
               }
             },
+
+            onPermissionDenied: (reason) => {
+              console.warn('[FCM] Permission notifications refusée:', reason);
+              // Le bandeau NotificationPermissionBanner s'affiche via son propre useEffect
+            },
           });
-          return; // Ne pas initialiser le SW web si natif
+
+          nativeCleanup = cleanup;
+          console.log('[FCM] Init Capacitor terminée, permission:', permissionStatus);
+          return;
         }
 
-        // ── CAS 2 : Navigateur web (PWA / dev) ─────────────────────────
+        // ── CAS 2 : Navigateur web (PWA / dev) ─────────────────────────────
         if (typeof window === 'undefined' || !('Notification' in window)) return;
         const mod = await import('@/lib/pushNotifications');
-        if (!mod?.requestNotificationPermission) return;
-        const permitted = await mod.requestNotificationPermission();
-        if (!permitted) return;
-        const token = await mod.registerFcmToken();
-        if (token) {
-          base44.functions.invoke('saveFcmToken', { token }).catch(() => {});
+        if (!mod?.registerFcmToken) return;
+        // Permission déjà accordée → enregistrer silencieusement
+        if (Notification.permission === 'granted') {
+          const token = await mod.registerFcmToken();
+          if (token) {
+            console.log('[FCM] Token web enregistré');
+            base44.functions.invoke('saveFcmToken', { token }).catch(() => {});
+          }
         }
+        // Sinon le bandeau NotificationPermissionBanner demande la permission
+
       } catch (err) {
         console.debug('[FCM] Init error:', err?.message);
       }
     };
+
     initFcm();
+
+    // Écouter les événements de navigation CDL (depuis notifications)
+    const onCdlNavigate = (e) => {
+      const route = e.detail?.route;
+      if (route && route.startsWith('/')) {
+        // Stocker en sessionStorage pour que FcmDeepLinkHandler dans App.jsx le capte
+        try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
+        // Si navigate est disponible, l'utiliser directement
+        window.history.pushState({}, '', route);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
+    };
+    window.addEventListener('cdl_navigate', onCdlNavigate);
+
+    return () => {
+      if (nativeCleanup) nativeCleanup();
+      window.removeEventListener('cdl_navigate', onCdlNavigate);
+    };
   }, []);
 
   if (loading) {
@@ -200,6 +246,7 @@ export default function AppLayoutWrapper({ user }) {
 
   return (
     <>
+      <NotificationPermissionBanner />
       {showSplash && (
         <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />
       )}

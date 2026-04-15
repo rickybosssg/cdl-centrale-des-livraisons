@@ -48,29 +48,35 @@ async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = f
     method: "POST",
     headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      message: {
-        token: fcmToken,
-        notification: { title, body },
-        data: { route, notif_route: route },
-        android: {
-          priority: isHigh ? 'HIGH' : 'NORMAL',
-          notification: {
-            channel_id: 'cdl_courses',
-            color: '#1a73e8',
-            notification_priority: isHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
-            visibility: 'PUBLIC',
-          },
-        },
-        webpush: {
-          notification: {
-            icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-            badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-            vibrate: isHigh ? [300, 100, 300, 100, 300] : [200, 100, 200],
-            requireInteraction: isHigh,
-          },
-          fcm_options: { link: route },
-        },
+    message: {
+    token: fcmToken,
+    notification: { title, body },
+    data: { route, notif_route: route },
+    android: {
+      priority: isHigh ? 'HIGH' : 'NORMAL',
+      ttl: isHigh ? '86400s' : '604800s',
+      notification: {
+        channel_id: 'cdl_courses',
+        color: '#1a73e8',
+        sound: 'default',
+        vibrate_timings_millis: isHigh ? [0, 300, 100, 300, 100, 300] : [0, 200, 100, 200],
+        notification_priority: isHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
+        visibility: 'PUBLIC',
+        tag: `cdl-new-course-${route}`,
       },
+    },
+    webpush: {
+      notification: {
+        icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
+        badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
+        vibrate: isHigh ? [300, 100, 300, 100, 300] : [200, 100, 200],
+        requireInteraction: isHigh,
+        renotify: true,
+        tag: `cdl-new-course-${route}`,
+      },
+      fcm_options: { link: route },
+    },
+    },
     }),
   });
   const result = await res.json();
