@@ -157,14 +157,24 @@ export default function AppLayoutWrapper({ user }) {
               }
 
               try {
-                console.log('[AppLayoutWrapper FCM] 🔵 Appel saveFcmToken avec token...');
-                const res = await base44.functions.invoke('saveFcmToken', { token });
-                console.log('[AppLayoutWrapper FCM] ✅ Token sauvegardé en BDD:');
+                // Récupérer le user actuel pour passer userId et role
+                const me = await base44.auth.me();
+                console.log('[AppLayoutWrapper FCM] 🔵 User courant:', me?.email, '| role:', me?.role);
+                console.log('[AppLayoutWrapper FCM] 🔵 Appel saveFcmToken avec token + userId + role...');
+                
+                const res = await base44.functions.invoke('saveFcmToken', {
+                  token,
+                  userId: me?.id,
+                  userEmail: me?.email,
+                  userRole: me?.role,
+                });
+                
+                console.log('[AppLayoutWrapper FCM] ✅ TOKEN ENREGISTRÉ EN BDD:');
                 console.log('   - token_id:', res.data?.token_id);
                 console.log('   - success:', res.data?.success);
                 console.log('   - message:', res.data?.message);
               } catch (e) {
-                console.error('[AppLayoutWrapper FCM] ❌ Erreur saveFcmToken:');
+                console.error('[AppLayoutWrapper FCM] ❌ ERREUR saveFcmToken:');
                 console.error('   - message:', e?.message);
                 console.error('   - code:', e?.code);
                 console.error('   - response:', e?.response?.data);
