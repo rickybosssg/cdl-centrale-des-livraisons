@@ -120,24 +120,15 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
     console.log('[NativePush] ✅ STEP 3: Permission already GRANTED');
   }
 
-  // ── 5. Enregistrer l'appareil auprès de FCM ──────────────────────────────
-  console.log('[NativePush] 🟡 STEP 5: Registering device with FCM...');
-  try {
-    await PushNotifications.register();
-    console.log('[NativePush] ✅ Device registered, waiting for token...');
-  } catch (regErr) {
-    console.error('[NativePush] ❌ register() failed:', regErr?.message);
-    console.log('[NativePush] ❌ ════════════════════════════════════\n');
-    return { cleanup: () => {}, permissionStatus: 'register_error' };
-  }
-
+  // ── 5. Enregistrer les LISTENERS AVANT register() ──────────────────────────
+  console.log('[NativePush] 🟡 STEP 5: Registering listeners BEFORE register()...');
   const listeners = [];
 
-  // ── 6. Token reçu → callback ─────────────────────────────────────────────
+  // Token reçu → callback
   const tokenListener = await PushNotifications.addListener('registration', (token) => {
     const tokenValue = token.value;
     console.log('[NativePush] ✅ ════════════════════════════════════');
-    console.log('[NativePush] ✅ STEP 6: FCM TOKEN GENERATED');
+    console.log('[NativePush] ✅ STEP 6: FCM TOKEN GENERATED/REFRESHED');
     console.log('[NativePush] ✅ Token start (25 chars):', tokenValue?.substring(0, 25) + '...');
     console.log('[NativePush] ✅ Token full (256 chars):', tokenValue?.substring(0, 256));
     console.log('[NativePush] ✅ ════════════════════════════════════');
@@ -166,7 +157,7 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   });
   listeners.push(errorListener);
 
-  // ── 7. Notification reçue en FOREGROUND ──────────────────────────────────
+  // Notification reçue en FOREGROUND
   const foregroundListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
     console.log('[NativePush] 📬 Foreground notification:', notification.title);
     console.log('[NativePush] 📬 Data:', JSON.stringify(notification.data || {}));
@@ -174,7 +165,7 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   });
   listeners.push(foregroundListener);
 
-  // ── 8. Tap notification ──────────────────────────────────────────────────
+  // Tap notification
   const tapListener = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
     const data = action.notification?.data || {};
     const route = data.notif_route || data.route || data.target_screen || null;
@@ -189,6 +180,19 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
     }
   });
   listeners.push(tapListener);
+
+  console.log('[NativePush] ✅ All listeners registered');
+
+  // ── 6. APPELER register() APRÈS que les listeners soient prêts ────────────
+  console.log('[NativePush] 🟡 STEP 6: Calling register() to generate/refresh token...');
+  try {
+    await PushNotifications.register();
+    console.log('[NativePush] ✅ register() called, waiting for token event...');
+  } catch (regErr) {
+    console.error('[NativePush] ❌ register() failed:', regErr?.message);
+    console.log('[NativePush] ❌ ════════════════════════════════════\n');
+    return { cleanup: () => {}, permissionStatus: 'register_error' };
+  }
 
   console.log('[NativePush] ✅ ════════════════════════════════════');
   console.log('[NativePush] ✅ ALL LISTENERS REGISTERED');
