@@ -42,14 +42,14 @@ const PROFILES = [
     icon: Megaphone, color: 'bg-orange-100 text-orange-700',
     desc: 'Recrutez des clients via votre code promo — soumis à validation',
     immediate: false,
-    fields: { telephone: 'Téléphone', quartier: 'Zone' },
+    fields: { telephone: 'Téléphone', quartier: 'Quartier' },
   },
   {
     type: 'annonceur', label: 'Annonceur', emoji: '📢',
     icon: Megaphone, color: 'bg-pink-100 text-pink-700',
     desc: 'Publiez vos annonces sur CDL — soumis à validation',
     immediate: false,
-    fields: { telephone: 'Téléphone', quartier: 'Zone' },
+    fields: { telephone: 'Téléphone', quartier: 'Quartier' },
   },
 ];
 
@@ -113,18 +113,27 @@ export default function Settings() {
     if (!selectedProfile) return toast.error('Choisissez un profil');
     const cfg = PROFILES.find(p => p.type === selectedProfile);
     const missing = Object.keys(cfg.fields).filter(k => !formData[k]);
-    if (missing.length > 0) return toast.error('Veuillez remplir tous les champs obligatoires : ' + missing.join(', '));
-    if (selectedProfile === 'livreur' && moyenDeplacement.length === 0) {
-      console.log('[Settings.handleAddProfile] moyen_deplacement vide');
-      return toast.error('Veuillez sélectionner au moins un mode de déplacement');
+    if (missing.length > 0) {
+      const fieldLabels = missing.map(k => cfg.fields[k] || k).join(', ');
+      toast.error(`Champs obligatoires manquants : ${fieldLabels}`);
+      return;
     }
 
-    // Validation finale moyen_deplacement
+    // Validation livreur : moyen_deplacement
     if (selectedProfile === 'livreur' && moyenDeplacement.length === 0) {
       setDeplError(true);
-      return toast.error('Veuillez choisir un moyen de déplacement');
+      toast.error('Veuillez sélectionner au moins un mode de déplacement');
+      return;
     }
     setDeplError(false);
+
+    // Validation commercial : code promo
+    if (selectedProfile === 'commercial' && !codePromo.trim()) {
+      setCodePromoError('Code promo obligatoire');
+      toast.error('Code promo obligatoire');
+      return;
+    }
+    setCodePromoError('');
 
     const payload = { ...formData, email: user.email, full_name: user.full_name };
     if (selectedProfile === 'livreur') {
@@ -151,13 +160,21 @@ export default function Settings() {
       setSubmitting(false);
       if (result.data?.success) {
         console.log('[Settings.handleAddProfile] SUCCÈS');
+        const profileLabel = PROFILES.find(p => p.type === selectedProfile)?.label || selectedProfile;
         const pairedType = result.data?.auto_paired?.type;
         const pairedLabel = { client: 'Client', commercial: 'Commercial' }[pairedType];
+        
         if (pairedLabel) {
-          toast.success(`🎉 Profil créé ! Votre second profil compatible (${pairedLabel}) a aussi été activé automatiquement.`, { duration: 5000 });
+          toast.success(
+            `🎉 ${profileLabel} créé ! Votre profil ${pairedLabel} a aussi été activé automatiquement.`,
+            { duration: 5000 }
+          );
+        } else if (result.data.status === 'actif') {
+          toast.success(`✅ ${profileLabel} activé immédiatement !`, { duration: 4000 });
         } else {
-          toast.success(result.data.status === 'actif' ? '✅ Profil activé !' : '⏳ Demande envoyée à l\'admin');
+          toast.success(`⏳ Demande ${profileLabel} envoyée à l'équipe CDL`, { duration: 4000 });
         }
+        
         setDialogAdd(false);
         setSelectedProfile(null);
         setFormData({});

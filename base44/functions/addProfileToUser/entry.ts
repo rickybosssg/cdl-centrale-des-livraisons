@@ -26,6 +26,12 @@ const PROFILE_REQUIREMENTS = {
     documents: [],
     needsAdminValidation: true,
   },
+  annonceur: {
+    immediate: false,
+    fields: ['telephone', 'quartier'],
+    documents: [],
+    needsAdminValidation: true,
+  },
 };
 
 Deno.serve(async (req) => {
@@ -208,8 +214,8 @@ Deno.serve(async (req) => {
 
     // Notifier l'utilisateur avec données réelles
     console.log('[addProfileToUser] Notification utilisateur...');
-    const roleEmojis = { client: '👤', livreur: '🛵', partenaire: '🏪', commercial: '📣' };
-    const roleNames = { client: 'Client', livreur: 'Livreur', partenaire: 'Partenaire', commercial: 'Commercial' };
+    const roleEmojis = { client: '👤', livreur: '🛵', partenaire: '🏪', commercial: '📣', annonceur: '📢' };
+    const roleNames = { client: 'Client', livreur: 'Livreur', partenaire: 'Partenaire', commercial: 'Commercial', annonceur: 'Annonceur' };
     
     await base44.entities.Notification.create({
       destinataire_email: user.email,
@@ -241,8 +247,10 @@ Deno.serve(async (req) => {
       
       if (profile_type === 'partenaire') {
         adminMessage = `Commerce: ${data.nom_commerce || 'N/A'} | Catégorie: ${data.type_commerce || 'N/A'} | Tél: ${data.telephone || 'N/A'} | Adresse: ${data.adresse || 'N/A'}`;
-      } else if (profile_type === 'livreur' || profile_type === 'annonceur') {
+      } else if (profile_type === 'livreur') {
         adminMessage = `Nom: ${user.full_name} | Tél: ${data.telephone || 'N/A'} | Zone: ${data.quartier || 'N/A'} | Transport: ${data.moyen_deplacement || 'N/A'}`;
+      } else if (profile_type === 'annonceur' || profile_type === 'commercial') {
+        adminMessage = `Nom: ${user.full_name} | Tél: ${data.telephone || 'N/A'} | Quartier: ${data.quartier || 'N/A'}`;
       }
       
       await Promise.all(
