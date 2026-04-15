@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Plus, TrendingUp, Eye, Calendar, AlertCircle, DollarSign } from "lucide-react";
+import { Plus, TrendingUp, Eye, Calendar, AlertCircle, DollarSign, Zap, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import BedouWidget from "@/components/BedouWidget";
 import moment from "moment";
@@ -143,54 +144,73 @@ export default function DashboardAnnonceur({ user }) {
     return (
       <div className="space-y-6 pb-20">
       {/* Header */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold">Mon espace Annonceur 📢</h1>
-        <p className="text-sm text-muted-foreground">Créez et gérez vos publicités CDL</p>
+      <div className="space-y-2 mb-2">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">📢 Espace Annonceur</h1>
+        </div>
+        <p className="text-sm text-muted-foreground">Créez des campagnes publicitaires efficaces</p>
       </div>
 
-      {/* Bedou */}
+      {/* Bloc Bedou - Centre financier */}
       <BedouWidget user={user} />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Stats principales */}
+      <div className="grid grid-cols-2 gap-3">
         <Card>
-          <CardContent className="p-3 text-center">
-            <TrendingUp className="h-5 w-5 text-primary mx-auto mb-1" />
-            <p className="text-xl font-bold">{pubs.length}</p>
-            <p className="text-[10px] text-muted-foreground">Publicités créées</p>
+          <CardContent className="p-4 text-center space-y-1">
+            <Zap className="h-5 w-5 text-amber-500 mx-auto" />
+            <p className="text-2xl font-bold">{pubs.filter(p => p.active).length}</p>
+            <p className="text-xs text-muted-foreground">Pubs actives</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-3 text-center">
-            <Eye className="h-5 w-5 text-blue-600 mx-auto mb-1" />
-            <p className="text-xl font-bold">{pubs.filter(p => p.active).length}</p>
-            <p className="text-[10px] text-muted-foreground">Actives</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 text-center">
-            <DollarSign className="h-5 w-5 text-amber-600 mx-auto mb-1" />
-            <p className="text-lg font-bold">{pubs.filter(p => ["validée", "expirée"].includes(p.statut)).reduce((s, p) => s + (p.cout || 5000), 0).toLocaleString()}F</p>
-            <p className="text-[10px] text-muted-foreground">Dépensé</p>
+          <CardContent className="p-4 text-center space-y-1">
+            <BarChart3 className="h-5 w-5 text-blue-600 mx-auto" />
+            <p className="text-2xl font-bold">{pubs.length}</p>
+            <p className="text-xs text-muted-foreground">Pubs créées</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Boutons d'action */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/creer-publicite" className="flex-1">
-          <Button className="w-full gap-2 py-6">
-            <Plus className="h-5 w-5" />
-            Créer
-          </Button>
-        </Link>
-        <Link to="/mes-publicites-annonceur" className="flex-1">
-          <Button variant="outline" className="w-full gap-2 py-6">
-            <Eye className="h-5 w-5" />
-            Mes pubs
-          </Button>
-        </Link>
-      </div>
+      {/* Bloc performance */}
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-blue-50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            Performance globale
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Vues totales</span>
+            <span className="font-bold text-lg">{pubs.reduce((s, p) => s + (p.impressions || 0), 0).toLocaleString()}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Clics totaux</span>
+            <span className="font-bold text-lg">{pubs.reduce((s, p) => s + (p.clics || 0), 0).toLocaleString()}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Coût total</span>
+            <span className="font-bold text-lg text-primary">{pubs.filter(p => ["validée", "expirée"].includes(p.statut)).reduce((s, p) => s + (p.cout || 5000), 0).toLocaleString()} F</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bouton principal - Créer pub */}
+      <Link to="/creer-publicite" className="w-full">
+        <Button className="w-full gap-2 py-6 text-base font-semibold shadow-lg">
+          <Plus className="h-5 w-5" />
+          Créer une nouvelle publicité
+        </Button>
+      </Link>
+
+      {/* Lien vers mes pubs */}
+      <Link to="/mes-publicites-annonceur" className="w-full">
+        <Button variant="outline" className="w-full gap-2 py-6">
+          <Eye className="h-5 w-5" />
+          Gérer mes publicités
+        </Button>
+      </Link>
       </div>
     );
   }
