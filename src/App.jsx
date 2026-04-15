@@ -59,7 +59,7 @@ import PagePartenaire from './pages/partenaire/PagePartenaire';
 import CommandesPartenaire from './pages/partenaire/CommandesPartenaire';
 import MesMessages from './pages/MesMessages';
 import Settings from './pages/Settings';
-import FcmDiagnostic from './pages/FcmDiagnostic';
+
 import PolitiqueConfidentialite from './pages/PolitiqueConfidentialite';
 import CGU from './pages/CGU';
 import SupprimerCompte from './pages/SupprimerCompte';
@@ -315,7 +315,7 @@ const AuthenticatedApp = () => {
 
         {/* Paramètres utilisateur */}
         <Route path="/settings" element={<Settings />} />
-        <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
+
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />
         <Route path="/supprimer-compte" element={<SupprimerCompte />} />

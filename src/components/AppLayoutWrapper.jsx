@@ -184,18 +184,8 @@ export default function AppLayoutWrapper({ user }) {
         }
 
         // ── CAS 2 : Navigateur web (PWA / dev) ─────────────────────────────
-        if (typeof window === 'undefined' || !('Notification' in window)) return;
-        const mod = await import('@/lib/pushNotifications');
-        if (!mod?.registerFcmToken) return;
-        // Permission déjà accordée → enregistrer silencieusement
-        if (Notification.permission === 'granted') {
-          const token = await mod.registerFcmToken();
-          if (token) {
-            console.log('[FCM] Token web enregistré');
-            base44.functions.invoke('saveFcmToken', { token }).catch(() => {});
-          }
-        }
-        // Sinon le bandeau NotificationPermissionBanner demande la permission
+        // Web FCM: attendre le nettoyage et recréation complète
+        console.log('[FCM] Mode web détecté - pas de FCM pour le moment');
 
       } catch (err) {
         console.debug('[FCM] Init error:', err?.message);

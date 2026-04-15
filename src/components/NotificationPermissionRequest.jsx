@@ -8,84 +8,6 @@ import { Bell, Settings, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { getFirebaseConfig } from '@/lib/firebaseConfig';
-
-/**
- * Fonction minimaliste : enregistrer SW + injecter config + générer token FCM
- */
-async function generateFcmToken() {
-  console.log('[generateFcmToken] START');
-
-  // 1. Charger config depuis backend (source unique)
-  console.log('[generateFcmToken] ⏳ Chargement config Firebase...');
-  const firebaseConfig = await getFirebaseConfig();
-  if (!firebaseConfig) {
-    throw new Error('Firebase config non disponible du backend');
-  }
-  console.log('[generateFcmToken] ✅ Config reçue');
-
-  // 2. Importer Firebase modules
-  console.log('[generateFcmToken] ⏳ Import Firebase...');
-  const { initializeApp, getApps } = await import('firebase/app');
-  const { getMessaging } = await import('firebase/messaging');
-  const { getToken } = await import('firebase/messaging');
-  console.log('[generateFcmToken] ✅ Firebase importé');
-
-  // 3. Initialiser Firebase app (une seule fois)
-  console.log('[generateFcmToken] ⏳ initializeApp...');
-  const app =
-    getApps().length === 0
-      ? initializeApp(firebaseConfig)
-      : getApps()[0];
-  const messaging = getMessaging(app);
-  console.log('[generateFcmToken] ✅ Firebase app initialisé');
-
-  // 4. Enregistrer Service Worker
-  console.log('[generateFcmToken] ⏳ Nettoyage anciens SW...');
-  const allRegs = await navigator.serviceWorker.getRegistrations();
-  for (const reg of allRegs) {
-    console.log('[generateFcmToken] 🗑️ Unregister:', reg.scope);
-    await reg.unregister();
-  }
-  console.log('[generateFcmToken] ⏳ Enregistrement nouveau SW...');
-  const swReg = await navigator.serviceWorker.register(
-    '/firebase-messaging-sw.js',
-    { scope: '/' }
-  );
-  console.log('[generateFcmToken] ✅ SW enregistré:', swReg.scope);
-
-  await navigator.serviceWorker.ready;
-  console.log('[generateFcmToken] ✅ SW ready');
-
-  // 5. INJECTER CONFIG AU SW via postMessage
-  console.log('[generateFcmToken] ⏳ Injection config au SW...');
-  const controller = navigator.serviceWorker.controller || (await navigator.serviceWorker.ready).active;
-  if (controller) {
-    controller.postMessage({
-      type: 'FIREBASE_CONFIG',
-      config: firebaseConfig,
-    });
-    console.log('[generateFcmToken] ✅ Config injectée au SW');
-    // Attendre que le SW traite la config
-    await new Promise(r => setTimeout(r, 500));
-  } else {
-    console.warn('[generateFcmToken] ⚠️ SW controller non disponible');
-  }
-
-  // 6. Générer token FCM
-  console.log('[generateFcmToken] ⏳ Génération token FCM...');
-  const token = await getToken(messaging, {
-    vapidKey: firebaseConfig.vapidKey,
-    serviceWorkerRegistration: swReg,
-  });
-
-  if (!token) {
-    throw new Error('Token FCM vide');
-  }
-
-  console.log('[generateFcmToken] ✅ Token généré:', token.substring(0, 50) + '...');
-  return token;
-}
 
 export default function NotificationPermissionRequest({
   onSuccess,
@@ -100,7 +22,7 @@ export default function NotificationPermissionRequest({
     typeof window !== 'undefined' &&
     window.Capacitor?.isNativePlatform?.();
 
-  // Flux Web : permission + token FCM
+  // Flux Web : permission uniquement (pas de token pour le moment)
   const handleRequestWeb = async () => {
     setRequesting(true);
     try {
@@ -115,15 +37,6 @@ export default function NotificationPermissionRequest({
       }
 
       console.log('[NotificationPermissionRequest] ✅ Permission accordée');
-
-      // Générer token
-      console.log('[NotificationPermissionRequest] ⏳ Génération token...');
-      const token = await generateFcmToken();
-
-      // Sauvegarder token
-      const { base44 } = await import('@/api/base44Client');
-      await base44.functions.invoke('saveFcmToken', { token });
-
       toast.success('✅ Notifications activées !');
       onSuccess?.();
     } catch (err) {
@@ -160,22 +73,8 @@ export default function NotificationPermissionRequest({
         return;
       }
 
-      // Enregistrer et attendre token
+      // Enregistrer (sans générer token pour le moment)
       await PushNotifications.register();
-      const token = await new Promise((resolve) => {
-        PushNotifications.addListener('registration', (t) =>
-          resolve(t.value)
-        );
-        setTimeout(() => resolve(null), 8000);
-      });
-
-      if (!token) {
-        throw new Error('Token natif non reçu');
-      }
-
-      // Sauvegarder
-      const { base44 } = await import('@/api/base44Client');
-      await base44.functions.invoke('saveFcmToken', { token });
 
       toast.success('✅ Notifications activées !');
       onSuccess?.();
