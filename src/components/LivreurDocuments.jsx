@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera, Phone } from "lucide-react";
+import { CheckCircle2, Upload, Loader2, ShieldCheck, Camera, Phone, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { isNativeApp, openNativeCamera, openNativeGallery, compressImage } from "@/lib/nativeCamera";
 
 const DOCS = [
   { key: "photo_profil",            label: "Photo de profil",      desc: "Selfie clair, visage visible",              emoji: "🤳" },
@@ -12,16 +13,192 @@ const DOCS = [
   { key: "photo_moyen_deplacement", label: "Moyen de déplacement", desc: "Photo de votre moto ou véhicule",           emoji: "🛵" },
 ];
 
+// ── Composant document individuel ─────────────────────────────────────────────
+function DocItem({ doc, file, preview, onFile, onRemove }) {
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const [actionLoading, setActionLoading] = useState(null); // 'camera' | 'gallery'
+  const [permError, setPermError] = useState(null);
+  const native = isNativeApp();
+
+  const handleNativeCamera = async () => {
+    setPermError(null);
+    setActionLoading('camera');
+    try {
+      const f = await openNativeCamera();
+      if (f) onFile(doc.key, f);
+    } catch (err) {
+      setPermError(err.message || "Erreur caméra");
+      toast.error(err.message || "Erreur caméra");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleNativeGallery = async () => {
+    setPermError(null);
+    setActionLoading('gallery');
+    try {
+      const f = await openNativeGallery();
+      if (f) onFile(doc.key, f);
+    } catch (err) {
+      setPermError(err.message || "Erreur galerie");
+      toast.error(err.message || "Erreur galerie");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleWebFile = async (e, source) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { toast.error("Veuillez choisir une image"); return; }
+    if (f.size > 8 * 1024 * 1024) { toast.error("Fichier trop volumineux (max 8MB)"); return; }
+    setActionLoading(source);
+    try {
+      const compressed = await compressImage(f);
+      onFile(doc.key, compressed);
+    } catch (_) {
+      onFile(doc.key, f);
+    } finally {
+      setActionLoading(null);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <div className={`rounded-xl border-2 bg-white overflow-hidden ${file ? 'border-primary' : 'border-border'}`}>
+      {/* En-tête */}
+      <div className="flex items-center gap-3 p-3">
+        <span className="text-2xl flex-shrink-0">{doc.emoji}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">{doc.label}</p>
+          <p className="text-xs text-muted-foreground">{doc.desc}</p>
+        </div>
+        {file && <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />}
+      </div>
+
+      {/* Aperçu */}
+      {preview && (
+        <div className="relative">
+          <img src={preview} alt="aperçu" className="w-full h-40 object-contain bg-gray-100" />
+          <button
+            onClick={() => onRemove(doc.key)}
+            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1"
+          >
+            <X className="h-3 w-3" />
+          </button>
+          <div className="absolute bottom-2 left-2 bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+            ✅ Prêt
+          </div>
+        </div>
+      )}
+
+      {/* Boutons — APK natif */}
+      {native ? (
+        <div className="flex gap-2 p-3">
+          <button
+            onClick={handleNativeCamera}
+            disabled={!!actionLoading}
+            className="flex-1 flex flex-col items-center gap-1 py-3 rounded-xl bg-blue-50 border border-blue-300 active:scale-95 transition-all disabled:opacity-60"
+          >
+            {actionLoading === 'camera'
+              ? <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
+              : <span className="text-2xl">📷</span>}
+            <span className="text-xs font-bold text-blue-700">Caméra</span>
+          </button>
+          <button
+            onClick={handleNativeGallery}
+            disabled={!!actionLoading}
+            className="flex-1 flex flex-col items-center gap-1 py-3 rounded-xl bg-gray-50 border border-gray-300 active:scale-95 transition-all disabled:opacity-60"
+          >
+            {actionLoading === 'gallery'
+              ? <Loader2 className="h-6 w-6 text-gray-600 animate-spin" />
+              : <span className="text-2xl">🖼️</span>}
+            <span className="text-xs font-bold text-gray-700">Galerie</span>
+          </button>
+        </div>
+      ) : (
+        /* Navigateur web — inputs HTML natifs (opacity:0 sur div stylisé) */
+        <div className="flex gap-2 p-3">
+          {/* Caméra */}
+          <div className="flex-1 relative">
+            <div className="flex flex-col items-center gap-1 py-3 rounded-xl bg-blue-50 border border-blue-300 pointer-events-none select-none">
+              {actionLoading === 'camera'
+                ? <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
+                : <span className="text-2xl">📷</span>}
+              <span className="text-xs font-bold text-blue-700">Caméra</span>
+            </div>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => handleWebFile(e, 'camera')}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            />
+          </div>
+          {/* Galerie */}
+          <div className="flex-1 relative">
+            <div className="flex flex-col items-center gap-1 py-3 rounded-xl bg-gray-50 border border-gray-300 pointer-events-none select-none">
+              {actionLoading === 'gallery'
+                ? <Loader2 className="h-6 w-6 text-gray-600 animate-spin" />
+                : <span className="text-2xl">🖼️</span>}
+              <span className="text-xs font-bold text-gray-700">Galerie</span>
+            </div>
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleWebFile(e, 'gallery')}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Erreur permission */}
+      {permError && (
+        <div className="mx-3 mb-3 flex items-start gap-2 p-2 rounded-lg bg-red-50 border border-red-200 text-[11px] text-red-700">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+          <div>
+            <p>{permError}</p>
+            {permError.includes('refusée') && (
+              <button
+                onClick={() => {
+                  try { window.open('app-settings:'); } catch (_) {}
+                  toast.info("Ouvrez les paramètres → Autorisations → Caméra/Photos");
+                }}
+                className="underline font-bold mt-0.5"
+              >
+                Ouvrir les paramètres
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Nom du fichier */}
+      {file && (
+        <p className="text-[10px] text-primary text-center font-semibold pb-3 px-3 truncate">
+          ✅ {file.name}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Composant principal ───────────────────────────────────────────────────────
 export default function LivreurDocuments({ onComplete }) {
   const [files, setFiles]         = useState({});
   const [previews, setPreviews]   = useState({});
   const [uploading, setUploading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
-  const [user, setUser] = useState(null);
+  const [user, setUser]           = useState(null);
   const [telephone, setTelephone] = useState("");
   const [savingTel, setSavingTel] = useState(false);
-  const [telSaved, setTelSaved] = useState(false);
+  const [telSaved, setTelSaved]   = useState(false);
 
   useEffect(() => {
     base44.auth.me().then(me => {
@@ -40,7 +217,6 @@ export default function LivreurDocuments({ onComplete }) {
     if (!validateTel(telephone)) { toast.error("Numéro invalide (ex: +22670000000)"); return; }
     setSavingTel(true);
     await base44.auth.updateMe({ telephone });
-    // Mettre à jour le UserProfile livreur aussi
     const me = await base44.auth.me();
     const profiles = await base44.entities.UserProfile.filter({ user_email: me.email, profile_type: 'livreur', deleted: false });
     if (profiles.length > 0) {
@@ -52,11 +228,18 @@ export default function LivreurDocuments({ onComplete }) {
     toast.success("✅ Numéro enregistré");
   };
 
-  const handleFile = (key, e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFiles(prev    => ({ ...prev, [key]: file }));
-    setPreviews(prev => ({ ...prev, [key]: URL.createObjectURL(file) }));
+  const handleFile = (key, file) => {
+    setFiles(prev => ({ ...prev, [key]: file }));
+    const url = URL.createObjectURL(file);
+    setPreviews(prev => ({ ...prev, [key]: url }));
+  };
+
+  const handleRemove = (key) => {
+    setFiles(prev => { const n = { ...prev }; delete n[key]; return n; });
+    setPreviews(prev => {
+      if (prev[key]) URL.revokeObjectURL(prev[key]);
+      const n = { ...prev }; delete n[key]; return n;
+    });
   };
 
   const completed = DOCS.filter(d => files[d.key]).length;
@@ -76,7 +259,6 @@ export default function LivreurDocuments({ onComplete }) {
 
       const me = await base44.auth.me();
 
-      // Trouver le UserProfile livreur existant et le mettre à jour avec les docs
       const livreurProfiles = await base44.entities.UserProfile.filter({
         user_email: me.email,
         profile_type: 'livreur',
@@ -84,7 +266,6 @@ export default function LivreurDocuments({ onComplete }) {
       });
 
       if (livreurProfiles.length > 0) {
-        // Mettre à jour le UserProfile avec les documents et passer en en_attente
         await base44.entities.UserProfile.update(livreurProfiles[0].id, {
           documents_json: JSON.stringify(docUrls),
           status: 'en_attente',
@@ -92,14 +273,12 @@ export default function LivreurDocuments({ onComplete }) {
           completion_percentage: 100,
         });
       } else {
-        // Fallback : créer le profil livreur avec les docs si inexistant
         await base44.functions.invoke('addProfileToUser', {
           profile_type: 'livreur',
           data: { telephone: me.telephone || '', quartier: me.quartier || '', ...docUrls },
         });
       }
 
-      // Marquer docs_envoyes sur User pour compatibilité
       await base44.auth.updateMe({ docs_envoyes: true, terms_accepted: true, terms_accepted_at: new Date().toISOString() });
 
       try {
@@ -108,6 +287,7 @@ export default function LivreurDocuments({ onComplete }) {
           entity_data: { nom_complet: me.full_name, telephone: me.telephone, quartier: me.quartier },
         });
       } catch (_) {}
+
       toast.success("Documents envoyés ! Votre dossier est en cours d'examen.");
       onComplete();
     } catch (err) {
@@ -126,9 +306,14 @@ export default function LivreurDocuments({ onComplete }) {
           </div>
           <h1 className="text-xl font-bold">Complétez votre dossier</h1>
           <p className="text-sm text-muted-foreground">Envoyez vos documents pour activer votre compte livreur</p>
+          {isNativeApp() && (
+            <p className="text-[10px] text-primary font-medium bg-primary/10 px-3 py-1 rounded-full inline-block">
+              📱 Mode APK — Caméra & Galerie natives activées
+            </p>
+          )}
         </div>
 
-        {/* Bloc téléphone obligatoire */}
+        {/* Bloc téléphone */}
         <div className={`p-4 rounded-xl border-2 space-y-3 ${telSaved ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`}>
           <div className="flex items-center gap-2">
             <Phone className={`h-5 w-5 ${telSaved ? 'text-green-600' : 'text-red-600'}`} />
@@ -139,13 +324,14 @@ export default function LivreurDocuments({ onComplete }) {
           </div>
           {!telSaved ? (
             <>
-              <p className="text-xs text-red-700">Le numéro de téléphone est obligatoire pour devenir livreur. Il sera utilisé pour les courses et le contact client.</p>
+              <p className="text-xs text-red-700">Le numéro est utilisé pour les courses et le contact client.</p>
               <div className="flex gap-2">
                 <Input
                   placeholder="+226 XX XX XX XX"
                   value={telephone}
                   onChange={e => setTelephone(e.target.value)}
                   className="flex-1 bg-white"
+                  type="tel"
                 />
                 <Button size="sm" onClick={saveTelephone} disabled={savingTel}>
                   {savingTel ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Valider'}
@@ -160,6 +346,7 @@ export default function LivreurDocuments({ onComplete }) {
           )}
         </div>
 
+        {/* Progression */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Progression</span>
@@ -170,76 +357,18 @@ export default function LivreurDocuments({ onComplete }) {
           </div>
         </div>
 
+        {/* Cartes documents */}
         <div className="space-y-3">
-          {DOCS.map(doc => {
-            const hasFile = !!files[doc.key];
-            return (
-              <div key={doc.key} className={`rounded-xl border-2 bg-white ${hasFile ? 'border-primary' : 'border-border'}`}>
-
-                {/* En-tête */}
-                <div className="flex items-center gap-3 p-3">
-                  <span className="text-2xl flex-shrink-0">{doc.emoji}</span>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">{doc.label}</p>
-                    <p className="text-xs text-muted-foreground">{doc.desc}</p>
-                  </div>
-                  {hasFile && <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />}
-                </div>
-
-                {/* Aperçu */}
-                {previews[doc.key] && (
-                  <img src={previews[doc.key]} alt="aperçu" className="w-full h-28 object-cover" />
-                )}
-
-                {/* ── UPLOAD ZONE ──────────────────────────────────────────
-                    Les inputs sont VISIBLES et stylisés directement.
-                    Aucun overlay, aucun label wrapper, aucun JS .click().
-                    L'utilisateur tape directement sur l'input natif.
-                    C'est la méthode la plus compatible Android/WebView.
-                ─────────────────────────────────────────────────────────── */}
-                <div className="flex gap-2 p-3">
-
-                  {/* Caméra — input visible stylisé */}
-                  <div className="flex-1 relative">
-                    <div className="flex flex-col items-center gap-1 py-2.5 rounded-lg bg-blue-50 border border-blue-300 pointer-events-none select-none">
-                      <span className="text-xl">📷</span>
-                      <span className="text-xs font-bold text-blue-700">Caméra</span>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => handleFile(doc.key, e)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                  </div>
-
-                  {/* Galerie — input visible stylisé */}
-                  <div className="flex-1 relative">
-                    <div className="flex flex-col items-center gap-1 py-2.5 rounded-lg bg-gray-50 border border-gray-300 pointer-events-none select-none">
-                      <span className="text-xl">🖼️</span>
-                      <span className="text-xs font-bold text-gray-700">Galerie</span>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFile(doc.key, e)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                  </div>
-
-                </div>
-
-                {/* Nom du fichier */}
-                {files[doc.key] && (
-                  <p className="text-[10px] text-primary text-center font-semibold pb-3">
-                    ✅ {files[doc.key].name}
-                  </p>
-                )}
-
-              </div>
-            );
-          })}
+          {DOCS.map(doc => (
+            <DocItem
+              key={doc.key}
+              doc={doc}
+              file={files[doc.key]}
+              preview={previews[doc.key]}
+              onFile={handleFile}
+              onRemove={handleRemove}
+            />
+          ))}
         </div>
 
         {!telSaved && (
@@ -271,7 +400,6 @@ export default function LivreurDocuments({ onComplete }) {
             </div>
             <span className="text-amber-600">{showTerms ? '▲' : '▼'}</span>
           </button>
-
           {showTerms && (
             <div className="px-4 pb-4 text-xs text-amber-900 border-t border-amber-200 pt-3">
               <ol className="space-y-1.5 list-decimal list-inside">
@@ -283,7 +411,6 @@ export default function LivreurDocuments({ onComplete }) {
               </ol>
             </div>
           )}
-
           <label className="flex items-start gap-3 px-4 pb-4 cursor-pointer">
             <input
               type="checkbox"
