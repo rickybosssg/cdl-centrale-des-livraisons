@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { getFirebaseConfig } from '@/lib/firebaseConfig';
 
 /**
- * Fonction minimaliste : enregistrer SW + générer token FCM
+ * Fonction minimaliste : enregistrer SW + injecter config + générer token FCM
  */
 async function generateFcmToken() {
   console.log('[generateFcmToken] START');
@@ -57,7 +57,22 @@ async function generateFcmToken() {
   await navigator.serviceWorker.ready;
   console.log('[generateFcmToken] ✅ SW ready');
 
-  // 5. Générer token FCM
+  // 5. INJECTER CONFIG AU SW via postMessage
+  console.log('[generateFcmToken] ⏳ Injection config au SW...');
+  const controller = navigator.serviceWorker.controller || (await navigator.serviceWorker.ready).active;
+  if (controller) {
+    controller.postMessage({
+      type: 'FIREBASE_CONFIG',
+      config: firebaseConfig,
+    });
+    console.log('[generateFcmToken] ✅ Config injectée au SW');
+    // Attendre que le SW traite la config
+    await new Promise(r => setTimeout(r, 500));
+  } else {
+    console.warn('[generateFcmToken] ⚠️ SW controller non disponible');
+  }
+
+  // 6. Générer token FCM
   console.log('[generateFcmToken] ⏳ Génération token FCM...');
   const token = await getToken(messaging, {
     vapidKey: firebaseConfig.vapidKey,
