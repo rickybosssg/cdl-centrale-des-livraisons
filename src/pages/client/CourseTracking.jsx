@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import moment from "moment";
 import ReportIssueModal from "@/components/ReportIssueModal";
+import ContactCard from "@/components/ContactCard";
 
 const STATUT_CFG = {
   en_attente:       { label: "Recherche d'un livreur…",    color: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50",  emoji: "🔍" },
@@ -270,41 +271,13 @@ export default function CourseTracking() {
             )}
           </div>
 
-          {/* Bloc livreur */}
+          {/* Carte contact livreur */}
           {isAssigned && panelOpen && (
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-lg shadow-sm">
-                {livreurNom.charAt(0).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-gray-900 text-sm truncate">{livreurNom}</p>
-                {livreurPhone && <p className="text-xs text-gray-400">{livreurPhone}</p>}
-                {course.statut === "livree" && (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                    <span className="text-xs text-green-600 font-semibold">
-                      Livré le {moment(course.date_livraison).format("DD/MM à HH:mm")}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                {livreurPhone && (
-                  <a href={`tel:${livreurPhone}`}>
-                    <button className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center active:scale-90 transition-transform">
-                      <Phone className="h-5 w-5 text-green-700" />
-                    </button>
-                  </a>
-                )}
-                {livreurPhone && (
-                  <a href={`https://wa.me/${livreurPhone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer">
-                    <button className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center active:scale-90 transition-transform">
-                      <MessageCircle className="h-5 w-5 text-emerald-700" />
-                    </button>
-                  </a>
-                )}
-              </div>
-            </div>
+            <ContactCard
+              name={livreurNom}
+              phone={livreurPhone}
+              status={course.statut === "livree" ? `Livré le ${moment(course.date_livraison).format("DD/MM à HH:mm")}` : "En route"}
+            />
           )}
 
           {/* Trajet résumé */}

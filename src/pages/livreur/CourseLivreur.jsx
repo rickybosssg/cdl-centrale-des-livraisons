@@ -11,6 +11,8 @@ import StatusBadge from "../../components/StatusBadge";
 import { toast } from "sonner";
 import { vibrateSuccess, vibrateMedium, vibrateNotif, playNotificationSound } from "@/lib/vibration";
 import { triggerWhatsAppNotification, waMsgCourseCompletedClient, waMsgCourseCompletedDriver } from "@/lib/whatsappNotifications";
+import { useState, useEffect } from "react";
+import ContactCard from "@/components/ContactCard";
 
 export default function CourseLivreur() {
   const { id } = useParams();
@@ -273,50 +275,18 @@ export default function CourseLivreur() {
       </Card>
 
       {/* Contacts */}
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-primary" />
-              <div>
-                <p className="text-xs text-muted-foreground">Expéditeur</p>
-                <p className="text-sm font-medium">{course.telephone_expediteur}</p>
-              </div>
-            </div>
-            <a href={`tel:${course.telephone_expediteur}`}>
-              <Button variant="outline" size="sm"><Phone className="h-3 w-3 mr-1" />Appeler</Button>
-            </a>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-accent" />
-              <div>
-                <p className="text-xs text-muted-foreground">Destinataire</p>
-                <p className="text-sm font-medium">{course.telephone_destinataire}</p>
-              </div>
-            </div>
-            <a href={`tel:${course.telephone_destinataire}`}>
-              <Button variant="outline" size="sm"><Phone className="h-3 w-3 mr-1" />Appeler</Button>
-            </a>
-          </div>
-          {course.client_email && (
-            <div className="flex items-center justify-between pt-2 border-t">
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-green-600" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Client</p>
-                  <p className="text-sm font-medium">{course.client_name}</p>
-                </div>
-              </div>
-              {course.telephone_expediteur && (
-                <a href={`tel:${course.telephone_expediteur}`}>
-                  <Button size="sm" className="bg-green-600 hover:bg-green-700"><Phone className="h-3 w-3 mr-1" />Appeler</Button>
-                </a>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        <ContactCard
+          name={`${course.nom_expediteur || "Expéditeur"}`}
+          phone={course.telephone_expediteur}
+          status="Récupération du colis"
+        />
+        <ContactCard
+          name={`${course.nom_destinataire || "Destinataire"}`}
+          phone={course.telephone_destinataire}
+          status="Livraison du colis"
+        />
+      </div>
 
       {/* Urgence badge */}
       {course.urgence && course.urgence !== 'normal' && (

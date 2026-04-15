@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { vibrateSuccess, vibrateLight } from "@/lib/vibration";
 import { lancerDispatch } from "@/lib/dispatch";
 import moment from "moment";
+import { useState, useEffect, useRef } from "react";
+import ContactCard from "@/components/ContactCard";
 
 const STATUT_CONFIG = {
   en_attente_partenaire: { label: "En attente", color: "bg-amber-100 text-amber-700 border-amber-200" },
@@ -207,20 +209,19 @@ export default function CommandesPartenaire({ user }) {
             return (
               <Card key={cmd.id} className={cmd.statut === "en_attente_partenaire" ? "border-amber-300 shadow-md" : ""}>
                 <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-sm">{cmd.client_nom || "Client"}</p>
-                      <p className="text-xs text-muted-foreground">{cmd.client_telephone}</p>
-                      {cmd.quartier_livraison && (
-                        <p className="text-xs text-muted-foreground">📍 {cmd.quartier_livraison}</p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>
-                        {cfg.label}
-                      </span>
-                      <p className="text-xs text-muted-foreground mt-1">{moment(cmd.created_date).fromNow()}</p>
-                    </div>
+                  {/* Carte contact client */}
+                  <ContactCard
+                    name={cmd.client_nom || "Client"}
+                    phone={cmd.client_telephone}
+                    status={`Livraison à ${cmd.quartier_livraison || "domicile"}`}
+                  />
+
+                  {/* Status et date */}
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>
+                      {cfg.label}
+                    </span>
+                    <p className="text-xs text-muted-foreground">{moment(cmd.created_date).fromNow()}</p>
                   </div>
 
                   {cmd.note_client && (
