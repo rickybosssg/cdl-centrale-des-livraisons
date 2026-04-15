@@ -75,18 +75,29 @@ export async function compressImage(file, maxSize = 1920, quality = 0.85) {
 }
 
 /**
+ * Récupère le plugin Camera via window.Capacitor (injecté par l'APK)
+ * Pas d'import statique — évite les erreurs de build web
+ */
+function getCapacitorCamera() {
+  const Capacitor = window.Capacitor;
+  if (!Capacitor) return null;
+  // Dans Capacitor v3+, les plugins sont sur window.Capacitor.Plugins
+  const Camera = Capacitor.Plugins?.Camera;
+  if (!Camera) return null;
+  return Camera;
+}
+
+/**
  * Ouvre la CAMÉRA native (APK) ou retourne null (navigateur)
  * @returns {Promise<File|null>}
  */
 export async function openNativeCamera() {
   if (!isNativeApp()) return null;
 
-  let Camera;
-  try {
-    const mod = await import('@capacitor/camera');
-    Camera = mod.Camera;
-    const { CameraResultType, CameraSource } = mod;
+  const Camera = getCapacitorCamera();
+  if (!Camera) return null;
 
+  try {
     // Demander permission caméra
     const perms = await Camera.requestPermissions({ permissions: ['camera'] });
     if (perms.camera !== 'granted') {
@@ -96,8 +107,8 @@ export async function openNativeCamera() {
     const photo = await Camera.getPhoto({
       quality: 85,
       allowEditing: false,
-      resultType: CameraResultType.DataUrl,
-      source: CameraSource.Camera,
+      resultType: 'dataUrl',
+      source: 'CAMERA',
       correctOrientation: true,
       width: 1920,
     });
@@ -107,7 +118,6 @@ export async function openNativeCamera() {
     return await compressImage(file);
 
   } catch (err) {
-    // Annulation utilisateur — pas une erreur
     if (err?.message?.includes('User cancelled') || err?.message?.includes('cancelled')) {
       return null;
     }
@@ -122,10 +132,10 @@ export async function openNativeCamera() {
 export async function openNativeGallery() {
   if (!isNativeApp()) return null;
 
-  try {
-    const mod = await import('@capacitor/camera');
-    const { Camera, CameraResultType, CameraSource } = mod;
+  const Camera = getCapacitorCamera();
+  if (!Camera) return null;
 
+  try {
     // Demander permission photos
     const perms = await Camera.requestPermissions({ permissions: ['photos'] });
     if (perms.photos !== 'granted') {
@@ -135,8 +145,8 @@ export async function openNativeGallery() {
     const photo = await Camera.getPhoto({
       quality: 85,
       allowEditing: false,
-      resultType: CameraResultType.DataUrl,
-      source: CameraSource.Photos,
+      resultType: 'dataUrl',
+      source: 'PHOTOS',
       correctOrientation: true,
       width: 1920,
     });
