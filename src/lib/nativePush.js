@@ -117,7 +117,8 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
 
     console.log('[NativePush] ✅ STEP 4: User GRANTED the permission');
   } else {
-    console.log('[NativePush] ✅ STEP 3: Permission already GRANTED');
+    console.log('[NativePush] ✅ STEP 3: Permission already GRANTED (no popup needed)');
+    console.log('[NativePush] ✅ FALLBACK: Notifications were already enabled');
   }
 
   // ── 5. Enregistrer les LISTENERS AVANT register() ──────────────────────────
@@ -128,13 +129,13 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   const tokenListener = await PushNotifications.addListener('registration', (token) => {
     const tokenValue = token.value;
     console.log('[NativePush] ✅ ════════════════════════════════════');
-    console.log('[NativePush] ✅ STEP 6: FCM TOKEN GENERATED/REFRESHED');
+    console.log('[NativePush] ✅ [CERTAIN] FCM TOKEN GENERATED/REFRESHED');
     console.log('[NativePush] ✅ Token start (25 chars):', tokenValue?.substring(0, 25) + '...');
     console.log('[NativePush] ✅ Token full (256 chars):', tokenValue?.substring(0, 256));
     console.log('[NativePush] ✅ ════════════════════════════════════');
     
     if (onToken) {
-      console.log('[NativePush] 🟢 Calling onToken callback...');
+      console.log('[NativePush] 🟢 [CERTAIN] Calling onToken callback...');
       onToken(tokenValue);
     } else {
       console.warn('[NativePush] ⚠️ onToken callback NOT PROVIDED!');
@@ -185,9 +186,11 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
 
   // ── 6. APPELER register() APRÈS que les listeners soient prêts ────────────
   console.log('[NativePush] 🟡 STEP 6: Calling register() to generate/refresh token...');
+  console.log('[NativePush] 🟡 [CERTAIN] register() called - waiting for token event');
   try {
     await PushNotifications.register();
-    console.log('[NativePush] ✅ register() called, waiting for token event...');
+    console.log('[NativePush] ✅ [CERTAIN] register() method executed successfully');
+    console.log('[NativePush] ✅ [CERTAIN] Waiting for token event from listener...');
   } catch (regErr) {
     console.error('[NativePush] ❌ register() failed:', regErr?.message);
     console.log('[NativePush] ❌ ════════════════════════════════════\n');

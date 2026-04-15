@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     // 4. SUCCESS RESPONSE
     // ──────────────────────────────────────────────────────────────────────
     console.log('[FCM BACKEND] ✅ ════════════════════════════════════');
-    console.log('[FCM BACKEND] ✅ FCM TOKEN REGISTERED SUCCESSFULLY');
+    console.log('[FCM BACKEND] ✅ [CERTAIN] FCM TOKEN SAVED IN DATABASE');
     console.log('   - token_id:', result.id);
     console.log('   - user_email:', user.email);
     console.log('   - user_role:', user.role);
