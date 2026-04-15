@@ -144,16 +144,30 @@ export default function AppLayoutWrapper({ user }) {
 
         // ── CAS 1 : APK Android (Capacitor natif) ──────────────────────────
         if (isNativeApp()) {
-          console.log('[FCM] Mode natif Capacitor détecté');
+          console.log('[AppLayoutWrapper FCM] 🔴 Mode natif Capacitor détecté');
           const { cleanup, permissionStatus } = await initCapacitorPush({
 
             onToken: async (token) => {
-              console.log('[FCM] ✅ Token natif reçu → sauvegarde backend');
+              console.log('[AppLayoutWrapper FCM] 🟡 Token reçu du callback onToken');
+              console.log('[AppLayoutWrapper FCM] Token (256 chars):', token?.substring(0, 256));
+              
+              if (!token) {
+                console.error('[AppLayoutWrapper FCM] ❌ Token vide/undefined!');
+                return;
+              }
+
               try {
+                console.log('[AppLayoutWrapper FCM] 🔵 Appel saveFcmToken avec token...');
                 const res = await base44.functions.invoke('saveFcmToken', { token });
-                console.log('[FCM] ✅ Token sauvegardé en BDD:', res.data?.token_id);
+                console.log('[AppLayoutWrapper FCM] ✅ Token sauvegardé en BDD:');
+                console.log('   - token_id:', res.data?.token_id);
+                console.log('   - success:', res.data?.success);
+                console.log('   - message:', res.data?.message);
               } catch (e) {
-                console.error('[FCM] ❌ Erreur sauvegarde token:', e?.message);
+                console.error('[AppLayoutWrapper FCM] ❌ Erreur saveFcmToken:');
+                console.error('   - message:', e?.message);
+                console.error('   - code:', e?.code);
+                console.error('   - response:', e?.response?.data);
               }
             },
 
@@ -161,14 +175,13 @@ export default function AppLayoutWrapper({ user }) {
               // App ouverte → toast avec navigation React Router (pas window.location)
               const data = notification.data || {};
               const route = data.notif_route || data.route || data.target_screen || null;
-              console.log('[FCM] Foreground notification:', notification.title, '→', route);
+              console.log('[AppLayoutWrapper FCM] Foreground notification:', notification.title, '→', route);
               import('sonner').then(({ toast }) => {
                 toast(notification.title || 'CDL', {
                   description: notification.body || '',
                   duration: 8000,
                   action: route ? {
                     label: 'Voir',
-                    // postMessage → FcmDeepLinkHandler dans App.jsx gère la navigation
                     onClick: () => {
                       window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
                     },
@@ -179,32 +192,26 @@ export default function AppLayoutWrapper({ user }) {
             },
 
             onNotificationTap: ({ route, data }) => {
-              // Tap depuis background/app fermée
-              // sessionStorage déjà stocké dans nativePush.js
-              // On tente aussi une navigation directe si React est déjà monté
-              console.log('[FCM] Tap notification → route:', route);
+              console.log('[AppLayoutWrapper FCM] Tap notification → route:', route);
               if (route && route.startsWith('/')) {
                 window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
               }
             },
 
             onPermissionDenied: (reason) => {
-              console.warn('[FCM] Permission notifications refusée:', reason);
-              // Le bandeau NotificationPermissionBanner s'affiche via son propre useEffect
+              console.warn('[AppLayoutWrapper FCM] Permission notifications refusée:', reason);
             },
           });
 
           nativeCleanup = cleanup;
-          console.log('[FCM] Init Capacitor terminée, permission:', permissionStatus);
+          console.log('[AppLayoutWrapper FCM] ✅ Init Capacitor terminée, permission:', permissionStatus);
           return;
         }
 
-        // ── CAS 2 : Navigateur web (PWA / dev) ─────────────────────────────
-        // Web FCM: attendre le nettoyage et recréation complète
-        console.log('[FCM] Mode web détecté - pas de FCM pour le moment');
+        console.log('[AppLayoutWrapper FCM] Mode web détecté');
 
       } catch (err) {
-        console.debug('[FCM] Init error:', err?.message);
+        console.error('[AppLayoutWrapper FCM] Init error:', err?.message, err);
       }
     };
 
@@ -214,9 +221,7 @@ export default function AppLayoutWrapper({ user }) {
     const onCdlNavigate = (e) => {
       const route = e.detail?.route;
       if (route && route.startsWith('/')) {
-        // Stocker en sessionStorage pour que FcmDeepLinkHandler dans App.jsx le capte
         try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
-        // Si navigate est disponible, l'utiliser directement
         window.history.pushState({}, '', route);
         window.dispatchEvent(new PopStateEvent('popstate'));
       }

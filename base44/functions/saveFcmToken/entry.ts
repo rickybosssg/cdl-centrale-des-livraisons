@@ -6,34 +6,48 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 Deno.serve(async (req) => {
   try {
+    console.log('[saveFcmToken] 🔴 Request reçue');
+    
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
+    console.log('[saveFcmToken] User:', user?.email, '| role:', user?.role);
+
     if (!user) {
+      console.error('[saveFcmToken] ❌ User unauthorized');
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { token } = await req.json();
+    
+    console.log('[saveFcmToken] 🟡 Token reçu:');
+    console.log('   - Longueur:', token?.length);
+    console.log('   - Début (25 chars):', token?.substring(0, 25) + '...');
+    
     if (!token) {
+      console.error('[saveFcmToken] ❌ Token vide');
       return Response.json({ error: 'Token requis' }, { status: 400 });
     }
 
-    console.log(`[saveFcmToken] Sauvegarde token pour ${user.email}:`, token.substring(0, 25) + '...');
-
-    // 1. Vérifier si un token existe déjà pour cet utilisateur
+    // 1. Vérifier les anciens tokens
+    console.log('[saveFcmToken] 🔵 Recherche tokens existants pour', user.email);
     const existing = await base44.asServiceRole.entities.FcmToken.filter({
       user_email: user.email,
     });
+    console.log('[saveFcmToken] Tokens existants trouvés:', existing.length);
 
-    // 2. Supprimer les anciens tokens (garder un seul token actif par user)
+    // 2. Supprimer les anciens tokens
     for (const old of existing) {
       try {
         await base44.asServiceRole.entities.FcmToken.delete(old.id);
-        console.log(`[saveFcmToken] Token ancien supprimé: ${old.id}`);
-      } catch (_) {}
+        console.log('[saveFcmToken] ✓ Token ancien supprimé:', old.id);
+      } catch (delErr) {
+        console.warn('[saveFcmToken] Erreur suppression ancien token:', delErr.message);
+      }
     }
 
     // 3. Créer le nouveau token
+    console.log('[saveFcmToken] 🟢 Création nouveau FcmToken record...');
     const result = await base44.asServiceRole.entities.FcmToken.create({
       user_email: user.email,
       token,
@@ -41,14 +55,27 @@ Deno.serve(async (req) => {
       registered_at: new Date().toISOString(),
     });
 
-    console.log(`[saveFcmToken] ✅ Token enregistré:`, result.id);
+    console.log('[saveFcmToken] ✅ TOKEN ENREGISTRÉ AVEC SUCCÈS:');
+    console.log('   - token_id:', result.id);
+    console.log('   - user_email:', user.email);
+    console.log('   - user_role:', user.role);
+    console.log('   - device:', 'android_native');
+    
     return Response.json({
       success: true,
       token_id: result.id,
       message: `Token FCM enregistré pour ${user.email}`,
     });
   } catch (error) {
-    console.error('[saveFcmToken] Erreur:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    console.error('[saveFcmToken] ❌ ERREUR CRITIQUE:');
+    console.error('   - message:', error.message);
+    console.error('   - stack:', error.stack);
+    return Response.json({
+      error: error.message,
+      debug: {
+        message: error.message,
+        type: error.constructor.name,
+      }
+    }, { status: 500 });
   }
 });
