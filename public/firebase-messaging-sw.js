@@ -1,140 +1,82 @@
-/**
- * Firebase Messaging Service Worker — CDL App
- * VERSION CORRIGÉE : deep link fiable depuis notification background/killed
- *
- * Ce SW est enregistré avec les paramètres Firebase en query string.
- * Il gère les notifications background et les clics depuis app fermée.
- */
+/* eslint-disable no-restricted-globals */
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js');
 
-// Récupérer la config Firebase depuis les query params
+// Récupérer les params passés via l'URL
 const params = new URLSearchParams(self.location.search);
 const firebaseConfig = {
-  apiKey:            params.get('apiKey')            || '',
-  authDomain:        params.get('authDomain')        || 'cdl-app-4743c.firebaseapp.com',
-  projectId:         params.get('projectId')         || 'cdl-app-4743c',
-  storageBucket:     params.get('storageBucket')     || 'cdl-app-4743c.appspot.com',
+  apiKey: params.get('apiKey') || '',
+  authDomain: params.get('authDomain') || '',
+  projectId: params.get('projectId') || '',
+  storageBucket: params.get('storageBucket') || '',
   messagingSenderId: params.get('messagingSenderId') || '',
-  appId:             params.get('appId')             || '',
+  appId: params.get('appId') || '',
 };
+const vapidKey = params.get('vapidKey') || '';
 
-// Import Firebase Messaging compat (SW doit utiliser compat)
-importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
+// Initialiser Firebase seulement si les params sont présents
+if (firebaseConfig.apiKey && firebaseConfig.messagingSenderId && firebaseConfig.appId) {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
 
-firebase.initializeApp(firebaseConfig);
-const messaging = firebase.messaging();
+    // Background message handler
+    messaging.onBackgroundMessage((payload) => {
+      console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
-const CDL_ICON = 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg';
-const CDL_ORIGIN = self.registration.scope.replace(/\/$/, '') || 'https://cdl.base44.app';
+      const notificationTitle = payload.notification?.title || payload.data?.titre || 'CDL';
+      const notificationOptions = {
+        body: payload.notification?.body || payload.data?.message || '',
+        icon: payload.notification?.icon || payload.data?.icon || 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg',
+        badge: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg',
+        data: payload.data,
+        requireInteraction: true,
+        tag: payload.data?.notification_key || notificationTitle,
+        renotify: payload.data?.notification_key ? true : false,
+      };
 
-// ── Résoudre la route deep link depuis les données FCM ────────────────────────
-function resolveRoute(data) {
-  if (!data) return '/';
-  // Route explicite en priorité absolue
-  if (data.notif_route && data.notif_route.startsWith('/')) return data.notif_route;
-  if (data.route && data.route.startsWith('/')) return data.route;
-  if (data.target_screen && data.target_screen.startsWith('/')) return data.target_screen;
-
-  // Route par type
-  const type = data.type || '';
-  const id = data.courseId || data.entity_id || data.target_entity_id || '';
-
-  switch (type) {
-    case 'new_delivery_request':
-      return id ? `/course-livreur/${id}` : '/courses-disponibles';
-    case 'delivery_accepted':
-    case 'delivery_started':
-      return id ? `/course/${id}/track` : '/mes-courses';
-    case 'delivery_completed':
-    case 'delivery_cancelled':
-    case 'no_driver_found':
-      return id ? `/course/${id}` : '/mes-courses';
-    case 'new_course':
-    case 'course_accepted':
-    case 'course_update':
-      return id ? `/course/${id}` : '/mes-courses';
-    case 'course_cancelled':
-      return id ? `/course/${id}` : '/mes-courses';
-    case 'course_tracking':
-      return id ? `/course/${id}/track` : '/mes-courses';
-    case 'new_message':
-      return '/mes-messages';
-    case 'profile_validated':
-    case 'profile_rejected':
-      return '/settings';
-    case 'bedou_recharge':
-    case 'bedou_retrait':
-    case 'bedou':
-      return '/mon-bedou';
-    case 'course_issue':
-      return '/gestion-signalements';
-    case 'admin':
-      return '/admin-dashboard';
-    case 'commande':
-      return id ? `/commande-marketplace/${id}` : '/mes-commandes-marketplace';
-    default:
-      return '/';
+      self.registration.showNotification(notificationTitle, notificationOptions);
+    });
+  } catch (e) {
+    console.error('[firebase-messaging-sw.js] Error initializing Firebase:', e);
   }
+} else {
+  console.error('[firebase-messaging-sw.js] Missing Firebase config params:', {
+    hasApiKey: !!firebaseConfig.apiKey,
+    hasMessagingSenderId: !!firebaseConfig.messagingSenderId,
+    hasAppId: !!firebaseConfig.appId,
+  });
 }
 
-// ── Notifications background (app en arrière-plan ou fermée) ─────────────────
-messaging.onBackgroundMessage((payload) => {
-  console.log('[SW] Background message:', payload);
-
-  const { notification, data } = payload;
-  const title = notification?.title || data?.title || 'CDL';
-  const body  = notification?.body  || data?.body  || '';
-  const route = resolveRoute(data);
-
-  self.registration.showNotification(title, {
-    body,
-    icon: CDL_ICON,
-    badge: CDL_ICON,
-    tag: `cdl-${data?.type || 'notif'}-${data?.courseId || Date.now()}`,
-    renotify: true,
-    requireInteraction: ['new_delivery_request', 'delivery_cancelled', 'course_issue'].includes(data?.type),
-    vibrate: data?.priority === 'high' ? [300, 100, 300, 100, 300] : [200, 100, 200],
-    data: {
-      ...data,
-      route,
-      clickAction: CDL_ORIGIN + route,
-    },
-  });
+// Force skip waiting and claim clients immediately
+self.addEventListener('install', (event) => {
+  console.log('[firebase-messaging-sw.js] Installing...', self.registration.scope);
+  self.skipWaiting();
 });
 
-// ── Clic sur notification (toutes les notifications SW, y compris app fermée) ─
+self.addEventListener('activate', (event) => {
+  console.log('[firebase-messaging-sw.js] Activated:', self.registration.scope);
+  event.waitUntil(self.clients.claim());
+});
+
+// Handle notification click
 self.addEventListener('notificationclick', (event) => {
+  console.log('[firebase-messaging-sw.js] Notification click:', event.notification.data);
   event.notification.close();
 
-  const data = event.notification.data || {};
-  const route = data.route || data.notif_route || '/';
-  const targetUrl = CDL_ORIGIN + route;
-
-  console.log('[SW] Notification click → route:', route);
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // App déjà ouverte → focus + postMessage pour navigation React Router
-      for (const client of clientList) {
-        if (client.url.startsWith(CDL_ORIGIN)) {
-          client.focus();
-          // Envoyer la route à l'app via postMessage (capté par FcmDeepLinkHandler)
-          client.postMessage({
-            type: 'CDL_NOTIFICATION_CLICK',
-            route,
-            data,
-          });
-          return;
+  const route = event.notification.data?.route || event.notification.data?.target_screen;
+  if (route) {
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        if (clients.length > 0) {
+          // Navigate existing window
+          clients[0].navigate(route.startsWith('/') ? route : `/${route}`);
+          clients[0].focus();
+        } else {
+          // Open new window
+          self.clients.openWindow(route.startsWith('/') ? route : `/${route}`);
         }
-      }
-      // App fermée → ouvrir avec la route en query param (capté avant mount React)
-      return clients.openWindow(CDL_ORIGIN + '/?notif_route=' + encodeURIComponent(route));
-    })
-  );
-});
-
-// ── Activation immédiate du SW ─────────────────────────────────────────────────
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
+      })
+    );
+  }
 });

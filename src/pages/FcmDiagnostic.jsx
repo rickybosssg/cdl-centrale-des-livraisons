@@ -7,14 +7,14 @@ import { toast } from "sonner";
 import NotificationPermissionRequest from "@/components/NotificationPermissionRequest";
 
 const FIREBASE_CONFIG = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
   authDomain: "cdl-app-4743c.firebaseapp.com",
   projectId: "cdl-app-4743c",
   storageBucket: "cdl-app-4743c.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
 };
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || '';
 
 async function getFcmToken() {
   const { getToken } = await import('firebase/messaging');
@@ -185,29 +185,56 @@ export default function FcmDiagnostic() {
       }
 
       setStep('secrets', { label: "Secrets VITE_ configurés", status: "loading" });
-      const missing = Object.entries(FIREBASE_CONFIG).filter(([, v]) => !v || v === 'undefined').map(([k]) => k);
-      const vapidOk = !!VAPID_KEY && VAPID_KEY !== 'undefined';
-      if (missing.length > 0 || !vapidOk) {
-        setStep('secrets', { status: "error", detail: `Manquants: ${[...missing, !vapidOk && 'VAPID_KEY'].filter(Boolean).join(', ')}` });
+      const missing = [];
+      if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === 'undefined') missing.push('VITE_FIREBASE_API_KEY');
+      if (!FIREBASE_CONFIG.messagingSenderId || FIREBASE_CONFIG.messagingSenderId === 'undefined') missing.push('VITE_FIREBASE_MESSAGING_SENDER_ID');
+      if (!FIREBASE_CONFIG.appId || FIREBASE_CONFIG.appId === 'undefined') missing.push('VITE_FIREBASE_APP_ID');
+      if (!VAPID_KEY || VAPID_KEY === 'undefined') missing.push('VITE_FIREBASE_VAPID_KEY');
+      
+      if (missing.length > 0) {
+        setStep('secrets', { 
+          status: "error", 
+          detail: `Manquants: ${missing.join(', ')}` 
+        });
       } else {
-        setStep('secrets', { status: "ok", detail: `projectId: ${FIREBASE_CONFIG.projectId}` });
+        setStep('secrets', { 
+          status: "ok", 
+          detail: `✅ apiKey=${FIREBASE_CONFIG.apiKey.substring(0,8)}... | messagingSenderId=${FIREBASE_CONFIG.messagingSenderId.substring(0,8)}... | appId=${FIREBASE_CONFIG.appId.substring(0,8)}...` 
+        });
       }
 
       setStep('sw', { label: "Service Worker firebase-messaging-sw.js", status: "loading" });
       setStep('token', { label: "Token FCM web généré", status: "loading" });
       try {
+        // Force unregister old SW first
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          if (reg.scope.includes('firebase-messaging-sw')) {
+            console.log('[FcmDiagnostic] Unregistering old SW:', reg.scope);
+            await reg.unregister();
+          }
+        }
+        
         const { token, reg } = await getFcmToken();
-        setStep('sw', { status: "ok", detail: `Scope: ${reg.scope} | État: ${reg.active?.state || 'actif'}` });
+        
+        // Wait for SW to be ready
+        await navigator.serviceWorker.ready;
+        const swReg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+        
+        setStep('sw', { 
+          status: "ok", 
+          detail: `Scope: ${reg.scope} | SW actif: ${swReg?.active?.state || 'activé'} | Cache invalidé` 
+        });
         if (token) {
           setWebToken(token);
           await base44.functions.invoke('saveFcmToken', { token });
-          setStep('token', { status: "ok", detail: token.substring(0, 50) + "…" });
+          setStep('token', { status: "ok", detail: `${token.substring(0, 50)}…` });
         } else {
-          setStep('token', { status: "error", detail: "Aucun token — vérifiez VAPID_KEY" });
+          setStep('token', { status: "error", detail: "Token vide — vérifiez VAPID_KEY" });
         }
       } catch (e) {
-        setStep('sw', { status: "error", detail: e.message });
-        setStep('token', { status: "error", detail: "SW requis" });
+        setStep('sw', { status: "error", detail: `Erreur SW: ${e.message}` });
+        setStep('token', { status: "error", detail: "SW non chargé ou VAPID_KEY invalide" });
       }
     }
 
