@@ -32,14 +32,23 @@ async function getFcmToken() {
   
   // Enregistrer le SW et lui injecter la config via message
   const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-  await navigator.serviceWorker.ready;
+  console.log('[NotificationPermissionRequest] SW enregistré:', reg.scope);
   
-  // Envoyer la config au SW via message
-  if (navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({
+  await navigator.serviceWorker.ready;
+  console.log('[NotificationPermissionRequest] SW ready');
+  
+  // Envoyer la config au SW via message (wait pour s'assurer que le controller existe)
+  const controller = navigator.serviceWorker.controller;
+  if (controller) {
+    console.log('[NotificationPermissionRequest] Envoi config au SW');
+    controller.postMessage({
       type: 'FIREBASE_CONFIG',
       config: firebaseConfig,
     });
+    // Petit délai pour s'assurer que le SW a reçu le message
+    await new Promise(r => setTimeout(r, 500));
+  } else {
+    console.warn('[NotificationPermissionRequest] ⚠️ SW controller non disponible');
   }
   
   // Générer le token

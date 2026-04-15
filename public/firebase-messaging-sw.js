@@ -8,40 +8,70 @@
 let firebaseConfig = null;
 let messaging = null;
 
-// Écouter la config desde le frontend
+console.log('[firebase-messaging-sw] 🔄 Service Worker chargé');
+
+// Écouter la config depuis le frontend
 self.addEventListener('message', (event) => {
+  console.log('[firebase-messaging-sw] 📨 Message reçu:', event.data?.type);
+  
   if (event.data?.type === 'FIREBASE_CONFIG') {
     firebaseConfig = event.data.config;
-    console.log('[firebase-messaging-sw] Config reçue:', {
-      apiKey: firebaseConfig.apiKey.substring(0, 8) + '...',
-      messagingSenderId: firebaseConfig.messagingSenderId.substring(0, 8) + '...',
-      appId: firebaseConfig.appId.substring(0, 8) + '...',
-      vapidKey: firebaseConfig.vapidKey.substring(0, 8) + '...',
+    
+    // Vérifier la complétude
+    const missing = [];
+    if (!firebaseConfig.apiKey) missing.push('apiKey');
+    if (!firebaseConfig.messagingSenderId) missing.push('messagingSenderId');
+    if (!firebaseConfig.appId) missing.push('appId');
+    if (!firebaseConfig.vapidKey) missing.push('vapidKey');
+    
+    console.log('[firebase-messaging-sw] ✅ Config reçue:', {
+      apiKey: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 8) + '...' : '❌ UNDEFINED',
+      messagingSenderId: firebaseConfig.messagingSenderId ? firebaseConfig.messagingSenderId.substring(0, 8) + '...' : '❌ UNDEFINED',
+      appId: firebaseConfig.appId ? firebaseConfig.appId.substring(0, 8) + '...' : '❌ UNDEFINED',
+      vapidKey: firebaseConfig.vapidKey ? firebaseConfig.vapidKey.substring(0, 8) + '...' : '❌ UNDEFINED',
+      missing: missing.length > 0 ? missing : '✅ Complet',
     });
+    
+    // Initialiser Firebase
     initializeFirebase();
   }
 });
 
 async function initializeFirebase() {
   if (!firebaseConfig) {
-    console.warn('[firebase-messaging-sw] Firebase config not yet received');
-    return;
+    console.error('[firebase-messaging-sw] ❌ Firebase config not available');
+    return null;
   }
   
   try {
-    // Importer Firebase dynamiquement
-    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
+    console.log('[firebase-messaging-sw] ⏳ Initialisation Firebase...');
+    
+    // Importer Firebase depuis CDN
+    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
     const { getMessaging, onBackgroundMessage } = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js');
     
-    // Initialiser Firebase
-    const app = initializeApp(firebaseConfig);
-    messaging = getMessaging(app);
+    console.log('[firebase-messaging-sw] ✅ Modules Firebase importés');
     
-    console.log('[firebase-messaging-sw] Firebase initialisé avec succès');
+    // Initialiser Firebase (ou récupérer l'instance existante)
+    let app;
+    if (getApps().length === 0) {
+      app = initializeApp(firebaseConfig);
+      console.log('[firebase-messaging-sw] ✅ Firebase app initialisé');
+    } else {
+      app = getApps()[0];
+      console.log('[firebase-messaging-sw] ✅ Firebase app déjà initialisé');
+    }
+    
+    messaging = getMessaging(app);
+    console.log('[firebase-messaging-sw] ✅ Messaging initialisé');
     
     // Écouter les notifications en arrière-plan
     onBackgroundMessage(messaging, (payload) => {
-      console.log('[firebase-messaging-sw] Notification reçue en BG:', payload);
+      console.log('[firebase-messaging-sw] 📬 Notification reçue en BG:', {
+        title: payload.notification?.title,
+        body: payload.notification?.body,
+        route: payload.data?.route,
+      });
       
       const notificationTitle = payload.notification?.title || 'CDL';
       const notificationOptions = {
@@ -61,14 +91,18 @@ async function initializeFirebase() {
       self.registration.showNotification(notificationTitle, notificationOptions);
     });
     
+    console.log('[firebase-messaging-sw] ✅ Firebase Cloud Messaging prêt');
+    return messaging;
+    
   } catch (error) {
-    console.error('[firebase-messaging-sw] Erreur initialisation Firebase:', error);
+    console.error('[firebase-messaging-sw] ❌ Erreur initialisation Firebase:', error.message, error.stack);
+    return null;
   }
 }
 
 // Gérer le clic sur la notification
 self.addEventListener('notificationclick', (event) => {
-  console.log('[firebase-messaging-sw] Notification cliquée:', event.notification.tag);
+  console.log('[firebase-messaging-sw] 🖱️ Notification cliquée:', event.notification.tag);
   event.notification.close();
   
   const route = event.notification.data?.route || '/';
@@ -79,21 +113,23 @@ self.addEventListener('notificationclick', (event) => {
       // Chercher une fenêtre existante
       for (const client of clientList) {
         if (client.url === new URL(route, self.location).href && 'focus' in client) {
+          console.log('[firebase-messaging-sw] 📍 Focus sur fenêtre existante:', route);
           return client.focus();
         }
       }
       
       // Sinon, ouvrir une nouvelle fenêtre
       if (clients.openWindow) {
+        console.log('[firebase-messaging-sw] 📍 Ouverture nouvelle fenêtre:', route);
         return clients.openWindow(route);
       }
     })
   );
 });
 
-// Fallback: si la config n'a pas été reçue rapidement, log un avertissement
+// Alerte si config non reçue
 setTimeout(() => {
   if (!firebaseConfig) {
-    console.warn('[firebase-messaging-sw] Config Firebase non reçue après 5s — les notifications en BG ne fonctionneront pas');
+    console.warn('[firebase-messaging-sw] ⚠️ Config Firebase NON REÇUE après 5s');
   }
 }, 5000);

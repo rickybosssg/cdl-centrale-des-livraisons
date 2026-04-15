@@ -230,20 +230,24 @@ export default function FcmDiagnostic() {
         
         setStep('sw', { 
           status: "ok", 
-          detail: `Scope: ${reg.scope} | État: ${reg.active?.state || 'activé'}` 
+          detail: `Scope: ${reg.scope} | État: ${reg.active?.state || 'activé'} | Config envoyée au SW`
         });
+        
+        console.log('[FcmDiagnostic] ✅ SW config sent, waiting for token generation...');
         
         if (token) {
           setWebToken(token);
+          console.log('[FcmDiagnostic] ✅ Token généré:', token.substring(0, 50) + '...');
           await base44.functions.invoke('saveFcmToken', { token });
           setStep('token', { status: "ok", detail: `${token.substring(0, 50)}…` });
         } else {
-          setStep('token', { status: "error", detail: "Token vide" });
+          console.error('[FcmDiagnostic] ❌ Token vide');
+          setStep('token', { status: "error", detail: "Token vide — vérifiez console pour les logs du SW" });
         }
       } catch (e) {
-        console.error('[FcmDiagnostic] Error:', e);
-        setStep('sw', { status: "error", detail: `Erreur: ${e.message}` });
-        setStep('token', { status: "error", detail: `Erreur: ${e.message}` });
+        console.error('[FcmDiagnostic] ❌ Error:', e);
+        setStep('sw', { status: "error", detail: `❌ ${e.message}` });
+        setStep('token', { status: "error", detail: `❌ ${e.message}` });
       }
     }
 
