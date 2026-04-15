@@ -1,0 +1,60 @@
+{
+  "name": "NotificationTestLog",
+  "type": "object",
+  "properties": {
+    "admin_email": {
+      "type": "string",
+      "title": "Email admin qui a lanc\u00e9 le test"
+    },
+    "recipient_email": {
+      "type": "string",
+      "title": "Email destinataire du test"
+    },
+    "recipient_role": {
+      "type": "string",
+      "title": "R\u00f4le destinataire",
+      "enum": [
+        "admin",
+        "livreur",
+        "client",
+        "partenaire",
+        "commercial",
+        "annonceur"
+      ]
+    },
+    "tokens_count": {
+      "type": "number",
+      "title": "Nombre de tokens trouv\u00e9s"
+    },
+    "sent_count": {
+      "type": "number",
+      "title": "Nombre de notifications envoy\u00e9es"
+    },
+    "failed_count": {
+      "type": "number",
+      "title": "Nombre d'\u00e9checs"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "failed",
+        "partial"
+      ],
+      "title": "Statut du test"
+    },
+    "timestamp": {
+      "type": "string",
+      "title": "Timestamp du test"
+    },
+    "details": {
+      "type": "string",
+      "title": "D\u00e9tails JSON (payload + r\u00e9sultat)"
+    }
+  },
+  "required": [
+    "admin_email",
+    "recipient_email",
+    "recipient_role"
+  ]
+}
