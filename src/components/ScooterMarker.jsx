@@ -1,191 +1,170 @@
 /**
  * ScooterMarker — Marqueur scooter animé pour Leaflet
- * - Déplacement interpolé (pas de saut brutal)
- * - Orientation automatique selon le cap de déplacement
- * - Bulle contextuelle selon l'état de la course
- * - Optimisé mobile/APK
+ * - Interpolation fluide requestAnimationFrame (ease-out)
+ * - Orientation automatique selon le bearing GPS
+ * - Bulle contextuelle discrète
+ * - Pas de recreation du marker, seulement setLatLng + setIcon
+ * - Compatible mobile / APK Android
  */
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 
-// Calcule le bearing (cap) entre deux points GPS en degrés
+// ── Bearing entre deux coords (°) ──────────────────────────────────────────
 function calcBearing(lat1, lng1, lat2, lng2) {
-  const toRad = d => (d * Math.PI) / 180;
-  const toDeg = r => (r * 180) / Math.PI;
-  const dLng = toRad(lng2 - lng1);
-  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+  const R = Math.PI / 180;
+  const dLon = (lng2 - lng1) * R;
+  const y = Math.sin(dLon) * Math.cos(lat2 * R);
   const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+    Math.cos(lat1 * R) * Math.sin(lat2 * R) -
+    Math.sin(lat1 * R) * Math.cos(lat2 * R) * Math.cos(dLon);
+  return ((Math.atan2(y, x) / R) + 360) % 360;
 }
 
-// Distance entre deux points en mètres (Haversine simplifié)
-function distanceMeters(lat1, lng1, lat2, lng2) {
+// ── Distance en mètres ──────────────────────────────────────────────────────
+function distMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Génère le HTML de l'icône scooter SVG avec rotation
-function makeScooterIcon(bearing = 0, label = "") {
+// ── Génère l'icône divIcon scooter SVG ─────────────────────────────────────
+// Le scooter SVG pointe vers la DROITE (angle 0°) — on tourne selon bearing
+function makeScooterIcon(bearing, label) {
   const labelHtml = label
     ? `<div style="
-        position:absolute;
-        top:-34px;
-        left:50%;
-        transform:translateX(-50%);
-        background:white;
-        color:#1a73e8;
-        font-size:11px;
-        font-weight:700;
-        padding:3px 8px;
-        border-radius:20px;
-        white-space:nowrap;
-        box-shadow:0 2px 8px rgba(0,0,0,0.18);
-        border:1.5px solid #e0eaff;
-        font-family:Inter,sans-serif;
-        pointer-events:none;
+        position:absolute;top:-38px;left:50%;transform:translateX(-50%);
+        background:rgba(255,255,255,0.96);color:#1a73e8;
+        font-size:10.5px;font-weight:700;padding:3px 9px;
+        border-radius:20px;white-space:nowrap;
+        box-shadow:0 2px 10px rgba(26,115,232,0.22);
+        border:1.5px solid #c7d9ff;font-family:Inter,system-ui,sans-serif;
+        pointer-events:none;line-height:1.3;
       ">${label}</div>`
     : "";
 
+  // SVG scooter moderne orienté vers la droite → bearing 0 = Est (natif Leaflet bearing)
+  // On soustrait 90° car le scooter est en fait orienté vers le haut dans le SVG
+  const rotate = bearing - 90;
+
   return L.divIcon({
     className: "",
-    html: `
+    html: `<div style="position:relative;width:48px;height:48px;display:flex;align-items:center;justify-content:center;">
+      ${labelHtml}
       <div style="
-        position:relative;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        width:46px;
-        height:46px;
+        width:48px;height:48px;
+        background:linear-gradient(135deg,#1a73e8,#1557b0);
+        border-radius:50%;
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:0 4px 14px rgba(26,115,232,0.5);
+        border:2.5px solid rgba(255,255,255,0.95);
+        transform:rotate(${rotate}deg);
       ">
-        ${labelHtml}
-        <div style="
-          background:#1a73e8;
-          border-radius:50%;
-          width:46px;
-          height:46px;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          box-shadow:0 3px 12px rgba(26,115,232,0.45);
-          border:3px solid white;
-          transform:rotate(${bearing}deg);
-          transition:transform 0.6s ease;
-        ">
-          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 64 64" fill="white">
-            <!-- Corps scooter simplifié, moderne -->
-            <ellipse cx="20" cy="44" rx="9" ry="9" fill="none" stroke="white" stroke-width="4"/>
-            <ellipse cx="44" cy="44" rx="9" ry="9" fill="none" stroke="white" stroke-width="4"/>
-            <path d="M29 44 H38" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-            <path d="M20 36 L28 20 L42 20 L44 36" fill="white" opacity="0.9"/>
-            <path d="M28 20 L30 14 L38 14 L42 20" fill="white"/>
-            <rect x="38" y="10" width="10" height="5" rx="2" fill="white" opacity="0.8"/>
-            <path d="M20 36 Q16 36 15 38" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
-          </svg>
-        </div>
-        <div style="
-          position:absolute;
-          bottom:-6px;
-          left:50%;
-          transform:translateX(-50%);
-          width:10px;
-          height:10px;
-          background:rgba(26,115,232,0.25);
-          border-radius:50%;
-          filter:blur(2px);
-        "></div>
+        <svg width="28" height="28" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Roue arrière -->
+          <circle cx="10" cy="34" r="7" stroke="white" stroke-width="3.5" fill="none"/>
+          <!-- Roue avant -->
+          <circle cx="38" cy="34" r="7" stroke="white" stroke-width="3.5" fill="none"/>
+          <!-- Axe/fourche avant -->
+          <line x1="38" y1="27" x2="35" y2="18" stroke="white" stroke-width="3" stroke-linecap="round"/>
+          <!-- Guidon -->
+          <line x1="31" y1="15" x2="39" y2="15" stroke="white" stroke-width="3" stroke-linecap="round"/>
+          <!-- Cadre principal -->
+          <path d="M10 27 L22 18 L34 18" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <!-- Siège -->
+          <path d="M18 18 L28 18" stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.85"/>
+          <!-- Carénage/corps -->
+          <path d="M10 27 Q10 22 16 20 L22 18" stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.7"/>
+          <!-- Phare avant -->
+          <circle cx="38" cy="21" r="2.5" fill="white" opacity="0.9"/>
+        </svg>
       </div>
-    `,
-    iconSize: [46, 46],
-    iconAnchor: [23, 23],
+      <!-- Ombre sol -->
+      <div style="
+        position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);
+        width:28px;height:6px;
+        background:rgba(26,115,232,0.18);
+        border-radius:50%;filter:blur(3px);
+      "></div>
+    </div>`,
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
     popupAnchor: [0, -28],
   });
 }
 
-const ANIMATION_DURATION = 1200; // ms pour l'interpolation
+const ANIM_MS = 1000; // durée interpolation ms
 
-export default function ScooterMarker({ lat, lng, label, followOnUpdate = false }) {
+export default function ScooterMarker({ lat, lng, label = "", followOnUpdate = false }) {
   const map = useMap();
   const markerRef = useRef(null);
   const animRef = useRef(null);
-  const prevPos = useRef(null);
-  const currentPos = useRef({ lat, lng });
+  const fromRef = useRef({ lat, lng });
   const bearingRef = useRef(0);
 
-  // Init marker
+  // ── Initialisation (une seule fois) ────────────────────────────────────────
   useEffect(() => {
     if (!lat || !lng) return;
     const icon = makeScooterIcon(0, label);
-    const marker = L.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
-    markerRef.current = marker;
-    currentPos.current = { lat, lng };
-    prevPos.current = { lat, lng };
+    const m = L.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
+    markerRef.current = m;
+    fromRef.current = { lat, lng };
     return () => {
-      map.removeLayer(marker);
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      map.removeLayer(m);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mise à jour animée à chaque changement de position
+  // ── Mise à jour animée ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!markerRef.current || !lat || !lng) return;
 
-    const from = currentPos.current;
+    const from = { ...fromRef.current };
     const to = { lat, lng };
 
-    // Calculer bearing seulement si déplacement significatif (>5m)
-    const dist = distanceMeters(from.lat, from.lng, to.lat, to.lng);
-    let newBearing = bearingRef.current;
-    if (dist > 5) {
-      newBearing = calcBearing(from.lat, from.lng, to.lat, to.lng);
-      bearingRef.current = newBearing;
+    // Calculer bearing uniquement si déplacement > 8m (évite rotations parasites)
+    const dist = distMeters(from.lat, from.lng, to.lat, to.lng);
+    if (dist > 8) {
+      bearingRef.current = calcBearing(from.lat, from.lng, to.lat, to.lng);
     }
+    const bearing = bearingRef.current;
 
-    // Annuler animation précédente
+    // Annuler anim précédente
     if (animRef.current) cancelAnimationFrame(animRef.current);
 
-    const startTime = performance.now();
-    const startLat = from.lat;
-    const startLng = from.lng;
+    const t0 = performance.now();
+    const sLat = from.lat;
+    const sLng = from.lng;
 
-    const animate = (now) => {
-      const elapsed = now - startTime;
-      const t = Math.min(elapsed / ANIMATION_DURATION, 1);
-      // Easing ease-out cubic
-      const eased = 1 - Math.pow(1 - t, 3);
+    const step = (now) => {
+      const p = Math.min((now - t0) / ANIM_MS, 1);
+      // Ease-out cubic
+      const e = 1 - Math.pow(1 - p, 3);
+      const cLat = sLat + (to.lat - sLat) * e;
+      const cLng = sLng + (to.lng - sLng) * e;
 
-      const curLat = startLat + (to.lat - startLat) * eased;
-      const curLng = startLng + (to.lng - startLng) * eased;
+      markerRef.current.setLatLng([cLat, cLng]);
 
-      markerRef.current.setLatLng([curLat, curLng]);
-      markerRef.current.setIcon(makeScooterIcon(newBearing, label));
-      currentPos.current = { lat: curLat, lng: curLng };
-
-      if (t < 1) {
-        animRef.current = requestAnimationFrame(animate);
+      if (p < 1) {
+        animRef.current = requestAnimationFrame(step);
       } else {
-        currentPos.current = { lat: to.lat, lng: to.lng };
-        prevPos.current = { lat: to.lat, lng: to.lng };
+        fromRef.current = { lat: to.lat, lng: to.lng };
+        markerRef.current.setIcon(makeScooterIcon(bearing, label));
         if (followOnUpdate) {
-          map.panTo([to.lat, to.lng], { animate: true, duration: 0.5 });
+          map.panTo([to.lat, to.lng], { animate: true, duration: 0.4 });
         }
       }
     };
 
-    animRef.current = requestAnimationFrame(animate);
+    // Mettre l'icône avec le bon bearing dès le départ
+    markerRef.current.setIcon(makeScooterIcon(bearing, label));
+    animRef.current = requestAnimationFrame(step);
 
-    return () => {
-      if (animRef.current) cancelAnimationFrame(animRef.current);
-    };
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, [lat, lng, label, followOnUpdate, map]);
 
   return null;

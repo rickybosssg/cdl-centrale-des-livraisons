@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Phone, Package, MapPin, CheckCircle2, Navigation, TrendingUp, Zap } from "lucide-react";
 import MiniChat from "../../components/MiniChat";
 import DispatchTimer from "../../components/DispatchTimer";
+import MapSuivi from "../../components/MapSuivi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
@@ -365,6 +366,15 @@ export default function CourseLivreur() {
           )}
         </CardContent>
       </Card>
+
+      {/* Mini-carte scooter — livreur en route */}
+      {["acceptee", "en_cours"].includes(course.statut) && course.livreur_lat && (
+        <MapSuivi
+          livreurLat={course.livreur_lat}
+          livreurLng={course.livreur_lng}
+          label={course.statut === "en_cours" ? "En livraison 🛵" : "En route 🛵"}
+        />
+      )}
 
       {/* Google Maps */}
       <div className="grid grid-cols-2 gap-2">
