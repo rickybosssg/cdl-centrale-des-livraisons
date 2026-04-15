@@ -9,8 +9,8 @@ export default function NotificationPermissionBanner({ showAlways = false }) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    // Afficher seulement si permission !== granted
-    if (showAlways || Notification.permission !== 'granted') {
+    // Afficher seulement si permission !== granted (et si API Notification existe)
+    if (typeof Notification !== 'undefined' && (showAlways || Notification.permission !== 'granted')) {
       setShow(true);
     }
   }, [showAlways]);

@@ -24,7 +24,7 @@ export function useTabNavigation() {
   useEffect(() => {
     if (!isRootTab && scrollContainerRef.current) {
       const previousTab = getRootTab(location.pathname);
-      scrollCache[previousTab] = scrollContainerRef.current.scrollTop;
+      scrollCache[previousTab] = scrollContainerRef.current?.scrollTop || 0;
     }
   }, [location.pathname]);
 
@@ -32,10 +32,8 @@ export function useTabNavigation() {
   useEffect(() => {
     if (isRootTab && scrollContainerRef.current) {
       setTimeout(() => {
-        if (scrollCache[currentTab] !== undefined) {
-          scrollContainerRef.current.scrollTop = scrollCache[currentTab];
-        } else {
-          scrollContainerRef.current.scrollTop = 0;
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollCache[currentTab] || 0;
         }
       }, 0);
     }
