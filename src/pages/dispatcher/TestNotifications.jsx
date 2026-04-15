@@ -23,7 +23,7 @@ export default function TestNotifications() {
         console.log('[TestNotifications] Chargement des utilisateurs avec token FCM...');
         
         // Charger TOUS les tokens FCM enregistrés
-        const fcmTokens = await base44.asServiceRole.entities.FcmToken.filter(
+        const fcmTokens = await base44.entities.FcmToken.filter(
           { is_active: true },
           '-registered_at',
           100
@@ -43,40 +43,22 @@ export default function TestNotifications() {
         
         for (const token of fcmTokens) {
           try {
-            // Charger l'utilisateur User
-            const userList = await base44.asServiceRole.entities.User.filter(
-              { email: token.user_email },
+            // Chercher dans UserProfile
+            const profileList = await base44.entities.UserProfile.filter(
+              { user_email: token.user_email, status: 'actif' },
               null,
               1
             );
-            
-            if (userList.length > 0) {
-              const user = userList[0];
+              
+            if (profileList.length > 0) {
+              const profile = profileList[0];
               uniqueUsers.set(token.user_email, {
                 email: token.user_email,
-                role: user.role === 'admin' ? 'admin' : 'admin_other',
-                full_name: user.full_name || 'Admin',
+                role: profile.profile_type,
+                full_name: profile.user_nom || 'N/A',
                 token_device: token.device_type,
                 token_registered: token.registered_at,
               });
-            } else {
-              // Chercher dans UserProfile si pas en User
-              const profileList = await base44.asServiceRole.entities.UserProfile.filter(
-                { user_email: token.user_email, status: 'actif' },
-                null,
-                1
-              );
-              
-              if (profileList.length > 0) {
-                const profile = profileList[0];
-                uniqueUsers.set(token.user_email, {
-                  email: token.user_email,
-                  role: profile.profile_type,
-                  full_name: profile.user_nom || 'N/A',
-                  token_device: token.device_type,
-                  token_registered: token.registered_at,
-                });
-              }
             }
           } catch (err) {
             console.warn('[TestNotifications] Erreur loading user:', token.user_email, err.message);
@@ -100,7 +82,7 @@ export default function TestNotifications() {
   useEffect(() => {
     const loadLogs = async () => {
       try {
-        const logs = await base44.asServiceRole.entities.NotificationTestLog.filter(
+        const logs = await base44.entities.NotificationTestLog.filter(
           {},
           '-created_date',
           10
@@ -147,7 +129,7 @@ export default function TestNotifications() {
 
       // Recharger les logs
       setTimeout(async () => {
-        const logs = await base44.asServiceRole.entities.NotificationTestLog.filter(
+        const logs = await base44.entities.NotificationTestLog.filter(
           {},
           '-created_date',
           10

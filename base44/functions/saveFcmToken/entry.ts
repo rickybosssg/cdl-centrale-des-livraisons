@@ -29,26 +29,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Token requis' }, { status: 400 });
     }
 
-    // 1. Vérifier les anciens tokens
-    console.log('[saveFcmToken] 🔵 Recherche tokens existants pour', user.email);
-    const existing = await base44.asServiceRole.entities.FcmToken.filter({
-      user_email: user.email,
-    });
-    console.log('[saveFcmToken] Tokens existants trouvés:', existing.length);
-
-    // 2. Supprimer les anciens tokens
-    for (const old of existing) {
-      try {
-        await base44.asServiceRole.entities.FcmToken.delete(old.id);
-        console.log('[saveFcmToken] ✓ Token ancien supprimé:', old.id);
-      } catch (delErr) {
-        console.warn('[saveFcmToken] Erreur suppression ancien token:', delErr.message);
-      }
-    }
-
-    // 3. Créer le nouveau token
+    // Créer le nouveau token (pas de nettoyage ancien, juste ajouter)
     console.log('[saveFcmToken] 🟢 Création nouveau FcmToken record...');
-    const result = await base44.asServiceRole.entities.FcmToken.create({
+    const result = await base44.entities.FcmToken.create({
       user_email: user.email,
       token,
       device_type: 'android_native',
