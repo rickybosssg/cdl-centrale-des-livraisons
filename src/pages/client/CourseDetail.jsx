@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, MapPin, Phone, Package, Navigation, Map, AlertTriangle, RefreshCw } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Package, Navigation, Map, AlertTriangle, RefreshCw, Bike } from "lucide-react";
 import NotationCourse from "../../components/NotationCourse";
 import MiniChat from "../../components/MiniChat";
 import CourseBoostPanel from "../../components/CourseBoostPanel";
@@ -14,6 +14,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
 import moment from "moment";
+
+// Statuts où le livreur est RÉELLEMENT confirmé (a cliqué "Accepter")
+const DRIVER_CONFIRMED = ["acceptee", "en_cours", "livree"];
+
+const STATUT_CLIENT = {
+  en_attente:       { label: "🔍 Recherche d'un livreur en cours...",              color: "text-amber-600",  bg: "bg-amber-50 border-amber-200",   pulse: true  },
+  assignee_attente: { label: "🔍 Demande envoyée à un livreur, en attente...",     color: "text-amber-600",  bg: "bg-amber-50 border-amber-200",   pulse: true  },
+  acceptee:         { label: "✅ Livreur trouvé ! Il arrive pour récupérer le colis.", color: "text-indigo-600", bg: "bg-indigo-50 border-indigo-200", pulse: true  },
+  en_cours:         { label: "📦 Votre colis est en route !",                      color: "text-purple-600", bg: "bg-purple-50 border-purple-200",  pulse: true  },
+  livree:           { label: "🎉 Votre colis a été livré !",                       color: "text-green-600",  bg: "bg-green-50 border-green-200",    pulse: false },
+  annulee:          { label: "❌ Course annulée",                                  color: "text-red-600",    bg: "bg-red-50 border-red-200",        pulse: false },
+  aucun_livreur:    { label: "⏳ Aucun livreur disponible. Nous continuons de chercher...", color: "text-red-600", bg: "bg-red-50 border-red-200",  pulse: true  },
+};
 
 export default function CourseDetail() {
   const { id } = useParams();
@@ -29,6 +42,7 @@ export default function CourseDetail() {
   const [reportOpen, setReportOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [livreurPhoto, setLivreurPhoto] = useState(null);
 
   useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
 
@@ -49,6 +63,28 @@ export default function CourseDetail() {
     document.addEventListener("visibilitychange", onVisible);
     return () => { unsub(); document.removeEventListener("visibilitychange", onVisible); };
   }, [load]);
+
+  // Charger la photo du livreur depuis UserProfile quand la course est confirmée
+  useEffect(() => {
+    if (!course?.livreur_email || !DRIVER_CONFIRMED.includes(course?.statut)) {
+      setLivreurPhoto(null);
+      return;
+    }
+    // Photo déjà sur la course
+    if (course.livreur_photo) { setLivreurPhoto(course.livreur_photo); return; }
+    // Sinon chercher dans UserProfile.documents_json
+    base44.entities.UserProfile.filter({ user_email: course.livreur_email, profile_type: "livreur" })
+      .then(profiles => {
+        const prof = profiles?.[0];
+        if (!prof?.documents_json) return;
+        try {
+          const docs = JSON.parse(prof.documents_json);
+          const photo = docs?.photo_profil || docs?.selfie || docs?.photo || null;
+          if (photo) setLivreurPhoto(photo);
+        } catch (_) {}
+      })
+      .catch(() => {});
+  }, [course?.livreur_email, course?.statut, course?.livreur_photo]);
 
   const relancerSeul = async () => {
     setRelancantSeul(true);
@@ -87,16 +123,6 @@ export default function CourseDetail() {
     );
   }
 
-  const STATUT_CLIENT = {
-    en_attente: { label: "🔍 Recherche d’un livreur en cours...", color: "text-amber-600", bg: "bg-amber-50 border-amber-200", pulse: true },
-    assignee_attente: { label: "🛵 Un livreur a été trouvé ! En attente de confirmation...", color: "text-blue-600", bg: "bg-blue-50 border-blue-200", pulse: true },
-    acceptee: { label: "✅ Votre course a été acceptée ! Le livreur arrive...", color: "text-indigo-600", bg: "bg-indigo-50 border-indigo-200", pulse: true },
-    en_cours: { label: "📦 Votre colis est en route !", color: "text-purple-600", bg: "bg-purple-50 border-purple-200", pulse: true },
-    livree: { label: "🎉 Votre colis a été livré !", color: "text-green-600", bg: "bg-green-50 border-green-200", pulse: false },
-    annulee: { label: "❌ Course annulée", color: "text-red-600", bg: "bg-red-50 border-red-200", pulse: false },
-    aucun_livreur: { label: "⏳ Aucun livreur disponible pour le moment. Nous continuons de chercher...", color: "text-red-600", bg: "bg-red-50 border-red-200", pulse: true },
-  };
-
   if (!course) {
     return (
       <div className="text-center py-12">
@@ -106,6 +132,7 @@ export default function CourseDetail() {
   }
 
   const statutInfo = STATUT_CLIENT[course.statut] || STATUT_CLIENT.en_attente;
+  const driverConfirmed = DRIVER_CONFIRMED.includes(course.statut);
 
   return (
     <div className="space-y-4">
@@ -187,8 +214,57 @@ export default function CourseDetail() {
         </CardContent>
       </Card>
 
-      {/* Bouton suivi live toujours visible si livreur assigné */}
-      {course.livreur_email && ["acceptee","en_cours","assignee_attente"].includes(course.statut) && (
+      {/* ── BLOC LIVREUR — uniquement après acceptation réelle ── */}
+      {driverConfirmed && course.livreur_name && (
+        <Card className="border-indigo-200 bg-indigo-50">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-3">Votre livreur</p>
+            <div className="flex items-center gap-3">
+              {/* Photo : vraie photo > initiale > icône moto */}
+              {livreurPhoto ? (
+                <img
+                  src={livreurPhoto}
+                  alt={course.livreur_name}
+                  className="h-14 w-14 rounded-full object-cover border-2 border-indigo-300 flex-shrink-0"
+                  onError={() => setLivreurPhoto(null)}
+                />
+              ) : (
+                <div className="h-14 w-14 rounded-full bg-indigo-100 border-2 border-indigo-300 flex items-center justify-center flex-shrink-0">
+                  <Bike className="h-7 w-7 text-indigo-500" />
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="font-bold text-sm">{course.livreur_name}</p>
+                {course.telephone_livreur && (
+                  <a href={`tel:${course.telephone_livreur}`} className="text-xs text-primary font-medium flex items-center gap-1 mt-0.5">
+                    <Phone className="h-3 w-3" /> {course.telephone_livreur}
+                  </a>
+                )}
+                {course.livreur_note_semaine != null ? (
+                  <div className="flex items-center gap-0.5 mt-1">
+                    {[1,2,3,4,5].map(s => (
+                      <span key={s} className={`text-sm ${s <= Math.round(course.livreur_note_semaine) ? (course.livreur_note_semaine < 3 ? 'text-red-500' : 'text-amber-400') : 'text-muted-foreground'}`}>★</span>
+                    ))}
+                    <span className={`text-xs font-semibold ml-1 ${course.livreur_note_semaine < 3 ? 'text-red-600' : 'text-amber-600'}`}>
+                      {course.livreur_note_semaine.toFixed(1)}/5
+                    </span>
+                  </div>
+                ) : course.livreur_note_moyenne != null ? (
+                  <div className="flex items-center gap-0.5 mt-1">
+                    {[1,2,3,4,5].map(s => (
+                      <span key={s} className={`text-sm ${s <= Math.round(course.livreur_note_moyenne) ? 'text-amber-400' : 'text-muted-foreground'}`}>★</span>
+                    ))}
+                    <span className="text-xs font-semibold ml-1 text-amber-600">{course.livreur_note_moyenne.toFixed(1)}/5</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── SUIVI GPS — uniquement après acceptation réelle ── */}
+      {driverConfirmed && course.livreur_email && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4 space-y-3">
             <p className="text-sm font-semibold flex items-center gap-2">
@@ -208,57 +284,12 @@ export default function CourseDetail() {
         </Card>
       )}
 
-      {/* Livreur */}
-      {course.livreur_name && (
-        <Card className="border-indigo-200 bg-indigo-50">
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-2">Votre livreur</p>
-            <div className="flex items-center gap-3">
-              {course.livreur_photo ? (
-                <img src={course.livreur_photo} alt="" className="h-12 w-12 rounded-full object-cover border-2 border-indigo-300" />
-              ) : (
-                <div className="h-12 w-12 rounded-full bg-indigo-200 flex items-center justify-center text-xl font-bold text-indigo-700">
-                  {course.livreur_name?.charAt(0)}
-                </div>
-              )}
-              <div className="flex-1">
-                <p className="font-semibold text-sm">{course.livreur_name}</p>
-                {course.livreur_note_semaine != null ? (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    {[1,2,3,4,5].map(s => (
-                      <span key={s} className={`text-base ${s <= Math.round(course.livreur_note_semaine) ? (course.livreur_note_semaine < 3 ? 'text-red-500' : 'text-amber-400') : 'text-muted-foreground'}`}>★</span>
-                    ))}
-                    <span className={`text-xs font-semibold ml-1 ${course.livreur_note_semaine < 3 ? 'text-red-600' : 'text-amber-600'}`}>
-                      {course.livreur_note_semaine.toFixed(1)}/5
-                    </span>
-                    <span className="text-xs text-muted-foreground">(7 derniers jours)</span>
-                  </div>
-                ) : course.livreur_note_moyenne != null ? (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    {[1,2,3,4,5].map(s => (
-                      <span key={s} className={`text-base ${s <= Math.round(course.livreur_note_moyenne) ? 'text-amber-400' : 'text-muted-foreground'}`}>★</span>
-                    ))}
-                    <span className="text-xs font-semibold ml-1 text-amber-600">{course.livreur_note_moyenne.toFixed(1)}/5</span>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Pas encore de note</p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Timeline */}
       <Card>
         <CardContent className="p-4 space-y-3">
           <p className="text-sm font-medium">Historique</p>
           <div className="space-y-2">
-            <TimelineItem
-              label="Créée"
-              date={course.created_date}
-              active
-            />
+            <TimelineItem label="Créée" date={course.created_date} active />
             {course.date_acceptation && (
               <TimelineItem label="Acceptée" date={course.date_acceptation} active />
             )}
@@ -281,12 +312,12 @@ export default function CourseDetail() {
       </Card>
 
       {/* Paiement mobile */}
-      {course.mode_paiement && course.mode_paiement !== "Paiement à la livraison" && course.statut_paiement === "en_attente" && (  
+      {course.mode_paiement && course.mode_paiement !== "Paiement à la livraison" && course.statut_paiement === "en_attente" && (
         <PaiementMobile course={course} onConfirmed={() => setCourse(prev => ({ ...prev, statut_paiement: "paye" }))} />
       )}
 
-      {/* Appel livreur */}
-      {course.livreur_email && ["acceptee", "en_cours"].includes(course.statut) && course.telephone_livreur && (
+      {/* Appel livreur — uniquement après acceptation réelle */}
+      {driverConfirmed && course.telephone_livreur && (
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -307,15 +338,15 @@ export default function CourseDetail() {
         </Card>
       )}
 
-      {/* Mini Chat - uniquement si course active et livreur assigné */}
-      {course.livreur_email && ["acceptee", "en_cours"].includes(course.statut) && (
+      {/* Mini Chat — uniquement après acceptation réelle */}
+      {driverConfirmed && course.livreur_email && (
         <MiniChat course={course} user={{ email: course.client_email, full_name: course.client_name, user_type: "client" }} />
       )}
 
-      {/* Boost panel — remplace l'ancien formulaire de prix */}
+      {/* Boost panel */}
       <CourseBoostPanel course={course} onBoosted={() => load(true)} />
 
-      {/* Suggestion augmenter le prix si aucun livreur (fallback manuel) */}
+      {/* Aucun livreur */}
       {course.statut === "aucun_livreur" && (
         <Card className="border-red-300 bg-red-50">
           <CardContent className="p-5 space-y-4">
@@ -353,7 +384,7 @@ export default function CourseDetail() {
         <NotationCourse course={course} onDone={() => setCourse(prev => ({ ...prev, note_donnee: true }))} />
       )}
 
-      {/* ✅ BOUTON ANNULATION UNIFIÉ — logique métier CDL */}
+      {/* Annulation */}
       {["en_attente", "assignee_attente", "aucun_livreur"].includes(course.statut) && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="p-4 space-y-2">
@@ -397,7 +428,6 @@ export default function CourseDetail() {
         </Button>
       )}
 
-      {/* Dialog annulation */}
       <CancelCourseDialog
         open={cancelDialog}
         onOpenChange={setCancelDialog}
