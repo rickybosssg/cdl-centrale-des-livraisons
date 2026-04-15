@@ -540,9 +540,9 @@ export default function AdminDashboardPro() {
         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">Outils & Diagnostic</p>
         <div className="grid grid-cols-2 gap-2">
           {[
+            { to: "/admin-diagnostics", label: "🛠️ Diagnostics", icon: Settings, color: "text-indigo-600", bg: "bg-indigo-50 border-indigo-200" },
             { to: "/health-dashboard", label: "Santé système", icon: Activity, color: "text-teal-600", bg: "bg-teal-50 border-teal-200" },
             { to: "/audit-complet",    label: "Audit complet", icon: Eye,       color: "text-purple-600", bg: "bg-purple-50 border-purple-200" },
-            { to: "/audit-utilisateurs", label: "Audit utilisateurs", icon: Users, color: "text-blue-600", bg: "bg-blue-50 border-blue-200" },
             { to: "/bedou-audit",      label: "Audit Bedou",  icon: Wallet,    color: "text-green-600", bg: "bg-green-50 border-green-200" },
           ].map(({ to, label, icon: Icon, color, bg }) => (
             <Link key={to} to={to}>
