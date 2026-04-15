@@ -35,6 +35,12 @@ const SUGGESTIONS = {
     "Statistiques du jour",
     "Gérer les profils en attente",
   ],
+  annonceur: [
+    "Comment créer une publicité ?",
+    "Voir mes statistiques de pub",
+    "Comment cibler mes clients ?",
+    "Comment recharger mon budget ?",
+  ],
 };
 
 const GREETINGS = {
@@ -43,6 +49,7 @@ const GREETINGS = {
   commercial: "Bonjour ! Je suis ARIA 💼\nComment optimiser vos gains aujourd'hui ?",
   partenaire: "Bonjour ! Je suis ARIA 🏪\nComment gérer votre boutique ?",
   admin:      "Bonjour Admin ! Je suis ARIA ⚙️\nComment puis-je vous assister ?",
+  annonceur:  "Bonjour ! Je suis ARIA 📢\nComment optimiser vos campagnes ?",
 };
 
 export default function AriaButton({ userRole = "client" }) {
