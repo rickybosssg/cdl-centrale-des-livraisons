@@ -199,9 +199,6 @@ const AuthenticatedApp = () => {
   const { notification, closeNotification } = useTopNotification();
 
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
-  if (window.location.pathname === '/fcm-diagnostic') {
-    return <FcmDiagnostic />;
-  }
   if (window.location.pathname === '/admin-login-secure') {
     return <AdminLoginSecure />;
   }
@@ -360,6 +357,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin-diagnostics" element={<AdminDiagnostics />} />
           <Route path="/admin-auth-diagnostics" element={<AdminAuthDiagnostics />} />
           <Route path="/test-notifications" element={<TestNotifications />} />
+          <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
           <Route path="/profils" element={<ProfilsHub />} />
