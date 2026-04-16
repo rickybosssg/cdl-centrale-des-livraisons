@@ -112,6 +112,7 @@ import AuditLogs from './pages/staff/AuditLogs';
 import AdminDiagnostics from './pages/dispatcher/AdminDiagnostics';
 import AdminAuthDiagnostics from './pages/dispatcher/AdminAuthDiagnostics';
 import TestNotifications from './pages/dispatcher/TestNotifications';
+import FcmDiagnostic from './pages/FcmDiagnostic';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -197,6 +198,14 @@ const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
   const { notification, closeNotification } = useTopNotification();
 
+  // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
+  if (window.location.pathname === '/fcm-diagnostic') {
+    return <FcmDiagnostic />;
+  }
+  if (window.location.pathname === '/admin-login-secure') {
+    return <AdminLoginSecure />;
+  }
+
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
@@ -228,10 +237,7 @@ const AuthenticatedApp = () => {
     }
   }
 
-  // Route admin sécurisée — accessible même non connecté (redirige vers Base44 login)
-  if (window.location.pathname === '/admin-login-secure') {
-    return <AdminLoginSecure />;
-  }
+
 
   // Non authentifié → login standard Base44 (Google + Email/Password)
   if (!isAuthenticated) {
