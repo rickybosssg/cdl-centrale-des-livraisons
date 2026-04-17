@@ -13,6 +13,28 @@ import AppLayoutWrapper from './components/AppLayoutWrapper';
 import DispatcherGuard from './components/DispatcherGuard';
 import { base44 as b44 } from '@/api/base44Client';
 
+// Dans un APK Capacitor, ne jamais appeler base44.auth.redirectToLogin()
+// car ça ouvre Chrome externe. On redirige vers /phone-auth à la place.
+function isCapacitorNative() {
+  return typeof window !== 'undefined' &&
+    window.Capacitor !== undefined &&
+    window.Capacitor.isNativePlatform &&
+    window.Capacitor.isNativePlatform();
+}
+
+function safeRedirectToLogin(nextUrl) {
+  if (isCapacitorNative()) {
+    // APK natif → navigation SPA interne, jamais Chrome
+    // On utilise replaceState + reload partiel pour rester dans la WebView
+    if (window.location.pathname !== '/phone-auth') {
+      window.history.replaceState({}, '', '/phone-auth');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  } else {
+    b44.auth.redirectToLogin(nextUrl);
+  }
+}
+
 // Pages
 import Home from './pages/Home';
 import ResetAdmin from './pages/ResetAdmin';
@@ -113,6 +135,7 @@ import AdminDiagnostics from './pages/dispatcher/AdminDiagnostics';
 import AdminAuthDiagnostics from './pages/dispatcher/AdminAuthDiagnostics';
 import TestNotifications from './pages/dispatcher/TestNotifications';
 import FcmDiagnostic from './pages/FcmDiagnostic';
+import PhoneAuth from './pages/PhoneAuth';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -199,8 +222,12 @@ const AuthenticatedApp = () => {
   const { notification, closeNotification } = useTopNotification();
 
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
+  // Ces routes sont accessibles sans authentification (important pour APK natif)
   if (window.location.pathname === '/admin-login-secure') {
     return <AdminLoginSecure />;
+  }
+  if (window.location.pathname === '/phone-auth') {
+    return <PhoneAuth />;
   }
 
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -218,11 +245,13 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else {
-      // auth_required → login standard Base44
+      // auth_required → redirection sécurisée (jamais Chrome dans APK)
       const _p = new URLSearchParams(window.location.search);
       const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
       if (_ref) localStorage.setItem('cdl_promo_code', _ref);
-      b44.auth.redirectToLogin(window.location.pathname + window.location.search);
+      if (window.location.pathname !== '/phone-auth') {
+        safeRedirectToLogin(window.location.pathname + window.location.search);
+      }
       return (
         <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
           <div className="text-center space-y-4 text-white">
@@ -236,12 +265,14 @@ const AuthenticatedApp = () => {
 
 
 
-  // Non authentifié → login standard Base44 (Google + Email/Password)
+  // Non authentifié → redirection sécurisée (jamais Chrome dans APK)
   if (!isAuthenticated) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
-    b44.auth.redirectToLogin(window.location.pathname + window.location.search);
+    if (window.location.pathname !== '/phone-auth') {
+      safeRedirectToLogin(window.location.pathname + window.location.search);
+    }
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
         <div className="text-center space-y-4 text-white">
@@ -259,6 +290,7 @@ const AuthenticatedApp = () => {
       <Routes>
         {/* Routes publiques sans layout */}
         <Route path="/admin-login-secure" element={<AdminLoginSecure />} />
+        <Route path="/phone-auth" element={<PhoneAuth />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />
