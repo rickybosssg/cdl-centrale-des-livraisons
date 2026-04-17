@@ -27,14 +27,15 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    const { token } = body;
+    const { token, deviceType } = body;
 
     if (!token || token.trim().length === 0) {
       return Response.json({ error: 'Token is required' }, { status: 400 });
     }
 
     const cleanToken = token.trim();
-    console.log('[saveFcmToken] user:', user.email, '| token start:', cleanToken.substring(0, 25));
+    const resolvedDeviceType = deviceType || 'web';
+    console.log('[saveFcmToken] user:', user.email, '| deviceType:', resolvedDeviceType, '| token start:', cleanToken.substring(0, 25));
 
     // ── 1. Ce token existe déjà en BDD ? ──────────────────────────────────
     const existing = await base44.asServiceRole.entities.FcmToken.filter({ token: cleanToken });
@@ -47,7 +48,7 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.FcmToken.update(record.id, {
           is_active: true,
           last_used: new Date().toISOString(),
-          device_type: 'android_native',
+          device_type: resolvedDeviceType,
         });
         console.log('[saveFcmToken] ✅ Token existant mis à jour pour', user.email);
         return Response.json({ success: true, token_id: record.id, action: 'updated' });
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
     const result = await base44.asServiceRole.entities.FcmToken.create({
       user_email: user.email,
       token: cleanToken,
-      device_type: 'android_native',
+      device_type: resolvedDeviceType,
       registered_at: new Date().toISOString(),
       last_used: new Date().toISOString(),
       is_active: true,

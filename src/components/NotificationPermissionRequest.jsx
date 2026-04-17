@@ -1,6 +1,6 @@
 /**
- * NotificationPermissionRequest — Simple et minimaliste
- * Activation notifications navigateur + génération token FCM
+ * NotificationPermissionRequest — Utilise FCM Web Push
+ * Fonctionne dans : Chrome, WebView Android (APK Base44), Safari iOS
  */
 
 import { useState } from 'react';
@@ -8,6 +8,7 @@ import { Bell, Settings, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { base44 } from '@/api/base44Client';
 
 export default function NotificationPermissionRequest({
   onSuccess,
@@ -18,63 +19,29 @@ export default function NotificationPermissionRequest({
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   );
 
-  const isNative =
-    typeof window !== 'undefined' &&
-    window.Capacitor?.isNativePlatform?.();
-
-  // Flux Web : permission uniquement (pas de token pour le moment)
-  const handleRequestWeb = async () => {
+  const handleRequest = async () => {
     setRequesting(true);
     try {
-      console.log('[NotificationPermissionRequest] ⏳ Demande permission...');
-      const perm = await Notification.requestPermission();
-      setPermission(perm);
+      const { requestWebPushToken } = await import('@/lib/webPush');
+      const { token, permission: perm, error } = await requestWebPushToken();
 
-      if (perm !== 'granted') {
-        toast.error('❌ Notifications refusées');
-        setRequesting(false);
+      setPermission(perm === 'granted' ? 'granted' : perm || 'denied');
+
+      if (perm !== 'granted' || !token) {
+        toast.error('❌ Notifications refusées ou indisponibles');
         return;
       }
 
-      console.log('[NotificationPermissionRequest] ✅ Permission accordée');
-      toast.success('✅ Notifications activées !');
-      onSuccess?.();
-    } catch (err) {
-      console.error('[NotificationPermissionRequest] ❌', err);
-      toast.error(`Erreur: ${err.message}`);
-    } finally {
-      setRequesting(false);
-    }
-  };
-
-  // Flux Natif (Capacitor)
-  const handleRequestNative = async () => {
-    setRequesting(true);
-    try {
-      const { PushNotifications } = await import(
-        '@capacitor/push-notifications'
-      );
-
-      // Créer canal Android
-      await PushNotifications.createChannel({
-        id: 'default',
-        name: 'CDL Notifications',
-        description: 'Notifications CDL',
-        importance: 5,
-        sound: 'default',
-        vibration: true,
-      }).catch(() => {});
-
-      // Demander permission
-      const perm = await PushNotifications.requestPermissions();
-      if (perm.receive !== 'granted') {
-        toast.error('❌ Notifications refusées');
-        setRequesting(false);
-        return;
-      }
-
-      // Enregistrer (sans générer token pour le moment)
-      await PushNotifications.register();
+      // Sauvegarder le token
+      try {
+        const me = await base44.auth.me();
+        await base44.functions.invoke('saveFcmToken', {
+          token,
+          userId: me?.id,
+          userEmail: me?.email,
+          userRole: me?.role,
+        });
+      } catch (_) {}
 
       toast.success('✅ Notifications activées !');
       onSuccess?.();
@@ -87,8 +54,6 @@ export default function NotificationPermissionRequest({
   };
 
   if (permission === 'granted') return null;
-
-  const handleRequest = isNative ? handleRequestNative : handleRequestWeb;
 
   if (variant === 'banner') {
     return (
@@ -128,8 +93,7 @@ export default function NotificationPermissionRequest({
                 🔔 Activer les notifications
               </p>
               <p className="text-xs text-amber-700 mt-1">
-                CDL vous envoie les courses, messages et alertes en temps
-                réel.
+                CDL vous envoie les courses, messages et alertes en temps réel.
               </p>
             </div>
           </div>
@@ -149,11 +113,7 @@ export default function NotificationPermissionRequest({
                 variant="outline"
                 className="flex-1 border-amber-300"
                 onClick={() =>
-                  toast.info(
-                    isNative
-                      ? '📱 Paramètres → Apps → CDL → Notifications'
-                      : '📱 Cliquez le cadenas dans la barre → Notifications → Autoriser'
-                  )
+                  toast.info('📱 Paramètres → Apps → CDL → Notifications')
                 }
               >
                 <Settings className="h-3.5 w-3.5 mr-1.5" />
