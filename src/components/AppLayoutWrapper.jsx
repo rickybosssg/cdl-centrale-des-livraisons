@@ -140,10 +140,13 @@ export default function AppLayoutWrapper({ user }) {
 
     const initFcm = async () => {
       try {
-        const { isNativeApp, initCapacitorPush } = await import('@/lib/nativePush');
+        const { isNativeApp, waitForCapacitor, initCapacitorPush } = await import('@/lib/nativePush');
+
+        // Attendre que Capacitor s'injecte dans la WebView (jusqu'à 3s)
+        const native = await waitForCapacitor(3000);
 
         // ── CAS 1 : APK Android (Capacitor natif) ──────────────────────────
-        if (isNativeApp()) {
+        if (native && isNativeApp()) {
           console.log('[AppLayoutWrapper FCM] 🔴 Mode natif Capacitor détecté');
           const { cleanup, permissionStatus } = await initCapacitorPush({
 

@@ -1,122 +1,90 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
- * saveFcmToken — Enregistrer le token FCM natif en BDD (APK Android)
- * 
- * IMPORTANT : SANS asServiceRole, auth utilisateur standard uniquement
- * Appelée par AppLayoutWrapper quand le token Capacitor/FCM est reçu
+ * saveFcmToken — Enregistrer/mettre à jour le token FCM natif en BDD (APK Android)
+ * Déduplication : si le token existe déjà pour cet utilisateur, on met à jour last_used.
+ * Si un autre utilisateur avait ce token, on le désactive (changement d'appareil).
  */
 Deno.serve(async (req) => {
   try {
-    console.log('\n[FCM BACKEND] 🔴 ════════════════════════════════════');
-    console.log('[FCM BACKEND] 🔴 REQUÊTE saveFcmToken REÇUE');
-    
-    // ──────────────────────────────────────────────────────────────────────
-    // 1. AUTH UTILISATEUR STANDARD (pas asServiceRole!)
-    // ──────────────────────────────────────────────────────────────────────
     const base44 = createClientFromRequest(req);
+
     let user;
     try {
       user = await base44.auth.me();
     } catch (authErr) {
-      console.error('[FCM BACKEND] ❌ AUTH FAILED:', authErr.message);
       return Response.json({ error: 'Unauthorized', details: authErr.message }, { status: 401 });
     }
 
-    console.log('[FCM BACKEND] 🟢 USER AUTHENTICATED');
-    console.log('   - email:', user?.email);
-    console.log('   - user_id:', user?.id);
-    console.log('   - role:', user?.role);
-
     if (!user?.email) {
-      console.error('[FCM BACKEND] ❌ USER EMAIL MISSING');
       return Response.json({ error: 'User email required' }, { status: 401 });
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // 2. PARSER PAYLOAD
-    // ──────────────────────────────────────────────────────────────────────
     let body = {};
     try {
       body = await req.json();
-    } catch (parseErr) {
-      console.error('[FCM BACKEND] ❌ JSON PARSE FAILED:', parseErr.message);
+    } catch {
       return Response.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    const { token, userId, userEmail, userRole } = body;
-    
-    console.log('[FCM BACKEND] 🟡 PAYLOAD PARSED');
-    console.log('   - token_length:', token?.length || 0);
-    console.log('   - token_start:', token?.substring(0, 25) + '...');
-    console.log('   - userId_param:', userId);
-    console.log('   - userEmail_param:', userEmail);
-    console.log('   - userRole_param:', userRole);
-    
+    const { token } = body;
+
     if (!token || token.trim().length === 0) {
-      console.error('[FCM BACKEND] ❌ TOKEN EMPTY/MISSING');
-      return Response.json({ error: 'Token is required and cannot be empty' }, { status: 400 });
+      return Response.json({ error: 'Token is required' }, { status: 400 });
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // 3. SAUVEGARDER DANS FcmToken (auth utilisateur uniquement)
-    // ──────────────────────────────────────────────────────────────────────
-    console.log('[FCM BACKEND] 🟢 CREATING FcmToken RECORD');
-    console.log('   - table: FcmToken');
-    console.log('   - user_email:', user.email);
-    console.log('   - device_type: android_native');
+    const cleanToken = token.trim();
+    console.log('[saveFcmToken] user:', user.email, '| token start:', cleanToken.substring(0, 25));
 
-    let result;
-    try {
-      result = await base44.entities.FcmToken.create({
-        user_email: user.email,
-        token: token.trim(),
-        device_type: 'android_native',
-        registered_at: new Date().toISOString(),
-        is_active: true,
-      });
-      console.log('[FCM BACKEND] ✅ RECORD CREATED');
-      console.log('   - record_id:', result.id);
-    } catch (createErr) {
-      console.error('[FCM BACKEND] ❌ CREATE FAILED:', createErr.message);
-      throw createErr;
+    // ── 1. Ce token existe déjà en BDD ? ──────────────────────────────────
+    const existing = await base44.asServiceRole.entities.FcmToken.filter({ token: cleanToken });
+
+    if (existing.length > 0) {
+      const record = existing[0];
+
+      if (record.user_email === user.email) {
+        // Même utilisateur — juste mettre à jour last_used + s'assurer is_active=true
+        await base44.asServiceRole.entities.FcmToken.update(record.id, {
+          is_active: true,
+          last_used: new Date().toISOString(),
+          device_type: 'android_native',
+        });
+        console.log('[saveFcmToken] ✅ Token existant mis à jour pour', user.email);
+        return Response.json({ success: true, token_id: record.id, action: 'updated' });
+      } else {
+        // Appareil réassigné à un autre utilisateur — désactiver l'ancien
+        await base44.asServiceRole.entities.FcmToken.update(record.id, { is_active: false });
+        console.log('[saveFcmToken] ⚠️ Token réassigné de', record.user_email, '→', user.email);
+      }
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // 4. SUCCESS RESPONSE
-    // ──────────────────────────────────────────────────────────────────────
-    console.log('[FCM BACKEND] ✅ ════════════════════════════════════');
-    console.log('[FCM BACKEND] ✅ [CERTAIN] FCM TOKEN SAVED IN DATABASE');
-    console.log('   - token_id:', result.id);
-    console.log('   - user_email:', user.email);
-    console.log('   - user_role:', user.role);
-    console.log('   - device_type: android_native');
-    console.log('   - registered_at:', result.registered_at);
-    console.log('[FCM BACKEND] ✅ ════════════════════════════════════\n');
-    
+    // ── 2. Désactiver les anciens tokens de cet utilisateur (optionnel — garder 1 actif max) ──
+    // On garde tous les tokens actifs pour multi-device, donc pas de désactivation globale.
+
+    // ── 3. Créer un nouveau record ─────────────────────────────────────────
+    const result = await base44.asServiceRole.entities.FcmToken.create({
+      user_email: user.email,
+      token: cleanToken,
+      device_type: 'android_native',
+      registered_at: new Date().toISOString(),
+      last_used: new Date().toISOString(),
+      is_active: true,
+    });
+
+    console.log('[saveFcmToken] ✅ Nouveau token créé — id:', result.id, 'user:', user.email);
+
     return Response.json({
       success: true,
       token_id: result.id,
       user_email: user.email,
-      message: `FCM token registered for ${user.email}`,
-    }, { status: 200 });
+      action: 'created',
+    });
 
   } catch (error) {
-    console.error('[FCM BACKEND] ❌ ════════════════════════════════════');
-    console.error('[FCM BACKEND] ❌ FATAL ERROR');
-    console.error('   - error_type:', error?.constructor?.name);
-    console.error('   - error_message:', error?.message);
-    console.error('   - error_code:', error?.code);
-    if (error?.stack) {
-      console.error('   - stack:', error.stack.split('\n').slice(0, 3).join(' '));
-    }
-    console.error('[FCM BACKEND] ❌ ════════════════════════════════════\n');
-    
+    console.error('[saveFcmToken] ❌ ERROR:', error?.message);
     return Response.json({
       success: false,
       error: error?.message || 'Unknown error',
-      error_type: error?.constructor?.name || 'Error',
-      error_code: error?.code || 'UNKNOWN',
     }, { status: 500 });
   }
 });

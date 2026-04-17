@@ -16,6 +16,23 @@ export function isNativeApp() {
     window.Capacitor.isNativePlatform();
 }
 
+/**
+ * Attend que window.Capacitor soit disponible (délai injection WebView)
+ * Timeout max : 3 secondes
+ */
+export function waitForCapacitor(timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    if (isNativeApp()) return resolve(true);
+    const start = Date.now();
+    const check = () => {
+      if (isNativeApp()) return resolve(true);
+      if (Date.now() - start > timeoutMs) return resolve(false);
+      setTimeout(check, 100);
+    };
+    check();
+  });
+}
+
 // Canaux Android — 'default' OBLIGATOIRE en importance 5 pour app fermée
 // Le channel_id dans le payload FCM doit correspondre exactement
 const ANDROID_CHANNELS = [
