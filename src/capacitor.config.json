@@ -2,6 +2,10 @@
   "appId": "com.cdl.ouaga",
   "appName": "CDL",
   "webDir": "dist",
+  "server": {
+    "url": "https://cdl.base44.app",
+    "cleartext": false
+  },
   "plugins": {
     "PushNotifications": {
       "presentationOptions": ["badge", "sound", "alert"]
