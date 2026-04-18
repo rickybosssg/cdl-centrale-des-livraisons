@@ -2,25 +2,12 @@
   "appId": "com.cdl.ouaga",
   "appName": "CDL",
   "webDir": "dist",
-  "server": {
-    "url": "https://cdl.base44.app",
-    "cleartext": false,
-    "allowNavigation": [
-      "cdl.base44.app",
-      "app.base44.com",
-      "*.base44.com",
-      "*.googleapis.com",
-      "*.google.com",
-      "fcm.googleapis.com",
-      "*.firebaseio.com"
-    ]
-  },
   "plugins": {
     "PushNotifications": {
       "presentationOptions": ["badge", "sound", "alert"]
     },
     "SplashScreen": {
-      "launchShowDuration": 3000,
+      "launchShowDuration": 2000,
       "launchAutoHide": true,
       "backgroundColor": "#1a73e8",
       "showSpinner": false
