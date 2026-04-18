@@ -219,8 +219,16 @@ function FcmDeepLinkHandler() {
 }
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated, checkAppState } = useAuth();
   const { notification, closeNotification } = useTopNotification();
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Timeout de sécurité : si le splash dure > 12s, afficher un bouton de secours
+  useEffect(() => {
+    if (!isLoadingAuth && !isLoadingPublicSettings) return;
+    const t = setTimeout(() => setLoadingTimeout(true), 12000);
+    return () => clearTimeout(t);
+  }, [isLoadingAuth, isLoadingPublicSettings]);
 
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
   // Ces routes sont accessibles sans authentification (important pour APK natif)
@@ -237,6 +245,23 @@ const AuthenticatedApp = () => {
         <div className="text-center space-y-4 text-white">
           <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
           <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+          {loadingTimeout && (
+            <div className="space-y-3 mt-4">
+              <p className="text-sm text-white/80">Le chargement prend trop de temps...</p>
+              <button
+                onClick={() => { setLoadingTimeout(false); checkAppState(); }}
+                className="px-5 py-2 bg-white text-primary rounded-xl font-semibold text-sm"
+              >
+                🔄 Réessayer
+              </button>
+              <button
+                onClick={() => { window.location.href = '/phone-auth'; }}
+                className="block mx-auto text-xs text-white/60 underline mt-1"
+              >
+                Se connecter manuellement
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -333,6 +358,7 @@ const AuthenticatedApp = () => {
 
         {/* Paramètres utilisateur */}
         <Route path="/settings" element={<Settings />} />
+        <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />
@@ -390,7 +416,6 @@ const AuthenticatedApp = () => {
           <Route path="/admin-diagnostics" element={<AdminDiagnostics />} />
           <Route path="/admin-auth-diagnostics" element={<AdminAuthDiagnostics />} />
           <Route path="/test-notifications" element={<TestNotifications />} />
-          <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
