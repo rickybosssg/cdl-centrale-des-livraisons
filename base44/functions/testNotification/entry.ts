@@ -9,8 +9,8 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    if (!user || user.role !== 'admin') {
-      return Response.json({ error: 'Admin only' }, { status: 403 });
+    if (!user) {
+      return Response.json({ error: 'Non authentifié' }, { status: 401 });
     }
 
     const { recipient_email, recipient_role } = await req.json();
@@ -19,6 +19,11 @@ Deno.serve(async (req) => {
       return Response.json({
         error: 'recipient_email et recipient_role requis',
       }, { status: 400 });
+    }
+
+    // Un utilisateur ne peut envoyer un test qu'à lui-même, sauf l'admin
+    if (user.role !== 'admin' && recipient_email !== user.email) {
+      return Response.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
     console.log(

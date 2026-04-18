@@ -1,238 +1,314 @@
 /**
- * FcmDiagnostic — Diagnostic FCM Web SDK
- * Teste Firebase Messaging Web SDK (fonctionne dans APK Base44 + navigateur)
+ * FcmDiagnostic — Page de diagnostic notifications push
+ * Affiche le token FCM de l'utilisateur, état de la chaîne, et test d'envoi.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { toast } from 'sonner';
 
-function getEnvInfo() {
-  const ua = navigator.userAgent;
-  const cap = window.Capacitor;
+function StatusRow({ label, status, detail }) {
+  const icon = status === 'ok'
+    ? <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+    : status === 'error'
+      ? <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+      : status === 'loading'
+        ? <Loader2 className="h-4 w-4 text-blue-500 flex-shrink-0 animate-spin" />
+        : <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />;
 
-  return {
-    // URL
-    currentUrl: (document.URL || window.location?.href || '').substring(0, 80),
-    isCapacitorUrl: (document.URL || '').startsWith('capacitor://'),
-    isRemoteUrl: (document.URL || '').startsWith('http') && !(document.URL || '').startsWith('http://localhost'),
-
-    // Capacitor (présent dans APK Studio, absent dans APK Base44)
-    hasCapacitor: !!cap,
-    isNativePlatform: cap?.isNativePlatform?.() ?? false,
-    capacitorPlatform: cap?.getPlatform?.() ?? 'N/A',
-
-    // Web APIs (disponibles dans APK Base44)
-    hasNotificationAPI: 'Notification' in window,
-    notificationPermission: 'Notification' in window ? Notification.permission : 'N/A',
-    hasServiceWorker: 'serviceWorker' in navigator,
-    hasPushManager: 'PushManager' in window,
-
-    // User Agent
-    ua: ua.substring(0, 120),
-    isAndroid: /Android/i.test(ua),
-    isWebView: /wv\)/i.test(ua) || /WebView/i.test(ua),
-  };
+  return (
+    <div className="flex items-start gap-3 py-2 border-b last:border-0">
+      {icon}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {detail && <p className="text-xs text-muted-foreground mt-0.5 break-all">{detail}</p>}
+      </div>
+    </div>
+  );
 }
 
 export default function FcmDiagnostic() {
-  const [logs, setLogs] = useState([]);
-  const [info, setInfo] = useState(null);
-  const [running, setRunning] = useState(false);
-  const [tokenSaved, setTokenSaved] = useState(false);
-  const isMounted = useRef(true);
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [fcmTokens, setFcmTokens] = useState([]);
+  const [chain, setChain] = useState({
+    user: 'loading',
+    permission: 'pending',
+    token: 'pending',
+    db: 'pending',
+  });
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null);
+  const [isNative, setIsNative] = useState(false);
 
-  const addLog = (msg, type = 'info') => {
-    const ts = new Date().toLocaleTimeString();
-    if (isMounted.current) setLogs(prev => [...prev, { msg, type, ts }]);
+  const detectMode = () => {
+    return typeof window !== 'undefined' &&
+      window.Capacitor !== undefined &&
+      window.Capacitor.isNativePlatform?.();
   };
 
-  useEffect(() => {
-    isMounted.current = true;
-    setInfo(getEnvInfo());
-    return () => { isMounted.current = false; };
-  }, []);
+  const load = async () => {
+    setIsNative(detectMode());
+    setChain({ user: 'loading', permission: 'pending', token: 'pending', db: 'pending' });
+    setFcmTokens([]);
+    setSendResult(null);
 
-  const runDiagnostic = async () => {
-    setRunning(true);
-    setLogs([]);
-    setTokenSaved(false);
-
-    const d = getEnvInfo();
-    setInfo(d);
-
-    addLog('════════════════════════════', 'info');
-    addLog('🚀 DIAGNOSTIC FCM WEB SDK', 'info');
-    addLog('════════════════════════════', 'info');
-
-    // ── Environnement ────────────────────────────────────────────────────
-    addLog('--- ENVIRONNEMENT ---', 'info');
-    addLog(`URL: ${d.currentUrl}`, 'info');
-    addLog(`capacitor://: ${d.isCapacitorUrl ? '✅ oui' : '❌ non (APK Base44 = normal)'}`, d.isCapacitorUrl ? 'success' : 'warn');
-    addLog(`window.Capacitor: ${d.hasCapacitor ? '✅ présent' : '⚠️ absent (APK Base44 = normal)'}`, 'warn');
-    addLog(`Android UA: ${d.isAndroid ? '✅ oui' : 'non'}`, d.isAndroid ? 'success' : 'info');
-    addLog(`WebView: ${d.isWebView ? '✅ oui' : 'non'}`, 'info');
-
-    // ── Web APIs ──────────────────────────────────────────────────────────
-    addLog('--- WEB APIs (nécessaires pour FCM Web) ---', 'info');
-    addLog(`Notification API: ${d.hasNotificationAPI ? '✅ oui' : '❌ non'}`, d.hasNotificationAPI ? 'success' : 'error');
-    addLog(`Service Worker: ${d.hasServiceWorker ? '✅ oui' : '❌ non'}`, d.hasServiceWorker ? 'success' : 'error');
-    addLog(`Push Manager: ${d.hasPushManager ? '✅ oui' : '❌ non'}`, d.hasPushManager ? 'success' : 'error');
-    addLog(`Permission actuelle: ${d.notificationPermission}`, d.notificationPermission === 'granted' ? 'success' : 'warn');
-
-    if (!d.hasNotificationAPI || !d.hasServiceWorker || !d.hasPushManager) {
-      addLog('═══════════════════════════', 'error');
-      addLog('❌ Web APIs manquantes — FCM impossible', 'error');
-      addLog('L\'APK ne supporte pas les Web Push APIs', 'error');
-      setRunning(false);
+    // Étape 1 : User
+    let me;
+    try {
+      me = await base44.auth.me();
+      setUser(me);
+      setChain(c => ({ ...c, user: 'ok' }));
+    } catch {
+      setChain(c => ({ ...c, user: 'error' }));
       return;
     }
 
-    // ── Service Worker ────────────────────────────────────────────────────
-    addLog('--- SERVICE WORKER FIREBASE ---', 'info');
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      addLog(`SW enregistrés: ${regs.length}`, regs.length > 0 ? 'success' : 'warn');
-      regs.forEach(r => addLog(`  - ${r.active?.scriptURL || r.scope}`, 'info'));
-    } catch (err) {
-      addLog(`⚠️ getRegistrations: ${err.message}`, 'warn');
+    // Étape 2 : Permission
+    const native = detectMode();
+    if (native) {
+      try {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        const perm = await PushNotifications.checkPermissions();
+        setChain(c => ({ ...c, permission: perm.receive === 'granted' ? 'ok' : 'error' }));
+      } catch {
+        setChain(c => ({ ...c, permission: 'error' }));
+      }
+    } else {
+      const perm = 'Notification' in window ? Notification.permission : 'unavailable';
+      setChain(c => ({ ...c, permission: perm === 'granted' ? 'ok' : perm === 'default' ? 'warn' : 'error' }));
     }
 
-    // ── Firebase Web SDK ──────────────────────────────────────────────────
-    addLog('--- FIREBASE WEB SDK ---', 'info');
-
-    let initWebFcm, isFcmWebSupported;
+    // Étape 3+4 : Token en BDD
     try {
-      const mod = await import('@/lib/webFcm');
-      initWebFcm = mod.initWebFcm;
-      isFcmWebSupported = mod.isFcmWebSupported;
-      addLog('✅ Module webFcm importé', 'success');
-    } catch (err) {
-      addLog(`❌ Import webFcm: ${err.message}`, 'error');
-      setRunning(false);
-      return;
+      const tokens = await base44.entities.FcmToken.filter(
+        { user_email: me.email, is_active: true },
+        '-registered_at',
+        5
+      );
+      setFcmTokens(tokens);
+      setChain(c => ({
+        ...c,
+        token: tokens.length > 0 ? 'ok' : 'error',
+        db: tokens.length > 0 ? 'ok' : 'error',
+      }));
+    } catch {
+      setChain(c => ({ ...c, token: 'error', db: 'error' }));
     }
+  };
 
-    if (!isFcmWebSupported()) {
-      addLog('❌ FCM Web non supporté sur cet appareil', 'error');
-      setRunning(false);
-      return;
-    }
-    addLog('✅ FCM Web supporté', 'success');
+  useEffect(() => { load(); }, []);
 
-    // ── Init + Token ──────────────────────────────────────────────────────
-    addLog('Init FCM + demande permission + génération token...', 'info');
+  const copyToken = (token) => {
+    navigator.clipboard?.writeText(token);
+    toast.success('Token copié');
+  };
 
+  const sendTestToSelf = async () => {
+    if (!user?.email) return;
+    setSending(true);
+    setSendResult(null);
     try {
-      const { permissionStatus, token } = await initWebFcm({
-        onToken: (t) => {
-          addLog(`✅ TOKEN FCM REÇU (${t.length} chars)`, 'success');
-          addLog(`Token: ${t.substring(0, 50)}...`, 'success');
-          if (isMounted.current) setTokenSaved(true);
-        },
-        onForegroundNotif: (n) => {
-          addLog(`📬 Notification foreground: ${n.title}`, 'success');
-        },
-        onPermissionDenied: () => {
-          addLog('❌ Permission refusée', 'error');
-        },
+      const res = await base44.functions.invoke('testNotification', {
+        recipient_email: user.email,
+        recipient_role: user.role || 'user',
       });
-
-      addLog(`Permission finale: ${permissionStatus}`, permissionStatus === 'granted' ? 'success' : 'error');
-
-      if (permissionStatus === 'granted' && token) {
-        addLog('════════════════════════════', 'success');
-        addLog('✅ FCM WEB ENTIÈREMENT FONCTIONNEL', 'success');
-        addLog('Les notifications sont prêtes (app ouverte + background)', 'success');
-        addLog('════════════════════════════', 'success');
+      const d = res.data;
+      if (d?.success) {
+        setSendResult({ ok: true, msg: `✅ Envoyée ! ${d.details?.sent}/${d.details?.tokens_found} token(s)` });
+        toast.success('Notification envoyée — vérifie ton téléphone');
+      } else {
+        setSendResult({ ok: false, msg: d?.details || d?.message || 'Échec envoi' });
+        toast.error('Échec: ' + (d?.details || d?.message));
       }
     } catch (err) {
-      addLog(`❌ initWebFcm: ${err.message}`, 'error');
+      setSendResult({ ok: false, msg: err.message });
+      toast.error(err.message);
+    } finally {
+      setSending(false);
     }
-
-    setRunning(false);
   };
 
-  const colorMap = { info: '#e0f0ff', success: '#d4edda', warn: '#fff3cd', error: '#f8d7da' };
-  const textMap = { info: '#1a5276', success: '#155724', warn: '#856404', error: '#721c24' };
+  const requestPermissionAndToken = async () => {
+    const native = detectMode();
+    if (native) {
+      try {
+        const { initCapacitorPush } = await import('@/lib/nativePush');
+        toast.info('Demande de permission...');
+        await initCapacitorPush({
+          onToken: async (token) => {
+            toast.success('Token reçu ! Sauvegarde en cours...');
+            await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native' });
+            toast.success('Token sauvegardé en BDD');
+            load();
+          },
+          onPermissionDenied: () => toast.error('Permission refusée'),
+          onForegroundNotif: () => {},
+          onNotificationTap: () => {},
+        });
+      } catch (err) {
+        toast.error('Erreur: ' + err.message);
+      }
+    } else {
+      if ('Notification' in window) {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          toast.success('Permission accordée — rechargement token...');
+          load();
+        } else {
+          toast.error('Permission refusée');
+        }
+      }
+    }
+  };
 
-  const modeLabel = info?.hasCapacitor && info?.isNativePlatform
-    ? '✅ Capacitor Natif (Android Studio APK)'
-    : info?.isAndroid
-      ? '📱 APK Base44 (WebView distante) — FCM Web'
-      : '🌐 Navigateur Web — FCM Web';
-
-  const modeBg = info?.hasCapacitor && info?.isNativePlatform ? '#238636' : '#1a73e8';
+  const mode = isNative ? '📱 Capacitor natif (Android Studio APK)' : '🌐 Web / APK Base44';
 
   return (
-    <div style={{ fontFamily: 'monospace', padding: '16px', maxWidth: '100%', background: '#0d1117', minHeight: '100vh', color: '#e6edf3' }}>
-      <h1 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px', color: '#58a6ff' }}>
-        🔬 CDL FCM Diagnostic
-      </h1>
-
-      {/* Badge mode */}
-      <div style={{ padding: '6px 14px', borderRadius: '20px', marginBottom: '12px', fontSize: '12px', fontWeight: 'bold', background: modeBg, color: 'white', display: 'inline-block' }}>
-        {modeLabel}
+    <div className="space-y-4 pb-20 max-w-lg mx-auto">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-lg font-bold">🔔 Diagnostic Notifications</h1>
+          <p className="text-xs text-muted-foreground">{mode}</p>
+        </div>
+        <Button variant="ghost" size="icon" className="ml-auto" onClick={load}>
+          <RefreshCw className="h-4 w-4" />
+        </Button>
       </div>
 
-      {/* Info rapide */}
-      {info && (
-        <div style={{ background: '#161b22', borderRadius: '8px', padding: '10px', marginBottom: '12px', border: '1px solid #30363d', fontSize: '11px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-            {[
-              ['Notification API', String(info.hasNotificationAPI)],
-              ['Service Worker', String(info.hasServiceWorker)],
-              ['Push Manager', String(info.hasPushManager)],
-              ['Permission', info.notificationPermission],
-              ['Android UA', String(info.isAndroid)],
-              ['window.Capacitor', String(info.hasCapacitor)],
-              ['Token sauvegardé', String(tokenSaved)],
-            ].map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', gap: '4px' }}>
-                <span style={{ color: '#8b949e' }}>{k}:</span>
-                <span style={{ color: v === 'true' || v === 'granted' ? '#3fb950' : v === 'false' || v === 'denied' ? '#f85149' : '#e6edf3', fontWeight: 'bold' }}>{v}</span>
+      {/* Chaîne de notifications */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">État de la chaîne</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <StatusRow
+            label="1. Utilisateur connecté"
+            status={chain.user}
+            detail={user ? `${user.full_name} (${user.email})` : 'Non connecté'}
+          />
+          <StatusRow
+            label="2. Permission notifications"
+            status={chain.permission}
+            detail={
+              chain.permission === 'ok' ? 'Accordée ✅' :
+              chain.permission === 'warn' ? 'Non demandée encore' :
+              chain.permission === 'error' ? 'Refusée — allez dans Paramètres → Apps → CDL → Notifications' :
+              'Vérification...'
+            }
+          />
+          <StatusRow
+            label="3. Token FCM généré"
+            status={chain.token}
+            detail={fcmTokens.length > 0 ? `${fcmTokens.length} token(s) actif(s)` : 'Aucun token en BDD'}
+          />
+          <StatusRow
+            label="4. Token sauvegardé en BDD"
+            status={chain.db}
+            detail={fcmTokens.length > 0 ? `Dernier: ${fcmTokens[0]?.device_type} — ${new Date(fcmTokens[0]?.registered_at).toLocaleString()}` : 'Aucun'}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Tokens FCM */}
+      {fcmTokens.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Tokens FCM actifs ({fcmTokens.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 px-4 pb-4">
+            {fcmTokens.map((t, i) => (
+              <div key={t.id} className="bg-muted rounded-lg p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-primary">
+                    {t.device_type === 'android_native' ? '📱 Android Natif' : '🌐 Web'}
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToken(t.token)}>
+                    <Copy className="h-3 w-3 mr-1" /> Copier
+                  </Button>
+                </div>
+                <p className="text-xs font-mono text-muted-foreground break-all">
+                  {t.token.substring(0, 60)}...
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Enregistré: {new Date(t.registered_at).toLocaleString()}
+                </p>
               </div>
             ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-sm font-semibold text-amber-900">⚠️ Aucun token FCM en BDD</p>
+            <p className="text-xs text-amber-700">
+              L'app n'a pas encore enregistré de token pour cet utilisateur.
+              {isNative
+                ? ' Le token Capacitor doit être généré au lancement.'
+                : ' Vérifie que le Service Worker Firebase est enregistré.'}
+            </p>
+            <Button size="sm" onClick={requestPermissionAndToken} className="w-full">
+              🔑 Demander permission + générer token
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
-      <button
-        onClick={runDiagnostic}
-        disabled={running}
-        style={{ width: '100%', padding: '14px', background: running ? '#21262d' : '#1a73e8', color: running ? '#8b949e' : 'white', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: 'bold', cursor: running ? 'not-allowed' : 'pointer', marginBottom: '16px' }}
-      >
-        {running ? '⏳ Diagnostic en cours...' : '▶ Lancer diagnostic FCM Web'}
-      </button>
+      {/* Envoi test */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">5. Envoyer une notification de test</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 px-4 pb-4">
+          <p className="text-xs text-muted-foreground">
+            Envoie une notification push à <strong>{user?.email}</strong> sur tous ses appareils enregistrés.
+          </p>
+          <Button
+            onClick={sendTestToSelf}
+            disabled={sending || fcmTokens.length === 0}
+            className="w-full"
+          >
+            {sending ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Envoi...</>
+            ) : (
+              <><Send className="h-4 w-4 mr-2" /> Envoyer test à moi-même</>
+            )}
+          </Button>
 
-      <div style={{ background: '#161b22', borderRadius: '8px', border: '1px solid #30363d', overflow: 'hidden' }}>
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid #30363d', fontSize: '11px', color: '#8b949e' }}>
-          LOGS ({logs.length})
-        </div>
-        <div style={{ maxHeight: '55vh', overflowY: 'auto', padding: '8px' }}>
-          {logs.length === 0 && (
-            <p style={{ fontSize: '12px', color: '#8b949e', padding: '8px', textAlign: 'center' }}>
-              Appuie sur "Lancer diagnostic" pour commencer
+          {sendResult && (
+            <div className={`p-3 rounded-lg text-sm font-medium ${sendResult.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+              {sendResult.msg}
+            </div>
+          )}
+
+          {fcmTokens.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center">
+              Génère d'abord un token FCM ci-dessus
             </p>
           )}
-          {logs.map((log, i) => (
-            <div key={i} style={{ fontSize: '11px', padding: '3px 8px', marginBottom: '2px', borderRadius: '4px', background: colorMap[log.type], color: textMap[log.type], wordBreak: 'break-all' }}>
-              <span style={{ opacity: 0.6, marginRight: '6px' }}>{log.ts}</span>
-              {log.msg}
-            </div>
-          ))}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Explication */}
-      <div style={{ marginTop: '16px', padding: '12px', background: '#161b22', borderRadius: '8px', border: '1px solid #30363d', fontSize: '11px' }}>
-        <p style={{ color: '#58a6ff', fontWeight: 'bold', marginBottom: '8px' }}>ℹ️ Architecture FCM pour APK Base44</p>
-        <p style={{ color: '#8b949e', marginBottom: '4px' }}>L'APK Base44 charge l'app depuis un serveur distant → window.Capacitor n'est PAS injecté.</p>
-        <p style={{ color: '#8b949e', marginBottom: '4px' }}>Solution : Firebase Web SDK + Service Worker = notifications identiques, sans Capacitor.</p>
-        <p style={{ color: '#3fb950' }}>✅ App ouverte : onMessage Firebase</p>
-        <p style={{ color: '#3fb950' }}>✅ App background/fermée : SW firebase-messaging-sw.js</p>
-      </div>
-
-      <p style={{ fontSize: '10px', color: '#8b949e', marginTop: '12px', textAlign: 'center' }}>
-        /fcm-diagnostic — CDL v3 (Web SDK)
-      </p>
+      {/* Guide de debug */}
+      <Card className="border-blue-200 bg-blue-50">
+        <CardContent className="p-4 space-y-2 text-xs text-blue-800">
+          <p className="font-bold">🔍 Si la notification n'arrive pas :</p>
+          <ul className="space-y-1 ml-3 list-disc">
+            <li><strong>App ouverte</strong> → listener Capacitor `pushNotificationReceived`</li>
+            <li><strong>Background</strong> → système Android (automatique si canal "default" créé)</li>
+            <li><strong>App fermée</strong> → FCM + canal Android importance 5 requis</li>
+            <li>Vérifier <strong>google-services.json</strong> dans le projet Android</li>
+            <li>Vérifier que <strong>FIREBASE_SERVICE_ACCOUNT_JSON</strong> est correct en BDD</li>
+            <li>Vérifier les logs Android Studio (Logcat → tag "CDL")</li>
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { registerSW } from "@/lib/swRegister";
 import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
@@ -122,70 +121,108 @@ export default function AppLayoutWrapper({ user }) {
     return () => { isMounted = false; };
   }, [initialized, userReady]);
 
-  // Service Worker minimal — étape 1 du setup FCM
-  useEffect(() => {
-    console.log('[AppLayoutWrapper] Enregistrement SW minimal');
-    registerSW().then(reg => {
-      if (reg) {
-        console.log('[AppLayoutWrapper] ✅ SW enregistré avec succès');
-      }
-    }).catch(err => {
-      console.error('[AppLayoutWrapper] ❌ Erreur SW:', err);
-    });
-  }, []);
-
-  // FCM — Web Push (fonctionne dans APK Base44 WebView + navigateurs)
+  // FCM — Détection automatique : Capacitor natif OU Web Push
   useEffect(() => {
     const initFcm = async () => {
       try {
-        console.log('[AppLayoutWrapper FCM] Init FCM Web Push...');
-        const { requestWebPushToken, onForegroundMessage } = await import('@/lib/webPush');
+        const isNative = typeof window !== 'undefined' &&
+          window.Capacitor !== undefined &&
+          window.Capacitor.isNativePlatform?.();
 
-        // Générer le token (demande permission si nécessaire)
-        const { token, permission, error } = await requestWebPushToken();
+        if (isNative) {
+          // ── APK Android Studio (Capacitor natif) ────────────────────────
+          console.log('[AppLayoutWrapper FCM] Mode Capacitor natif → nativePush');
+          const { initCapacitorPush } = await import('@/lib/nativePush');
 
-        if (!token) {
-          console.warn('[AppLayoutWrapper FCM] Pas de token FCM — permission:', permission, 'error:', error);
-          return;
-        }
-
-        // Sauvegarder le token en BDD
-        try {
-          const me = await base44.auth.me();
-          const res = await base44.functions.invoke('saveFcmToken', {
-            token,
-            userId: me?.id,
-            userEmail: me?.email,
-            userRole: me?.role,
+          await initCapacitorPush({
+            onToken: async (token) => {
+              console.log('[AppLayoutWrapper FCM] Token natif reçu:', token.substring(0, 30));
+              try {
+                const me = await base44.auth.me();
+                const res = await base44.functions.invoke('saveFcmToken', {
+                  token,
+                  deviceType: 'android_native',
+                });
+                console.log('[AppLayoutWrapper FCM] ✅ Token natif sauvegardé:', res.data?.action);
+              } catch (saveErr) {
+                console.error('[AppLayoutWrapper FCM] Erreur saveFcmToken:', saveErr?.message);
+              }
+            },
+            onForegroundNotif: (notification) => {
+              const route = notification.data?.notif_route || notification.data?.route || null;
+              console.log('[AppLayoutWrapper FCM] Notif foreground natif:', notification.title, '→', route);
+              import('sonner').then(({ toast }) => {
+                toast(notification.title || 'CDL', {
+                  description: notification.body || '',
+                  duration: 8000,
+                  action: route ? {
+                    label: 'Voir',
+                    onClick: () => {
+                      window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
+                    },
+                  } : undefined,
+                });
+              });
+              if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            },
+            onNotificationTap: ({ route }) => {
+              if (route) {
+                window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
+              }
+            },
+            onPermissionDenied: (reason) => {
+              console.warn('[AppLayoutWrapper FCM] Permission Capacitor refusée:', reason);
+            },
           });
-          console.log('[AppLayoutWrapper FCM] ✅ Token FCM enregistré — id:', res.data?.token_id);
-        } catch (saveErr) {
-          console.error('[AppLayoutWrapper FCM] Erreur saveFcmToken:', saveErr?.message);
-        }
 
-        // Notifications foreground (app ouverte)
-        onForegroundMessage((payload) => {
-          const notif = payload.notification || {};
-          const data = payload.data || {};
-          const route = data.notif_route || data.route || data.target_screen || null;
-          console.log('[AppLayoutWrapper FCM] Foreground:', notif.title, '→', route);
-          import('sonner').then(({ toast }) => {
-            toast(notif.title || 'CDL', {
-              description: notif.body || '',
-              duration: 8000,
-              action: route ? {
-                label: 'Voir',
-                onClick: () => {
-                  window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
-                },
-              } : undefined,
+        } else {
+          // ── APK Base44 / PWA / navigateur (Firebase Web SDK) ────────────
+          console.log('[AppLayoutWrapper FCM] Mode Web Push (Firebase SDK)');
+
+          // Enregistrer le SW Firebase d'abord
+          const { registerSW } = await import('@/lib/swRegister');
+          await registerSW();
+
+          const { requestWebPushToken, onForegroundMessage } = await import('@/lib/webPush');
+          const { token, permission, error } = await requestWebPushToken();
+
+          if (!token) {
+            console.warn('[AppLayoutWrapper FCM] Pas de token FCM — permission:', permission, 'error:', error);
+            return;
+          }
+
+          try {
+            const me = await base44.auth.me();
+            const res = await base44.functions.invoke('saveFcmToken', {
+              token,
+              deviceType: 'web',
             });
+            console.log('[AppLayoutWrapper FCM] ✅ Token web sauvegardé:', res.data?.action);
+          } catch (saveErr) {
+            console.error('[AppLayoutWrapper FCM] Erreur saveFcmToken:', saveErr?.message);
+          }
+
+          onForegroundMessage((payload) => {
+            const notif = payload.notification || {};
+            const data = payload.data || {};
+            const route = data.notif_route || data.route || data.target_screen || null;
+            import('sonner').then(({ toast }) => {
+              toast(notif.title || 'CDL', {
+                description: notif.body || '',
+                duration: 8000,
+                action: route ? {
+                  label: 'Voir',
+                  onClick: () => {
+                    window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
+                  },
+                } : undefined,
+              });
+            });
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
           });
-          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-        });
 
-        console.log('[AppLayoutWrapper FCM] ✅ FCM Web Push initialisé');
-
+          console.log('[AppLayoutWrapper FCM] ✅ FCM Web Push initialisé');
+        }
       } catch (err) {
         console.error('[AppLayoutWrapper FCM] Init error:', err?.message);
       }

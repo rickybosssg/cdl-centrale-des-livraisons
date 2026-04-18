@@ -13,6 +13,14 @@ const DIAGNOSTIC_TOOLS = [
     color: "bg-blue-50 border-blue-200 text-blue-700"
   },
   {
+    id: "fcm-debug",
+    icon: Bell,
+    title: "📲 FCM Token Debug",
+    description: "Voir mon token FCM, l'état de la permission, envoyer une notification test à n'importe quel utilisateur",
+    path: "/fcm-token-debug",
+    color: "bg-cyan-50 border-cyan-200 text-cyan-700"
+  },
+  {
     id: "bedou",
     icon: Wallet,
     title: "💰 Audit Bedou",

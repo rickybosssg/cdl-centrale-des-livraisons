@@ -135,6 +135,7 @@ import AdminDiagnostics from './pages/dispatcher/AdminDiagnostics';
 import AdminAuthDiagnostics from './pages/dispatcher/AdminAuthDiagnostics';
 import TestNotifications from './pages/dispatcher/TestNotifications';
 import FcmDiagnostic from './pages/FcmDiagnostic';
+import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
 import PhoneAuth from './pages/PhoneAuth';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
@@ -390,6 +391,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin-auth-diagnostics" element={<AdminAuthDiagnostics />} />
           <Route path="/test-notifications" element={<TestNotifications />} />
           <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
+          <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
           <Route path="/profils" element={<ProfilsHub />} />
