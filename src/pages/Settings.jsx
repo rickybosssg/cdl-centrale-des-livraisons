@@ -422,6 +422,16 @@ export default function Settings() {
         }} />
       )}
 
+      {/* Diagnostic notifications */}
+      <Link to="/fcm-diagnostic" className="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors">
+        <span className="text-xl">🔔</span>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-blue-900">Diagnostic notifications</p>
+          <p className="text-xs text-blue-700">Vérifier token FCM, permission, test d'envoi</p>
+        </div>
+        <span className="text-blue-400 text-sm">›</span>
+      </Link>
+
       {/* Légal & Conformité */}
         <Card>
         <CardHeader className="pb-3">
