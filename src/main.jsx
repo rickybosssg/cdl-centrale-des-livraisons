@@ -179,6 +179,8 @@ async function saveFcmTokenWhenReady(fcmToken, attempts = 0) {
 }
 
 // Lancer FCM early (sans bloquer le rendu React)
+// Flag global pour éviter double-initialisation dans AppLayoutWrapper
+window.__cdl_fcm_early_started = true;
 initFcmEarly().catch(e => console.error('[CDL-FCM-EARLY] Fatal:', e));
 
 // ═══════════════════════════════════════════════════════════════════════════════
