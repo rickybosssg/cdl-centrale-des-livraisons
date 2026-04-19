@@ -135,12 +135,6 @@ export default function AppLayoutWrapper({ user }) {
 
         if (isNative) {
           // ── APK Capacitor natif ────────────────────────────────────────
-          // Si main.jsx a déjà lancé initFcmEarly(), ne pas re-initialiser
-          // pour éviter double register() + listeners dupliqués → crash
-          if (window.__cdl_fcm_early_started) {
-            console.log('[AppLayoutWrapper FCM] FCM déjà initialisé par main.jsx — skip');
-            return;
-          }
           console.log('[AppLayoutWrapper FCM] Mode Capacitor natif → nativePush');
           const { initCapacitorPush } = await import('@/lib/nativePush');
 
