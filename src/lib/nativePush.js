@@ -10,10 +10,12 @@
  */
 
 export function isNativeApp() {
-  return typeof window !== 'undefined' &&
-    window.Capacitor !== undefined &&
-    window.Capacitor.isNativePlatform &&
-    window.Capacitor.isNativePlatform();
+  if (typeof window === 'undefined') return false;
+  // Méthode 1 : protocol capacitor: (APK Base44 et Android Studio)
+  if (window.location?.protocol === 'capacitor:') return true;
+  // Méthode 2 : window.Capacitor injecté
+  if (window.Capacitor?.isNativePlatform?.() === true) return true;
+  return false;
 }
 
 /**

@@ -125,9 +125,13 @@ export default function AppLayoutWrapper({ user }) {
   useEffect(() => {
     const initFcm = async () => {
       try {
-        const isNative = typeof window !== 'undefined' &&
-          window.Capacitor !== undefined &&
-          window.Capacitor.isNativePlatform?.();
+        // Détection Capacitor natif : 3 méthodes pour couvrir tous les cas APK
+        // 1. window.Capacitor injecté (Android Studio APK)
+        // 2. protocol capacitor: (APK Base44 et autres)
+        // 3. @capacitor/push-notifications disponible (fallback)
+        const isNative =
+          window.location?.protocol === 'capacitor:' ||
+          (typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform?.() === true);
 
         if (isNative) {
           // ── APK Android Studio (Capacitor natif) ────────────────────────
