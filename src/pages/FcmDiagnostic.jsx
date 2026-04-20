@@ -134,56 +134,59 @@ export default function FcmDiagnostic() {
   };
 
   const requestPermissionAndToken = async () => {
-    toast.info('Tentative Capacitor Push...');
-    try {
-      // Toujours essayer Capacitor en premier (APK Base44 + Android Studio)
-      const { PushNotifications } = await import('@capacitor/push-notifications');
-      
-      // Créer le canal Android
+    const hasCapacitor = typeof window !== 'undefined' && typeof window.Capacitor !== 'undefined';
+    const hasNotificationApi = typeof window !== 'undefined' && 'Notification' in window;
+
+    if (!hasCapacitor && !hasNotificationApi) {
+      toast.error('❌ Impossible : ni Capacitor ni API Notification disponibles dans cette WebView. L\'APK Base44 ne supporte pas les push notifications nativement.', { duration: 8000 });
+      return;
+    }
+
+    if (hasCapacitor) {
+      toast.info('Tentative Capacitor Push...');
       try {
-        await PushNotifications.createChannel({
-          id: 'default', name: 'CDL Notifications',
-          importance: 5, sound: 'default', vibration: true,
-        });
-      } catch (_) {}
-
-      // Demander la permission
-      const perm = await PushNotifications.requestPermissions();
-      if (perm.receive !== 'granted') {
-        toast.error('Permission refusée par Android');
-        return;
-      }
-
-      toast.success('Permission accordée — génération token...');
-
-      // Écouter le token
-      const listener = await PushNotifications.addListener('registration', async (token) => {
-        await listener.remove();
-        toast.success('Token reçu ! Sauvegarde...');
+        const { PushNotifications } = await import('@capacitor/push-notifications');
         try {
-          await base44.functions.invoke('saveFcmToken', { token: token.value, deviceType: 'android_native' });
-          toast.success('✅ Token sauvegardé en BDD !');
-          load();
-        } catch (saveErr) {
-          toast.error('Erreur sauvegarde: ' + saveErr.message);
-        }
-      });
+          await PushNotifications.createChannel({
+            id: 'default', name: 'CDL Notifications',
+            importance: 5, sound: 'default', vibration: true,
+          });
+        } catch (_) {}
 
-      await PushNotifications.register();
-      toast.info('register() appelé — attente du token...');
-
-    } catch (capacitorErr) {
-      // Fallback web si Capacitor vraiment pas disponible
-      toast.warning('Capacitor non disponible: ' + capacitorErr.message);
-      if ('Notification' in window) {
-        const perm = await Notification.requestPermission();
-        if (perm === 'granted') {
-          toast.success('Permission web accordée');
-          load();
-        } else {
-          toast.error('Permission web refusée');
+        const perm = await PushNotifications.requestPermissions();
+        if (perm.receive !== 'granted') {
+          toast.error('Permission refusée par Android');
+          return;
         }
+        toast.success('Permission accordée — génération token...');
+
+        const listener = await PushNotifications.addListener('registration', async (token) => {
+          await listener.remove();
+          toast.success('Token reçu ! Sauvegarde...');
+          try {
+            await base44.functions.invoke('saveFcmToken', { token: token.value, deviceType: 'android_native' });
+            toast.success('✅ Token sauvegardé en BDD !');
+            load();
+          } catch (saveErr) {
+            toast.error('Erreur sauvegarde: ' + saveErr.message);
+          }
+        });
+        await PushNotifications.register();
+        toast.info('register() appelé — attente du token...');
+      } catch (err) {
+        toast.error('Erreur Capacitor: ' + err.message, { duration: 6000 });
       }
+      return;
+    }
+
+    // Fallback Web Notification API
+    toast.info('Tentative Web Notification API...');
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') {
+      toast.success('Permission web accordée — rechargement...');
+      load();
+    } else {
+      toast.error('Permission web refusée');
     }
   };
 
