@@ -1,10 +1,11 @@
 /**
- * sendOTP — Envoyer un code OTP via Twilio Verify
+ * sendOTP — Envoyer un code OTP via Twilio Verify (PUBLIC — pas d'authentification requise)
  * 
  * Input: { phone: "+226XXXXXXXX" }
  * Output: { success: true, message: "Code envoyé" }
  */
 Deno.serve(async (req) => {
+  // Fonction PUBLIQUE — pas d'authentification requise
   try {
     const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
     const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
