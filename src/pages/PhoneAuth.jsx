@@ -118,7 +118,7 @@ export default function PhoneAuth() {
               style={styles.phoneInput}
               type="text"
               inputMode="numeric"
-              placeholder="55738247"
+              placeholder="________"
               value={digits}
               onChange={handlePhoneChange}
               maxLength="8"
