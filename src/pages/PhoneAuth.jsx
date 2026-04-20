@@ -1,16 +1,20 @@
 /**
- * PhoneAuth — Ouvre le login Base44 via @capacitor/browser (InAppBrowser natif)
+ * PhoneAuth — Login via @capacitor/browser + deep link de retour
  *
- * Sur Android natif : ouvre une Custom Tab compatible OAuth Google.
- * Après login, Base44 redirige vers cdl.base44.app?access_token=xxx
- * → on écoute l'événement browserFinished + on poll le token en localStorage.
- * Sur web : fallback window.location.replace classique.
+ * Flux :
+ * 1. Ouvre app.base44.com/login dans une Custom Tab Android (compatible OAuth Google)
+ * 2. Base44 redirige vers com.cdl.ouaga://login?access_token=xxx (deep link)
+ * 3. @capacitor/app intercepte l'URL → on stocke le token → reload
+ *
+ * Le deep link com.cdl.ouaga:// doit être configuré dans AndroidManifest.xml
+ * avec intent-filter pour scheme="com.cdl.ouaga"
  */
 import { useEffect, useState } from "react";
 import { appParams } from "@/lib/app-params";
 
 const APP_ID = import.meta.env.VITE_BASE44_APP_ID || appParams.appId;
-const NEXT_URL = 'https://cdl.base44.app';
+// Deep link de retour : Capacitor intercepte com.cdl.ouaga://
+const NEXT_URL = 'com.cdl.ouaga://login';
 
 function isNative() {
   return typeof window !== 'undefined' &&
@@ -18,64 +22,58 @@ function isNative() {
 }
 
 export default function PhoneAuth() {
-  const [status, setStatus] = useState('opening'); // opening | waiting | error
+  const [status, setStatus] = useState('opening');
 
   const loginUrl = `https://app.base44.com/login?app_id=${APP_ID}&next=${encodeURIComponent(NEXT_URL)}`;
 
   useEffect(() => {
-    let pollInterval = null;
+    let appListener = null;
+    let browserListener = null;
 
     const openLogin = async () => {
       if (isNative()) {
         try {
           const { Browser } = await import('@capacitor/browser');
+          const { App } = await import('@capacitor/app');
 
-          // Ouvrir le login dans une Custom Tab Android (compatible OAuth)
-          await Browser.open({ url: loginUrl, windowName: '_self' });
-          setStatus('waiting');
-
-          // Écouter la fermeture du browser (retour app)
-          Browser.addListener('browserFinished', () => {
-            // Vérifier si le token est arrivé dans l'URL ou localStorage
-            checkForToken();
+          // Écouter le deep link de retour AVANT d'ouvrir le browser
+          appListener = await App.addListener('appUrlOpen', (data) => {
+            console.log('[PhoneAuth] appUrlOpen:', data.url);
+            const url = new URL(data.url);
+            const token = url.searchParams.get('access_token');
+            if (token) {
+              localStorage.setItem('base44_access_token', token);
+              Browser.close().catch(() => {});
+              window.location.reload();
+            }
           });
 
-          // Poll toutes les 500ms pour détecter le token après redirection
-          pollInterval = setInterval(checkForToken, 500);
+          // Écouter aussi browserFinished (si l'utilisateur ferme manuellement)
+          browserListener = await Browser.addListener('browserFinished', () => {
+            // Vérifier si token déjà stocké
+            if (localStorage.getItem('base44_access_token')) {
+              window.location.reload();
+            } else {
+              setStatus('waiting');
+            }
+          });
+
+          await Browser.open({ url: loginUrl });
+          setStatus('waiting');
         } catch (err) {
-          console.error('[PhoneAuth] Browser error:', err);
-          // Fallback : window.location
+          console.error('[PhoneAuth] error:', err);
           window.location.replace(loginUrl);
         }
       } else {
-        // Web : redirection classique
         window.location.replace(loginUrl);
-      }
-    };
-
-    const checkForToken = () => {
-      // Vérifier le token dans l'URL courante
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get('access_token');
-      if (token) {
-        if (pollInterval) clearInterval(pollInterval);
-        localStorage.setItem('base44_access_token', token);
-        window.history.replaceState({}, '', '/');
-        window.location.reload();
-        return;
-      }
-      // Vérifier aussi le localStorage (cas où Base44 l'a déjà stocké)
-      const stored = localStorage.getItem('base44_access_token');
-      if (stored) {
-        if (pollInterval) clearInterval(pollInterval);
-        window.location.reload();
       }
     };
 
     openLogin();
 
     return () => {
-      if (pollInterval) clearInterval(pollInterval);
+      appListener?.remove?.();
+      browserListener?.remove?.();
     };
   }, []);
 
@@ -87,15 +85,17 @@ export default function PhoneAuth() {
         className="h-20 w-20 rounded-2xl object-cover shadow-lg"
       />
       <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-      <p className="text-white/80 text-sm">
-        {status === 'waiting' ? 'Retournez dans l\'app après connexion...' : 'Ouverture de la connexion...'}
+      <p className="text-white/80 text-sm text-center px-8">
+        {status === 'waiting'
+          ? 'Connectez-vous dans la fenêtre qui vient de s\'ouvrir'
+          : 'Ouverture de la connexion...'}
       </p>
       {status === 'waiting' && (
         <button
           onClick={() => window.location.reload()}
           className="mt-2 px-5 py-2 bg-white text-primary rounded-xl font-semibold text-sm"
         >
-          ✅ J'ai terminé ma connexion
+          ✅ J'ai terminé, recharger l'app
         </button>
       )}
     </div>
