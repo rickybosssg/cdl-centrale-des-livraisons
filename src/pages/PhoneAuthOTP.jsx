@@ -243,6 +243,23 @@ export default function PhoneAuthOTP() {
           </div>
         )}
 
+        {/* Séparateur */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-white/20" />
+          <span className="text-white/50 text-xs">OU</span>
+          <div className="flex-1 h-px bg-white/20" />
+        </div>
+
+        {/* Accès admin */}
+        <div className="text-center">
+          <button
+            onClick={() => window.location.href = '/admin-login-secure'}
+            className="text-white/80 hover:text-white text-sm font-semibold transition-colors"
+          >
+            Se connecter en tant qu'admin
+          </button>
+        </div>
+
         {/* Footer */}
         <p className="text-center text-white/60 text-xs">
           Aucun compte ? Un compte sera créé automatiquement.
