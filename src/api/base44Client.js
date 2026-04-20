@@ -19,11 +19,17 @@ function getServerUrl() {
   return '';
 }
 
+console.log('[base44Client] 📱 INIT:');
+console.log('  - appId:', appId);
+console.log('  - serverUrl (native):', getServerUrl());
+console.log('  - appBaseUrl:', appBaseUrl);
+console.log('  - ❌ NO fallback to app.base44.com in production');
+
 export const base44 = createClient({
   appId,
   token,
   functionsVersion,
   serverUrl: getServerUrl(),
   requiresAuth: false,
-  appBaseUrl
+  appBaseUrl: 'https://cdl.base44.app' // Force production URL, never platform
 });

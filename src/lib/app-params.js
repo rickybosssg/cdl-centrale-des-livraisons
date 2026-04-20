@@ -60,6 +60,12 @@ const getAppParams = () => {
 	// ✅ BLOQUER #1: appId depuis env VITE_BASE44_APP_ID (prioritaire sur URL param)
 	const appIdFromEnv = import.meta.env.VITE_BASE44_APP_ID;
 	const appId = appIdFromEnv || getAppParamValue("app_id");
+	
+	console.log('[app-params] 🔍 APP CONFIG:');
+	console.log('  - VITE_BASE44_APP_ID:', appIdFromEnv ? `✅ ${appIdFromEnv}` : '❌ MISSING (check .env)');
+	console.log('  - appId final:', appId || 'MISSING_APP_ID');
+	console.log('  - native mode:', native);
+	
 	if (!appId) {
 		console.error('🔴 FATAL: appId manquant — impossible d\'appeler les fonctions');
 		if (!isNode && window.location?.pathname !== '/phone-auth') {
@@ -67,10 +73,9 @@ const getAppParams = () => {
 		}
 	}
 
-	// ✅ appBaseUrl toujours cdl.base44.app pour APK natif + Web
-	const appBaseUrl = native 
-		? 'https://cdl.base44.app'
-		: (import.meta.env.VITE_BASE44_APP_BASE_URL || getAppParamValue("app_base_url") || 'https://cdl.base44.app');
+	// ✅ appBaseUrl ALWAYS cdl.base44.app (no fallback to app.base44.com)
+	const appBaseUrl = 'https://cdl.base44.app';
+	console.log('  - appBaseUrl:', appBaseUrl, '(forced for APK + Web)');
 
 	return {
 		appId: appId || 'MISSING_APP_ID',
