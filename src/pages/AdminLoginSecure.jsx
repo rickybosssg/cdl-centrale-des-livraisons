@@ -21,8 +21,9 @@ export default function AdminLoginSecure() {
     setError("");
 
     try {
-      // Appel HTTP direct sans authentification requise
-      const response = await fetch('/functions/adminLogin', {
+      // Appel direct à la fonction backend via l'API Base44 publique
+      const appId = '69c3c74fc4b62396dca61751';
+      const response = await fetch(`https://app.base44.com/api/apps/${appId}/functions/adminLogin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -36,8 +37,7 @@ export default function AdminLoginSecure() {
       if (response.ok && data.success) {
         setSuccess(true);
         setTimeout(() => {
-          window.history.pushState({}, '', '/admin-dashboard');
-          window.dispatchEvent(new PopStateEvent('popstate'));
+          window.location.href = '/admin-dashboard';
         }, 1000);
       } else {
         setError(data.error || "Email ou mot de passe incorrect");
