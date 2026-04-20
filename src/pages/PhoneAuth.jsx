@@ -30,30 +30,8 @@ export default function PhoneAuth() {
       return;
     }
 
-    // APK natif : écouter le retour au premier plan (App State)
-    let appStateListener = null;
-    const setupAppStateListener = async () => {
-      try {
-        const { App } = await import('@capacitor/app');
-        appStateListener = await App.addListener('appStateChange', async ({ isActive }) => {
-          if (isActive) {
-            // L'utilisateur revient dans l'app → vérifier si connecté
-            const authed = await base44.auth.isAuthenticated();
-            if (authed) {
-              window.location.href = '/';
-            }
-          }
-        });
-      } catch (_) {}
-    };
-
-    setupAppStateListener();
     // Lancer la redirection vers le login
     base44.auth.redirectToLogin('https://cdl.base44.app');
-
-    return () => {
-      if (appStateListener) appStateListener.remove().catch(() => {});
-    };
   }, []);
 
   return (
