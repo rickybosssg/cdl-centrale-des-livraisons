@@ -63,15 +63,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('[verifyOTPWithRedirect] ========== DEBUG ==========');
-    console.log('[verifyOTPWithRedirect] Numéro normalisé:', phone);
-    console.log('[verifyOTPWithRedirect] Numéro admin:', '+22655738247');
-    console.log('[verifyOTPWithRedirect] Comparaison (===):', phone === '+22655738247');
-    console.log('[verifyOTPWithRedirect] ===========================');
+    console.log('[verifyOTPWithRedirect] ════ VERIFY OTP WORKFLOW ════');
+    console.log('[verifyOTPWithRedirect] Phone (normalized):', phone);
+    console.log('[verifyOTPWithRedirect] Code:', code);
 
     // Appel API REST Twilio Verify
     const url = `https://verify.twilio.com/v2/Services/${verifyServiceSid}/VerificationCheck`;
     const auth = btoa(`${accountSid}:${authToken}`);
+
+    console.log('[verifyOTPWithRedirect] 📞 Twilio API call...');
 
     const response = await fetch(url, {
       method: 'POST',
@@ -88,37 +88,46 @@ Deno.serve(async (req) => {
     const data = await response.json();
 
     if (!response.ok || data.status !== 'approved') {
-      console.warn('[verifyOTPWithRedirect] Code incorrect pour', phone);
+      console.warn('[verifyOTPWithRedirect] ❌ Code incorrect:', { status: data.status, message: data.message });
       return Response.json(
-        { error: 'Code OTP incorrect ou expiré' },
+        { 
+          success: false,
+          error: 'Code OTP incorrect ou expiré',
+          step: 'verifyOTP',
+          twilio_status: data.status,
+          twilio_message: data.message,
+        },
         { status: 401 }
       );
     }
 
-    console.log('[verifyOTPWithRedirect] Code correct pour', phone);
+    console.log('[verifyOTPWithRedirect] ✅ Code valide pour:', phone);
 
     const base44 = createClientFromRequest(req);
+    const ADMIN_PHONE = '+22655738247';
 
     // ═══════════════════════════════════════════════════════════════
     // LOGIQUE DE REDIRECTION
     // ═══════════════════════════════════════════════════════════════
 
     // CAS 1 : Admin
-    const isAdmin = phone === '+22655738247';
-    console.log('[verifyOTPWithRedirect] DEBUG - isAdmin check:', isAdmin);
+    const isAdmin = phone === ADMIN_PHONE;
+    console.log(`[verifyOTPWithRedirect] 🔍 Admin check: ${phone} === ${ADMIN_PHONE} ? ${isAdmin}`);
     
     if (isAdmin) {
-      console.log('[verifyOTPWithRedirect] ✅ ADMIN détecté - numéro:', phone);
+      console.log('[verifyOTPWithRedirect] 👨‍💼 ADMIN DÉTECTÉ');
       return Response.json({
         success: true,
         redirect_url: '/admin-dashboard',
         user_type: 'admin',
+        phone: phone,
       });
     }
     
-    console.log('[verifyOTPWithRedirect] ℹ️ Pas un admin - numéro:', phone);
+    console.log('[verifyOTPWithRedirect] ℹ️ Utilisateur régulier - numéro:', phone);
 
     // CAS 2 & 3 : Rechercher l'utilisateur
+    console.log('[verifyOTPWithRedirect] 🔍 Recherche utilisateur avec téléphone:', phone);
     let user = null;
     try {
       const users = await base44.asServiceRole.entities.User.filter(
@@ -128,14 +137,17 @@ Deno.serve(async (req) => {
       );
       if (users.length > 0) {
         user = users[0];
+        console.log('[verifyOTPWithRedirect] ✅ Utilisateur trouvé:', user.email);
+      } else {
+        console.log('[verifyOTPWithRedirect] ℹ️ Aucun utilisateur trouvé');
       }
     } catch (err) {
-      console.warn('[verifyOTPWithRedirect] Erreur recherche user:', err.message);
+      console.warn('[verifyOTPWithRedirect] ⚠️ Erreur recherche user:', err.message);
     }
 
     // CAS 2 : Utilisateur existant
     if (user) {
-      console.log('[verifyOTPWithRedirect] Utilisateur existant:', user.email);
+      console.log('[verifyOTPWithRedirect] 👤 Utilisateur existant:', user.email);
 
       // Récupérer le profil actif
       let activeProfile = null;
@@ -150,9 +162,12 @@ Deno.serve(async (req) => {
         );
         if (profiles.length > 0) {
           activeProfile = profiles[0];
+          console.log('[verifyOTPWithRedirect] Profil actif:', activeProfile.profile_type);
+        } else {
+          console.log('[verifyOTPWithRedirect] ⚠️ Pas de profil actif');
         }
       } catch (err) {
-        console.warn('[verifyOTPWithRedirect] Erreur recherche profil:', err.message);
+        console.warn('[verifyOTPWithRedirect] ⚠️ Erreur recherche profil:', err.message);
       }
 
       // Déterminer la redirection selon le profil actif
@@ -163,28 +178,29 @@ Deno.serve(async (req) => {
           client: '/',
           livreur: '/courses-disponibles',
           partenaire: '/dashboard-partenaire',
-          commercial: '/', // À adapter
+          commercial: '/',
           annonceur: '/dashboard-annonceur',
         };
         redirectUrl = redirectMap[profileType] || '/';
       }
 
-      console.log('[verifyOTPWithRedirect] Redirection vers:', redirectUrl);
+      console.log('[verifyOTPWithRedirect] 🔄 Redirection utilisateur existant vers:', redirectUrl);
       return Response.json({
         success: true,
         redirect_url: redirectUrl,
         user_type: 'existing',
+        phone: phone,
+        email: user.email,
       });
     }
 
     // CAS 3 : Nouvel utilisateur
-    console.log('[verifyOTPWithRedirect] Nouvel utilisateur');
+    console.log('[verifyOTPWithRedirect] 📝 Nouvel utilisateur — création');
 
-    // Créer l'utilisateur
     try {
       const tempEmail = `phone_${phone.replace(/\D/g, '')}@cdl.local`;
 
-      await base44.asServiceRole.entities.User.create({
+      const newUser = await base44.asServiceRole.entities.User.create({
         email: tempEmail,
         telephone: phone,
         full_name: phone,
@@ -192,20 +208,26 @@ Deno.serve(async (req) => {
         created_by: 'phone_auth',
       });
 
-      console.log('[verifyOTPWithRedirect] Utilisateur créé:', tempEmail);
+      console.log('[verifyOTPWithRedirect] ✅ Utilisateur créé:', tempEmail);
     } catch (err) {
-      console.error('[verifyOTPWithRedirect] Erreur création user:', err.message);
+      console.error('[verifyOTPWithRedirect] ❌ Erreur création user:', err.message);
       return Response.json(
-        { error: 'Erreur création compte' },
+        { 
+          success: false,
+          error: 'Erreur création compte',
+          step: 'createUser',
+          details: err.message,
+        },
         { status: 500 }
       );
     }
 
-    // Rediriger vers inscription + choix de profil
+    console.log('[verifyOTPWithRedirect] 🔄 Redirection nouvel utilisateur vers inscription');
     return Response.json({
       success: true,
       redirect_url: '/complete-profile/new',
       user_type: 'new',
+      phone: phone,
     });
   } catch (error) {
     console.error('[verifyOTPWithRedirect] Erreur:', error.message);

@@ -1,20 +1,30 @@
 /**
- * sendOTP — Envoyer un code OTP via Twilio Verify (PUBLIC — pas d'authentification requise)
- * 
- * Input: { phone: "+226XXXXXXXX" }
- * Output: { success: true, message: "Code envoyé" }
+ * sendOTP — Envoyer un code OTP via Twilio Verify (PUBLIC)
+ * RETOURNE L'ERREUR TWILIO COMPLÈTE pour diagnostic
  */
 Deno.serve(async (req) => {
-  // Fonction PUBLIQUE — pas d'authentification requise
   try {
     const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
     const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
     const verifyServiceSid = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
 
+    console.log('[sendOTP] 🔍 CONFIG CHECK:');
+    console.log('  - ACCOUNT_SID exists:', !!accountSid);
+    console.log('  - AUTH_TOKEN exists:', !!authToken);
+    console.log('  - VERIFY_SERVICE_SID exists:', !!verifyServiceSid);
+
     if (!accountSid || !authToken || !verifyServiceSid) {
-      console.error('[sendOTP] Configuration Twilio manquante');
       return Response.json(
-        { error: 'Configuration Twilio manquante' },
+        {
+          success: false,
+          step: 'sendOTP',
+          error: 'Configuration Twilio manquante',
+          missing: {
+            accountSid: !accountSid,
+            authToken: !authToken,
+            verifyServiceSid: !verifyServiceSid,
+          },
+        },
         { status: 500 }
       );
     }
@@ -22,7 +32,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     let phone = body.phone || '';
 
-    // Normaliser le numéro
+    // Normaliser
     phone = phone.replace(/\s/g, '');
     if (!phone.startsWith('+')) {
       if (phone.startsWith('226')) {
@@ -34,17 +44,25 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Valider le format
+    // Valider format
     if (!/^\+226\d{8}$/.test(phone)) {
       return Response.json(
-        { error: 'Numéro invalide. Format attendu: +226XXXXXXXX' },
+        {
+          success: false,
+          step: 'sendOTP',
+          error: 'Numéro invalide',
+          received: body.phone,
+          normalized: phone,
+          expected_format: '+226XXXXXXXX',
+        },
         { status: 400 }
       );
     }
 
-    console.log('[sendOTP] Envoi OTP vers', phone);
+    console.log(`[sendOTP] 📞 Envoi OTP vers ${phone}`);
+    console.log(`[sendOTP] Service SID: ${verifyServiceSid.substring(0, 5)}...`);
 
-    // Appel API REST Twilio Verify
+    // Appel Twilio
     const url = `https://verify.twilio.com/v2/Services/${verifyServiceSid}/Verifications`;
     const auth = btoa(`${accountSid}:${authToken}`);
 
@@ -62,25 +80,44 @@ Deno.serve(async (req) => {
 
     const data = await response.json();
 
+    console.log(`[sendOTP] Response status: ${response.status}`);
+    console.log(`[sendOTP] Response body:`, JSON.stringify(data));
+
     if (!response.ok) {
-      console.error('[sendOTP] Erreur Twilio:', data);
+      console.error('[sendOTP] ❌ Erreur Twilio API');
       return Response.json(
-        { error: data.message || 'Erreur Twilio' },
+        {
+          success: false,
+          step: 'sendOTP',
+          phone: phone,
+          http_status: response.status,
+          twilio_error_code: data.code,
+          twilio_message: data.message,
+          twilio_more_info: data.more_info,
+          raw_error: JSON.stringify(data),
+        },
         { status: response.status }
       );
     }
 
-    console.log('[sendOTP] Code envoyé avec succès - SID:', data.sid);
+    console.log(`[sendOTP] ✅ OTP envoyé — SID: ${data.sid}`);
 
     return Response.json({
       success: true,
-      message: 'Code OTP envoyé par SMS',
+      step: 'sendOTP',
       phone: phone,
+      message: 'Code OTP envoyé par SMS',
+      verification_sid: data.sid,
     });
   } catch (error) {
-    console.error('[sendOTP] Erreur:', error.message);
+    console.error('[sendOTP] ⚠️ Exception:', error.message);
     return Response.json(
-      { error: error.message || 'Erreur lors de l\'envoi du code' },
+      {
+        success: false,
+        step: 'sendOTP',
+        error: error.message,
+        raw_error: error.toString(),
+      },
       { status: 500 }
     );
   }

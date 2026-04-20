@@ -136,6 +136,8 @@ import TestNotifications from './pages/dispatcher/TestNotifications';
 import FcmDiagnostic from './pages/FcmDiagnostic';
 import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
 import PhoneAuth from './pages/PhoneAuth';
+import OTPSystemTest from './pages/dispatcher/OTPSystemTest';
+import TwilioSecretsDebug from './pages/dispatcher/TwilioSecretsDebug';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -413,6 +415,8 @@ const AuthenticatedApp = () => {
           <Route path="/admin-auth-diagnostics" element={<AdminAuthDiagnostics />} />
           <Route path="/test-notifications" element={<TestNotifications />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
+          <Route path="/otp-system-test" element={<OTPSystemTest />} />
+          <Route path="/twilio-secrets-debug" element={<TwilioSecretsDebug />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
           <Route path="/profils" element={<ProfilsHub />} />

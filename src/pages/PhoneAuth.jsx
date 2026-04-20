@@ -1,63 +1,132 @@
-import { useState } from "react";
-import { base44 } from "@/api/base44Client";
-import { Loader2, ArrowLeft, Phone } from "lucide-react";
-
-const ADMIN_PHONE = "+22655738247";
+import { useState, useRef } from "react";
+import { Loader2, ArrowLeft } from "lucide-react";
+import { appParams } from "@/lib/app-params";
 
 export default function PhoneAuth() {
-  const [step, setStep] = useState("phone"); // phone | code | loading
-  const [digits, setDigits] = useState(""); // Seulement les 8 chiffres
+  const [step, setStep] = useState("phone");
+  const [digits, setDigits] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [debugInfo, setDebugInfo] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
 
-  // Saisie simple — accepter UNIQUEMENT chiffres, max 8
   const handlePhoneChange = (e) => {
-    const value = e.target.value;
-    // Accepter seulement si ce sont des chiffres et max 8
-    if (/^\d*$/.test(value) && value.length <= 8) {
-      setDigits(value);
-    }
+    const v = e.target.value.replace(/\D/g, "");
+    setDigits(v.slice(0, 8));
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  // SEND OTP
+  // ═══════════════════════════════════════════════════════════════
+
   const sendOTP = async () => {
-    if (digits.length < 8) {
+    if (digits.length !== 8) {
       setMessage("Numéro incomplet");
       return;
     }
 
-    const fullPhone = "+226" + digits;
-
     setLoading(true);
     setMessage("");
+    setDebugInfo(null);
 
     try {
-      console.log('[PhoneAuth] Appel sendOTP avec:', { phone: fullPhone });
-      
-      // Appel via fetch avec l'appId
-      const appId = import.meta.env.VITE_BASE44_APP_ID;
-      const res = await fetch(`/api/apps/${appId}/functions/sendOTP`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const fullPhone = "+226" + digits;
+      console.log("[PhoneAuth] 📞 sendOTP call:", { fullPhone });
+
+      const appId = appParams.appId;
+      const url = `/api/apps/${appId}/functions/sendOTP`;
+
+      console.log("[PhoneAuth] Appel URL:", url);
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: fullPhone }),
       });
 
       const data = await res.json();
-      console.log('[PhoneAuth] Réponse sendOTP:', { status: res.status, data });
+      console.log("[PhoneAuth] sendOTP response:", { status: res.status, data });
+
+      setDebugInfo({
+        endpoint: url,
+        status: res.status,
+        response: data,
+      });
 
       if (data?.success) {
+        console.log("[PhoneAuth] ✅ OTP envoyé");
         setStep("code");
         setMessage("");
+        setShowDebug(false);
       } else {
-        setMessage(data?.error || "Erreur envoi SMS");
+        // Afficher l'erreur Twilio complète
+        console.error("[PhoneAuth] ❌ Erreur:", data);
+        const errorMsg = data?.twilio_message || data?.error || "Erreur inconnue";
+        setMessage(errorMsg);
+        setShowDebug(true);
       }
     } catch (err) {
-      console.error('[PhoneAuth] Exception sendOTP:', err);
-      setMessage("Erreur lors de l'envoi du code");
+      console.error("[PhoneAuth] Exception:", err);
+      setMessage("Erreur réseau: " + err.message);
+      setDebugInfo({ exception: err.message });
+      setShowDebug(true);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
+
+  // ═══════════════════════════════════════════════════════════════
+  // TEST SENDOTP DIRECTEMENT
+  // ═══════════════════════════════════════════════════════════════
+
+  const testSendOTP = async () => {
+    console.log("[PhoneAuth] 🧪 TEST sendOTP");
+    setLoading(true);
+    setDebugInfo(null);
+
+    try {
+      const appId = appParams.appId;
+      const url = `/api/apps/${appId}/functions/sendOTP`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: "+22655738247" }),
+      });
+
+      const data = await res.json();
+      console.log("[PhoneAuth] TEST response:", { status: res.status, data });
+
+      setDebugInfo({
+        test: "sendOTP",
+        endpoint: url,
+        phone: "+22655738247",
+        status: res.status,
+        response: data,
+      });
+      setShowDebug(true);
+
+      if (data?.success) {
+        setMessage("✅ TEST OK — Code envoyé");
+      } else {
+        setMessage(
+          `❌ TEST FAILED — ${data?.twilio_message || data?.error || "Unknown error"}`
+        );
+      }
+    } catch (err) {
+      console.error("[PhoneAuth] TEST Exception:", err);
+      setDebugInfo({ test: "sendOTP", exception: err.message });
+      setShowDebug(true);
+      setMessage("❌ TEST FAILED — " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // VERIFY OTP
+  // ═══════════════════════════════════════════════════════════════
 
   const verifyOTP = async () => {
     if (!code || code.length !== 6) {
@@ -67,14 +136,17 @@ export default function PhoneAuth() {
 
     setLoading(true);
     setMessage("");
+    setDebugInfo(null);
 
     try {
       setStep("loading");
 
-      const appId = import.meta.env.VITE_BASE44_APP_ID;
-      const res = await fetch(`/api/apps/${appId}/functions/verifyOTPWithRedirect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const appId = appParams.appId;
+      const url = `/api/apps/${appId}/functions/verifyOTPWithRedirect`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phone: "+226" + digits,
           code,
@@ -82,24 +154,34 @@ export default function PhoneAuth() {
       });
 
       const data = await res.json();
-      console.log('[PhoneAuth] Réponse verifyOTPWithRedirect:', { status: res.status, data });
+      console.log("[PhoneAuth] verifyOTP response:", { status: res.status, data });
+
+      setDebugInfo({
+        endpoint: url,
+        status: res.status,
+        response: data,
+      });
 
       if (data?.success) {
-        const redirectUrl = data.redirect_url || "/";
+        console.log("[PhoneAuth] ✅ OTP valide — Redirection vers:", data.redirect_url);
         setTimeout(() => {
-          window.location.href = redirectUrl;
+          window.location.href = data.redirect_url || "/";
         }, 800);
       } else {
         setStep("code");
-        setMessage(data?.error || "Code incorrect");
+        const errorMsg = data?.error || "Code incorrect";
+        setMessage(errorMsg);
+        setShowDebug(true);
       }
     } catch (err) {
-      console.error('[PhoneAuth] Exception verifyOTPWithRedirect:', err);
+      console.error("[PhoneAuth] Verify exception:", err);
       setStep("code");
-      setMessage("Erreur lors de la vérification");
+      setMessage("Erreur vérification: " + err.message);
+      setDebugInfo({ exception: err.message });
+      setShowDebug(true);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   // ═══════════════════════════════════════════════════════════════
@@ -163,7 +245,26 @@ export default function PhoneAuth() {
             )}
           </button>
 
+          {/* BOUTON TEST VISIBLE */}
+          <button
+            style={styles.testButton}
+            onClick={testSendOTP}
+            disabled={loading}
+          >
+            🧪 Tester sendOTP
+          </button>
+
           {message && <p style={styles.error}>{message}</p>}
+
+          {/* AFFICHER DEBUG INFO SI PRÉSENT */}
+          {showDebug && debugInfo && (
+            <div style={styles.debugBox}>
+              <p style={styles.debugTitle}>🔍 DEBUG INFO:</p>
+              <pre style={styles.debugContent}>
+                {JSON.stringify(debugInfo, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -181,6 +282,8 @@ export default function PhoneAuth() {
             setStep("phone");
             setCode("");
             setMessage("");
+            setDebugInfo(null);
+            setShowDebug(false);
           }}
           style={styles.backButtonRow}
         >
@@ -221,6 +324,16 @@ export default function PhoneAuth() {
         </button>
 
         {message && <p style={styles.error}>{message}</p>}
+
+        {/* AFFICHER DEBUG INFO SI PRÉSENT */}
+        {showDebug && debugInfo && (
+          <div style={styles.debugBox}>
+            <p style={styles.debugTitle}>🔍 DEBUG INFO:</p>
+            <pre style={styles.debugContent}>
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -235,6 +348,7 @@ const styles = {
     alignItems: "center",
     fontFamily: "Inter, system-ui, sans-serif",
     padding: "20px",
+    overflowY: "auto",
   },
   card: {
     background: "white",
@@ -337,6 +451,19 @@ const styles = {
     justifyContent: "center",
     gap: "8px",
   },
+  testButton: {
+    width: "100%",
+    padding: "10px",
+    marginBottom: "12px",
+    background: "#f0f0f0",
+    color: "#666",
+    border: "1px solid #ddd",
+    borderRadius: "12px",
+    fontWeight: "500",
+    fontSize: "13px",
+    cursor: "pointer",
+    transition: "all 0.2s",
+  },
   error: {
     color: "#dc2626",
     fontSize: "13px",
@@ -346,5 +473,29 @@ const styles = {
   spinner: {
     display: "flex",
     justifyContent: "center",
+  },
+  debugBox: {
+    marginTop: "16px",
+    padding: "12px",
+    background: "#f5f5f5",
+    border: "1px solid #ddd",
+    borderRadius: "8px",
+    textAlign: "left",
+  },
+  debugTitle: {
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "#333",
+    margin: "0 0 8px 0",
+  },
+  debugContent: {
+    fontSize: "10px",
+    fontFamily: "monospace",
+    color: "#666",
+    margin: "0",
+    overflow: "auto",
+    maxHeight: "200px",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
   },
 };
