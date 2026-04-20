@@ -566,9 +566,10 @@ const styles = {
     fontWeight: "bold",
     letterSpacing: "4px",
     boxSizing: "border-box",
-    fontFamily: "monospace",
+    fontFamily: "inherit",
     color: "#333",
     textAlign: "center",
+    WebkitAppearance: "none",
   },
   button: {
     width: "100%",
