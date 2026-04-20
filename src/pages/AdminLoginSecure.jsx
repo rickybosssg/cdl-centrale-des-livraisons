@@ -21,25 +21,32 @@ export default function AdminLoginSecure() {
     setError("");
 
     try {
-      // Appeler la fonction backend
-      const res = await base44.functions.invoke("adminLogin", {
-        email: email.trim().toLowerCase(),
-        password,
+      // Appel HTTP brut sans authentification SDK
+      const response = await fetch('/api/functions/adminLogin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
       });
 
-      if (res.data?.success) {
+      const data = await response.json();
+
+      if (data.success) {
         setSuccess(true);
-        // Redirection vers le dashboard admin (compatible APK natif)
         setTimeout(() => {
           window.history.pushState({}, '', '/admin-dashboard');
           window.dispatchEvent(new PopStateEvent('popstate'));
         }, 1000);
       } else {
-        setError(res.data?.error || "Authentification échouée");
+        setError(data.error || "Email ou mot de passe incorrect");
       }
     } catch (err) {
       console.error('[AdminLogin] Error:', err);
-      setError(err.message || "Erreur de connexion");
+      setError("Erreur de connexion — veuillez réessayer");
     } finally {
       setLoading(false);
     }
