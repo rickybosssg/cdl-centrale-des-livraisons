@@ -32,17 +32,31 @@ export default function PhoneAuth() {
 
     try {
       const fullPhone = "+226" + digits;
-      console.log("[PhoneAuth] 📞 sendOTP:", fullPhone);
-
-      // SÉCURITÉ : vérifier que appId existe AVANT l'appel
+      
+      // ✅ DEBUG: Vérifier appId
       const appId = appParams?.appId;
-      if (!appId) {
-        throw new Error("Configuration manquante: appId");
+      console.log("[PhoneAuth] appParams:", appParams);
+      console.log("[PhoneAuth] appId:", appId, "type:", typeof appId, "length:", appId?.length);
+      
+      if (!appId || appId === 'MISSING_APP_ID') {
+        const errMsg = "appId manquant ou invalide — contacter admin";
+        setMessage(errMsg);
+        setDebugInfo({ appId, appParams });
+        setShowDebug(true);
+        setLoading(false);
+        return;
       }
 
-      // ✅ FIX 403: Utiliser URL absolue vers cdl.base44.app (app subdomain, pas platform domain)
+      console.log("[PhoneAuth] 📞 sendOTP:", fullPhone);
+
+      // ✅ FIX 403: Utiliser URL absolue vers cdl.base44.app avec appId valide
       const url = `https://cdl.base44.app/api/apps/${appId}/functions/sendOTP`;
-      console.log("[PhoneAuth] URL:", url);
+      console.log("[PhoneAuth] URL complète:", url);
+
+      // ✅ VÉRIFICATION: L'URL doit contenir l'appId correct
+      if (!url.includes(appId)) {
+        throw new Error(`URL malformée — appId '${appId}' pas dans l'URL`);
+      }
 
       // Timeout + retry logic
       const controller = new AbortController();
