@@ -45,9 +45,10 @@ export default function FcmDiagnostic() {
   const [isNative, setIsNative] = useState(false);
 
   const detectMode = () => {
-    return typeof window !== 'undefined' &&
-      window.Capacitor !== undefined &&
-      window.Capacitor.isNativePlatform?.();
+    if (typeof window === 'undefined') return false;
+    if (window.location?.protocol === 'capacitor:') return true;
+    if (typeof window.Capacitor !== 'undefined') return true;
+    return false;
   };
 
   const load = async () => {
@@ -133,33 +134,54 @@ export default function FcmDiagnostic() {
   };
 
   const requestPermissionAndToken = async () => {
-    const native = detectMode();
-    if (native) {
+    toast.info('Tentative Capacitor Push...');
+    try {
+      // Toujours essayer Capacitor en premier (APK Base44 + Android Studio)
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+      
+      // Créer le canal Android
       try {
-        const { initCapacitorPush } = await import('@/lib/nativePush');
-        toast.info('Demande de permission...');
-        await initCapacitorPush({
-          onToken: async (token) => {
-            toast.success('Token reçu ! Sauvegarde en cours...');
-            await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native' });
-            toast.success('Token sauvegardé en BDD');
-            load();
-          },
-          onPermissionDenied: () => toast.error('Permission refusée'),
-          onForegroundNotif: () => {},
-          onNotificationTap: () => {},
+        await PushNotifications.createChannel({
+          id: 'default', name: 'CDL Notifications',
+          importance: 5, sound: 'default', vibration: true,
         });
-      } catch (err) {
-        toast.error('Erreur: ' + err.message);
+      } catch (_) {}
+
+      // Demander la permission
+      const perm = await PushNotifications.requestPermissions();
+      if (perm.receive !== 'granted') {
+        toast.error('Permission refusée par Android');
+        return;
       }
-    } else {
+
+      toast.success('Permission accordée — génération token...');
+
+      // Écouter le token
+      const listener = await PushNotifications.addListener('registration', async (token) => {
+        await listener.remove();
+        toast.success('Token reçu ! Sauvegarde...');
+        try {
+          await base44.functions.invoke('saveFcmToken', { token: token.value, deviceType: 'android_native' });
+          toast.success('✅ Token sauvegardé en BDD !');
+          load();
+        } catch (saveErr) {
+          toast.error('Erreur sauvegarde: ' + saveErr.message);
+        }
+      });
+
+      await PushNotifications.register();
+      toast.info('register() appelé — attente du token...');
+
+    } catch (capacitorErr) {
+      // Fallback web si Capacitor vraiment pas disponible
+      toast.warning('Capacitor non disponible: ' + capacitorErr.message);
       if ('Notification' in window) {
         const perm = await Notification.requestPermission();
         if (perm === 'granted') {
-          toast.success('Permission accordée — rechargement token...');
+          toast.success('Permission web accordée');
           load();
         } else {
-          toast.error('Permission refusée');
+          toast.error('Permission web refusée');
         }
       }
     }
