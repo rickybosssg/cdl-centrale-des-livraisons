@@ -415,13 +415,20 @@ export default function PhoneAuth() {
         <p style={styles.subtitle}>Code envoyé à +226{digits}</p>
 
         <input
+          autoFocus
           style={styles.input}
           type="text"
           placeholder="000000"
           maxLength="6"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+          onFocus={(e) => {
+            e.target.select();
+            e.target.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
           disabled={loading}
+          inputMode="numeric"
+          pattern="\d{6}"
         />
 
         <button
@@ -547,12 +554,17 @@ const styles = {
     padding: "14px",
     marginBottom: "16px",
     borderRadius: "12px",
-    border: "1px solid #ddd",
-    fontSize: "15px",
+    border: "2px solid #ddd",
+    fontSize: "18px",
+    fontWeight: "600",
+    letterSpacing: "8px",
     boxSizing: "border-box",
-    fontFamily: "inherit",
-    transition: "border 0.2s",
+    fontFamily: "monospace",
+    transition: "border 0.2s, box-shadow 0.2s",
     color: "#333",
+    textAlign: "center",
+    WebkitAppearance: "none",
+    WebkitBorderRadius: "12px",
   },
   button: {
     width: "100%",
