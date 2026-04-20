@@ -25,22 +25,17 @@ export default function AdminLoginSecure() {
     try {
       console.log('[AdminLogin] Appel fonction avec:', { email, password });
       
-      const res = await fetch('/api/functions/adminLoginPublic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-        }),
+      const result = await base44.asServiceRole.functions.invoke('adminLoginPublic', {
+        email: email.trim().toLowerCase(),
+        password,
       });
 
-      const result = await res.json();
       console.log('[AdminLogin] Résultat reçu:', result);
       
-      const rawResult = JSON.stringify(result);
+      const rawResult = JSON.stringify(result.data || result);
       setDebugResult(rawResult);
 
-      if (result.success) {
+      if (result.data?.success) {
         localStorage.setItem('isAdmin', 'true');
         setSuccess(true);
         console.log('[AdminLogin] ✅ Connexion réussie, redirection...');
@@ -66,19 +61,14 @@ export default function AdminLoginSecure() {
     try {
       console.log('[AdminLogin] TEST FONCTION avec identifiants fixes');
       
-      const res = await fetch('/api/functions/adminLoginPublic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: 'weezyh2@gmail.com',
-          password: 'cdl2025admin',
-        }),
+      const result = await base44.asServiceRole.functions.invoke('adminLoginPublic', {
+        email: 'weezyh2@gmail.com',
+        password: 'cdl2025admin',
       });
 
-      const result = await res.json();
       console.log('[AdminLogin] TEST - Résultat:', result);
       
-      const rawResult = JSON.stringify(result);
+      const rawResult = JSON.stringify(result.data || result);
       setDebugResult(rawResult);
     } catch (err) {
       console.error('[AdminLogin] TEST - Exception:', err);
