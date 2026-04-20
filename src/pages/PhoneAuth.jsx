@@ -1,9 +1,17 @@
 import { useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { appParams } from "@/lib/app-params";
 
 export default function PhoneAuth() {
   useEffect(() => {
-    base44.auth.redirectToLogin(window.location.origin + '/');
+    // En APK natif, window.location.origin = "null" ou "capacitor://localhost"
+    // On utilise appBaseUrl (l'URL publique de l'app) comme nextUrl
+    const proto = window.location?.protocol;
+    const isNative = proto === 'capacitor:' || proto === 'file:' || typeof window.Capacitor !== 'undefined';
+    const nextUrl = isNative
+      ? (appParams.appBaseUrl || 'https://app.base44.com')
+      : window.location.origin + '/';
+    base44.auth.redirectToLogin(nextUrl);
   }, []);
 
   return (
