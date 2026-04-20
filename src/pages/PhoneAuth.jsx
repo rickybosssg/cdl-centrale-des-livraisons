@@ -24,7 +24,7 @@ function isNative() {
 export default function PhoneAuth() {
   const [status, setStatus] = useState('opening');
 
-  const loginUrl = `https://app.base44.com/login?app_id=${APP_ID}&next=${encodeURIComponent(NEXT_URL)}`;
+  const loginUrl = `https://app.base44.com/auth/login?app_id=${APP_ID}&redirect_uri=${encodeURIComponent(NEXT_URL)}`;
 
   useEffect(() => {
     let appListener = null;
