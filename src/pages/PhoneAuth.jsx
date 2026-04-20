@@ -10,7 +10,7 @@ export default function PhoneAuth() {
     const isNative = proto === 'capacitor:' || proto === 'file:' || typeof window.Capacitor !== 'undefined';
     const nextUrl = isNative
       ? 'https://cdl.base44.app'
-      : window.location.origin + '/';
+      : 'https://cdl.base44.app';
     base44.auth.redirectToLogin(nextUrl);
   }, []);
 
