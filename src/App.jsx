@@ -138,6 +138,7 @@ import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
 import PhoneAuth from './pages/PhoneAuth';
 import OTPSystemTest from './pages/dispatcher/OTPSystemTest';
 import TwilioSecretsDebug from './pages/dispatcher/TwilioSecretsDebug';
+import AppPublicLink from './pages/AppPublicLink';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -315,6 +316,7 @@ const AuthenticatedApp = () => {
         {/* Routes publiques sans layout */}
         <Route path="/admin-login-secure" element={<AdminLoginSecure />} />
         <Route path="/phone-auth" element={<PhoneAuth />} />
+        <Route path="/app-public-link" element={<AppPublicLink />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />

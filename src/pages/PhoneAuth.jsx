@@ -34,8 +34,8 @@ export default function PhoneAuth() {
       const fullPhone = "+226" + digits;
       console.log("[PhoneAuth] 📞 sendOTP call:", { fullPhone });
 
-      const appId = appParams.appId;
-      const url = `/api/apps/${appId}/functions/sendOTP`;
+      // ✅ URL RELATIVE — suit automatiquement le sous-domaine courant
+      const url = `/api/functions/sendOTP`;
 
       console.log("[PhoneAuth] Appel URL:", url);
 
@@ -86,8 +86,8 @@ export default function PhoneAuth() {
     setDebugInfo(null);
 
     try {
-      const appId = appParams.appId;
-      const url = `/api/apps/${appId}/functions/sendOTP`;
+      // ✅ URL RELATIVE — suit automatiquement le sous-domaine courant
+      const url = `/api/functions/sendOTP`;
 
       const res = await fetch(url, {
         method: "POST",
@@ -141,8 +141,8 @@ export default function PhoneAuth() {
     try {
       setStep("loading");
 
-      const appId = appParams.appId;
-      const url = `/api/apps/${appId}/functions/verifyOTPWithRedirect`;
+      // ✅ URL RELATIVE — suit automatiquement le sous-domaine courant
+      const url = `/api/functions/verifyOTPWithRedirect`;
 
       const res = await fetch(url, {
         method: "POST",
