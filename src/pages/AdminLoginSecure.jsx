@@ -25,7 +25,7 @@ export default function AdminLoginSecure() {
     try {
       console.log('[AdminLogin] Appel fonction avec:', { email, password });
       
-      const result = await base44.asServiceRole.functions.invoke('adminLoginPublic', {
+      const result = await base44.functions.invoke('adminLoginPublic', {
         email: email.trim().toLowerCase(),
         password,
       });
@@ -61,7 +61,7 @@ export default function AdminLoginSecure() {
     try {
       console.log('[AdminLogin] TEST FONCTION avec identifiants fixes');
       
-      const result = await base44.asServiceRole.functions.invoke('adminLoginPublic', {
+      const result = await base44.functions.invoke('adminLoginPublic', {
         email: 'weezyh2@gmail.com',
         password: 'cdl2025admin',
       });
