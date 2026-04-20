@@ -57,6 +57,9 @@ Deno.serve(async (req) => {
     }
 
     console.log('[verifyOTPWithRedirect] Vérification pour', phone);
+    console.log('[verifyOTPWithRedirect] DEBUG - phone reçu:', phone);
+    console.log('[verifyOTPWithRedirect] DEBUG - admin numéro:', '+22655738247');
+    console.log('[verifyOTPWithRedirect] DEBUG - sont identiques:', phone === '+22655738247');
 
     // Appel API REST Twilio Verify
     const url = `https://verify.twilio.com/v2/Services/${verifyServiceSid}/VerificationCheck`;
@@ -93,14 +96,19 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════════════════════════════
 
     // CAS 1 : Admin
-    if (phone === '+22655738247') {
-      console.log('[verifyOTPWithRedirect] ✅ ADMIN détecté');
+    const isAdmin = phone === '+22655738247';
+    console.log('[verifyOTPWithRedirect] DEBUG - isAdmin check:', isAdmin);
+    
+    if (isAdmin) {
+      console.log('[verifyOTPWithRedirect] ✅ ADMIN détecté - numéro:', phone);
       return Response.json({
         success: true,
         redirect_url: '/admin-dashboard',
         user_type: 'admin',
       });
     }
+    
+    console.log('[verifyOTPWithRedirect] ℹ️ Pas un admin - numéro:', phone);
 
     // CAS 2 & 3 : Rechercher l'utilisateur
     let user = null;
