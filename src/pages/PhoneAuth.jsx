@@ -32,7 +32,13 @@ export default function PhoneAuth() {
     setMessage("");
 
     try {
+      console.log('[PhoneAuth] Appel fonction sendOTP avec:', { phone: fullPhone });
+      console.log('[PhoneAuth] base44.functions:', typeof base44.functions);
+      
       const res = await base44.functions.invoke("sendOTP", { phone: fullPhone });
+      
+      console.log('[PhoneAuth] Réponse brute sendOTP:', res);
+      console.log('[PhoneAuth] res.data:', res?.data);
 
       if (res.data?.success) {
         setStep("code");
@@ -41,6 +47,9 @@ export default function PhoneAuth() {
         setMessage(res.data?.error || "Erreur envoi SMS");
       }
     } catch (err) {
+      console.error('[PhoneAuth] Exception sendOTP:', err);
+      console.error('[PhoneAuth] Status:', err?.status);
+      console.error('[PhoneAuth] Response:', err?.response);
       setMessage(err.message || "Erreur réseau");
     }
 
