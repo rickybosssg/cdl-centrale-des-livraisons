@@ -28,9 +28,10 @@ export default function AdminLoginSecure() {
 
       if (res.data?.success) {
         setSuccess(true);
-        // Redirection vers le dashboard admin
+        // Redirection vers le dashboard admin (compatible APK natif)
         setTimeout(() => {
-          window.location.href = "/admin-dashboard";
+          window.history.pushState({}, '', '/admin-dashboard');
+          window.dispatchEvent(new PopStateEvent('popstate'));
         }, 1000);
       } else {
         setError(res.data?.error || "Authentification échouée");
