@@ -34,14 +34,22 @@ export default function PhoneAuth() {
     try {
       console.log('[PhoneAuth] Appel sendOTP avec:', { phone: fullPhone });
       
-      const res = await base44.functions.invoke('sendOTP', { phone: fullPhone });
-      console.log('[PhoneAuth] Réponse sendOTP:', res);
+      // Appel via fetch avec l'appId
+      const appId = import.meta.env.VITE_BASE44_APP_ID;
+      const res = await fetch(`/api/apps/${appId}/functions/sendOTP`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: fullPhone }),
+      });
 
-      if (res?.success) {
+      const data = await res.json();
+      console.log('[PhoneAuth] Réponse sendOTP:', { status: res.status, data });
+
+      if (data?.success) {
         setStep("code");
         setMessage("");
       } else {
-        setMessage(res?.error || "Erreur envoi SMS");
+        setMessage(data?.error || "Erreur envoi SMS");
       }
     } catch (err) {
       console.error('[PhoneAuth] Exception sendOTP:', err);
@@ -63,22 +71,27 @@ export default function PhoneAuth() {
     try {
       setStep("loading");
 
-      const res = await base44.functions.invoke("verifyOTPWithRedirect", {
-        phone: "+226" + digits,
-        code,
+      const appId = import.meta.env.VITE_BASE44_APP_ID;
+      const res = await fetch(`/api/apps/${appId}/functions/verifyOTPWithRedirect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: "+226" + digits,
+          code,
+        }),
       });
 
-      console.log('[PhoneAuth] Réponse verifyOTPWithRedirect:', res);
+      const data = await res.json();
+      console.log('[PhoneAuth] Réponse verifyOTPWithRedirect:', { status: res.status, data });
 
-      if (res?.success) {
-        // Redirection intelligente selon le type d'utilisateur
-        const redirectUrl = res.redirect_url || "/";
+      if (data?.success) {
+        const redirectUrl = data.redirect_url || "/";
         setTimeout(() => {
           window.location.href = redirectUrl;
         }, 800);
       } else {
         setStep("code");
-        setMessage(res?.error || "Code incorrect");
+        setMessage(data?.error || "Code incorrect");
       }
     } catch (err) {
       console.error('[PhoneAuth] Exception verifyOTPWithRedirect:', err);
