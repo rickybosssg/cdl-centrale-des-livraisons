@@ -56,17 +56,30 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validation mot de passe simple (en prod, utiliser bcrypt)
-    // Pour le déploiement initial, vérifier contre un hash ou une variable d'env
-    const ADMIN_PASSWORD_HASH = Deno.env.get('ADMIN_PASSWORD') || 'cdl2025admin';
-    
-    // Comparaison basique (à remplacer par bcrypt.compare() en production)
-    if (password !== ADMIN_PASSWORD_HASH) {
-      console.warn('[adminLogin] Mot de passe incorrect pour:', email);
-      return Response.json(
-        { success: false, error: 'Email ou mot de passe incorrect' },
-        { status: 401 }
-      );
+    // Validation mot de passe
+    // Si l'utilisateur a un hashed_password (bcrypt), utiliser bcrypt
+    // Sinon, utiliser ADMIN_PASSWORD en texte brut
+    if (user.hashed_password) {
+      // Utiliser bcrypt pour comparer
+      const bcrypt = await import('npm:bcrypt@5.1.0');
+      const isPasswordValid = await bcrypt.compare(password, user.hashed_password);
+      if (!isPasswordValid) {
+        console.warn('[adminLogin] Mot de passe bcrypt incorrect pour:', email);
+        return Response.json(
+          { success: false, error: 'Email ou mot de passe incorrect' },
+          { status: 401 }
+        );
+      }
+    } else {
+      // Fallback : comparer avec ADMIN_PASSWORD en texte brut
+      const ADMIN_PASSWORD = Deno.env.get('ADMIN_PASSWORD') || 'cdl2025admin';
+      if (password !== ADMIN_PASSWORD) {
+        console.warn('[adminLogin] Mot de passe texte brut incorrect pour:', email);
+        return Response.json(
+          { success: false, error: 'Email ou mot de passe incorrect' },
+          { status: 401 }
+        );
+      }
     }
 
     console.log('[adminLogin] ✅ Authentification réussie pour:', email);
