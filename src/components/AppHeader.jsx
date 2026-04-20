@@ -51,7 +51,17 @@ export default function AppHeader({ userRole, userEmail }) {
             whileTap={{ scale: 0.9 }}
             transition={{ duration: 0.16, ease: [0.4,0,0.2,1] }}
             className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
-            onClick={() => base44.auth.logout()}
+            onClick={() => {
+              const proto = window.location?.protocol;
+              const isNative = proto === 'capacitor:' || proto === 'file:' || typeof window.Capacitor !== 'undefined';
+              if (isNative) {
+                try { localStorage.removeItem('base44_access_token'); localStorage.removeItem('token'); } catch(_) {}
+                window.history.replaceState({}, '', '/phone-auth');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              } else {
+                base44.auth.logout('/phone-auth');
+              }
+            }}
           >
             <LogOut className="h-4 w-4" />
           </motion.button>
