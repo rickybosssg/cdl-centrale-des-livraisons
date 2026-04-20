@@ -21,8 +21,8 @@ export default function PhoneAuth() {
   // ═══════════════════════════════════════════════════════════════
 
   const sendOTP = async () => {
-    if (digits.length !== 8) {
-      setMessage("Numéro incomplet");
+    if (!digits || digits.length !== 8) {
+      setMessage("Numéro incomplet (8 chiffres requis)");
       return;
     }
 
@@ -32,48 +32,81 @@ export default function PhoneAuth() {
 
     try {
       const fullPhone = "+226" + digits;
-      console.log("[PhoneAuth] 📞 sendOTP call:", { fullPhone });
+      console.log("[PhoneAuth] 📞 sendOTP:", fullPhone);
 
-      // ✅ URL COMPLÈTE avec appId — fonctionne partout (web, Capacitor, localhost)
-      const appId = appParams.appId;
+      // SÉCURITÉ : vérifier que appId existe AVANT l'appel
+      const appId = appParams?.appId;
+      if (!appId) {
+        throw new Error("Configuration manquante: appId");
+      }
+
       const url = `/api/apps/${appId}/functions/sendOTP`;
+      console.log("[PhoneAuth] URL:", url);
 
-      console.log("[PhoneAuth] Appel URL:", url, "appId:", appId);
+      // Timeout + retry logic
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: fullPhone }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeout);
+      
+      if (!res.ok && res.status === 404) {
+        throw new Error("Endpoint non trouvé — vérifier appId ou URL de la fonction");
+      }
+
       const data = await res.json();
-      console.log("[PhoneAuth] sendOTP response:", { status: res.status, data });
+      console.log("[PhoneAuth] Réponse:", { status: res.status, success: data?.success });
 
       setDebugInfo({
         endpoint: url,
         status: res.status,
+        phone: fullPhone,
         response: data,
       });
 
-      if (data?.success) {
+      // ✅ SUCCESS : passer à la vérification
+      if (data?.success === true) {
         console.log("[PhoneAuth] ✅ OTP envoyé");
         setStep("code");
         setMessage("");
         setShowDebug(false);
       } else {
-        // Afficher l'erreur Twilio complète
-        console.error("[PhoneAuth] ❌ Erreur:", data);
-        const errorMsg = data?.twilio_message || data?.error || "Erreur inconnue";
+        // ❌ ERREUR : afficher Twilio + fallback
+        console.error("[PhoneAuth] ❌ Erreur Twilio:", data);
+        const errorMsg = 
+          data?.twilio_message || 
+          data?.error || 
+          `Erreur ${res.status}`;
         setMessage(errorMsg);
         setShowDebug(true);
       }
     } catch (err) {
-      console.error("[PhoneAuth] Exception:", err);
-      setMessage("Erreur réseau: " + err.message);
-      setDebugInfo({ exception: err.message });
-      setShowDebug(true);
-    } finally {
+      console.error("[PhoneAuth] Exception:", err?.message);
       setLoading(false);
+      
+      // Différencier les types d'erreurs
+      if (err?.name === "AbortError") {
+        setMessage("⏱️ Timeout — vérifier la connexion réseau");
+      } else if (err?.message?.includes("Configuration")) {
+        setMessage("🔴 Erreur config — contacter support");
+      } else {
+        setMessage("❌ Erreur réseau: " + (err?.message || "inconnue"));
+      }
+      
+      setDebugInfo({ 
+        error: err?.message,
+        stack: err?.stack?.split('\n')[0],
+      });
+      setShowDebug(true);
+      return;
+    } finally {
+      if (loading) setLoading(false);
     }
   };
 
@@ -87,40 +120,65 @@ export default function PhoneAuth() {
     setDebugInfo(null);
 
     try {
-      // ✅ URL COMPLÈTE avec appId — fonctionne partout
-      const appId = appParams.appId;
+      const appId = appParams?.appId;
+      if (!appId) {
+        throw new Error("Configuration: appId manquant");
+      }
+
       const url = `/api/apps/${appId}/functions/sendOTP`;
+      console.log("[PhoneAuth] TEST URL:", url);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: "+22655738247" }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeout);
+
+      if (!res.ok && res.status === 404) {
+        throw new Error("Endpoint 404 — vérifier appId");
+      }
+
       const data = await res.json();
-      console.log("[PhoneAuth] TEST response:", { status: res.status, data });
+      console.log("[PhoneAuth] TEST réponse:", { status: res.status, success: data?.success });
 
       setDebugInfo({
         test: "sendOTP",
         endpoint: url,
+        appId: appId,
         phone: "+22655738247",
         status: res.status,
-        response: data,
+        success: data?.success,
+        error: data?.error || data?.twilio_message,
       });
       setShowDebug(true);
 
-      if (data?.success) {
-        setMessage("✅ TEST OK — Code envoyé");
+      if (data?.success === true) {
+        setMessage("✅ TEST OK — Twilio fonctionne !");
       } else {
-        setMessage(
-          `❌ TEST FAILED — ${data?.twilio_message || data?.error || "Unknown error"}`
-        );
+        setMessage(`❌ Erreur: ${data?.twilio_message || data?.error || "inconnue"}`);
       }
     } catch (err) {
-      console.error("[PhoneAuth] TEST Exception:", err);
-      setDebugInfo({ test: "sendOTP", exception: err.message });
+      console.error("[PhoneAuth] TEST erreur:", err?.message);
+      
+      let msg = "❌ TEST FAILED";
+      if (err?.name === "AbortError") msg += " — Timeout (réseau ?)";
+      else if (err?.message?.includes("404")) msg += " — Endpoint 404";
+      else if (err?.message?.includes("Configuration")) msg += " — Config error";
+      else msg += " — " + (err?.message || "unknown");
+      
+      setMessage(msg);
+      setDebugInfo({ 
+        test: "sendOTP",
+        error: err?.message,
+        appId: appParams?.appId,
+      });
       setShowDebug(true);
-      setMessage("❌ TEST FAILED — " + err.message);
     } finally {
       setLoading(false);
     }
@@ -136,6 +194,12 @@ export default function PhoneAuth() {
       return;
     }
 
+    if (!digits || digits.length !== 8) {
+      setMessage("Numéro invalide — retour");
+      setStep("phone");
+      return;
+    }
+
     setLoading(true);
     setMessage("");
     setDebugInfo(null);
@@ -143,44 +207,80 @@ export default function PhoneAuth() {
     try {
       setStep("loading");
 
-      // ✅ URL COMPLÈTE avec appId — fonctionne partout
-      const appId = appParams.appId;
+      // SÉCURITÉ : vérifier config avant appel
+      const appId = appParams?.appId;
+      if (!appId) {
+        throw new Error("Configuration manquante: appId");
+      }
+
       const url = `/api/apps/${appId}/functions/verifyOTPWithRedirect`;
+      const fullPhone = "+226" + digits;
+
+      console.log("[PhoneAuth] Verify:", { phone: fullPhone, codeLength: code.length });
+
+      // Timeout + retry
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: "+226" + digits,
+          phone: fullPhone,
           code,
         }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeout);
+
+      if (!res.ok && res.status === 404) {
+        throw new Error("Endpoint non trouvé");
+      }
+
       const data = await res.json();
-      console.log("[PhoneAuth] verifyOTP response:", { status: res.status, data });
+      console.log("[PhoneAuth] Verify réponse:", { status: res.status, success: data?.success });
 
       setDebugInfo({
         endpoint: url,
         status: res.status,
+        phone: fullPhone,
         response: data,
       });
 
-      if (data?.success) {
-        console.log("[PhoneAuth] ✅ OTP valide — Redirection vers:", data.redirect_url);
+      // ✅ CODE BON : redirection automatique
+      if (data?.success === true) {
+        const redirectUrl = data?.redirect_url || "/";
+        console.log("[PhoneAuth] ✅ Redirection vers:", redirectUrl);
+        
+        // Vérifier que l'URL commence par /
+        const safeUrl = (redirectUrl || "").startsWith("/") ? redirectUrl : "/";
         setTimeout(() => {
-          window.location.href = data.redirect_url || "/";
+          window.location.href = safeUrl;
         }, 800);
       } else {
+        // ❌ CODE MAUVAIS : retour à l'écran de saisie
         setStep("code");
-        const errorMsg = data?.error || "Code incorrect";
+        const errorMsg = data?.error || data?.twilio_message || "Code incorrect ou expiré";
         setMessage(errorMsg);
         setShowDebug(true);
       }
     } catch (err) {
-      console.error("[PhoneAuth] Verify exception:", err);
+      console.error("[PhoneAuth] Verify erreur:", err?.message);
       setStep("code");
-      setMessage("Erreur vérification: " + err.message);
-      setDebugInfo({ exception: err.message });
+      
+      if (err?.name === "AbortError") {
+        setMessage("⏱️ Timeout — vérifier la connexion");
+      } else if (err?.message?.includes("Configuration")) {
+        setMessage("🔴 Erreur config — contacter support");
+      } else {
+        setMessage("❌ Erreur: " + (err?.message || "inconnue"));
+      }
+      
+      setDebugInfo({
+        error: err?.message,
+        phone: "+226" + digits,
+      });
       setShowDebug(true);
     } finally {
       setLoading(false);
