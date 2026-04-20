@@ -21,22 +21,13 @@ export default function AdminLoginSecure() {
     setError("");
 
     try {
-      // Appeler la fonction via HTTP direct pour contourner l'authentification requise
-      const appId = '69c3c74fc4b62396dca61751';
-      const res = await fetch(`https://app.base44.com/api/apps/${appId}/functions/adminLogin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-        }),
+      // Appeler la fonction backend
+      const res = await base44.functions.invoke("adminLogin", {
+        email: email.trim().toLowerCase(),
+        password,
       });
 
-      const data = await res.json();
-
-      if (data.success) {
+      if (res.data?.success) {
         setSuccess(true);
         // Redirection vers le dashboard admin (compatible APK natif)
         setTimeout(() => {
@@ -44,9 +35,10 @@ export default function AdminLoginSecure() {
           window.dispatchEvent(new PopStateEvent('popstate'));
         }, 1000);
       } else {
-        setError(data.error || "Authentification échouée");
+        setError(res.data?.error || "Authentification échouée");
       }
     } catch (err) {
+      console.error('[AdminLogin] Error:', err);
       setError(err.message || "Erreur de connexion");
     } finally {
       setLoading(false);
