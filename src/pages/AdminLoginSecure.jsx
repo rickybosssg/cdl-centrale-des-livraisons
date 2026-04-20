@@ -21,23 +21,30 @@ export default function AdminLoginSecure() {
     setError("");
 
     try {
-      const res = await base44.functions.invoke('adminLogin', {
-        email: email.trim().toLowerCase(),
-        password,
+      // Appel HTTP direct sans authentification requise
+      const response = await fetch('/functions/adminLogin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
       });
 
-      if (res.data?.success) {
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         setSuccess(true);
         setTimeout(() => {
           window.history.pushState({}, '', '/admin-dashboard');
           window.dispatchEvent(new PopStateEvent('popstate'));
         }, 1000);
       } else {
-        setError(res.data?.error || "Email ou mot de passe incorrect");
+        setError(data.error || "Email ou mot de passe incorrect");
       }
     } catch (err) {
       console.error('[AdminLogin] Error:', err);
-      setError("Erreur de connexion — veuillez réessayer");
+      setError("Erreur serveur — veuillez réessayer");
     } finally {
       setLoading(false);
     }
