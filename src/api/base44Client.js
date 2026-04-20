@@ -19,11 +19,13 @@ function getServerUrl() {
   return '';
 }
 
-console.log('[base44Client] 📱 INIT:');
-console.log('  - appId:', appId);
-console.log('  - serverUrl (native):', getServerUrl());
-console.log('  - appBaseUrl:', appBaseUrl);
-console.log('  - ❌ NO fallback to app.base44.com in production');
+console.log('========================================');
+console.log('BASE44 CLIENT INIT');
+console.log('========================================');
+console.log('appId: ' + appId);
+console.log('serverUrl: ' + getServerUrl());
+console.log('appBaseUrl: ' + 'https://cdl.base44.app');
+console.log('========================================');
 
 export const base44 = createClient({
   appId,

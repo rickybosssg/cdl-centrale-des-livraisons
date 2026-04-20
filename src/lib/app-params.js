@@ -61,21 +61,23 @@ const getAppParams = () => {
 	const appIdFromEnv = import.meta.env.VITE_BASE44_APP_ID;
 	const appId = appIdFromEnv || getAppParamValue("app_id");
 	
-	console.log('[app-params] 🔍 APP CONFIG:');
-	console.log('  - VITE_BASE44_APP_ID:', appIdFromEnv ? `✅ ${appIdFromEnv}` : '❌ MISSING (check .env)');
-	console.log('  - appId final:', appId || 'MISSING_APP_ID');
-	console.log('  - native mode:', native);
+	const appBaseUrl = 'https://cdl.base44.app';
+
+	console.log('========================================');
+	console.log('APP CONFIG - VITE_BASE44_APP_ID');
+	console.log('========================================');
+	console.log('VITE_BASE44_APP_ID: ' + (appIdFromEnv || 'MISSING'));
+	console.log('appId final: ' + (appId || 'MISSING_APP_ID'));
+	console.log('native mode: ' + native);
+	console.log('appBaseUrl: ' + appBaseUrl);
+	console.log('========================================');
 	
 	if (!appId) {
-		console.error('🔴 FATAL: appId manquant — impossible d\'appeler les fonctions');
+		console.error('ERREUR: appId manquant');
 		if (!isNode && window.location?.pathname !== '/phone-auth') {
-			console.error('appId required from env.VITE_BASE44_APP_ID or URL param app_id=');
+			console.error('Ajoute VITE_BASE44_APP_ID dans les secrets ou app_id= en URL');
 		}
 	}
-
-	// ✅ appBaseUrl ALWAYS cdl.base44.app (no fallback to app.base44.com)
-	const appBaseUrl = 'https://cdl.base44.app';
-	console.log('  - appBaseUrl:', appBaseUrl, '(forced for APK + Web)');
 
 	return {
 		appId: appId || 'MISSING_APP_ID',
