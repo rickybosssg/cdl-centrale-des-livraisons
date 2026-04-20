@@ -11,23 +11,6 @@ export default function AdminLoginSecure() {
   const [showPassword, setShowPassword] = useState(false);
   const [debugResult, setDebugResult] = useState(null);
 
-  const callAdminLoginPublic = async (emailVal, passwordVal) => {
-    try {
-      const response = await fetch('/api/functions/adminLogin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailVal, password: passwordVal }),
-      });
-      
-      const data = await response.json();
-      console.log('[AdminLogin] Réponse HTTP:', { status: response.status, data });
-      return data;
-    } catch (err) {
-      console.error('[AdminLogin] Erreur fetch:', err);
-      throw err;
-    }
-  };
-
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) {
@@ -42,15 +25,18 @@ export default function AdminLoginSecure() {
     try {
       console.log('[AdminLogin] Appel fonction avec:', { email, password });
       
-      const result = await callAdminLoginPublic(email.trim().toLowerCase(), password);
+      const result = await base44.functions.invoke('adminLogin', {
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
       console.log('[AdminLogin] Résultat reçu:', result);
       
       // Afficher le résultat brut
-      const rawResult = JSON.stringify(result);
+      const rawResult = JSON.stringify(result.data || result);
       setDebugResult(rawResult);
 
-      if (result?.success) {
+      if (result.data?.success) {
         setSuccess(true);
         console.log('[AdminLogin] ✅ Connexion réussie, redirection...');
         setTimeout(() => {
@@ -75,11 +61,14 @@ export default function AdminLoginSecure() {
     try {
       console.log('[AdminLogin] TEST FONCTION avec identifiants fixes');
       
-      const result = await callAdminLoginPublic('weezyh2@gmail.com', 'cdl2025admin');
+      const result = await base44.functions.invoke('adminLogin', {
+        email: 'weezyh2@gmail.com',
+        password: 'cdl2025admin',
+      });
 
       console.log('[AdminLogin] TEST - Résultat:', result);
       
-      const rawResult = JSON.stringify(result);
+      const rawResult = JSON.stringify(result.data || result);
       setDebugResult(rawResult);
     } catch (err) {
       console.error('[AdminLogin] TEST - Exception:', err);
