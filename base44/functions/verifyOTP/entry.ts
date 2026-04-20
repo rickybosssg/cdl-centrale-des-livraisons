@@ -2,9 +2,8 @@
  * verifyOTP — Vérifier le code OTP et authentifier l'utilisateur
  * 
  * Input: { phone: "+226XXXXXXXX", code: "123456" }
- * Output: { success: true, token: "...", user: {...} }
+ * Output: { success: true, user: {...} }
  */
-import { Twilio } from 'npm:twilio@4.27.0';
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
@@ -14,6 +13,7 @@ Deno.serve(async (req) => {
     const verifyServiceSid = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
 
     if (!accountSid || !authToken || !verifyServiceSid) {
+      console.error('[verifyOTP] Configuration Twilio manquante');
       return Response.json(
         { error: 'Configuration Twilio manquante' },
         { status: 500 }
@@ -51,34 +51,42 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Initialiser Twilio
-    const client = new Twilio(accountSid, authToken);
+    console.log('[verifyOTP] Vérification pour', phone);
 
-    // Vérifier le code via Twilio Verify
-    const verificationCheck = await client.verify.v2
-      .services(verifyServiceSid)
-      .verificationChecks.create({
-        to: phone,
-        code: code,
-      });
+    // Appel API REST Twilio Verify
+    const url = `https://verify.twilio.com/v2/Services/${verifyServiceSid}/VerificationCheck`;
+    const auth = btoa(`${accountSid}:${authToken}`);
 
-    console.log('[verifyOTP] Vérification pour', phone, '- Status:', verificationCheck.status);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        To: phone,
+        Code: code,
+      }).toString(),
+    });
 
-    if (verificationCheck.status !== 'approved') {
+    const data = await response.json();
+
+    if (!response.ok || data.status !== 'approved') {
+      console.warn('[verifyOTP] Code incorrect pour', phone);
       return Response.json(
         { error: 'Code OTP incorrect ou expiré' },
         { status: 401 }
       );
     }
 
+    console.log('[verifyOTP] Code correct pour', phone);
+
     // Code correct — chercher/créer l'utilisateur
     const base44 = createClientFromRequest(req);
 
-    // Chercher un utilisateur avec ce téléphone
     let user = null;
-    let users = [];
     try {
-      users = await base44.asServiceRole.entities.User.filter(
+      const users = await base44.asServiceRole.entities.User.filter(
         { telephone: phone },
         null,
         1
@@ -94,19 +102,17 @@ Deno.serve(async (req) => {
     if (!user) {
       console.log('[verifyOTP] Création nouvel utilisateur avec téléphone:', phone);
       try {
-        // Générer un email temporaire basé sur le téléphone
         const tempEmail = `phone_${phone.replace(/\D/g, '')}@cdl.local`;
         
-        // Créer l'utilisateur via SDK
         await base44.asServiceRole.entities.User.create({
           email: tempEmail,
           telephone: phone,
-          full_name: phone, // nom temporaire
+          full_name: phone,
           role: 'user',
           created_by: 'phone_auth',
         });
 
-        users = await base44.asServiceRole.entities.User.filter(
+        const users = await base44.asServiceRole.entities.User.filter(
           { telephone: phone },
           null,
           1
@@ -121,8 +127,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Générer un token d'authentification
-    // NOTE: Base44 gère l'auth automatiquement — on retourne le user
     console.log('[verifyOTP] Authentification réussie pour:', user.email);
 
     return Response.json({
