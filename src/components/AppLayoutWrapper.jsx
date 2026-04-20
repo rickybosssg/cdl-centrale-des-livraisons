@@ -144,7 +144,7 @@ export default function AppLayoutWrapper({ user }) {
       try {
         const isNative =
           window.location?.protocol === 'capacitor:' ||
-          (typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform?.() === true);
+          typeof window.Capacitor !== 'undefined';
 
         console.log('[FCM] Init | isNative:', isNative, '| user:', userEmail);
 

@@ -11,10 +11,12 @@
 
 export function isNativeApp() {
   if (typeof window === 'undefined') return false;
-  // Méthode 1 : protocol capacitor: (APK Base44 et Android Studio)
+  // Méthode 1 : protocol capacitor: (Android Studio APK)
   if (window.location?.protocol === 'capacitor:') return true;
-  // Méthode 2 : window.Capacitor injecté
+  // Méthode 2 : window.Capacitor injecté (Android Studio + Base44 APK récent)
   if (window.Capacitor?.isNativePlatform?.() === true) return true;
+  // Méthode 3 : window.Capacitor existe mais isNativePlatform non exposé (APK Base44)
+  if (typeof window.Capacitor !== 'undefined') return true;
   return false;
 }
 

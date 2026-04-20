@@ -15,7 +15,7 @@ import '@/index.css'
     function isNative() {
       if (typeof window === 'undefined') return false;
       if (window.location?.protocol === 'capacitor:') return true;
-      if (window.Capacitor?.isNativePlatform?.()) return true;
+      if (typeof window.Capacitor !== 'undefined') return true;
       return false;
     }
 

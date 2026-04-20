@@ -17,9 +17,8 @@ import { base44 as b44 } from '@/api/base44Client';
 // car ça ouvre Chrome externe. On redirige vers /phone-auth à la place.
 function isCapacitorNative() {
   return typeof window !== 'undefined' &&
-    window.Capacitor !== undefined &&
-    window.Capacitor.isNativePlatform &&
-    window.Capacitor.isNativePlatform();
+    (window.location?.protocol === 'capacitor:' ||
+     typeof window.Capacitor !== 'undefined');
 }
 
 function safeRedirectToLogin(nextUrl) {
