@@ -461,6 +461,17 @@ export default function PhoneAuth() {
   );
 }
 
+// Add placeholder styling via global style
+if (typeof document !== 'undefined' && !document.getElementById('phoneauth-style')) {
+  const style = document.createElement('style');
+  style.id = 'phoneauth-style';
+  style.textContent = `
+    input::placeholder { color: #666 !important; }
+    textarea::placeholder { color: #666 !important; }
+  `;
+  document.head.appendChild(style);
+}
+
 const styles = {
   container: {
     height: "100vh",
