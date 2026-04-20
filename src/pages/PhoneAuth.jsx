@@ -40,7 +40,8 @@ export default function PhoneAuth() {
         throw new Error("Configuration manquante: appId");
       }
 
-      const url = `/api/apps/${appId}/functions/sendOTP`;
+      // ✅ FIX 403: Utiliser URL absolue vers cdl.base44.app (app subdomain, pas platform domain)
+      const url = `https://cdl.base44.app/api/apps/${appId}/functions/sendOTP`;
       console.log("[PhoneAuth] URL:", url);
 
       // Timeout + retry logic
@@ -125,7 +126,8 @@ export default function PhoneAuth() {
         throw new Error("Configuration: appId manquant");
       }
 
-      const url = `/api/apps/${appId}/functions/sendOTP`;
+      // ✅ FIX 403: Utiliser URL absolue vers cdl.base44.app
+      const url = `https://cdl.base44.app/api/apps/${appId}/functions/sendOTP`;
       console.log("[PhoneAuth] TEST URL:", url);
 
       const controller = new AbortController();
@@ -213,7 +215,8 @@ export default function PhoneAuth() {
         throw new Error("Configuration manquante: appId");
       }
 
-      const url = `/api/apps/${appId}/functions/verifyOTPWithRedirect`;
+      // ✅ FIX 403: Utiliser URL absolue vers cdl.base44.app
+      const url = `https://cdl.base44.app/api/apps/${appId}/functions/verifyOTPWithRedirect`;
       const fullPhone = "+226" + digits;
 
       console.log("[PhoneAuth] Verify:", { phone: fullPhone, codeLength: code.length });
