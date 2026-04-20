@@ -416,19 +416,14 @@ export default function PhoneAuth() {
 
         <input
           autoFocus
-          style={styles.input}
+          style={styles.codeInput}
           type="text"
+          inputMode="numeric"
           placeholder="000000"
           maxLength="6"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          onFocus={(e) => {
-            e.target.select();
-            e.target.scrollIntoView({ behavior: "smooth", block: "center" });
-          }}
           disabled={loading}
-          inputMode="numeric"
-          pattern="\d{6}"
         />
 
         <button
@@ -554,17 +549,26 @@ const styles = {
     padding: "14px",
     marginBottom: "16px",
     borderRadius: "12px",
-    border: "2px solid #ddd",
-    fontSize: "18px",
-    fontWeight: "600",
-    letterSpacing: "8px",
+    border: "1px solid #ddd",
+    fontSize: "15px",
+    boxSizing: "border-box",
+    fontFamily: "inherit",
+    transition: "border 0.2s",
+    color: "#333",
+  },
+  codeInput: {
+    width: "100%",
+    padding: "14px",
+    marginBottom: "16px",
+    borderRadius: "12px",
+    border: "2px solid #2078C6",
+    fontSize: "24px",
+    fontWeight: "bold",
+    letterSpacing: "4px",
     boxSizing: "border-box",
     fontFamily: "monospace",
-    transition: "border 0.2s, box-shadow 0.2s",
     color: "#333",
     textAlign: "center",
-    WebkitAppearance: "none",
-    WebkitBorderRadius: "12px",
   },
   button: {
     width: "100%",
