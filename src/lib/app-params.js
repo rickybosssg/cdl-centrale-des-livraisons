@@ -52,9 +52,9 @@ const getAppParams = () => {
 
 	const native = isCapacitorNative();
 
-	// En mode natif, fromUrl doit pointer vers l'app web réelle, pas file://
+	// ✅ FIX 403: Utiliser cdl.base44.app (app subdomain) au lieu de app.base44.com (platform domain)
 	const safeFromUrl = native
-		? 'https://app.base44.com'
+		? 'https://cdl.base44.app'
 		: getAppParamValue("from_url", { defaultValue: window.location.href });
 
 	// ✅ BLOQUER #1: appId MANQUANT = erreur fatale

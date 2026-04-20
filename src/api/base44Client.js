@@ -4,7 +4,7 @@ import { appParams } from '@/lib/app-params';
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
 // En mode natif (Capacitor APK ou file://), les URLs relatives échouent.
-// On force serverUrl vers app.base44.com.
+// ✅ FIX 403: Utiliser cdl.base44.app (app subdomain) au lieu de app.base44.com (platform domain)
 function getServerUrl() {
   if (typeof window === 'undefined') return '';
   const proto = window.location?.protocol;
@@ -13,8 +13,8 @@ function getServerUrl() {
     proto === 'file:' ||
     typeof window.Capacitor !== 'undefined';
   if (isNative) {
-    console.log('[CDL] base44Client: mode natif → serverUrl=https://app.base44.com');
-    return 'https://app.base44.com';
+    console.log('[CDL] base44Client: mode natif → serverUrl=https://cdl.base44.app (app domain, not platform)');
+    return 'https://cdl.base44.app';
   }
   return '';
 }
