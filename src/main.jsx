@@ -21,11 +21,14 @@ import '@/index.css'
 
     function fixUrl(url) {
       if (typeof url !== 'string') return url;
+      // URLs relatives → absolues
       if (url.startsWith('/api/') || url.startsWith('/auth/')) return API_HOST + url;
-      if (url.startsWith('capacitor://localhost/api/') || url.startsWith('capacitor://localhost/auth/'))
-        return API_HOST + url.replace('capacitor://localhost', '');
-      if (/^https?:\/\/localhost(:\d+)?\/(api|auth)\//.test(url))
-        return url.replace(/^https?:\/\/localhost(:\d+)?/, API_HOST);
+      // capacitor://localhost/...
+      if (url.startsWith('capacitor://localhost/')) return API_HOST + url.replace('capacitor://localhost', '');
+      // http(s)://localhost/...
+      if (/^https?:\/\/localhost(:\d+)?\//.test(url)) return url.replace(/^https?:\/\/localhost(:\d+)?/, API_HOST);
+      // file:///android_asset/... — impossible à corriger, mais on filtre
+      if (url.startsWith('file:///')) return url; // laisser passer (ressources locales)
       return url;
     }
 

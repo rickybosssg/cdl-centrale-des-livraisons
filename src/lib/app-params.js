@@ -34,15 +34,33 @@ const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl =
 	return null;
 }
 
+// Détecte si on est dans un APK Capacitor (Android Studio)
+const isCapacitorNative = () => {
+	if (isNode) return false;
+	if (window.location?.protocol === 'capacitor:') return true;
+	if (typeof window.Capacitor !== 'undefined') return true;
+	// Détecter file:// (WebView Android sans Capacitor configuré)
+	if (window.location?.protocol === 'file:') return true;
+	return false;
+};
+
 const getAppParams = () => {
 	if (getAppParamValue("clear_access_token") === 'true') {
 		storage.removeItem('base44_access_token');
 		storage.removeItem('token');
 	}
+
+	const native = isCapacitorNative();
+
+	// En mode natif, fromUrl doit pointer vers l'app web réelle, pas file://
+	const safeFromUrl = native
+		? 'https://app.base44.com'
+		: getAppParamValue("from_url", { defaultValue: window.location.href });
+
 	return {
 		appId: getAppParamValue("app_id", { defaultValue: import.meta.env.VITE_BASE44_APP_ID }),
 		token: getAppParamValue("access_token", { removeFromUrl: true }),
-		fromUrl: getAppParamValue("from_url", { defaultValue: window.location.href }),
+		fromUrl: safeFromUrl,
 		functionsVersion: getAppParamValue("functions_version", { defaultValue: import.meta.env.VITE_BASE44_FUNCTIONS_VERSION }),
 		appBaseUrl: getAppParamValue("app_base_url", { defaultValue: import.meta.env.VITE_BASE44_APP_BASE_URL }),
 	}

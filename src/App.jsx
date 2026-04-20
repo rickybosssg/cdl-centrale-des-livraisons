@@ -225,7 +225,7 @@ const AuthenticatedApp = () => {
   // Timeout de sécurité : si le splash dure > 12s, afficher un bouton de secours
   useEffect(() => {
     if (!isLoadingAuth && !isLoadingPublicSettings) return;
-    const t = setTimeout(() => setLoadingTimeout(true), 12000);
+    const t = setTimeout(() => setLoadingTimeout(true), 5000);
     return () => clearTimeout(t);
   }, [isLoadingAuth, isLoadingPublicSettings]);
 

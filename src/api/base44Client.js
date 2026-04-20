@@ -3,16 +3,17 @@ import { appParams } from '@/lib/app-params';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
-// En mode Capacitor natif, les URLs relatives échouent.
-// On force serverUrl vers app.base44.com si on est dans une WebView native.
+// En mode natif (Capacitor APK ou file://), les URLs relatives échouent.
+// On force serverUrl vers app.base44.com.
 function getServerUrl() {
   if (typeof window === 'undefined') return '';
-  // Détection Capacitor : protocol capacitor: OU window.Capacitor injecté
+  const proto = window.location?.protocol;
   const isNative =
-    window.location.protocol === 'capacitor:' ||
-    (window.Capacitor?.isNativePlatform?.() === true);
+    proto === 'capacitor:' ||
+    proto === 'file:' ||
+    typeof window.Capacitor !== 'undefined';
   if (isNative) {
-    console.log('[CDL] base44Client: mode Capacitor natif → serverUrl forcé à https://app.base44.com');
+    console.log('[CDL] base44Client: mode natif → serverUrl=https://app.base44.com');
     return 'https://app.base44.com';
   }
   return '';

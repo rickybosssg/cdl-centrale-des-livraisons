@@ -72,7 +72,14 @@ export default function PhoneAuth() {
       });
       if (res.data?.success) {
         setStep("success");
-        setTimeout(() => { window.location.href = "/"; }, 1800);
+        setTimeout(() => {
+          try {
+            window.history.pushState({}, '', '/');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          } catch (_) {
+            window.location.href = '/';
+          }
+        }, 1800);
       } else {
         setError(res.data?.error || "Code incorrect, veuillez réessayer");
         setOtp(["", "", "", "", "", ""]);
@@ -120,7 +127,16 @@ export default function PhoneAuth() {
       });
       if (res.data?.success) {
         setStep("success");
-        setTimeout(() => { window.location.href = "/"; }, 1800);
+        setTimeout(() => {
+          // Dans l'APK Capacitor, window.location.href="/" peut naviguer vers file:///
+          // On utilise history.pushState + popstate pour forcer React Router
+          try {
+            window.history.pushState({}, '', '/');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          } catch (_) {
+            window.location.href = '/';
+          }
+        }, 1800);
       } else {
         setError(res.data?.error || "Code incorrect, veuillez réessayer");
         setOtp(["", "", "", "", "", ""]);
