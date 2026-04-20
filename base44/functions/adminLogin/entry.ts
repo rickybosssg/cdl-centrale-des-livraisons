@@ -22,67 +22,71 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
 
     // Récupérer l'utilisateur par email
-    let user = null;
-    try {
-      const users = await base44.asServiceRole.entities.User.filter(
-        { email: email.trim().toLowerCase() },
-        null,
-        1
-      );
-      if (users.length > 0) {
-        user = users[0];
-      }
-    } catch (err) {
-      console.warn('[adminLogin] Erreur recherche user:', err.message);
-    }
+    const users = await base44.asServiceRole.entities.User.filter(
+      { email: email.trim().toLowerCase() },
+      null,
+      1
+    );
 
-    // Vérifier si c'est un admin
-    if (!user) {
+    if (!users || users.length === 0) {
       return Response.json(
         { success: false, error: 'Email ou mot de passe incorrect' },
         { status: 401 }
       );
     }
 
+    const user = users[0];
+
     // Vérifier le rôle admin
     const ADMIN_EMAILS = ['weezyh2@gmail.com'];
     const isAdmin = user.role === 'admin' || ADMIN_EMAILS.includes(user.email);
 
     if (!isAdmin) {
-      console.warn('[adminLogin] Tentative accès non-admin:', email);
       return Response.json(
         { success: false, error: 'Accès administrateur refusé' },
         { status: 403 }
       );
     }
 
-    // Validation mot de passe
-    // Si l'utilisateur a un hashed_password (bcrypt), utiliser bcrypt
-    // Sinon, utiliser ADMIN_PASSWORD en texte brut
-    if (user.hashed_password) {
-      // Utiliser bcrypt pour comparer
-      const bcrypt = await import('npm:bcrypt@5.1.0');
-      const isPasswordValid = await bcrypt.compare(password, user.hashed_password);
-      if (!isPasswordValid) {
-        console.warn('[adminLogin] Mot de passe bcrypt incorrect pour:', email);
-        return Response.json(
-          { success: false, error: 'Email ou mot de passe incorrect' },
-          { status: 401 }
-        );
-      }
-    } else {
-      // Fallback : comparer avec ADMIN_PASSWORD en texte brut
-      const ADMIN_PASSWORD = Deno.env.get('ADMIN_PASSWORD') || 'cdl2025admin';
-      if (password !== ADMIN_PASSWORD) {
-        console.warn('[adminLogin] Mot de passe texte brut incorrect pour:', email);
-        return Response.json(
-          { success: false, error: 'Email ou mot de passe incorrect' },
-          { status: 401 }
-        );
-      }
+    // Validation mot de passe hashé avec Web Crypto
+    if (!user.hashed_password) {
+      return Response.json(
+        { success: false, error: 'Aucun mot de passe configuré' },
+        { status: 500 }
+      );
     }
 
-    console.log('[adminLogin] ✅ Authentification réussie pour:', email);
+    // Décoder le hash stocké (salt + hash)
+    const combined = new Uint8Array(atob(user.hashed_password).split('').map(c => c.charCodeAt(0)));
+    const salt = combined.slice(0, 16);
+    const storedHash = combined.slice(16);
+    
+    // Dériver la clé du mot de passe fourni
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: salt,
+        iterations: 100000,
+        hash: 'SHA-256',
+      },
+      await crypto.subtle.importKey('raw', encoder.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']),
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt']
+    );
+    
+    // Exporter et comparer
+    const exported = await crypto.subtle.exportKey('raw', key);
+    const derivedHash = new Uint8Array(exported);
+    
+    const isValid = derivedHash.every((val, idx) => val === storedHash[idx]);
+    if (!isValid) {
+      return Response.json(
+        { success: false, error: 'Email ou mot de passe incorrect' },
+        { status: 401 }
+      );
+    }
 
     return Response.json({
       success: true,
@@ -94,7 +98,6 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
-    console.error('[adminLogin] Erreur:', error.message);
     return Response.json(
       { success: false, error: 'Erreur serveur' },
       { status: 500 }
