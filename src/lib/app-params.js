@@ -57,8 +57,9 @@ const getAppParams = () => {
 		? 'https://cdl.base44.app'
 		: getAppParamValue("from_url", { defaultValue: window.location.href });
 
-	// ✅ BLOQUER #1: appId MANQUANT = erreur fatale
-	const appId = getAppParamValue("app_id", { defaultValue: import.meta.env.VITE_BASE44_APP_ID });
+	// ✅ BLOQUER #1: appId depuis env VITE_BASE44_APP_ID (prioritaire sur URL param)
+	const appIdFromEnv = import.meta.env.VITE_BASE44_APP_ID;
+	const appId = appIdFromEnv || getAppParamValue("app_id");
 	if (!appId) {
 		console.error('🔴 FATAL: appId manquant — impossible d\'appeler les fonctions');
 		if (!isNode && window.location?.pathname !== '/phone-auth') {
@@ -66,12 +67,17 @@ const getAppParams = () => {
 		}
 	}
 
+	// ✅ appBaseUrl toujours cdl.base44.app pour APK natif + Web
+	const appBaseUrl = native 
+		? 'https://cdl.base44.app'
+		: (import.meta.env.VITE_BASE44_APP_BASE_URL || getAppParamValue("app_base_url") || 'https://cdl.base44.app');
+
 	return {
 		appId: appId || 'MISSING_APP_ID',
 		token: getAppParamValue("access_token", { removeFromUrl: true }),
 		fromUrl: safeFromUrl,
 		functionsVersion: getAppParamValue("functions_version", { defaultValue: import.meta.env.VITE_BASE44_FUNCTIONS_VERSION }),
-		appBaseUrl: getAppParamValue("app_base_url", { defaultValue: import.meta.env.VITE_BASE44_APP_BASE_URL }),
+		appBaseUrl,
 	}
 }
 
