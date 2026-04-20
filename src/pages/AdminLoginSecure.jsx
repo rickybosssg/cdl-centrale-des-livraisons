@@ -21,8 +21,9 @@ export default function AdminLoginSecure() {
     setError("");
 
     try {
-      // Appel HTTP brut sans authentification SDK
-      const response = await fetch('/api/functions/adminLogin', {
+      // Appel HTTP avec appId
+      const appId = '69c3c74fc4b62396dca61751';
+      const response = await fetch(`/api/apps/${appId}/functions/adminLogin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
