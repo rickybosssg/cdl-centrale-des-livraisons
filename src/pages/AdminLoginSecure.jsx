@@ -25,7 +25,7 @@ export default function AdminLoginSecure() {
     try {
       console.log('[AdminLogin] Appel fonction avec:', { email, password });
       
-      const result = await base44.functions.invoke('checkAdminCreds', {
+      const result = await base44.functions.invoke('adminLoginPublic', {
         email: email.trim().toLowerCase(),
         password,
       });
@@ -37,6 +37,7 @@ export default function AdminLoginSecure() {
       setDebugResult(rawResult);
 
       if (result.data?.success) {
+        localStorage.setItem('isAdmin', 'true');
         setSuccess(true);
         console.log('[AdminLogin] ✅ Connexion réussie, redirection...');
         setTimeout(() => {
@@ -61,7 +62,7 @@ export default function AdminLoginSecure() {
     try {
       console.log('[AdminLogin] TEST FONCTION avec identifiants fixes');
       
-      const result = await base44.functions.invoke('checkAdminCreds', {
+      const result = await base44.functions.invoke('adminLoginPublic', {
         email: 'weezyh2@gmail.com',
         password: 'cdl2025admin',
       });
