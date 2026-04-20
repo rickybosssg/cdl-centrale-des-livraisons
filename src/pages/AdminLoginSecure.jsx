@@ -21,30 +21,27 @@ export default function AdminLoginSecure() {
     setError("");
 
     try {
-      // Appel direct à la fonction backend via l'API Base44 publique
-      const appId = '69c3c74fc4b62396dca61751';
-      const response = await fetch(`https://app.base44.com/api/apps/${appId}/functions/adminLogin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-        }),
+      // Appel direct à la fonction adminLogin via SDK Base44
+      const result = await base44.functions.invoke('adminLogin', {
+        email: email.trim().toLowerCase(),
+        password,
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (result.data?.success) {
         setSuccess(true);
+        // Sauvegarder le flag admin en localStorage
+        localStorage.setItem('admin_authenticated', 'true');
+        localStorage.setItem('admin_email', email.trim().toLowerCase());
+        
         setTimeout(() => {
           window.location.href = '/admin-dashboard';
         }, 1000);
       } else {
-        setError(data.error || "Email ou mot de passe incorrect");
+        setError("Email ou mot de passe incorrect");
       }
     } catch (err) {
       console.error('[AdminLogin] Error:', err);
-      setError("Erreur serveur — veuillez réessayer");
+      setError("Email ou mot de passe incorrect");
     } finally {
       setLoading(false);
     }
