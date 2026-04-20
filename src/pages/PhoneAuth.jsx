@@ -11,14 +11,12 @@ export default function PhoneAuth() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Saisie simple — accepter UNIQUEMENT 8 chiffres, sans modification
+  // Saisie simple — accepter UNIQUEMENT chiffres, max 8
   const handlePhoneChange = (e) => {
     const value = e.target.value;
-    // Extraire uniquement les chiffres
-    const digitsOnly = value.replace(/\D/g, "");
-    // Limiter à 8 chiffres
-    if (digitsOnly.length <= 8) {
-      setDigits(digitsOnly);
+    // Accepter seulement si ce sont des chiffres et max 8
+    if (/^\d*$/.test(value) && value.length <= 8) {
+      setDigits(value);
     }
   };
 
@@ -118,13 +116,12 @@ export default function PhoneAuth() {
             <span style={styles.prefix}>+226</span>
             <input
               style={styles.phoneInput}
-              type="tel"
+              type="text"
               inputMode="numeric"
               placeholder="55738247"
               value={digits}
               onChange={handlePhoneChange}
               maxLength="8"
-              disabled={loading}
             />
           </div>
 
