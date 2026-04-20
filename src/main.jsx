@@ -12,23 +12,29 @@ import '@/index.css'
   try {
     const API_HOST = 'https://app.base44.com';
 
-    function isNative() {
-      if (typeof window === 'undefined') return false;
-      if (window.location?.protocol === 'capacitor:') return true;
-      if (typeof window.Capacitor !== 'undefined') return true;
-      return false;
-    }
-
     function fixUrl(url) {
       if (typeof url !== 'string') return url;
-      // URLs relatives → absolues
-      if (url.startsWith('/api/') || url.startsWith('/auth/')) return API_HOST + url;
-      // capacitor://localhost/...
-      if (url.startsWith('capacitor://localhost/')) return API_HOST + url.replace('capacitor://localhost', '');
-      // http(s)://localhost/...
-      if (/^https?:\/\/localhost(:\d+)?\//.test(url)) return url.replace(/^https?:\/\/localhost(:\d+)?/, API_HOST);
-      // file:///android_asset/... — impossible à corriger, mais on filtre
-      if (url.startsWith('file:///')) return url; // laisser passer (ressources locales)
+
+      // 1. URLs relatives (commencent par /)
+      if (url.startsWith('/')) return API_HOST + url;
+
+      // 2. capacitor://localhost/... → https://app.base44.com/...
+      if (url.startsWith('capacitor://localhost')) {
+        return API_HOST + url.replace('capacitor://localhost', '');
+      }
+
+      // 3. http(s)://localhost/... → https://app.base44.com/...
+      if (/^https?:\/\/localhost(:\d+)?\//.test(url)) {
+        return url.replace(/^https?:\/\/localhost(:\d+)?/, API_HOST);
+      }
+
+      // 4. file:///android_asset/www/api/... → https://app.base44.com/api/...
+      // (Axios dans APK Base44 sans Capacitor configuré peut générer ce format)
+      const fileApiMatch = url.match(/^file:\/\/.*?\/(api\/.+|auth\/.+)$/);
+      if (fileApiMatch) {
+        return API_HOST + '/' + fileApiMatch[1];
+      }
+
       return url;
     }
 
@@ -37,12 +43,15 @@ import '@/index.css'
     window.fetch = function(input, init) {
       if (typeof input === 'string') {
         const fixed = fixUrl(input);
-        if (fixed !== input) console.log('[CDL-PATCH] fetch:', fixed.substring(0, 80));
+        if (fixed !== input) console.log('[CDL-PATCH] fetch:', fixed.substring(0, 100));
         return _fetch.call(this, fixed, init);
       }
       if (input instanceof Request) {
         const fixed = fixUrl(input.url);
-        if (fixed !== input.url) return _fetch.call(this, new Request(fixed, input), init);
+        if (fixed !== input.url) {
+          console.log('[CDL-PATCH] fetch(Request):', fixed.substring(0, 100));
+          return _fetch.call(this, new Request(fixed, input), init);
+        }
       }
       return _fetch.apply(this, arguments);
     };
@@ -51,12 +60,12 @@ import '@/index.css'
     const _open = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url, ...rest) {
       const fixed = fixUrl(String(url));
-      if (fixed !== url) console.log('[CDL-PATCH] XHR:', fixed.substring(0, 80));
+      if (fixed !== String(url)) console.log('[CDL-PATCH] XHR:', fixed.substring(0, 100));
       return _open.call(this, method, fixed, ...rest);
     };
 
-    const native = isNative();
-    console.log('[CDL-PATCH] ✅ Patch réseau actif | Capacitor natif:', native, '| Protocol:', window.location?.protocol);
+    console.log('[CDL-PATCH] ✅ Patch réseau actif | Protocol:', window.location?.protocol,
+      '| Capacitor:', typeof window.Capacitor !== 'undefined');
   } catch(e) {
     console.error('[CDL-PATCH] Erreur patch:', e);
   }

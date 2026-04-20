@@ -254,7 +254,14 @@ const AuthenticatedApp = () => {
                 🔄 Réessayer
               </button>
               <button
-                onClick={() => { window.location.href = '/phone-auth'; }}
+                onClick={() => {
+                  try {
+                    window.history.pushState({}, '', '/phone-auth');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  } catch (_) {
+                    window.location.href = '/phone-auth';
+                  }
+                }}
                 className="block mx-auto text-xs text-white/60 underline mt-1"
               >
                 Se connecter manuellement
@@ -270,42 +277,22 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else {
-      // auth_required → redirection sécurisée (jamais Chrome dans APK)
+      // auth_required → afficher PhoneAuth directement (jamais de redirection externe dans APK)
       const _p = new URLSearchParams(window.location.search);
       const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
       if (_ref) localStorage.setItem('cdl_promo_code', _ref);
-      if (window.location.pathname !== '/phone-auth') {
-        safeRedirectToLogin(window.location.pathname + window.location.search);
-      }
-      return (
-        <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
-          <div className="text-center space-y-4 text-white">
-            <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
-            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-          </div>
-        </div>
-      );
+      return <PhoneAuth />;
     }
   }
 
 
 
-  // Non authentifié → redirection sécurisée (jamais Chrome dans APK)
+  // Non authentifié → afficher PhoneAuth directement (jamais de redirection externe dans APK)
   if (!isAuthenticated) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
-    if (window.location.pathname !== '/phone-auth') {
-      safeRedirectToLogin(window.location.pathname + window.location.search);
-    }
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
-        <div className="text-center space-y-4 text-white">
-          <img src="https://media.base44.com/images/public/69c3c74fc4b62396dca61751/1eb51398f_Screenshot_20260330_132434_WhatsApp.jpg" alt="CDL" className="h-24 w-24 mx-auto rounded-3xl" />
-          <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-        </div>
-      </div>
-    );
+    return <PhoneAuth />;
   }
 
   return (
