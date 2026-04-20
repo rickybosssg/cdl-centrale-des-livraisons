@@ -57,8 +57,17 @@ const getAppParams = () => {
 		? 'https://app.base44.com'
 		: getAppParamValue("from_url", { defaultValue: window.location.href });
 
+	// ✅ BLOQUER #1: appId MANQUANT = erreur fatale
+	const appId = getAppParamValue("app_id", { defaultValue: import.meta.env.VITE_BASE44_APP_ID });
+	if (!appId) {
+		console.error('🔴 FATAL: appId manquant — impossible d\'appeler les fonctions');
+		if (!isNode && window.location?.pathname !== '/phone-auth') {
+			console.error('appId required from env.VITE_BASE44_APP_ID or URL param app_id=');
+		}
+	}
+
 	return {
-		appId: getAppParamValue("app_id", { defaultValue: import.meta.env.VITE_BASE44_APP_ID }),
+		appId: appId || 'MISSING_APP_ID',
 		token: getAppParamValue("access_token", { removeFromUrl: true }),
 		fromUrl: safeFromUrl,
 		functionsVersion: getAppParamValue("functions_version", { defaultValue: import.meta.env.VITE_BASE44_FUNCTIONS_VERSION }),
