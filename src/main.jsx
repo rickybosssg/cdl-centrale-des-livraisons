@@ -12,28 +12,34 @@ import '@/index.css'
   try {
     const API_HOST = 'https://app.base44.com';
 
+    // Seuls les chemins API/auth doivent être redirigés vers app.base44.com
+    const API_PATHS = ['/api/', '/auth/'];
+
+    function isApiPath(path) {
+      return API_PATHS.some(p => path.startsWith(p));
+    }
+
     function fixUrl(url) {
       if (typeof url !== 'string') return url;
 
-      // 1. URLs relatives (commencent par /)
-      if (url.startsWith('/')) return API_HOST + url;
+      // 1. URLs relatives API/auth seulement (pas les assets locaux /src/, /assets/)
+      if (url.startsWith('/') && isApiPath(url)) return API_HOST + url;
 
-      // 2. capacitor://localhost/... → https://app.base44.com/...
+      // 2. capacitor://localhost/api/... ou /auth/...
       if (url.startsWith('capacitor://localhost')) {
-        return API_HOST + url.replace('capacitor://localhost', '');
+        const path = url.replace('capacitor://localhost', '');
+        if (isApiPath(path)) return API_HOST + path;
       }
 
-      // 3. http(s)://localhost/... → https://app.base44.com/...
+      // 3. http(s)://localhost/api/... ou /auth/...
       if (/^https?:\/\/localhost(:\d+)?\//.test(url)) {
-        return url.replace(/^https?:\/\/localhost(:\d+)?/, API_HOST);
+        const path = url.replace(/^https?:\/\/localhost(:\d+)?/, '');
+        if (isApiPath(path)) return url.replace(/^https?:\/\/localhost(:\d+)?/, API_HOST);
       }
 
       // 4. file:///android_asset/www/api/... → https://app.base44.com/api/...
-      // (Axios dans APK Base44 sans Capacitor configuré peut générer ce format)
       const fileApiMatch = url.match(/^file:\/\/.*?\/(api\/.+|auth\/.+)$/);
-      if (fileApiMatch) {
-        return API_HOST + '/' + fileApiMatch[1];
-      }
+      if (fileApiMatch) return API_HOST + '/' + fileApiMatch[1];
 
       return url;
     }

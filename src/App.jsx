@@ -221,12 +221,14 @@ const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated, checkAppState } = useAuth();
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+  const [forcePhoneAuth, setForcePhoneAuth] = useState(false);
 
-  // Timeout de sécurité : si le splash dure > 12s, afficher un bouton de secours
+  // Timeout de sécurité : affiche boutons après 5s, force /phone-auth après 12s
   useEffect(() => {
     if (!isLoadingAuth && !isLoadingPublicSettings) return;
-    const t = setTimeout(() => setLoadingTimeout(true), 5000);
-    return () => clearTimeout(t);
+    const t1 = setTimeout(() => setLoadingTimeout(true), 5000);
+    const t2 = setTimeout(() => setForcePhoneAuth(true), 12000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [isLoadingAuth, isLoadingPublicSettings]);
 
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
@@ -237,6 +239,9 @@ const AuthenticatedApp = () => {
   if (window.location.pathname === '/phone-auth') {
     return <PhoneAuth />;
   }
+
+  // Forcer affichage PhoneAuth si le chargement dépasse 12s (APK bloqué)
+  if (forcePhoneAuth) return <PhoneAuth />;
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
