@@ -13,21 +13,61 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   try {
+    // ✅ BLOCKER #1: Vérifier la méthode HTTP
+    if (req.method !== 'POST') {
+      return Response.json(
+        { success: false, error: 'Method must be POST' },
+        { status: 405 }
+      );
+    }
+
     const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
     const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
     const verifyServiceSid = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
 
     if (!accountSid || !authToken || !verifyServiceSid) {
-      console.error('[verifyOTPWithRedirect] Configuration Twilio manquante');
+      console.error('[verifyOTPWithRedirect] 🔴 Configuration Twilio manquante');
       return Response.json(
-        { error: 'Configuration Twilio manquante' },
+        { success: false, error: 'Configuration Twilio manquante — contacter admin' },
         { status: 500 }
       );
     }
 
-    const body = await req.json();
-    let phone = body.phone || '';
-    const code = body.code || '';
+    // ✅ BLOCKER #2: Vérifier le body et les paramètres
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return Response.json(
+        { success: false, error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
+
+    if (!body || typeof body !== 'object') {
+      return Response.json(
+        { success: false, error: 'Body must be JSON object' },
+        { status: 400 }
+      );
+    }
+
+    let phone = body?.phone || '';
+    const code = body?.code || '';
+
+    // ✅ BLOCKER #3: Vérifier phone et code présents
+    if (!phone || typeof phone !== 'string') {
+      return Response.json(
+        { success: false, error: 'phone parameter required (string)' },
+        { status: 400 }
+      );
+    }
+
+    if (!code || typeof code !== 'string') {
+      return Response.json(
+        { success: false, error: 'code parameter required (string)' },
+        { status: 400 }
+      );
+    }
 
     // Normaliser le numéro au format international complet
     phone = phone.replace(/\s/g, '').trim();
@@ -71,31 +111,60 @@ Deno.serve(async (req) => {
     const url = `https://verify.twilio.com/v2/Services/${verifyServiceSid}/VerificationCheck`;
     const auth = btoa(`${accountSid}:${authToken}`);
 
-    console.log('[verifyOTPWithRedirect] 📞 Twilio API call...');
+    console.log('[verifyOTPWithRedirect] 📞 Twilio API call (timeout 10s)...');
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        To: phone,
-        Code: code,
-      }).toString(),
-    });
+    let response;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const data = await response.json();
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          To: phone,
+          Code: code,
+        }).toString(),
+        signal: controller.signal,
+      });
 
-    if (!response.ok || data.status !== 'approved') {
-      console.warn('[verifyOTPWithRedirect] ❌ Code incorrect:', { status: data.status, message: data.message });
+      clearTimeout(timeoutId);
+    } catch (fetchErr) {
+      // ✅ BLOCKER #4: Timeout ou erreur réseau
+      if (fetchErr.name === 'AbortError') {
+        console.error('[verifyOTPWithRedirect] ❌ Timeout (>10s) calling Twilio');
+        return Response.json(
+          { success: false, error: 'Timeout vérification — réessayez' },
+          { status: 504 }
+        );
+      }
+      throw fetchErr;
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      console.error('[verifyOTPWithRedirect] ❌ Response not valid JSON');
+      return Response.json(
+        { success: false, error: 'Invalid Twilio response' },
+        { status: 502 }
+      );
+    }
+
+    // Vérifier le statut
+    if (!response.ok || data?.status !== 'approved') {
+      console.warn('[verifyOTPWithRedirect] ❌ Code incorrect:', { status: data?.status, message: data?.message });
       return Response.json(
         { 
           success: false,
           error: 'Code OTP incorrect ou expiré',
           step: 'verifyOTP',
-          twilio_status: data.status,
-          twilio_message: data.message,
+          twilio_status: data?.status,
+          twilio_message: data?.message,
         },
         { status: 401 }
       );
@@ -103,7 +172,20 @@ Deno.serve(async (req) => {
 
     console.log('[verifyOTPWithRedirect] ✅ Code valide pour:', phone);
 
-    const base44 = createClientFromRequest(req);
+    let base44;
+    try {
+      base44 = createClientFromRequest(req);
+      if (!base44) {
+        throw new Error('base44 client not initialized');
+      }
+    } catch (err) {
+      console.error('[verifyOTPWithRedirect] ❌ Base44 init failed:', err.message);
+      return Response.json(
+        { success: false, error: 'System error — contacter admin' },
+        { status: 500 }
+      );
+    }
+
     const ADMIN_PHONE = '+22655738247';
 
     // ═══════════════════════════════════════════════════════════════
@@ -230,9 +312,13 @@ Deno.serve(async (req) => {
       phone: phone,
     });
   } catch (error) {
-    console.error('[verifyOTPWithRedirect] Erreur:', error.message);
+    console.error('[verifyOTPWithRedirect] Exception:', error?.message || String(error));
     return Response.json(
-      { error: error.message || 'Erreur lors de la vérification' },
+      { 
+        success: false,
+        error: error?.message || 'Erreur inattendue',
+        step: 'verify_workflow',
+      },
       { status: 500 }
     );
   }
