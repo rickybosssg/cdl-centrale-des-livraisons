@@ -1,38 +1,40 @@
+/**
+ * PhoneAuth — Page de connexion
+ *
+ * PROBLÈME FONDAMENTAL APK :
+ * base44.auth.redirectToLogin() utilise une Chrome Custom Tab (navigateur externe).
+ * Le token revient dans Chrome, pas dans la WebView → session jamais partagée.
+ *
+ * SOLUTION :
+ * Dans l'APK, on charge la page de login Base44 DIRECTEMENT dans la WebView
+ * via window.location.href (pas de Chrome Custom Tab).
+ * Base44 redirige ensuite vers nextUrl?access_token=xxx → même WebView → token lu par app-params.js.
+ */
 import { useEffect, useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { appParams } from "@/lib/app-params";
+
+const APP_ID = import.meta.env.VITE_BASE44_APP_ID || appParams.appId;
+
+function getLoginUrl() {
+  const nextUrl = 'https://cdl.base44.app';
+  return `https://app.base44.com/login?app_id=${APP_ID}&next=${encodeURIComponent(nextUrl)}`;
+}
+
+function isNativeAPK() {
+  if (typeof window === 'undefined') return false;
+  const proto = window.location?.protocol;
+  return proto === 'capacitor:' || proto === 'file:' || typeof window.Capacitor !== 'undefined';
+}
 
 export default function PhoneAuth() {
-  const [checking, setChecking] = useState(false);
-
-  const proto = typeof window !== 'undefined' ? window.location?.protocol : '';
-  const isNative = proto === 'capacitor:' || proto === 'file:' || typeof window !== 'undefined' && typeof window.Capacitor !== 'undefined';
-
-  const [notConnected, setNotConnected] = useState(false);
-
-  // Vérifie si déjà connecté (token récupéré après retour du navigateur)
-  const checkAndRedirect = async () => {
-    setChecking(true);
-    setNotConnected(false);
-    try {
-      const authed = await base44.auth.isAuthenticated();
-      if (authed) {
-        window.location.href = '/';
-        return;
-      }
-    } catch (_) {}
-    setChecking(false);
-    setNotConnected(true);
-  };
+  const [loginUrl] = useState(getLoginUrl);
+  const native = isNativeAPK();
 
   useEffect(() => {
-    if (!isNative) {
-      // Web : rediriger directement
-      base44.auth.redirectToLogin('https://cdl.base44.app');
-      return;
-    }
-
-    // Lancer la redirection vers le login
-    base44.auth.redirectToLogin('https://cdl.base44.app');
+    // Dans la WebView native : rediriger DANS la WebView (pas Chrome Custom Tab)
+    // Dans le web : même chose, window.location.href reste dans le même onglet
+    console.log('[PhoneAuth] Redirection login dans WebView → ', loginUrl);
+    window.location.href = loginUrl;
   }, []);
 
   return (
@@ -44,32 +46,15 @@ export default function PhoneAuth() {
       />
       <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
       <p className="text-white/80 text-sm text-center">
-        Connexion en cours...<br/>
-        <span className="text-white/60 text-xs">Revenez sur l'app après vous être connecté</span>
+        Chargement de la connexion...
       </p>
-      {isNative && (
-        <div className="flex flex-col items-center gap-3">
-          <button
-            onClick={checkAndRedirect}
-            disabled={checking}
-            className="px-6 py-3 bg-white text-primary rounded-xl font-semibold text-sm shadow-lg active:scale-95 transition-transform"
-          >
-            {checking ? "Vérification..." : "✅ Je me suis connecté, continuer"}
-          </button>
-          {notConnected && (
-            <div className="text-center space-y-2">
-              <p className="text-white/90 text-sm font-semibold">⚠️ Session non détectée</p>
-              <p className="text-white/70 text-xs px-4">Connectez-vous d'abord dans le navigateur, puis revenez sur l'app et appuyez à nouveau.</p>
-              <button
-                onClick={() => base44.auth.redirectToLogin('https://cdl.base44.app')}
-                className="text-white/80 text-xs underline"
-              >
-                Ouvrir la page de connexion
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Fallback si la redirection automatique échoue */}
+      <a
+        href={loginUrl}
+        className="mt-2 px-6 py-3 bg-white text-primary rounded-xl font-semibold text-sm shadow-lg"
+      >
+        Se connecter
+      </a>
     </div>
   );
 }

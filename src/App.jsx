@@ -292,11 +292,16 @@ const AuthenticatedApp = () => {
 
 
 
-  // Non authentifié → afficher PhoneAuth directement (jamais de redirection externe dans APK)
+  // Non authentifié → afficher PhoneAuth (charge le login dans la WebView)
   if (!isAuthenticated) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
+    // Si on est déjà sur /phone-auth, afficher le composant
+    // Sinon, naviguer vers /phone-auth pour que l'URL soit correcte
+    if (window.location.pathname !== '/phone-auth') {
+      window.history.replaceState({}, '', '/phone-auth');
+    }
     return <PhoneAuth />;
   }
 
