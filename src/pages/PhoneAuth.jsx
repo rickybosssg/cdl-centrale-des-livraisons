@@ -6,34 +6,35 @@ const ADMIN_PHONE = "+22655738247";
 
 export default function PhoneAuth() {
   const [step, setStep] = useState("phone"); // phone | code | loading
-  const [phone, setPhone] = useState("+226");
+  const [digits, setDigits] = useState(""); // Seulement les 8 chiffres
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Gérer la saisie du numéro — accepter uniquement 8 chiffres
+  // Saisie simple — accepter UNIQUEMENT 8 chiffres, sans modification
   const handlePhoneChange = (e) => {
-    let value = e.target.value;
+    const value = e.target.value;
     // Extraire uniquement les chiffres
     const digitsOnly = value.replace(/\D/g, "");
-    // Limiter à 8 chiffres (Burkina Faso)
-    const limitedDigits = digitsOnly.slice(0, 8);
-    // Reconstruire avec le préfixe
-    setPhone("+226" + limitedDigits);
+    // Limiter à 8 chiffres
+    if (digitsOnly.length <= 8) {
+      setDigits(digitsOnly);
+    }
   };
 
   const sendOTP = async () => {
-    const digitCount = phone.replace(/\D/g, "").length;
-    if (digitCount < 8) {
+    if (digits.length < 8) {
       setMessage("Numéro incomplet");
       return;
     }
+
+    const fullPhone = "+226" + digits;
 
     setLoading(true);
     setMessage("");
 
     try {
-      const res = await base44.functions.invoke("sendOTP", { phone });
+      const res = await base44.functions.invoke("sendOTP", { phone: fullPhone });
 
       if (res.data?.success) {
         setStep("code");
@@ -61,7 +62,7 @@ export default function PhoneAuth() {
       setStep("loading");
 
       const res = await base44.functions.invoke("verifyOTPWithRedirect", {
-        phone,
+        phone: "+226" + digits,
         code,
       });
 
@@ -114,25 +115,26 @@ export default function PhoneAuth() {
           <p style={styles.subtitle}>Entrez votre numéro de téléphone</p>
 
           <div style={styles.phoneInputWrapper}>
-            <Phone size={16} style={{ color: "#666" }} />
+            <span style={styles.prefix}>+226</span>
             <input
               style={styles.phoneInput}
               type="tel"
-              placeholder="55 73 82 47"
-              value={phone}
+              inputMode="numeric"
+              placeholder="55738247"
+              value={digits}
               onChange={handlePhoneChange}
-              maxLength="13"
+              maxLength="8"
+              disabled={loading}
             />
           </div>
 
           <button
             style={{
               ...styles.button,
-              opacity: phone.replace(/\D/g, "").length === 8 ? 1 : 0.6,
-              pointerEvents: phone.replace(/\D/g, "").length === 8 ? "auto" : "none",
+              opacity: digits.length === 8 ? 1 : 0.6,
             }}
             onClick={sendOTP}
-            disabled={loading || phone.replace(/\D/g, "").length < 8}
+            disabled={loading || digits.length !== 8}
           >
             {loading ? (
               <>
@@ -170,7 +172,7 @@ export default function PhoneAuth() {
 
         <div style={styles.logo}>CDL</div>
         <h2 style={styles.title}>Vérification</h2>
-        <p style={styles.subtitle}>Code envoyé à {phone}</p>
+        <p style={styles.subtitle}>Code envoyé à +226{digits}</p>
 
         <input
           style={styles.input}
@@ -265,12 +267,19 @@ const styles = {
   phoneInputWrapper: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: "0",
     paddingLeft: "12px",
     marginBottom: "16px",
     borderRadius: "12px",
     border: "1px solid #ddd",
     background: "#f9f9f9",
+  },
+  prefix: {
+    fontSize: "15px",
+    fontWeight: "600",
+    color: "#333",
+    whiteSpace: "nowrap",
+    paddingRight: "4px",
   },
   phoneInput: {
     flex: 1,
