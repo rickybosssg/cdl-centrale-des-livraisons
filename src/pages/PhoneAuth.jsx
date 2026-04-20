@@ -58,7 +58,7 @@ export default function PhoneAuth() {
             }
           });
 
-          await Browser.open({ url: loginUrl });
+          await Browser.open({ url: loginUrl, windowName: '_blank' });
           setStatus('waiting');
         } catch (err) {
           console.error('[PhoneAuth] error:', err);
