@@ -11,19 +11,20 @@ export default function PhoneAuth() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Gérer la saisie du numéro — empêcher suppression du +226
+  // Gérer la saisie du numéro — accepter uniquement 8 chiffres
   const handlePhoneChange = (e) => {
     let value = e.target.value;
-    // Forcer le +226 au début
-    if (!value.startsWith("+226")) {
-      value = "+226" + value.replace(/^\+?226?/, "");
-    }
-    // Limiter à 13 caractères (+226XXXXXXXX)
-    setPhone(value.slice(0, 13));
+    // Extraire uniquement les chiffres
+    const digitsOnly = value.replace(/\D/g, "");
+    // Limiter à 8 chiffres (Burkina Faso)
+    const limitedDigits = digitsOnly.slice(0, 8);
+    // Reconstruire avec le préfixe
+    setPhone("+226" + limitedDigits);
   };
 
   const sendOTP = async () => {
-    if (phone.length < 13) {
+    const digitCount = phone.replace(/\D/g, "").length;
+    if (digitCount < 8) {
       setMessage("Numéro incomplet");
       return;
     }
@@ -127,11 +128,11 @@ export default function PhoneAuth() {
           <button
             style={{
               ...styles.button,
-              opacity: phone.length === 13 ? 1 : 0.6,
-              pointerEvents: phone.length === 13 ? "auto" : "none",
+              opacity: phone.replace(/\D/g, "").length === 8 ? 1 : 0.6,
+              pointerEvents: phone.replace(/\D/g, "").length === 8 ? "auto" : "none",
             }}
             onClick={sendOTP}
-            disabled={loading || phone.length < 13}
+            disabled={loading || phone.replace(/\D/g, "").length < 8}
           >
             {loading ? (
               <>
@@ -188,7 +189,7 @@ export default function PhoneAuth() {
             pointerEvents: code.length === 6 ? "auto" : "none",
           }}
           onClick={verifyOTP}
-          disabled={loading || code.length < 6}
+          disabled={loading || code.length !== 6}
         >
           {loading ? (
             <>
