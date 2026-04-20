@@ -9,6 +9,7 @@ export default function AdminLoginSecure() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [debugResult, setDebugResult] = useState(null);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -19,29 +20,59 @@ export default function AdminLoginSecure() {
 
     setLoading(true);
     setError("");
+    setDebugResult(null);
 
     try {
-      // Appel direct à la fonction adminLogin via SDK Base44
+      console.log('[AdminLogin] Appel fonction avec:', { email, password });
+      
       const result = await base44.functions.invoke('adminLogin', {
         email: email.trim().toLowerCase(),
         password,
       });
 
+      console.log('[AdminLogin] Résultat reçu:', result);
+      
+      // Afficher le résultat brut
+      const rawResult = JSON.stringify(result.data || result);
+      setDebugResult(rawResult);
+
       if (result.data?.success) {
         setSuccess(true);
-        // Sauvegarder le flag admin en localStorage
-        localStorage.setItem('admin_authenticated', 'true');
-        localStorage.setItem('admin_email', email.trim().toLowerCase());
-        
+        console.log('[AdminLogin] ✅ Connexion réussie, redirection...');
         setTimeout(() => {
           window.location.href = '/admin-dashboard';
-        }, 1000);
+        }, 1500);
       } else {
         setError("Email ou mot de passe incorrect");
       }
     } catch (err) {
-      console.error('[AdminLogin] Error:', err);
-      setError("Email ou mot de passe incorrect");
+      console.error('[AdminLogin] Exception:', err);
+      setDebugResult(JSON.stringify({ error: err.message }));
+      setError("Erreur lors de l'appel fonction");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestFunction = async () => {
+    setLoading(true);
+    setDebugResult(null);
+    
+    try {
+      console.log('[AdminLogin] TEST FONCTION avec identifiants fixes');
+      
+      const result = await base44.functions.invoke('adminLogin', {
+        email: 'weezyh2@gmail.com',
+        password: 'cdl2025admin',
+      });
+
+      console.log('[AdminLogin] TEST - Résultat:', result);
+      
+      const rawResult = JSON.stringify(result.data || result);
+      setDebugResult(rawResult);
+    } catch (err) {
+      console.error('[AdminLogin] TEST - Exception:', err);
+      setDebugResult(JSON.stringify({ error: err.message }));
     } finally {
       setLoading(false);
     }
@@ -52,8 +83,11 @@ export default function AdminLoginSecure() {
       <div style={styles.container}>
         <div style={styles.card}>
           <div style={styles.successIcon}>✓</div>
-          <p style={styles.successText}>Connexion réussie</p>
-          <p style={{ fontSize: "13px", color: "#666", marginTop: "8px" }}>
+          <p style={styles.successText}>Connexion admin OK</p>
+          <p style={{ fontSize: "12px", color: "#666", marginTop: "8px", fontFamily: "monospace" }}>
+            {debugResult}
+          </p>
+          <p style={{ fontSize: "13px", color: "#666", marginTop: "12px" }}>
             Redirection en cours...
           </p>
         </div>
@@ -78,7 +112,47 @@ export default function AdminLoginSecure() {
         <h1 style={styles.title}>Accès Administrateur</h1>
         <p style={styles.subtitle}>Portal sécurisé CDL</p>
 
-        <form onSubmit={handleLogin} style={{ width: "100%", marginTop: "30px" }}>
+        <button
+          type="button"
+          onClick={handleTestFunction}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "10px",
+            marginBottom: "20px",
+            background: "#666",
+            color: "white",
+            border: "none",
+            borderRadius: "8px",
+            fontSize: "12px",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          🧪 Tester fonction admin
+        </button>
+
+        {debugResult && (
+          <div style={{
+            width: "100%",
+            padding: "10px",
+            marginBottom: "15px",
+            background: "#f5f5f5",
+            border: "1px solid #ddd",
+            borderRadius: "6px",
+            fontSize: "11px",
+            fontFamily: "monospace",
+            color: "#333",
+            wordBreak: "break-all",
+            maxHeight: "100px",
+            overflow: "auto",
+          }}>
+            <strong>Résultat brut :</strong><br/>
+            {debugResult}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} style={{ width: "100%", marginTop: "15px" }}>
           <input
             style={styles.input}
             type="email"
