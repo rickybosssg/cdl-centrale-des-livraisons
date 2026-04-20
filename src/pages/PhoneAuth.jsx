@@ -1,25 +1,30 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, Phone } from "lucide-react";
+
+const ADMIN_PHONE = "+22655738247";
 
 export default function PhoneAuth() {
   const [step, setStep] = useState("phone"); // phone | code | loading
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("+226");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [adminLoading, setAdminLoading] = useState(false);
 
-  // ═══════════════════════════════════════════════════════════════
-  // OTP FLOW
-  // ═══════════════════════════════════════════════════════════════
+  // Gérer la saisie du numéro — empêcher suppression du +226
+  const handlePhoneChange = (e) => {
+    let value = e.target.value;
+    // Forcer le +226 au début
+    if (!value.startsWith("+226")) {
+      value = "+226" + value.replace(/^\+?226?/, "");
+    }
+    // Limiter à 13 caractères (+226XXXXXXXX)
+    setPhone(value.slice(0, 13));
+  };
 
   const sendOTP = async () => {
-    if (!phone.trim()) {
-      setMessage("Entrez un numéro");
+    if (phone.length < 13) {
+      setMessage("Numéro incomplet");
       return;
     }
 
@@ -52,38 +57,29 @@ export default function PhoneAuth() {
     setMessage("");
 
     try {
-      const res = await base44.functions.invoke("verifyOTP", { phone, code });
+      setStep("loading");
+
+      const res = await base44.functions.invoke("verifyOTPWithRedirect", {
+        phone,
+        code,
+      });
 
       if (res.data?.success) {
-        // Stocker le token si fourni
-        if (res.data.token) {
-          localStorage.setItem("base44_access_token", res.data.token);
-        }
-
-        setStep("loading");
-
-        // Redirection après succès
+        // Redirection intelligente selon le type d'utilisateur
+        const redirectUrl = res.data.redirect_url || "/";
         setTimeout(() => {
-          window.location.href = "/";
+          window.location.href = redirectUrl;
         }, 800);
       } else {
+        setStep("code");
         setMessage(res.data?.error || "Code incorrect");
       }
     } catch (err) {
+      setStep("code");
       setMessage(err.message || "Erreur vérification");
     }
 
     setLoading(false);
-  };
-
-  // ═══════════════════════════════════════════════════════════════
-  // ADMIN LOGIN (via Base44)
-  // ═══════════════════════════════════════════════════════════════
-
-  const handleAdminLogin = () => {
-    // Rediriger vers le portail admin sécurisé (Base44)
-    // Le portail gérera l'authentification email + mot de passe
-    window.location.href = "/admin-login-secure";
   };
 
   // ═══════════════════════════════════════════════════════════════
@@ -105,67 +101,7 @@ export default function PhoneAuth() {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ADMIN LOGIN FORM
-  // ═══════════════════════════════════════════════════════════════
-
-  if (showAdminLogin) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <button
-            onClick={() => {
-              setShowAdminLogin(false);
-              setAdminEmail("");
-              setAdminPassword("");
-              setMessage("");
-            }}
-            style={styles.backButtonRow}
-          >
-            <ArrowLeft size={18} /> Retour
-          </button>
-
-          <div style={styles.logo}>CDL</div>
-          <h2 style={styles.title}>Accès Admin</h2>
-
-          <input
-            style={styles.input}
-            type="email"
-            placeholder="Email admin"
-            value={adminEmail}
-            onChange={(e) => setAdminEmail(e.target.value)}
-          />
-
-          <input
-            style={styles.input}
-            type="password"
-            placeholder="Mot de passe"
-            value={adminPassword}
-            onChange={(e) => setAdminPassword(e.target.value)}
-          />
-
-          <button
-            style={styles.button}
-            onClick={handleAdminLogin}
-            disabled={adminLoading}
-          >
-            {adminLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Connexion...
-              </>
-            ) : (
-              "Se connecter"
-            )}
-          </button>
-
-          {message && <p style={styles.error}>{message}</p>}
-        </div>
-      </div>
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // OTP FORM - PHONE STEP
+  // PHONE STEP
   // ═══════════════════════════════════════════════════════════════
 
   if (step === "phone") {
@@ -174,19 +110,28 @@ export default function PhoneAuth() {
         <div style={styles.card}>
           <div style={styles.logo}>CDL</div>
           <h2 style={styles.title}>Connexion</h2>
+          <p style={styles.subtitle}>Entrez votre numéro de téléphone</p>
 
-          <input
-            style={styles.input}
-            type="tel"
-            placeholder="+226XXXXXXXX ou 0XXXXXXXX"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
+          <div style={styles.phoneInputWrapper}>
+            <Phone size={16} style={{ color: "#666" }} />
+            <input
+              style={styles.phoneInput}
+              type="tel"
+              placeholder="55 73 82 47"
+              value={phone}
+              onChange={handlePhoneChange}
+              maxLength="13"
+            />
+          </div>
 
           <button
-            style={styles.button}
+            style={{
+              ...styles.button,
+              opacity: phone.length === 13 ? 1 : 0.6,
+              pointerEvents: phone.length === 13 ? "auto" : "none",
+            }}
             onClick={sendOTP}
-            disabled={loading}
+            disabled={loading || phone.length < 13}
           >
             {loading ? (
               <>
@@ -199,24 +144,13 @@ export default function PhoneAuth() {
           </button>
 
           {message && <p style={styles.error}>{message}</p>}
-
-          {/* SÉPARATEUR */}
-          <div style={styles.divider}></div>
-
-          {/* ADMIN BUTTON */}
-          <button
-            style={styles.adminButton}
-            onClick={() => setShowAdminLogin(true)}
-          >
-            Se connecter en tant qu'admin
-          </button>
         </div>
       </div>
     );
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // OTP FORM - CODE STEP
+  // CODE STEP
   // ═══════════════════════════════════════════════════════════════
 
   return (
@@ -244,12 +178,17 @@ export default function PhoneAuth() {
           maxLength="6"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+          disabled={loading}
         />
 
         <button
-          style={styles.button}
+          style={{
+            ...styles.button,
+            opacity: code.length === 6 ? 1 : 0.6,
+            pointerEvents: code.length === 6 ? "auto" : "none",
+          }}
           onClick={verifyOTP}
-          disabled={loading}
+          disabled={loading || code.length < 6}
         >
           {loading ? (
             <>
@@ -322,6 +261,26 @@ const styles = {
     color: "#999",
     marginBottom: "24px",
   },
+  phoneInputWrapper: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    paddingLeft: "12px",
+    marginBottom: "16px",
+    borderRadius: "12px",
+    border: "1px solid #ddd",
+    background: "#f9f9f9",
+  },
+  phoneInput: {
+    flex: 1,
+    padding: "14px 12px",
+    border: "none",
+    background: "transparent",
+    fontSize: "15px",
+    fontFamily: "inherit",
+    color: "#333",
+    outline: "none",
+  },
   input: {
     width: "100%",
     padding: "14px",
@@ -345,28 +304,11 @@ const styles = {
     fontWeight: "600",
     fontSize: "15px",
     cursor: "pointer",
-    transition: "background 0.2s",
+    transition: "background 0.2s, opacity 0.2s",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     gap: "8px",
-  },
-  divider: {
-    margin: "24px 0",
-    height: "1px",
-    background: "#eee",
-  },
-  adminButton: {
-    width: "100%",
-    padding: "12px",
-    background: "transparent",
-    border: "1.5px solid #2078C6",
-    borderRadius: "12px",
-    color: "#2078C6",
-    fontWeight: "600",
-    fontSize: "14px",
-    cursor: "pointer",
-    transition: "all 0.2s",
   },
   error: {
     color: "#dc2626",
