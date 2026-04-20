@@ -80,27 +80,10 @@ export default function PhoneAuth() {
   // ADMIN LOGIN (via Base44)
   // ═══════════════════════════════════════════════════════════════
 
-  const handleAdminLogin = async () => {
-    if (!adminEmail || !adminPassword) {
-      setMessage("Email et mot de passe requis");
-      return;
-    }
-
-    setAdminLoading(true);
-
-    try {
-      // Utiliser base44.auth pour login admin
-      await base44.auth.login(adminEmail, adminPassword);
-
-      // Redirection après login admin réussi
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 800);
-    } catch (err) {
-      setMessage(err.message || "Identifiants invalides");
-    }
-
-    setAdminLoading(false);
+  const handleAdminLogin = () => {
+    // Rediriger vers le portail admin sécurisé (Base44)
+    // Le portail gérera l'authentification email + mot de passe
+    window.location.href = "/admin-login-secure";
   };
 
   // ═══════════════════════════════════════════════════════════════
@@ -349,6 +332,7 @@ const styles = {
     boxSizing: "border-box",
     fontFamily: "inherit",
     transition: "border 0.2s",
+    color: "#333",
   },
   button: {
     width: "100%",
