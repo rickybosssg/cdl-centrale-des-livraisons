@@ -430,14 +430,27 @@ export default function PhoneAuth() {
         <h2 style={styles.title}>Vérification</h2>
         <p style={styles.subtitle}>Code envoyé à +226{digits}</p>
 
-        {/* Champ OTP — jamais disabled, toujours cliquable sur Android */}
+        {/* Indicateur visuel des cases OTP */}
+        <div style={styles.otpDots}>
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} style={{
+              ...styles.otpDot,
+              background: code[i] ? "#2078C6" : "#e0e0e0",
+              transform: code[i] ? "scale(1.2)" : "scale(1)",
+            }}>
+              {code[i] || ""}
+            </div>
+          ))}
+        </div>
+
+        {/* Champ OTP caché — jamais disabled, toujours cliquable sur Android */}
         <input
           ref={codeInputRef}
-          style={styles.codeInput}
+          style={styles.codeInputHidden}
           type="tel"
           inputMode="numeric"
           pattern="[0-9]*"
-          placeholder="______"
+          placeholder=""
           maxLength="6"
           value={code}
           onChange={(e) => {
@@ -591,22 +604,39 @@ const styles = {
     transition: "border 0.2s",
     color: "#333",
   },
-  codeInput: {
+  otpDots: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "10px",
+    marginBottom: "12px",
+  },
+  otpDot: {
+    width: "40px",
+    height: "48px",
+    borderRadius: "10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "22px",
+    fontWeight: "bold",
+    color: "white",
+    transition: "all 0.15s ease",
+  },
+  codeInputHidden: {
+    // Champ réel transparent superposé — capte la saisie Android
     width: "100%",
-    padding: "16px 14px",
+    padding: "14px",
     marginBottom: "16px",
     borderRadius: "12px",
-    border: "2px solid #2078C6",
-    fontSize: "28px",
-    fontWeight: "bold",
-    letterSpacing: "8px",
+    border: "2px solid #e0e0e0",
+    fontSize: "18px",
+    letterSpacing: "6px",
     boxSizing: "border-box",
     fontFamily: "monospace",
-    color: "#111",
+    color: "#2078C6",
     textAlign: "center",
-    background: "#f0f7ff",
+    background: "#f9f9f9",
     outline: "none",
-    // Android WebView : ne jamais bloquer le champ
     pointerEvents: "auto",
     touchAction: "auto",
     userSelect: "text",
