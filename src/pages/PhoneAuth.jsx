@@ -81,13 +81,16 @@ export default function PhoneAuth() {
       clearTimeout(timer);
 
       const data = await res.json();
-      console.log("[PhoneAuth] sendOTP:", res.status, data?.success);
+      console.log("[PhoneAuth] sendOTP:", res.status, JSON.stringify(data));
 
       if (data?.success === true) {
         setStep("code");
         setMessage("");
       } else {
-        setMessage(data?.error || data?.twilio_message || "Erreur d'envoi — réessayez");
+        // Afficher l'erreur Twilio réelle si disponible
+        const errMsg = data?.twilio_message || data?.error || "Erreur d'envoi — réessayez";
+        const errCode = data?.twilio_error_code ? ` (code ${data.twilio_error_code})` : "";
+        setMessage(errMsg + errCode);
       }
     } catch (err) {
       if (err?.name === "AbortError") {
