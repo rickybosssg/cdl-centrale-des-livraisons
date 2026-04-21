@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setIsAuthenticated(false);
     try { localStorage.removeItem('base44_access_token'); } catch (_) {}
-    window.location.href = '/phone-auth';
+    window.location.href = '/connexion';
   };
 
   const navigateToLogin = () => {

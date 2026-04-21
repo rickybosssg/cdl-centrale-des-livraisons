@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Loader2, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
+// Composant de connexion email/mot de passe (anciennement PhoneAuth)
 export default function PhoneAuth() {
   const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [email, setEmail] = useState("");

@@ -453,7 +453,7 @@ export default function Settings() {
           <button
             onClick={() => {
               try { localStorage.removeItem('base44_access_token'); } catch(_) {}
-              window.location.href = '/phone-auth';
+              window.location.href = '/connexion';
             }}
             className="flex items-center gap-3 p-3 rounded-lg border w-full hover:bg-muted transition-colors"
           >

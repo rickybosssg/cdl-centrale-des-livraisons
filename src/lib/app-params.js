@@ -77,7 +77,7 @@ const getAppParams = () => {
 	
 	if (!appId) {
 		console.error('ERREUR: appId manquant');
-		if (!isNode && window.location?.pathname !== '/phone-auth') {
+		if (!isNode && window.location?.pathname !== '/connexion') {
 			console.error('Ajoute VITE_BASE44_APP_ID dans les secrets ou app_id= en URL');
 		}
 	}

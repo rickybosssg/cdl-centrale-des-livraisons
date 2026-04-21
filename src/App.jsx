@@ -13,12 +13,7 @@ import AppLayoutWrapper from './components/AppLayoutWrapper';
 import DispatcherGuard from './components/DispatcherGuard';
 import { base44 as b44 } from '@/api/base44Client';
 
-// Redirection vers l'écran de connexion (email/password)
-function safeRedirectToLogin() {
-  if (window.location.pathname !== '/phone-auth') {
-    window.location.href = '/phone-auth';
-  }
-}
+const LOGIN_PATH = '/connexion';
 
 // Pages
 import Home from './pages/Home';
@@ -221,7 +216,7 @@ const AuthenticatedApp = () => {
   if (window.location.pathname === '/admin-login-secure') {
     return <AdminLoginSecure />;
   }
-  if (window.location.pathname === '/phone-auth') {
+  if (window.location.pathname === LOGIN_PATH) {
     return <PhoneAuth />;
   }
 
@@ -241,7 +236,7 @@ const AuthenticatedApp = () => {
                 🔄 Réessayer
               </button>
               <button
-                onClick={() => { window.location.href = '/phone-auth'; }}
+                onClick={() => { window.location.href = LOGIN_PATH; }}
                 className="block mx-auto text-xs text-white/60 underline mt-1"
               >
                 Se connecter manuellement
@@ -264,9 +259,7 @@ const AuthenticatedApp = () => {
     }
   }
 
-
-
-  // Non authentifié → afficher l'écran de connexion email/password
+  // Non authentifié → écran de connexion email/password
   if (!isAuthenticated) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
@@ -281,6 +274,7 @@ const AuthenticatedApp = () => {
       <Routes>
         {/* Routes publiques sans layout */}
         <Route path="/admin-login-secure" element={<AdminLoginSecure />} />
+        <Route path="/connexion" element={<PhoneAuth />} />
         <Route path="/phone-auth" element={<PhoneAuth />} />
         <Route path="/app-public-link" element={<AppPublicLink />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
