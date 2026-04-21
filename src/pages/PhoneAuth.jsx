@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { appParams } from "@/lib/app-params";
 
@@ -7,9 +7,23 @@ export default function PhoneAuth() {
   const [digits, setDigits] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false); // état séparé pour la vérification
   const [message, setMessage] = useState("");
   const [debugInfo, setDebugInfo] = useState(null);
   const [showDebug, setShowDebug] = useState(false);
+  const codeInputRef = useRef(null);
+
+  // Focus + ouverture clavier numérique dès l'arrivée sur l'écran code
+  useEffect(() => {
+    if (step === "code" && codeInputRef.current) {
+      // Délai court pour laisser le DOM se stabiliser sur Android
+      setTimeout(() => {
+        codeInputRef.current?.focus();
+        // Forcer l'ouverture du clavier sur Android WebView
+        try { codeInputRef.current?.click(); } catch (_) {}
+      }, 200);
+    }
+  }, [step]);
 
   const handlePhoneChange = (e) => {
     const v = e.target.value.replace(/\D/g, "");
@@ -216,12 +230,13 @@ export default function PhoneAuth() {
       return;
     }
 
-    setLoading(true);
+    setVerifying(true);
     setMessage("");
     setDebugInfo(null);
 
     try {
-      setStep("loading");
+      // NE PAS changer de step avant d'avoir la réponse — ça bloque le champ sur Android
+      // setStep("loading") supprimé intentionnellement
 
       // SÉCURITÉ : vérifier config avant appel
       const appId = appParams?.appId;
@@ -269,22 +284,22 @@ export default function PhoneAuth() {
       if (data?.success === true) {
         const redirectUrl = data?.redirect_url || "/";
         console.log("[PhoneAuth] ✅ Redirection vers:", redirectUrl);
-        
-        // Vérifier que l'URL commence par /
+        setStep("loading"); // afficher loading seulement après succès
         const safeUrl = (redirectUrl || "").startsWith("/") ? redirectUrl : "/";
         setTimeout(() => {
           window.location.href = safeUrl;
         }, 800);
       } else {
-        // ❌ CODE MAUVAIS : retour à l'écran de saisie
-        setStep("code");
+        // ❌ CODE MAUVAIS : rester sur l'écran code, champ toujours accessible
         const errorMsg = data?.error || data?.twilio_message || "Code incorrect ou expiré";
         setMessage(errorMsg);
         setShowDebug(true);
+        setCode(""); // vider le code pour ressaisie facile
+        // Re-focus le champ sur Android
+        setTimeout(() => { codeInputRef.current?.focus(); }, 100);
       }
     } catch (err) {
       console.error("[PhoneAuth] Verify erreur:", err?.message);
-      setStep("code");
       
       if (err?.name === "AbortError") {
         setMessage("⏱️ Timeout — vérifier la connexion");
@@ -299,8 +314,9 @@ export default function PhoneAuth() {
         phone: "+226" + digits,
       });
       setShowDebug(true);
+      setTimeout(() => { codeInputRef.current?.focus(); }, 100);
     } finally {
-      setLoading(false);
+      setVerifying(false);
     }
   };
 
@@ -414,28 +430,36 @@ export default function PhoneAuth() {
         <h2 style={styles.title}>Vérification</h2>
         <p style={styles.subtitle}>Code envoyé à +226{digits}</p>
 
+        {/* Champ OTP — jamais disabled, toujours cliquable sur Android */}
         <input
-          autoFocus
+          ref={codeInputRef}
           style={styles.codeInput}
-          type="text"
+          type="tel"
           inputMode="numeric"
-          placeholder="000000"
+          pattern="[0-9]*"
+          placeholder="______"
           maxLength="6"
           value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          disabled={loading}
+          onChange={(e) => {
+            const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+            setCode(v);
+          }}
+          autoComplete="one-time-code"
+          enterKeyHint="done"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && code.length === 6) verifyOTP();
+          }}
         />
 
         <button
           style={{
             ...styles.button,
-            opacity: code.length === 6 ? 1 : 0.6,
-            pointerEvents: code.length === 6 ? "auto" : "none",
+            opacity: code.length === 6 && !verifying ? 1 : 0.6,
           }}
           onClick={verifyOTP}
-          disabled={loading || code.length !== 6}
+          disabled={verifying || code.length !== 6}
         >
-          {loading ? (
+          {verifying ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Vérification...
@@ -569,18 +593,24 @@ const styles = {
   },
   codeInput: {
     width: "100%",
-    padding: "14px",
+    padding: "16px 14px",
     marginBottom: "16px",
     borderRadius: "12px",
     border: "2px solid #2078C6",
-    fontSize: "24px",
+    fontSize: "28px",
     fontWeight: "bold",
-    letterSpacing: "4px",
+    letterSpacing: "8px",
     boxSizing: "border-box",
-    fontFamily: "inherit",
-    color: "#333",
+    fontFamily: "monospace",
+    color: "#111",
     textAlign: "center",
-    WebkitAppearance: "none",
+    background: "#f0f7ff",
+    outline: "none",
+    // Android WebView : ne jamais bloquer le champ
+    pointerEvents: "auto",
+    touchAction: "auto",
+    userSelect: "text",
+    WebkitUserSelect: "text",
   },
   button: {
     width: "100%",
