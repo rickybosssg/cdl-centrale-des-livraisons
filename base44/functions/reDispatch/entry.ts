@@ -1,9 +1,18 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
+function canRefuseAssignedCourse(
+  user: { email?: string; role?: string; user_type?: string } | null,
+  livreurEmail: string | undefined,
+): boolean {
+  if (!user?.email) return false;
+  if (user.email === livreurEmail) return true;
+  return user.role === 'admin' || user.role === 'dispatcher' || user.user_type === 'admin';
+}
+
 /**
  * Refus livreur (CoursePendante) — aligné sur checkPendingAssignments :
  * historique refuse, décrément nombre_courses_actives, remise en en_attente, autoDispatch.
- * Avant : seul l'historique était mis à jour → autoDispatch refusé (statut assignee_attente non éligible).
+ * Authentification obligatoire : livreur assigné ou staff.
  */
 Deno.serve(async (req) => {
   try {
@@ -15,6 +24,10 @@ Deno.serve(async (req) => {
     }
 
     const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user?.email) {
+      return Response.json({ error: 'Authentification requise' }, { status: 401 });
+    }
 
     const courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });
     if (!courses || courses.length === 0) {
@@ -24,6 +37,10 @@ Deno.serve(async (req) => {
 
     if (course.statut !== 'assignee_attente') {
       return Response.json({ success: true, note: 'Statut non concerné', statut: course.statut });
+    }
+
+    if (!canRefuseAssignedCourse(user, course.livreur_email)) {
+      return Response.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
     const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);

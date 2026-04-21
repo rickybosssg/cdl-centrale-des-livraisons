@@ -1,0 +1,13 @@
+{
+	"appId": "com.cdl.app",
+	"appName": "CDL",
+	"webDir": "dist",
+	"android": {
+		"allowMixedContent": true
+	},
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		}
+	}
+}

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { base44 } from "@/api/base44Client";
 import { Loader2, ArrowLeft, Lock, Eye, EyeOff } from "lucide-react";
 
 export default function AdminLoginSecure() {
@@ -9,7 +8,6 @@ export default function AdminLoginSecure() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [debugResult, setDebugResult] = useState(null);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -20,11 +18,8 @@ export default function AdminLoginSecure() {
 
     setLoading(true);
     setError("");
-    setDebugResult(null);
 
     try {
-      console.log('[AdminLogin] Appel fonction avec:', { email, password });
-      
       const result = await fetch(`/api/functions/adminLoginPublic`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,53 +29,16 @@ export default function AdminLoginSecure() {
         }),
       }).then(r => r.json());
 
-      console.log('[AdminLogin] Résultat reçu:', result);
-      
-      const rawResult = JSON.stringify(result.data || result);
-      setDebugResult(rawResult);
-
-      if (result.data?.success) {
-        localStorage.setItem('isAdmin', 'true');
+      if (result.success) {
         setSuccess(true);
-        console.log('[AdminLogin] ✅ Connexion réussie, redirection...');
         setTimeout(() => {
           window.location.href = '/admin-dashboard';
-        }, 1500);
+        }, 1200);
       } else {
         setError("Email ou mot de passe incorrect");
       }
     } catch (err) {
-      console.error('[AdminLogin] Exception:', err);
-      setDebugResult(JSON.stringify({ error: err.message }));
-      setError("Erreur lors de l'appel fonction");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTestFunction = async () => {
-    setLoading(true);
-    setDebugResult(null);
-    
-    try {
-      console.log('[AdminLogin] TEST FONCTION avec identifiants fixes');
-      
-      const result = await fetch(`/api/functions/adminLoginPublic`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: 'weezyh2@gmail.com',
-          password: 'cdl2025admin',
-        }),
-      }).then(r => r.json()).then(d => ({ data: d }));
-
-      console.log('[AdminLogin] TEST - Résultat:', result);
-      
-      const rawResult = JSON.stringify(result.data || result);
-      setDebugResult(rawResult);
-    } catch (err) {
-      console.error('[AdminLogin] TEST - Exception:', err);
-      setDebugResult(JSON.stringify({ error: err.message }));
+      setError("Erreur lors de la connexion — réessayez.");
     } finally {
       setLoading(false);
     }
@@ -91,10 +49,7 @@ export default function AdminLoginSecure() {
       <div style={styles.container}>
         <div style={styles.card}>
           <div style={styles.successIcon}>✓</div>
-          <p style={styles.successText}>Connexion admin OK</p>
-          <p style={{ fontSize: "12px", color: "#666", marginTop: "8px", fontFamily: "monospace" }}>
-            {debugResult}
-          </p>
+          <p style={styles.successText}>Connexion réussie</p>
           <p style={{ fontSize: "13px", color: "#666", marginTop: "12px" }}>
             Redirection en cours...
           </p>
@@ -118,47 +73,7 @@ export default function AdminLoginSecure() {
         </div>
 
         <h1 style={styles.title}>Accès Administrateur</h1>
-        <p style={styles.subtitle}>Portal sécurisé CDL</p>
-
-        <button
-          type="button"
-          onClick={handleTestFunction}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "10px",
-            marginBottom: "20px",
-            background: "#666",
-            color: "white",
-            border: "none",
-            borderRadius: "8px",
-            fontSize: "12px",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          🧪 Tester fonction admin
-        </button>
-
-        {debugResult && (
-          <div style={{
-            width: "100%",
-            padding: "10px",
-            marginBottom: "15px",
-            background: "#f5f5f5",
-            border: "1px solid #ddd",
-            borderRadius: "6px",
-            fontSize: "11px",
-            fontFamily: "monospace",
-            color: "#333",
-            wordBreak: "break-all",
-            maxHeight: "100px",
-            overflow: "auto",
-          }}>
-            <strong>Résultat brut :</strong><br/>
-            {debugResult}
-          </div>
-        )}
+        <p style={styles.subtitle}>Portail sécurisé CDL</p>
 
         <form onSubmit={handleLogin} style={{ width: "100%", marginTop: "15px" }}>
           <input
@@ -168,6 +83,7 @@ export default function AdminLoginSecure() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={loading}
+            autoComplete="username"
           />
 
           <div style={{ position: "relative" }}>
@@ -178,6 +94,7 @@ export default function AdminLoginSecure() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
+              autoComplete="current-password"
             />
             <button
               type="button"
@@ -223,7 +140,7 @@ export default function AdminLoginSecure() {
         {error && <p style={styles.error}>{error}</p>}
 
         <p style={styles.notice}>
-          ⚠️ Cette page est réservée aux administrateurs CDL uniquement.
+          Réservé aux administrateurs CDL.
         </p>
       </div>
     </div>

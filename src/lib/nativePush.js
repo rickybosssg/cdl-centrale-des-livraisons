@@ -149,11 +149,7 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   // Token reçu → callback
   const tokenListener = await PushNotifications.addListener('registration', (token) => {
     const tokenValue = token.value;
-    console.log('[NativePush] ✅ ════════════════════════════════════');
-    console.log('[NativePush] ✅ [CERTAIN] FCM TOKEN GENERATED/REFRESHED');
-    console.log('[NativePush] ✅ Token start (25 chars):', tokenValue?.substring(0, 25) + '...');
-    console.log('[NativePush] ✅ Token full (256 chars):', tokenValue?.substring(0, 256));
-    console.log('[NativePush] ✅ ════════════════════════════════════');
+    console.log('[NativePush] FCM token reçu (préfixe):', tokenValue ? `${String(tokenValue).slice(0, 12)}…` : '—');
     
     if (onToken) {
       console.log('[NativePush] 🟢 [CERTAIN] Calling onToken callback...');

@@ -13,6 +13,16 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 const TIMEOUT_MS = 60 * 1000; // 60 secondes
 
+/** Appel avec course_id : livreur assigné ou staff (aligné sur adminCourseAction) */
+function canTriggerDispatchForCourse(
+  user: { email?: string; role?: string; user_type?: string } | null,
+  course: { livreur_email?: string },
+): boolean {
+  if (!user?.email) return false;
+  if (user.email === course.livreur_email) return true;
+  return user.role === 'admin' || user.role === 'dispatcher' || user.user_type === 'admin';
+}
+
 function isDriverStillValid(driver) {
   return (
     driver.driver_online === true &&
@@ -146,6 +156,10 @@ Deno.serve(async (req) => {
     let coursesRaw: Record<string, unknown>[];
 
     if (singleCourseId) {
+      const user = await base44.auth.me();
+      if (!user?.email) {
+        return Response.json({ error: 'Authentification requise' }, { status: 401 });
+      }
       const one = await base44.asServiceRole.entities.Course.filter({ id: singleCourseId });
       const c = one?.[0];
       if (!c || c.statut !== 'assignee_attente') {
@@ -156,6 +170,9 @@ Deno.serve(async (req) => {
           total: 0,
           note: 'Course absente ou déjà traitée',
         });
+      }
+      if (!canTriggerDispatchForCourse(user, c as { livreur_email?: string })) {
+        return Response.json({ error: 'Non autorisé' }, { status: 403 });
       }
       coursesRaw = [c];
     } else {
