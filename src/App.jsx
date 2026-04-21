@@ -13,24 +13,10 @@ import AppLayoutWrapper from './components/AppLayoutWrapper';
 import DispatcherGuard from './components/DispatcherGuard';
 import { base44 as b44 } from '@/api/base44Client';
 
-// Dans un APK Capacitor, ne jamais appeler base44.auth.redirectToLogin()
-// car ça ouvre Chrome externe. On redirige vers /phone-auth à la place.
-function isCapacitorNative() {
-  return typeof window !== 'undefined' &&
-    (window.location?.protocol === 'capacitor:' ||
-     typeof window.Capacitor !== 'undefined');
-}
-
-function safeRedirectToLogin(nextUrl) {
-  if (isCapacitorNative()) {
-    // APK natif → navigation SPA interne, jamais Chrome
-    // On utilise replaceState + reload partiel pour rester dans la WebView
-    if (window.location.pathname !== '/phone-auth') {
-      window.history.replaceState({}, '', '/phone-auth');
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }
-  } else {
-    b44.auth.redirectToLogin(nextUrl);
+// Redirection vers l'écran de connexion (email/password)
+function safeRedirectToLogin() {
+  if (window.location.pathname !== '/phone-auth') {
+    window.location.href = '/phone-auth';
   }
 }
 
@@ -224,14 +210,12 @@ const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated, checkAppState } = useAuth();
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
-  const [forcePhoneAuth, setForcePhoneAuth] = useState(false);
 
-  // Timeout de sécurité : affiche boutons après 5s, force /phone-auth après 12s
+  // Timeout de sécurité : affiche bouton réessayer après 5s
   useEffect(() => {
     if (!isLoadingAuth && !isLoadingPublicSettings) return;
     const t1 = setTimeout(() => setLoadingTimeout(true), 5000);
-    const t2 = setTimeout(() => setForcePhoneAuth(true), 12000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    return () => { clearTimeout(t1); };
   }, [isLoadingAuth, isLoadingPublicSettings]);
 
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
@@ -242,9 +226,6 @@ const AuthenticatedApp = () => {
   if (window.location.pathname === '/phone-auth') {
     return <PhoneAuth />;
   }
-
-  // Forcer affichage PhoneAuth si le chargement dépasse 12s (APK bloqué)
-  if (forcePhoneAuth) return <PhoneAuth />;
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -262,14 +243,7 @@ const AuthenticatedApp = () => {
                 🔄 Réessayer
               </button>
               <button
-                onClick={() => {
-                  try {
-                    window.history.pushState({}, '', '/phone-auth');
-                    window.dispatchEvent(new PopStateEvent('popstate'));
-                  } catch (_) {
-                    window.location.href = '/phone-auth';
-                  }
-                }}
+                onClick={() => { window.location.href = '/phone-auth'; }}
                 className="block mx-auto text-xs text-white/60 underline mt-1"
               >
                 Se connecter manuellement
@@ -285,7 +259,6 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else {
-      // auth_required → afficher PhoneAuth directement (jamais de redirection externe dans APK)
       const _p = new URLSearchParams(window.location.search);
       const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
       if (_ref) localStorage.setItem('cdl_promo_code', _ref);
@@ -295,16 +268,11 @@ const AuthenticatedApp = () => {
 
 
 
-  // Non authentifié → afficher PhoneAuth (charge le login dans la WebView)
+  // Non authentifié → afficher l'écran de connexion email/password
   if (!isAuthenticated) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
-    // Si on est déjà sur /phone-auth, afficher le composant
-    // Sinon, naviguer vers /phone-auth pour que l'URL soit correcte
-    if (window.location.pathname !== '/phone-auth') {
-      window.history.replaceState({}, '', '/phone-auth');
-    }
     return <PhoneAuth />;
   }
 

@@ -452,15 +452,8 @@ export default function Settings() {
           </Link>
           <button
             onClick={() => {
-              const proto = window.location?.protocol;
-              const isNative = proto === 'capacitor:' || proto === 'file:' || typeof window.Capacitor !== 'undefined';
-              if (isNative) {
-                try { localStorage.removeItem('base44_access_token'); localStorage.removeItem('token'); } catch(_) {}
-                window.history.replaceState({}, '', '/phone-auth');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              } else {
-                base44.auth.logout('/phone-auth');
-              }
+              try { localStorage.removeItem('base44_access_token'); } catch(_) {}
+              window.location.href = '/phone-auth';
             }}
             className="flex items-center gap-3 p-3 rounded-lg border w-full hover:bg-muted transition-colors"
           >
