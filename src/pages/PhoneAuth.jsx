@@ -7,22 +7,42 @@ export default function PhoneAuth() {
   const [digits, setDigits] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [verifying, setVerifying] = useState(false); // état séparé pour la vérification
+  const [verifying, setVerifying] = useState(false);
   const [message, setMessage] = useState("");
   const [debugInfo, setDebugInfo] = useState(null);
   const [showDebug, setShowDebug] = useState(false);
+  // Fallback : si le champ OTP stylé ne répond pas, on bascule sur input simple
+  const [useFallbackInput, setUseFallbackInput] = useState(false);
   const codeInputRef = useRef(null);
+  const fallbackRef = useRef(null);
+  const focusAttempts = useRef(0);
 
-  // Focus + ouverture clavier numérique dès l'arrivée sur l'écran code
+  // Focus automatique sur l'écran OTP — avec détection de l'échec sur Android
   useEffect(() => {
-    if (step === "code" && codeInputRef.current) {
-      // Délai court pour laisser le DOM se stabiliser sur Android
+    if (step !== "code") return;
+    focusAttempts.current = 0;
+
+    const tryFocus = () => {
+      const el = codeInputRef.current || fallbackRef.current;
+      if (!el) return;
+      el.focus();
+      // Vérifier si le focus a bien été pris (Android WebView peut le refuser)
       setTimeout(() => {
-        codeInputRef.current?.focus();
-        // Forcer l'ouverture du clavier sur Android WebView
-        try { codeInputRef.current?.click(); } catch (_) {}
-      }, 200);
-    }
+        if (document.activeElement !== el) {
+          focusAttempts.current += 1;
+          if (focusAttempts.current >= 2) {
+            // Focus refusé 2 fois → basculer sur fallback input simple
+            setUseFallbackInput(true);
+            setTimeout(() => { fallbackRef.current?.focus(); }, 100);
+          }
+        }
+      }, 300);
+    };
+
+    // Premier essai à 200ms, deuxième à 600ms
+    const t1 = setTimeout(tryFocus, 200);
+    const t2 = setTimeout(tryFocus, 600);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [step]);
 
   const handlePhoneChange = (e) => {
@@ -430,39 +450,67 @@ export default function PhoneAuth() {
         <h2 style={styles.title}>Vérification</h2>
         <p style={styles.subtitle}>Code envoyé à +226{digits}</p>
 
-        {/* Indicateur visuel des cases OTP */}
-        <div style={styles.otpDots}>
-          {[0,1,2,3,4,5].map(i => (
-            <div key={i} style={{
-              ...styles.otpDot,
-              background: code[i] ? "#2078C6" : "#e0e0e0",
-              transform: code[i] ? "scale(1.2)" : "scale(1)",
-            }}>
-              {code[i] || ""}
-            </div>
-          ))}
-        </div>
+        {/* Champ OTP principal — visible, jamais disabled */}
+        {!useFallbackInput ? (
+          <input
+            ref={codeInputRef}
+            style={styles.codeInput}
+            type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="• • • • • •"
+            maxLength="6"
+            value={code}
+            onChange={(e) => {
+              const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+              setCode(v);
+              // Si 6 chiffres saisis, auto-valider après 300ms
+              if (v.length === 6) setTimeout(() => verifyOTP(), 300);
+            }}
+            autoComplete="one-time-code"
+            enterKeyHint="done"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && code.length === 6) verifyOTP();
+            }}
+            onClick={() => { codeInputRef.current?.focus(); }}
+          />
+        ) : (
+          // Fallback — input simple garanti fonctionnel sur toute WebView Android
+          <div>
+            <p style={{ fontSize: "11px", color: "#999", marginBottom: "6px" }}>
+              Saisissez le code reçu par SMS
+            </p>
+            <input
+              ref={fallbackRef}
+              style={styles.codeInputFallback}
+              type="number"
+              inputMode="numeric"
+              placeholder="123456"
+              maxLength="6"
+              value={code}
+              onChange={(e) => {
+                const v = String(e.target.value).replace(/\D/g, "").slice(0, 6);
+                setCode(v);
+                if (v.length === 6) setTimeout(() => verifyOTP(), 300);
+              }}
+              autoComplete="one-time-code"
+            />
+          </div>
+        )}
 
-        {/* Champ OTP caché — jamais disabled, toujours cliquable sur Android */}
-        <input
-          ref={codeInputRef}
-          style={styles.codeInputHidden}
-          type="tel"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          placeholder=""
-          maxLength="6"
-          value={code}
-          onChange={(e) => {
-            const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-            setCode(v);
-          }}
-          autoComplete="one-time-code"
-          enterKeyHint="done"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && code.length === 6) verifyOTP();
-          }}
-        />
+        {/* Lien fallback manuel si le champ ne répond toujours pas */}
+        {!useFallbackInput && (
+          <button
+            style={styles.fallbackLink}
+            onClick={() => {
+              setUseFallbackInput(true);
+              setCode("");
+              setTimeout(() => { fallbackRef.current?.focus(); }, 100);
+            }}
+          >
+            Le champ ne répond pas ? Appuyer ici
+          </button>
+        )}
 
         <button
           style={{
@@ -604,43 +652,54 @@ const styles = {
     transition: "border 0.2s",
     color: "#333",
   },
-  otpDots: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "10px",
-    marginBottom: "12px",
-  },
-  otpDot: {
-    width: "40px",
-    height: "48px",
-    borderRadius: "10px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "22px",
-    fontWeight: "bold",
-    color: "white",
-    transition: "all 0.15s ease",
-  },
-  codeInputHidden: {
-    // Champ réel transparent superposé — capte la saisie Android
+  codeInput: {
     width: "100%",
-    padding: "14px",
-    marginBottom: "16px",
-    borderRadius: "12px",
-    border: "2px solid #e0e0e0",
-    fontSize: "18px",
-    letterSpacing: "6px",
+    padding: "18px 14px",
+    marginBottom: "8px",
+    borderRadius: "14px",
+    border: "2px solid #2078C6",
+    fontSize: "32px",
+    fontWeight: "bold",
+    letterSpacing: "10px",
     boxSizing: "border-box",
     fontFamily: "monospace",
-    color: "#2078C6",
+    color: "#111",
     textAlign: "center",
-    background: "#f9f9f9",
+    background: "#f0f7ff",
     outline: "none",
+    // Android : garantir que le champ est toujours tappable
     pointerEvents: "auto",
-    touchAction: "auto",
+    touchAction: "manipulation",
     userSelect: "text",
     WebkitUserSelect: "text",
+    cursor: "text",
+  },
+  codeInputFallback: {
+    // Input ultra-simple — garanti fonctionnel sur toute WebView Android
+    width: "100%",
+    padding: "18px",
+    marginBottom: "8px",
+    borderRadius: "12px",
+    border: "3px solid #22c55e",
+    fontSize: "28px",
+    fontWeight: "bold",
+    letterSpacing: "8px",
+    boxSizing: "border-box",
+    fontFamily: "monospace",
+    color: "#111",
+    textAlign: "center",
+    background: "#f0fff4",
+    outline: "none",
+  },
+  fallbackLink: {
+    background: "none",
+    border: "none",
+    color: "#999",
+    fontSize: "11px",
+    cursor: "pointer",
+    textDecoration: "underline",
+    marginBottom: "12px",
+    padding: "4px",
   },
   button: {
     width: "100%",
