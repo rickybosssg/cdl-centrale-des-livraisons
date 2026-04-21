@@ -52,10 +52,13 @@ const getAppParams = () => {
 
 	const native = isCapacitorNative();
 
-	// ✅ FIX 403: Utiliser cdl.base44.app (app subdomain) au lieu de app.base44.com (platform domain)
-	const safeFromUrl = native
+	// Avec server.url dans capacitor.config.json, la WebView charge depuis https://cdl.base44.app
+	// donc window.location.href sera déjà https://cdl.base44.app/...
+	// En mode file:// (vieux APK sans server.url), forcer manuellement
+	const isFileProt = !isNode && window.location?.protocol === 'file:';
+	const safeFromUrl = isFileProt
 		? 'https://cdl.base44.app'
-		: getAppParamValue("from_url", { defaultValue: window.location.href });
+		: getAppParamValue("from_url", { defaultValue: !isNode ? window.location.href : '' });
 
 	// ✅ BLOQUER #1: appId depuis env VITE_BASE44_APP_ID (prioritaire sur URL param)
 	const appIdFromEnv = import.meta.env.VITE_BASE44_APP_ID;

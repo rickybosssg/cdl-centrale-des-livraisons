@@ -1,18 +1,23 @@
 /**
- * verifyOTPWithRedirect — Vérifier OTP, créer/trouver user, générer session token
+ * verifyOTPWithRedirect — Vérifier OTP, créer/trouver user, retourner credentials
  *
  * Flux :
  * 1. Vérifier le code OTP via Twilio
- * 2. Trouver ou créer l'utilisateur par téléphone
- * 3. Générer un vrai token de session Base44 via login platform
- * 4. Retourner le token + redirect_url au frontend
+ * 2. Trouver l'utilisateur par téléphone dans UserProfile ou User
+ * 3. Si nouveau → register() via SDK pour créer le compte
+ * 4. Retourner login_email + login_password pour que le frontend crée la session
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // Mot de passe déterministe basé sur le numéro — stable, jamais visible utilisateur
 function derivePassword(phone) {
   const base = phone.replace(/\D/g, '');
-  return `CDL_${base}_2025!`;
+  return `CDL_${base}_2025!Secure`;
+}
+
+function deriveEmail(phone) {
+  const base = phone.replace(/\D/g, '');
+  return `phone_${base}@cdl.local`;
 }
 
 Deno.serve(async (req) => {
@@ -23,7 +28,6 @@ Deno.serve(async (req) => {
   const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
   const authToken  = Deno.env.get('TWILIO_AUTH_TOKEN');
   const verifySid  = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
-  const appId      = Deno.env.get('BASE44_APP_ID');
 
   if (!accountSid || !authToken || !verifySid) {
     return Response.json({ success: false, error: 'Configuration Twilio manquante' }, { status: 500 });
@@ -40,9 +44,9 @@ Deno.serve(async (req) => {
   if (!code)  return Response.json({ success: false, error: 'code requis' }, { status: 400 });
 
   // Normalisation numéro
-  if (/^\d{8}$/.test(phone))   phone = '+226' + phone;
-  else if (/^226\d{8}$/.test(phone)) phone = '+' + phone;
-  else if (/^0\d{7}$/.test(phone))   phone = '+226' + phone.substring(1);
+  if (/^\d{8}$/.test(phone))          phone = '+226' + phone;
+  else if (/^226\d{8}$/.test(phone))  phone = '+' + phone;
+  else if (/^0\d{7}$/.test(phone))    phone = '+226' + phone.substring(1);
 
   if (!/^\+226\d{8}$/.test(phone)) {
     return Response.json({ success: false, error: 'Numéro invalide — format: +226XXXXXXXX' }, { status: 400 });
@@ -87,81 +91,111 @@ Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   const ADMIN_PHONE = '+22655738247';
   const isAdminPhone = phone === ADMIN_PHONE;
-  const tempEmail    = `phone_${phone.replace(/\D/g, '')}@cdl.local`;
+  const tempEmail    = deriveEmail(phone);
   const tempPassword = derivePassword(phone);
 
-  // ─── 2. Trouver ou créer l'utilisateur ───────────────────────────────────
-  let user      = null;
-  let isNewUser = false;
+  // ─── 2. Trouver l'utilisateur existant ───────────────────────────────────
+  let existingUser = null;
+  let isNewUser    = false;
 
-  // Chercher par téléphone
+  // Chercher dans UserProfile par téléphone
   try {
-    const found = await base44.asServiceRole.entities.User.filter({ telephone: phone }, null, 1);
-    if (found.length > 0) user = found[0];
-  } catch (err) { console.warn('[verifyOTP] Recherche tel:', err.message); }
+    const profiles = await base44.asServiceRole.entities.UserProfile.filter({ telephone: phone }, null, 1);
+    if (profiles.length > 0) {
+      const prof = profiles[0];
+      // Récupérer le User correspondant
+      const users = await base44.asServiceRole.entities.User.filter({ email: prof.user_email }, null, 1);
+      if (users.length > 0) existingUser = users[0];
+    }
+  } catch (err) { console.warn('[verifyOTP] Recherche UserProfile:', err.message); }
 
-  // Chercher par email généré (fallback)
-  if (!user) {
+  // Chercher dans User par téléphone directement
+  if (!existingUser) {
     try {
-      const found = await base44.asServiceRole.entities.User.filter({ email: tempEmail }, null, 1);
-      if (found.length > 0) user = found[0];
-    } catch (err) { console.warn('[verifyOTP] Recherche email:', err.message); }
+      const found = await base44.asServiceRole.entities.User.filter({ telephone: phone }, null, 1);
+      if (found.length > 0) existingUser = found[0];
+    } catch (err) { console.warn('[verifyOTP] Recherche User.telephone:', err.message); }
   }
 
-  // Créer si inexistant
-  if (!user) {
-    console.log('[verifyOTP] 📝 Création utilisateur:', tempEmail);
+  // Chercher dans User par email généré (cas où déjà créé via register)
+  if (!existingUser) {
     try {
-      user = await base44.asServiceRole.entities.User.create({
+      const found = await base44.asServiceRole.entities.User.filter({ email: tempEmail }, null, 1);
+      if (found.length > 0) existingUser = found[0];
+    } catch (err) { console.warn('[verifyOTP] Recherche User.email:', err.message); }
+  }
+
+  // ─── 3. Créer si nouveau ─────────────────────────────────────────────────
+  if (!existingUser) {
+    console.log('[verifyOTP] 📝 Nouveau user — register:', tempEmail);
+    try {
+      // Utiliser auth.register() — méthode plateforme pour créer un compte
+      // Note: base44.auth (sans asServiceRole) fonctionne en backend function
+      const regResult = await base44.auth.register({
         email: tempEmail,
-        telephone: phone,
-        full_name: phone,
-        role: isAdminPhone ? 'admin' : 'user',
+        password: tempPassword,
       });
+      console.log('[verifyOTP] ✅ Register OK:', regResult?.email || tempEmail, '| keys:', Object.keys(regResult || {}));
+
+      // Récupérer le user créé
+      const found = await base44.asServiceRole.entities.User.filter({ email: tempEmail }, null, 1);
+      if (found.length > 0) {
+        existingUser = found[0];
+        // Mettre à jour téléphone et rôle
+        await base44.asServiceRole.entities.User.update(existingUser.id, {
+          telephone: phone,
+          full_name: phone,
+          role: isAdminPhone ? 'admin' : 'user',
+        });
+        existingUser.role = isAdminPhone ? 'admin' : 'user';
+      }
       isNewUser = true;
-      console.log('[verifyOTP] ✅ Utilisateur créé:', user.email, user.id);
-    } catch (err) {
-      console.error('[verifyOTP] ❌ Création échouée:', err.message);
-      return Response.json({ success: false, error: 'Erreur création compte: ' + err.message }, { status: 500 });
+    } catch (regErr) {
+      console.error('[verifyOTP] ❌ Register échoué:', regErr.message);
+      // Peut échouer si l'utilisateur existe déjà (race condition) — chercher à nouveau
+      try {
+        const found = await base44.asServiceRole.entities.User.filter({ email: tempEmail }, null, 1);
+        if (found.length > 0) {
+          existingUser = found[0];
+          console.log('[verifyOTP] User trouvé après échec register (race condition):', existingUser.email);
+        } else {
+          return Response.json({ success: false, error: 'Impossible de créer le compte: ' + regErr.message }, { status: 500 });
+        }
+      } catch (_) {
+        return Response.json({ success: false, error: 'Impossible de créer le compte: ' + regErr.message }, { status: 500 });
+      }
+    }
+  } else {
+    console.log('[verifyOTP] 👤 User existant trouvé:', existingUser.email, '| role:', existingUser.role);
+    // S'assurer que le téléphone est enregistré
+    if (!existingUser.telephone) {
+      try { await base44.asServiceRole.entities.User.update(existingUser.id, { telephone: phone }); } catch (_) {}
     }
   }
 
   // Forcer role admin pour numéro admin
-  if (isAdminPhone && user.role !== 'admin') {
+  if (isAdminPhone && existingUser?.role !== 'admin') {
     try {
-      await base44.asServiceRole.entities.User.update(user.id, { role: 'admin' });
-      user.role = 'admin';
+      await base44.asServiceRole.entities.User.update(existingUser.id, { role: 'admin' });
+      existingUser.role = 'admin';
     } catch (err) { console.warn('[verifyOTP] Force admin:', err.message); }
   }
 
-  // S'assurer que le téléphone est bien enregistré
-  if (!user.telephone) {
-    try { await base44.asServiceRole.entities.User.update(user.id, { telephone: phone }); }
-    catch (_) {}
-  }
-
-  console.log('[verifyOTP] 👤 User:', user.email, '| role:', user.role, '| new:', isNewUser);
-
-  // ─── 3. S'assurer que le mot de passe est défini pour le login côté frontend ──
-  try {
-    await base44.asServiceRole.entities.User.update(user.id, { password: tempPassword });
-    console.log('[verifyOTP] 🔑 Mot de passe défini pour:', user.email);
-  } catch (err) {
-    console.warn('[verifyOTP] Impossible de définir le mot de passe:', err.message);
-  }
+  const userEmail = existingUser?.email || tempEmail;
+  const userRole  = existingUser?.role  || 'user';
 
   // ─── 4. Déterminer redirect_url ───────────────────────────────────────────
   let redirectUrl = '/';
 
-  if (isAdminPhone || user.role === 'admin') {
+  if (isAdminPhone || userRole === 'admin') {
     redirectUrl = '/admin-dashboard';
   } else if (!isNewUser) {
     try {
       const profiles = await base44.asServiceRole.entities.UserProfile.filter(
-        { user_email: user.email, deleted: false }, null, 10
+        { user_email: userEmail, deleted: false }, null, 10
       );
-      const active = profiles.find(p => p.status === 'actif') || profiles[0];
-      if (active) {
+      if (profiles.length > 0) {
+        const active = profiles.find(p => p.status === 'actif') || profiles[0];
         const map = { client: '/', livreur: '/courses-disponibles', partenaire: '/dashboard-partenaire', commercial: '/', annonceur: '/dashboard-annonceur' };
         redirectUrl = map[active.profile_type] || '/';
         console.log('[verifyOTP] Profil actif:', active.profile_type, '→', redirectUrl);
@@ -169,18 +203,16 @@ Deno.serve(async (req) => {
     } catch (err) { console.warn('[verifyOTP] Recherche profil:', err.message); }
   }
 
-  console.log('[verifyOTP] ✅ Réponse finale | email:', user.email, '| redirect:', redirectUrl);
+  console.log('[verifyOTP] ✅ OK | email:', userEmail, '| new:', isNewUser, '| redirect:', redirectUrl);
 
   return Response.json({
     success: true,
-    // Credentials pour que le frontend fasse le login et crée la session
-    login_email:    user.email,
+    login_email:    userEmail,
     login_password: tempPassword,
-    // Redirection
-    redirect_url: redirectUrl,
+    redirect_url:   redirectUrl,
     user_type: isAdminPhone ? 'admin' : (isNewUser ? 'new' : 'existing'),
-    user_id:   user.id,
-    user_role: user.role,
+    user_id:   existingUser?.id,
+    user_role: userRole,
     phone,
   });
 });

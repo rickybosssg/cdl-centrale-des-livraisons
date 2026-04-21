@@ -3,6 +3,14 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { appParams } from "@/lib/app-params";
 import { base44 } from "@/api/base44Client";
 
+// Avec capacitor.config server.url = https://cdl.base44.app, les URLs relatives fonctionnent.
+// En fallback file://, on utilise l'URL absolue.
+function getBaseUrl() {
+  if (typeof window === 'undefined') return 'https://cdl.base44.app';
+  if (window.location?.protocol === 'file:') return 'https://cdl.base44.app';
+  return ''; // URLs relatives — fonctionne sur web ET APK avec server.url configuré
+}
+
 export default function PhoneAuth() {
   const [step, setStep] = useState("phone");
   const [digits, setDigits] = useState("");
@@ -10,707 +18,473 @@ export default function PhoneAuth() {
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [message, setMessage] = useState("");
-  const [debugInfo, setDebugInfo] = useState(null);
-  const [showDebug, setShowDebug] = useState(false);
-  // Fallback : si le champ OTP stylé ne répond pas, on bascule sur input simple
-  const [useFallbackInput, setUseFallbackInput] = useState(false);
   const codeInputRef = useRef(null);
+  // Fallback si champ OTP stylé ne répond pas sur Android
+  const [useFallback, setUseFallback] = useState(false);
   const fallbackRef = useRef(null);
-  const focusAttempts = useRef(0);
+  const focusTriesRef = useRef(0);
 
-  // Focus automatique sur l'écran OTP — avec détection de l'échec sur Android
+  // Auto-focus champ OTP avec détection d'échec sur Android WebView
   useEffect(() => {
     if (step !== "code") return;
-    focusAttempts.current = 0;
+    focusTriesRef.current = 0;
 
     const tryFocus = () => {
-      const el = codeInputRef.current || fallbackRef.current;
+      const el = useFallback ? fallbackRef.current : codeInputRef.current;
       if (!el) return;
       el.focus();
-      // Vérifier si le focus a bien été pris (Android WebView peut le refuser)
       setTimeout(() => {
         if (document.activeElement !== el) {
-          focusAttempts.current += 1;
-          if (focusAttempts.current >= 2) {
-            // Focus refusé 2 fois → basculer sur fallback input simple
-            setUseFallbackInput(true);
-            setTimeout(() => { fallbackRef.current?.focus(); }, 100);
+          focusTriesRef.current += 1;
+          if (focusTriesRef.current >= 2 && !useFallback) {
+            setUseFallback(true);
+            setTimeout(() => fallbackRef.current?.focus(), 100);
           }
         }
       }, 300);
     };
 
-    // Premier essai à 200ms, deuxième à 600ms
-    const t1 = setTimeout(tryFocus, 200);
+    const t1 = setTimeout(tryFocus, 150);
     const t2 = setTimeout(tryFocus, 600);
     return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [step]);
+  }, [step, useFallback]);
 
-  const handlePhoneChange = (e) => {
-    const v = e.target.value.replace(/\D/g, "");
-    setDigits(v.slice(0, 8));
-  };
-
-  // ═══════════════════════════════════════════════════════════════
-  // SEND OTP
-  // ═══════════════════════════════════════════════════════════════
-
+  // ── SEND OTP ──────────────────────────────────────────────────────────────
   const sendOTP = async () => {
-    if (!digits || digits.length !== 8) {
+    if (digits.length !== 8) {
       setMessage("Numéro incomplet (8 chiffres requis)");
       return;
     }
 
     setLoading(true);
     setMessage("");
-    setDebugInfo(null);
+
+    const appId = appParams?.appId;
+    if (!appId || appId === 'MISSING_APP_ID') {
+      setMessage("Erreur de configuration — contacter le support");
+      setLoading(false);
+      return;
+    }
+
+    const fullPhone = "+226" + digits;
+    const url = `${getBaseUrl()}/api/apps/${appId}/functions/sendOTP`;
 
     try {
-      const fullPhone = "+226" + digits;
-      
-      // ✅ DEBUG: Vérifier appId
-      const appId = appParams?.appId;
-      console.log("[PhoneAuth] appParams:", appParams);
-      console.log("[PhoneAuth] appId:", appId, "type:", typeof appId, "length:", appId?.length);
-      
-      if (!appId || appId === 'MISSING_APP_ID') {
-        const errMsg = "appId manquant ou invalide — contacter admin";
-        setMessage(errMsg);
-        setDebugInfo({ appId, appParams });
-        setShowDebug(true);
-        setLoading(false);
-        return;
-      }
-
-      console.log("[PhoneAuth] 📞 sendOTP:", fullPhone);
-
-      // ✅ FIX 403: Utiliser URL absolue vers cdl.base44.app avec appId valide
-      const url = `https://cdl.base44.app/api/apps/${appId}/functions/sendOTP`;
-      console.log("[PhoneAuth] URL complète:", url);
-
-      // ✅ VÉRIFICATION: L'URL doit contenir l'appId correct
-      if (!url.includes(appId)) {
-        throw new Error(`URL malformée — appId '${appId}' pas dans l'URL`);
-      }
-
-      // Timeout + retry logic
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: fullPhone }),
-        signal: controller.signal,
+        signal: ctrl.signal,
       });
-
-      clearTimeout(timeout);
-      
-      if (!res.ok && res.status === 404) {
-        throw new Error("Endpoint non trouvé — vérifier appId ou URL de la fonction");
-      }
+      clearTimeout(timer);
 
       const data = await res.json();
-      console.log("[PhoneAuth] Réponse:", { status: res.status, success: data?.success });
+      console.log("[PhoneAuth] sendOTP:", res.status, data?.success);
 
-      setDebugInfo({
-        endpoint: url,
-        status: res.status,
-        phone: fullPhone,
-        response: data,
-      });
-
-      // ✅ SUCCESS : passer à la vérification
       if (data?.success === true) {
-        console.log("[PhoneAuth] ✅ OTP envoyé");
         setStep("code");
         setMessage("");
-        setShowDebug(false);
       } else {
-        // ❌ ERREUR : afficher Twilio + fallback
-        console.error("[PhoneAuth] ❌ Erreur Twilio:", data);
-        const errorMsg = 
-          data?.twilio_message || 
-          data?.error || 
-          `Erreur ${res.status}`;
-        setMessage(errorMsg);
-        setShowDebug(true);
+        setMessage(data?.error || data?.twilio_message || "Erreur d'envoi — réessayez");
       }
     } catch (err) {
-      console.error("[PhoneAuth] Exception:", err?.message);
-      setLoading(false);
-      
-      // Différencier les types d'erreurs
       if (err?.name === "AbortError") {
-        setMessage("⏱️ Timeout — vérifier la connexion réseau");
-      } else if (err?.message?.includes("Configuration")) {
-        setMessage("🔴 Erreur config — contacter support");
+        setMessage("⏱️ Délai dépassé — vérifiez votre connexion");
       } else {
         setMessage("❌ Erreur réseau: " + (err?.message || "inconnue"));
       }
-      
-      setDebugInfo({ 
-        error: err?.message,
-        stack: err?.stack?.split('\n')[0],
-      });
-      setShowDebug(true);
-      return;
-    } finally {
-      if (loading) setLoading(false);
-    }
-  };
-
-  // ═══════════════════════════════════════════════════════════════
-  // TEST SENDOTP DIRECTEMENT
-  // ═══════════════════════════════════════════════════════════════
-
-  const testSendOTP = async () => {
-    console.log("[PhoneAuth] 🧪 TEST sendOTP");
-    setLoading(true);
-    setDebugInfo(null);
-
-    try {
-      const appId = appParams?.appId;
-      if (!appId) {
-        throw new Error("Configuration: appId manquant");
-      }
-
-      // ✅ FIX 403: Utiliser URL absolue vers cdl.base44.app
-      const url = `https://cdl.base44.app/api/apps/${appId}/functions/sendOTP`;
-      console.log("[PhoneAuth] TEST URL:", url);
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: "+22655738247" }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!res.ok && res.status === 404) {
-        throw new Error("Endpoint 404 — vérifier appId");
-      }
-
-      const data = await res.json();
-      console.log("[PhoneAuth] TEST réponse:", { status: res.status, success: data?.success });
-
-      setDebugInfo({
-        test: "sendOTP",
-        endpoint: url,
-        appId: appId,
-        phone: "+22655738247",
-        status: res.status,
-        success: data?.success,
-        error: data?.error || data?.twilio_message,
-      });
-      setShowDebug(true);
-
-      if (data?.success === true) {
-        setMessage("✅ TEST OK — Twilio fonctionne !");
-      } else {
-        setMessage(`❌ Erreur: ${data?.twilio_message || data?.error || "inconnue"}`);
-      }
-    } catch (err) {
-      console.error("[PhoneAuth] TEST erreur:", err?.message);
-      
-      let msg = "❌ TEST FAILED";
-      if (err?.name === "AbortError") msg += " — Timeout (réseau ?)";
-      else if (err?.message?.includes("404")) msg += " — Endpoint 404";
-      else if (err?.message?.includes("Configuration")) msg += " — Config error";
-      else msg += " — " + (err?.message || "unknown");
-      
-      setMessage(msg);
-      setDebugInfo({ 
-        test: "sendOTP",
-        error: err?.message,
-        appId: appParams?.appId,
-      });
-      setShowDebug(true);
     } finally {
       setLoading(false);
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // VERIFY OTP
-  // ═══════════════════════════════════════════════════════════════
-
-  const verifyOTP = async () => {
-    if (!code || code.length !== 6) {
-      setMessage("Code doit contenir 6 chiffres");
+  // ── VERIFY OTP ────────────────────────────────────────────────────────────
+  const verifyOTP = async (codeToVerify) => {
+    const otp = codeToVerify || code;
+    if (otp.length !== 6) {
+      setMessage("Le code doit contenir 6 chiffres");
       return;
     }
-
-    if (!digits || digits.length !== 8) {
-      setMessage("Numéro invalide — retour");
+    if (digits.length !== 8) {
+      setMessage("Numéro invalide");
       setStep("phone");
       return;
     }
 
     setVerifying(true);
     setMessage("");
-    setDebugInfo(null);
+
+    const appId = appParams?.appId;
+    if (!appId || appId === 'MISSING_APP_ID') {
+      setMessage("Erreur de configuration");
+      setVerifying(false);
+      return;
+    }
+
+    const fullPhone = "+226" + digits;
+    const url = `${getBaseUrl()}/api/apps/${appId}/functions/verifyOTPWithRedirect`;
 
     try {
-      // NE PAS changer de step avant d'avoir la réponse — ça bloque le champ sur Android
-      // setStep("loading") supprimé intentionnellement
-
-      // SÉCURITÉ : vérifier config avant appel
-      const appId = appParams?.appId;
-      if (!appId) {
-        throw new Error("Configuration manquante: appId");
-      }
-
-      // ✅ FIX 403: Utiliser URL absolue vers cdl.base44.app
-      const url = `https://cdl.base44.app/api/apps/${appId}/functions/verifyOTPWithRedirect`;
-      const fullPhone = "+226" + digits;
-
-      console.log("[PhoneAuth] Verify:", { phone: fullPhone, codeLength: code.length });
-
-      // Timeout + retry
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: fullPhone,
-          code,
-        }),
-        signal: controller.signal,
+        body: JSON.stringify({ phone: fullPhone, code: otp }),
+        signal: ctrl.signal,
       });
-
-      clearTimeout(timeout);
-
-      if (!res.ok && res.status === 404) {
-        throw new Error("Endpoint non trouvé");
-      }
+      clearTimeout(timer);
 
       const data = await res.json();
-      console.log("[PhoneAuth] Verify réponse:", { status: res.status, success: data?.success });
+      console.log("[PhoneAuth] verifyOTP:", res.status, data?.success, data?.user_type);
 
-      setDebugInfo({
-        endpoint: url,
-        status: res.status,
-        phone: fullPhone,
-        response: data,
-      });
-
-      // ✅ OTP VALIDÉ : créer la session puis rediriger
       if (data?.success === true) {
-        const redirectUrl   = data?.redirect_url || "/";
-        const loginEmail    = data?.login_email;
-        const loginPassword = data?.login_password;
-        console.log("[PhoneAuth] ✅ OTP validé | email:", loginEmail, "| redirect:", redirectUrl);
-
+        const { login_email, login_password, redirect_url } = data;
         setStep("loading");
 
-        // Créer la session Base44 via loginViaEmailPassword
-        // Le backend a défini le mot de passe → le login doit fonctionner
-        if (loginEmail && loginPassword) {
+        // Créer la session Base44
+        let loginOk = false;
+        if (login_email && login_password) {
           try {
-            console.log("[PhoneAuth] 🔑 Login email/password en cours...");
-            const result = await base44.auth.loginViaEmailPassword(loginEmail, loginPassword);
+            console.log("[PhoneAuth] 🔑 loginViaEmailPassword:", login_email);
+            const result = await base44.auth.loginViaEmailPassword(login_email, login_password);
             const accessToken = result?.access_token || result?.token;
             if (accessToken) {
-              // Persistance explicite pour APK Android (WebView localStorage isolé)
               try { localStorage.setItem("base44_access_token", accessToken); } catch (_) {}
-              // Aussi sur le SDK en mémoire
               try { base44.auth.setToken(accessToken); } catch (_) {}
-              console.log("[PhoneAuth] ✅ Session créée et token persisté");
+              loginOk = true;
+              console.log("[PhoneAuth] ✅ Token persisté");
             } else {
-              console.warn("[PhoneAuth] ⚠️ Pas de token retourné par loginViaEmailPassword — result:", JSON.stringify(result));
+              console.warn("[PhoneAuth] ⚠️ Aucun token:", JSON.stringify(result));
             }
           } catch (loginErr) {
-            console.error("[PhoneAuth] ❌ Login échoué:", loginErr?.message, loginErr?.status);
-            // Ne pas bloquer la redirection — l'app essaiera de reconnecter
+            console.warn("[PhoneAuth] loginViaEmailPassword échoué:", loginErr?.message);
+            // Tenter register si login échoue (compte pas encore créé côté auth)
+            if (loginErr?.message?.includes('credentials') || loginErr?.status === 401 || loginErr?.status === 400) {
+              try {
+                console.log("[PhoneAuth] 🆕 Tentative register:", login_email);
+                const regResult = await base44.auth.register({ email: login_email, password: login_password });
+                const accessToken = regResult?.access_token || regResult?.token;
+                if (accessToken) {
+                  try { localStorage.setItem("base44_access_token", accessToken); } catch (_) {}
+                  try { base44.auth.setToken(accessToken); } catch (_) {}
+                  loginOk = true;
+                  console.log("[PhoneAuth] ✅ Register + token persisté");
+                }
+              } catch (regErr) {
+                console.error("[PhoneAuth] ❌ Register aussi échoué:", regErr?.message);
+              }
+            }
           }
         }
 
-        const safeUrl = (redirectUrl || "").startsWith("/") ? redirectUrl : "/";
-        // Délai 800ms pour laisser localStorage se propager (APK Android WebView)
-        setTimeout(() => {
-          window.location.href = safeUrl;
-        }, 800);
+        if (!loginOk) {
+          console.warn("[PhoneAuth] ⚠️ Session non créée — rechargement quand même");
+        }
+
+        const safeUrl = (redirect_url || "/").startsWith("/") ? redirect_url : "/";
+        // Délai pour s'assurer que localStorage est propagé (APK Android WebView)
+        setTimeout(() => { window.location.href = safeUrl; }, 1000);
+
       } else {
-        // ❌ CODE MAUVAIS : rester sur l'écran code, champ toujours accessible
-        const errorMsg = data?.error || data?.twilio_message || "Code incorrect ou expiré";
+        const errorMsg = data?.error || "Code incorrect ou expiré";
         setMessage(errorMsg);
-        setShowDebug(true);
-        setCode(""); // vider le code pour ressaisie facile
-        // Re-focus le champ sur Android
-        setTimeout(() => { codeInputRef.current?.focus(); }, 100);
+        setCode("");
+        setTimeout(() => {
+          const el = useFallback ? fallbackRef.current : codeInputRef.current;
+          el?.focus();
+        }, 100);
       }
     } catch (err) {
-      console.error("[PhoneAuth] Verify erreur:", err?.message);
-      
       if (err?.name === "AbortError") {
-        setMessage("⏱️ Timeout — vérifier la connexion");
-      } else if (err?.message?.includes("Configuration")) {
-        setMessage("🔴 Erreur config — contacter support");
+        setMessage("⏱️ Délai dépassé — réessayez");
       } else {
         setMessage("❌ Erreur: " + (err?.message || "inconnue"));
       }
-      
-      setDebugInfo({
-        error: err?.message,
-        phone: "+226" + digits,
-      });
-      setShowDebug(true);
-      setTimeout(() => { codeInputRef.current?.focus(); }, 100);
+      setCode("");
+      setTimeout(() => {
+        const el = useFallback ? fallbackRef.current : codeInputRef.current;
+        el?.focus();
+      }, 100);
     } finally {
       setVerifying(false);
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // LOADING STATE
-  // ═══════════════════════════════════════════════════════════════
-
+  // ── LOADING SCREEN ────────────────────────────────────────────────────────
   if (step === "loading") {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
           <div style={styles.logo}>CDL</div>
-          <div style={{ ...styles.spinner, marginBottom: "20px" }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "20px" }}>
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
           </div>
-          <p style={styles.subtitle}>Authentification en cours...</p>
+          <p style={styles.subtitle}>Connexion en cours...</p>
         </div>
       </div>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // PHONE STEP
-  // ═══════════════════════════════════════════════════════════════
-
+  // ── PHONE SCREEN ──────────────────────────────────────────────────────────
   if (step === "phone") {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
           <div style={styles.logo}>CDL</div>
           <h2 style={styles.title}>Connexion</h2>
-          <p style={styles.subtitle}>Entrez votre numéro de téléphone</p>
+          <p style={styles.subtitle}>Entrez votre numéro Burkina</p>
 
-          <div style={styles.phoneInputWrapper}>
+          <div style={styles.phoneRow}>
             <span style={styles.prefix}>+226</span>
             <input
               style={styles.phoneInput}
               type="text"
               inputMode="numeric"
-              placeholder="________"
+              placeholder="XX XX XX XX"
               value={digits}
-              onChange={handlePhoneChange}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "");
+                setDigits(v.slice(0, 8));
+              }}
               maxLength="8"
+              onKeyDown={(e) => { if (e.key === "Enter" && digits.length === 8) sendOTP(); }}
             />
           </div>
 
           <button
-            style={{
-              ...styles.button,
-              opacity: digits.length === 8 ? 1 : 0.6,
-            }}
+            style={{ ...styles.btn, opacity: digits.length === 8 && !loading ? 1 : 0.6 }}
             onClick={sendOTP}
             disabled={loading || digits.length !== 8}
           >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Envoi...
-              </>
-            ) : (
-              "Envoyer le code"
-            )}
-          </button>
-
-          {/* BOUTON TEST VISIBLE */}
-          <button
-            style={styles.testButton}
-            onClick={testSendOTP}
-            disabled={loading}
-          >
-            🧪 Tester sendOTP
+            {loading
+              ? <><Loader2 className="h-4 w-4 animate-spin" style={{ marginRight: 8 }} />Envoi...</>
+              : "Recevoir le code SMS"}
           </button>
 
           {message && <p style={styles.error}>{message}</p>}
-
-          {/* AFFICHER DEBUG INFO SI PRÉSENT */}
-          {showDebug && debugInfo && (
-            <div style={styles.debugBox}>
-              <p style={styles.debugTitle}>🔍 DEBUG INFO:</p>
-              <pre style={styles.debugContent}>
-                {JSON.stringify(debugInfo, null, 2)}
-              </pre>
-            </div>
-          )}
         </div>
       </div>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // CODE STEP
-  // ═══════════════════════════════════════════════════════════════
+  // ── OTP SCREEN ────────────────────────────────────────────────────────────
+  const handleCodeChange = (val) => {
+    const v = val.replace(/\D/g, "").slice(0, 6);
+    setCode(v);
+    if (v.length === 6) {
+      // Auto-soumettre après un court délai
+      setTimeout(() => verifyOTP(v), 300);
+    }
+  };
 
   return (
     <div style={styles.container}>
       <div style={styles.card}>
         <button
-          onClick={() => {
-            setStep("phone");
-            setCode("");
-            setMessage("");
-            setDebugInfo(null);
-            setShowDebug(false);
-          }}
-          style={styles.backButtonRow}
+          onClick={() => { setStep("phone"); setCode(""); setMessage(""); }}
+          style={styles.backBtn}
         >
-          <ArrowLeft size={18} /> Modifier numéro
+          <ArrowLeft size={18} /> Modifier
         </button>
 
         <div style={styles.logo}>CDL</div>
-        <h2 style={styles.title}>Vérification</h2>
-        <p style={styles.subtitle}>Code envoyé à +226{digits}</p>
+        <h2 style={styles.title}>Code reçu ?</h2>
+        <p style={styles.subtitle}>SMS envoyé au +226{digits}</p>
 
-        {/* Champ OTP principal — visible, jamais disabled */}
-        {!useFallbackInput ? (
+        {/* Champ OTP principal */}
+        {!useFallback ? (
           <input
             ref={codeInputRef}
-            style={styles.codeInput}
+            style={styles.otpInput}
             type="tel"
             inputMode="numeric"
             pattern="[0-9]*"
             placeholder="• • • • • •"
             maxLength="6"
             value={code}
-            onChange={(e) => {
-              const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-              setCode(v);
-              // Si 6 chiffres saisis, auto-valider après 300ms
-              if (v.length === 6) setTimeout(() => verifyOTP(), 300);
-            }}
+            onChange={(e) => handleCodeChange(e.target.value)}
             autoComplete="one-time-code"
             enterKeyHint="done"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && code.length === 6) verifyOTP();
-            }}
-            onClick={() => { codeInputRef.current?.focus(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && code.length === 6) verifyOTP(); }}
           />
         ) : (
-          // Fallback — input simple garanti fonctionnel sur toute WebView Android
-          <div>
-            <p style={{ fontSize: "11px", color: "#999", marginBottom: "6px" }}>
-              Saisissez le code reçu par SMS
+          <>
+            <p style={{ fontSize: "11px", color: "#22c55e", marginBottom: "4px", fontWeight: 600 }}>
+              ✅ Saisie alternative activée
             </p>
             <input
               ref={fallbackRef}
-              style={styles.codeInputFallback}
+              style={styles.otpFallback}
               type="number"
               inputMode="numeric"
               placeholder="123456"
-              maxLength="6"
               value={code}
-              onChange={(e) => {
-                const v = String(e.target.value).replace(/\D/g, "").slice(0, 6);
-                setCode(v);
-                if (v.length === 6) setTimeout(() => verifyOTP(), 300);
-              }}
+              onChange={(e) => handleCodeChange(String(e.target.value))}
               autoComplete="one-time-code"
             />
-          </div>
+          </>
         )}
 
-        {/* Lien fallback manuel si le champ ne répond toujours pas */}
-        {!useFallbackInput && (
+        {/* Lien de bascule manuelle */}
+        {!useFallback && (
           <button
-            style={styles.fallbackLink}
-            onClick={() => {
-              setUseFallbackInput(true);
-              setCode("");
-              setTimeout(() => { fallbackRef.current?.focus(); }, 100);
-            }}
+            style={styles.altLink}
+            onClick={() => { setUseFallback(true); setCode(""); setTimeout(() => fallbackRef.current?.focus(), 100); }}
           >
-            Le champ ne répond pas ? Appuyer ici
+            Le clavier ne s'ouvre pas ? Appuyez ici
           </button>
         )}
 
         <button
-          style={{
-            ...styles.button,
-            opacity: code.length === 6 && !verifying ? 1 : 0.6,
-          }}
-          onClick={verifyOTP}
+          style={{ ...styles.btn, opacity: code.length === 6 && !verifying ? 1 : 0.6 }}
+          onClick={() => verifyOTP()}
           disabled={verifying || code.length !== 6}
         >
-          {verifying ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Vérification...
-            </>
-          ) : (
-            "Valider"
-          )}
+          {verifying
+            ? <><Loader2 className="h-4 w-4 animate-spin" style={{ marginRight: 8 }} />Vérification...</>
+            : "Valider le code"}
+        </button>
+
+        {/* Renvoyer le code */}
+        <button
+          style={styles.resendBtn}
+          onClick={() => { setStep("phone"); setCode(""); setMessage(""); }}
+        >
+          Renvoyer un code
         </button>
 
         {message && <p style={styles.error}>{message}</p>}
-
-        {/* AFFICHER DEBUG INFO SI PRÉSENT */}
-        {showDebug && debugInfo && (
-          <div style={styles.debugBox}>
-            <p style={styles.debugTitle}>🔍 DEBUG INFO:</p>
-            <pre style={styles.debugContent}>
-              {JSON.stringify(debugInfo, null, 2)}
-            </pre>
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-// Add placeholder styling via global style
+// Injection style placeholder
 if (typeof document !== 'undefined' && !document.getElementById('phoneauth-style')) {
-  const style = document.createElement('style');
-  style.id = 'phoneauth-style';
-  style.textContent = `
-    input::placeholder { color: #666 !important; }
-    textarea::placeholder { color: #666 !important; }
+  const s = document.createElement('style');
+  s.id = 'phoneauth-style';
+  s.textContent = `
+    input[type="tel"]::placeholder, input[type="text"]::placeholder,
+    input[type="number"]::placeholder { color: #aaa !important; }
   `;
-  document.head.appendChild(style);
+  document.head.appendChild(s);
 }
 
 const styles = {
   container: {
-    height: "100vh",
-    background: "linear-gradient(135deg, #2078C6, #0f4fa3)",
+    minHeight: "100vh",
+    background: "linear-gradient(160deg, #1a6bbf 0%, #0a3d7a 100%)",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
     fontFamily: "Inter, system-ui, sans-serif",
-    padding: "20px",
-    overflowY: "auto",
+    padding: "24px 16px",
   },
   card: {
     background: "white",
-    padding: "40px 30px",
-    borderRadius: "20px",
+    padding: "40px 28px 32px",
+    borderRadius: "24px",
     width: "100%",
-    maxWidth: "340px",
+    maxWidth: "360px",
     textAlign: "center",
-    boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
     position: "relative",
   },
-  backButtonRow: {
+  backBtn: {
     position: "absolute",
     top: "16px",
     left: "16px",
     background: "transparent",
     border: "none",
-    color: "#2078C6",
+    color: "#1a6bbf",
     fontWeight: "600",
     cursor: "pointer",
     fontSize: "14px",
     display: "flex",
     alignItems: "center",
-    gap: "6px",
-    padding: "8px 12px",
+    gap: "4px",
+    padding: "8px",
     borderRadius: "8px",
-    transition: "background 0.2s",
   },
   logo: {
-    fontSize: "36px",
-    fontWeight: "800",
-    color: "#2078C6",
-    letterSpacing: "2px",
+    fontSize: "40px",
+    fontWeight: "900",
+    color: "#1a6bbf",
+    letterSpacing: "3px",
     marginBottom: "8px",
   },
   title: {
-    fontSize: "20px",
-    fontWeight: "600",
+    fontSize: "22px",
+    fontWeight: "700",
     color: "#111",
-    margin: "8px 0 8px 0",
+    margin: "4px 0 6px",
   },
   subtitle: {
     fontSize: "13px",
-    color: "#999",
+    color: "#888",
     marginBottom: "24px",
   },
-  phoneInputWrapper: {
+  phoneRow: {
     display: "flex",
     alignItems: "center",
-    gap: "0",
-    paddingLeft: "12px",
+    border: "2px solid #e2e8f0",
+    borderRadius: "14px",
+    background: "#f8fafc",
     marginBottom: "16px",
-    borderRadius: "12px",
-    border: "1px solid #ddd",
-    background: "#f9f9f9",
+    overflow: "hidden",
   },
   prefix: {
-    fontSize: "15px",
-    fontWeight: "600",
-    color: "#333",
+    padding: "14px 10px 14px 16px",
+    fontSize: "16px",
+    fontWeight: "700",
+    color: "#1a6bbf",
     whiteSpace: "nowrap",
-    paddingRight: "4px",
+    borderRight: "2px solid #e2e8f0",
   },
   phoneInput: {
     flex: 1,
     padding: "14px 12px",
     border: "none",
     background: "transparent",
-    fontSize: "15px",
-    fontFamily: "inherit",
-    color: "#333",
+    fontSize: "18px",
+    fontFamily: "monospace",
+    color: "#111",
     outline: "none",
+    letterSpacing: "2px",
   },
-  input: {
+  otpInput: {
     width: "100%",
-    padding: "14px",
-    marginBottom: "16px",
-    borderRadius: "12px",
-    border: "1px solid #ddd",
-    fontSize: "15px",
-    boxSizing: "border-box",
-    fontFamily: "inherit",
-    transition: "border 0.2s",
-    color: "#333",
-  },
-  codeInput: {
-    width: "100%",
-    padding: "18px 14px",
+    padding: "18px 10px",
     marginBottom: "8px",
-    borderRadius: "14px",
-    border: "2px solid #2078C6",
-    fontSize: "32px",
-    fontWeight: "bold",
-    letterSpacing: "10px",
+    borderRadius: "16px",
+    border: "2px solid #1a6bbf",
+    fontSize: "34px",
+    fontWeight: "700",
+    letterSpacing: "12px",
     boxSizing: "border-box",
     fontFamily: "monospace",
     color: "#111",
     textAlign: "center",
     background: "#f0f7ff",
     outline: "none",
-    // Android : garantir que le champ est toujours tappable
     pointerEvents: "auto",
     touchAction: "manipulation",
-    userSelect: "text",
     WebkitUserSelect: "text",
+    userSelect: "text",
     cursor: "text",
+    display: "block",
   },
-  codeInputFallback: {
-    // Input ultra-simple — garanti fonctionnel sur toute WebView Android
+  otpFallback: {
     width: "100%",
-    padding: "18px",
+    padding: "18px 10px",
     marginBottom: "8px",
-    borderRadius: "12px",
+    borderRadius: "14px",
     border: "3px solid #22c55e",
     fontSize: "28px",
-    fontWeight: "bold",
+    fontWeight: "700",
     letterSpacing: "8px",
     boxSizing: "border-box",
     fontFamily: "monospace",
@@ -718,79 +492,52 @@ const styles = {
     textAlign: "center",
     background: "#f0fff4",
     outline: "none",
+    display: "block",
   },
-  fallbackLink: {
+  altLink: {
     background: "none",
     border: "none",
-    color: "#999",
+    color: "#aaa",
     fontSize: "11px",
     cursor: "pointer",
     textDecoration: "underline",
-    marginBottom: "12px",
+    marginBottom: "14px",
     padding: "4px",
   },
-  button: {
+  btn: {
     width: "100%",
-    padding: "14px",
-    marginBottom: "12px",
-    background: "#2078C6",
+    padding: "15px",
+    marginBottom: "10px",
+    background: "linear-gradient(135deg, #1a6bbf, #0a3d7a)",
     color: "white",
     border: "none",
-    borderRadius: "12px",
-    fontWeight: "600",
-    fontSize: "15px",
+    borderRadius: "14px",
+    fontWeight: "700",
+    fontSize: "16px",
     cursor: "pointer",
-    transition: "background 0.2s, opacity 0.2s",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     gap: "8px",
+    boxShadow: "0 4px 15px rgba(26,107,191,0.3)",
+    transition: "opacity 0.2s",
   },
-  testButton: {
-    width: "100%",
-    padding: "10px",
-    marginBottom: "12px",
-    background: "#f0f0f0",
-    color: "#666",
-    border: "1px solid #ddd",
-    borderRadius: "12px",
-    fontWeight: "500",
+  resendBtn: {
+    background: "none",
+    border: "none",
+    color: "#1a6bbf",
     fontSize: "13px",
+    fontWeight: "600",
     cursor: "pointer",
-    transition: "all 0.2s",
+    marginBottom: "8px",
+    padding: "4px",
+    textDecoration: "underline",
   },
   error: {
     color: "#dc2626",
     fontSize: "13px",
-    marginTop: "12px",
+    marginTop: "10px",
     fontWeight: "500",
-  },
-  spinner: {
-    display: "flex",
-    justifyContent: "center",
-  },
-  debugBox: {
-    marginTop: "16px",
-    padding: "12px",
-    background: "#f5f5f5",
-    border: "1px solid #ddd",
-    borderRadius: "8px",
-    textAlign: "left",
-  },
-  debugTitle: {
-    fontSize: "12px",
-    fontWeight: "600",
-    color: "#333",
-    margin: "0 0 8px 0",
-  },
-  debugContent: {
-    fontSize: "10px",
-    fontFamily: "monospace",
-    color: "#666",
-    margin: "0",
-    overflow: "auto",
-    maxHeight: "200px",
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
+    lineHeight: "1.4",
   },
 };

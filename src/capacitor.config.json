@@ -3,12 +3,20 @@
   "appName": "CDL",
   "webDir": "dist",
   "server": {
+    "url": "https://cdl.base44.app",
+    "cleartext": false,
     "allowNavigation": [
-      "app.base44.com",
       "cdl.base44.app",
+      "*.base44.app",
       "*.base44.com",
-      "*.base44.app"
+      "verify.twilio.com",
+      "api.twilio.com"
     ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
   },
   "plugins": {
     "PushNotifications": {
@@ -17,8 +25,13 @@
     "SplashScreen": {
       "launchShowDuration": 2000,
       "launchAutoHide": true,
-      "backgroundColor": "#1a73e8",
-      "showSpinner": false
+      "backgroundColor": "#1a6bbf",
+      "showSpinner": false,
+      "androidSpinnerStyle": "small",
+      "iosSpinnerStyle": "small",
+      "spinnerColor": "#ffffff",
+      "splashFullScreen": true,
+      "splashImmersive": true
     }
   }
 }

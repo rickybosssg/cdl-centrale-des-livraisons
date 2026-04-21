@@ -3,19 +3,19 @@ import { appParams } from '@/lib/app-params';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
-// En mode natif (Capacitor APK ou file://), les URLs relatives échouent.
-// ✅ FIX 403: Utiliser cdl.base44.app (app subdomain) au lieu de app.base44.com (platform domain)
+// Avec capacitor.config.json server.url = https://cdl.base44.app,
+// la WebView charge directement depuis le sous-domaine de l'app.
+// Les appels relatifs (/api/...) fonctionnent donc sans serverUrl explicite.
+// On garde le serverUrl explicite uniquement si on est en mode file:// (fallback)
 function getServerUrl() {
   if (typeof window === 'undefined') return '';
   const proto = window.location?.protocol;
-  const isNative =
-    proto === 'capacitor:' ||
-    proto === 'file:' ||
-    typeof window.Capacitor !== 'undefined';
-  if (isNative) {
-    console.log('[CDL] base44Client: mode natif → serverUrl=https://cdl.base44.app (app domain, not platform)');
+  // file:// = vieux mode sans server.url dans capacitor.config
+  if (proto === 'file:') {
+    console.log('[CDL] base44Client: mode file:// → serverUrl=https://cdl.base44.app');
     return 'https://cdl.base44.app';
   }
+  // capacitor:// ou https:// avec server.url → les URLs relatives fonctionnent
   return '';
 }
 
