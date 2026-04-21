@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Loader2, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
-// Composant de connexion email/mot de passe (anciennement PhoneAuth)
+// Couleur unique : même bleu que Facebook #1877f2
+const BLUE = "#1877f2";
+
 export default function PhoneAuth() {
   const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [email, setEmail] = useState("");
@@ -70,11 +72,21 @@ export default function PhoneAuth() {
   };
 
   const handleFacebook = async () => {
-    setLoading(true); setMessage("");
+    // loginWithSocialProvider gère l'OAuth (redirect ou popup) et la session automatiquement
+    // Sur APK Capacitor, cela ouvre le navigateur interne pour le flow OAuth Facebook
+    setLoading(true);
+    setMessage("");
     try {
       await base44.auth.loginWithSocialProvider("facebook");
+      // Si on arrive ici (pas de redirect), la session est créée — recharger
+      window.location.href = "/";
     } catch (err) {
-      setMessage("Connexion Facebook impossible — réessayez");
+      // Ne pas afficher d'erreur si c'est un simple reject de navigation (pop-up fermée, redirect attendue)
+      const msg = err?.message || "";
+      const isNavigationError = msg.includes("redirect") || msg.includes("navigation") || msg.includes("blocked");
+      if (!isNavigationError) {
+        setMessage("Connexion Facebook non disponible sur cet appareil");
+      }
       setLoading(false);
     }
   };
@@ -84,9 +96,8 @@ export default function PhoneAuth() {
   return (
     <div style={s.container}>
       <div style={s.card}>
-        {/* Logo */}
+        {/* Logo — sans tagline */}
         <div style={s.logo}>CDL</div>
-        <p style={s.tagline}>Coursiers De Livraison</p>
 
         {/* Titre */}
         <h2 style={s.title}>
@@ -176,7 +187,7 @@ export default function PhoneAuth() {
               <div style={s.sepLine} />
             </div>
 
-            <button style={s.fbBtn} onClick={handleFacebook} disabled={loading}>
+            <button style={{ ...s.fbBtn, opacity: loading ? 0.7 : 1 }} onClick={handleFacebook} disabled={loading}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="white" style={{ marginRight: 10, flexShrink: 0 }}>
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
@@ -208,7 +219,7 @@ export default function PhoneAuth() {
 const s = {
   container: {
     minHeight: "100vh",
-    background: "linear-gradient(160deg, #1a6bbf 0%, #0a3d7a 100%)",
+    background: BLUE,
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
@@ -222,22 +233,14 @@ const s = {
     width: "100%",
     maxWidth: "380px",
     textAlign: "center",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
   },
   logo: {
     fontSize: "42px",
     fontWeight: "900",
-    color: "#1a6bbf",
+    color: BLUE,
     letterSpacing: "4px",
-    marginBottom: "2px",
-  },
-  tagline: {
-    fontSize: "11px",
-    color: "#aaa",
-    letterSpacing: "1px",
     marginBottom: "20px",
-    textTransform: "uppercase",
-    margin: "0 0 20px",
   },
   title: {
     fontSize: "20px",
@@ -304,7 +307,7 @@ const s = {
     width: "100%",
     padding: "15px",
     marginBottom: "8px",
-    background: "linear-gradient(135deg, #1a6bbf, #0a3d7a)",
+    background: BLUE,
     color: "white",
     border: "none",
     borderRadius: "14px",
@@ -315,13 +318,13 @@ const s = {
     alignItems: "center",
     justifyContent: "center",
     gap: "8px",
-    boxShadow: "0 4px 15px rgba(26,107,191,0.3)",
+    boxShadow: `0 4px 15px rgba(24,119,242,0.35)`,
     transition: "opacity 0.2s",
   },
   linkBtn: {
     background: "none",
     border: "none",
-    color: "#1a6bbf",
+    color: BLUE,
     fontSize: "13px",
     fontWeight: "600",
     cursor: "pointer",
@@ -352,7 +355,7 @@ const s = {
     width: "100%",
     padding: "13px",
     marginBottom: "16px",
-    background: "#1877f2",
+    background: BLUE,
     color: "white",
     border: "none",
     borderRadius: "14px",
@@ -362,7 +365,7 @@ const s = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    boxShadow: "0 4px 12px rgba(24,119,242,0.3)",
+    boxShadow: `0 4px 12px rgba(24,119,242,0.35)`,
     transition: "opacity 0.2s",
   },
   toggleRow: {
@@ -379,7 +382,7 @@ const s = {
   toggleBtn: {
     background: "none",
     border: "none",
-    color: "#1a6bbf",
+    color: BLUE,
     fontSize: "13px",
     fontWeight: "700",
     cursor: "pointer",
