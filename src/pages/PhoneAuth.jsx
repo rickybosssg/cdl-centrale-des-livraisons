@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { appParams } from "@/lib/app-params";
+import { base44 } from "@/api/base44Client";
 
 export default function PhoneAuth() {
   const [step, setStep] = useState("phone");
@@ -300,15 +301,39 @@ export default function PhoneAuth() {
         response: data,
       });
 
-      // ✅ CODE BON : redirection automatique
+      // ✅ CODE BON : login via credentials puis rediriger
       if (data?.success === true) {
         const redirectUrl = data?.redirect_url || "/";
-        console.log("[PhoneAuth] ✅ Redirection vers:", redirectUrl);
-        setStep("loading"); // afficher loading seulement après succès
+        const loginEmail = data?.login_email;
+        const loginPassword = data?.login_password;
+        console.log("[PhoneAuth] ✅ OTP validé | email:", loginEmail, "| redirect:", redirectUrl);
+
+        setStep("loading");
+
+        // Créer la session Base44 avec les credentials retournés par le backend
+        if (loginEmail && loginPassword) {
+          try {
+            console.log("[PhoneAuth] 🔑 Login avec email/password...");
+            const loginResult = await base44.auth.loginViaEmailPassword(loginEmail, loginPassword);
+            const token = loginResult?.access_token || loginResult?.token;
+            if (token) {
+              // Sauvegarder explicitement pour APK Android (localStorage peut être isolé)
+              try {
+                localStorage.setItem("base44_access_token", token);
+                localStorage.setItem("token", token);
+              } catch (_) {}
+              console.log("[PhoneAuth] ✅ Session créée, token sauvegardé");
+            }
+          } catch (loginErr) {
+            console.warn("[PhoneAuth] ⚠️ Login échoué:", loginErr?.message);
+            // Continuer quand même vers la redirection — l'AuthContext retentera
+          }
+        }
+
         const safeUrl = (redirectUrl || "").startsWith("/") ? redirectUrl : "/";
         setTimeout(() => {
           window.location.href = safeUrl;
-        }, 800);
+        }, 300);
       } else {
         // ❌ CODE MAUVAIS : rester sur l'écran code, champ toujours accessible
         const errorMsg = data?.error || data?.twilio_message || "Code incorrect ou expiré";
