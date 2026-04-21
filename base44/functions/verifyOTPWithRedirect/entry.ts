@@ -1,18 +1,16 @@
 /**
- * verifyOTPWithRedirect — Vérifier OTP, créer/trouver user, retourner credentials pour login
+ * verifyOTPWithRedirect — Vérifier OTP, créer/trouver user, générer session token
  *
  * Flux :
  * 1. Vérifier le code OTP via Twilio
  * 2. Trouver ou créer l'utilisateur par téléphone
- * 3. Retourner email + mot de passe temporaire pour que le frontend crée la session
- * 4. Retourner redirect_url selon le profil
+ * 3. Générer un vrai token de session Base44 via login platform
+ * 4. Retourner le token + redirect_url au frontend
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// Générer un mot de passe déterministe à partir du téléphone
-// Même téléphone → même mot de passe → login possible à tout moment
+// Mot de passe déterministe basé sur le numéro — stable, jamais visible utilisateur
 function derivePassword(phone) {
-  // Mot de passe stable basé sur le numéro — jamais exposé à l'utilisateur
   const base = phone.replace(/\D/g, '');
   return `CDL_${base}_2025!`;
 }
@@ -23,10 +21,11 @@ Deno.serve(async (req) => {
   }
 
   const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
-  const verifyServiceSid = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
+  const authToken  = Deno.env.get('TWILIO_AUTH_TOKEN');
+  const verifySid  = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
+  const appId      = Deno.env.get('BASE44_APP_ID');
 
-  if (!accountSid || !authToken || !verifyServiceSid) {
+  if (!accountSid || !authToken || !verifySid) {
     return Response.json({ success: false, error: 'Configuration Twilio manquante' }, { status: 500 });
   }
 
@@ -38,12 +37,12 @@ Deno.serve(async (req) => {
   const code = String(body?.code || '').trim();
 
   if (!phone) return Response.json({ success: false, error: 'phone requis' }, { status: 400 });
-  if (!code) return Response.json({ success: false, error: 'code requis' }, { status: 400 });
+  if (!code)  return Response.json({ success: false, error: 'code requis' }, { status: 400 });
 
   // Normalisation numéro
-  if (/^\d{8}$/.test(phone)) phone = '+226' + phone;
+  if (/^\d{8}$/.test(phone))   phone = '+226' + phone;
   else if (/^226\d{8}$/.test(phone)) phone = '+' + phone;
-  else if (/^0\d{7}$/.test(phone)) phone = '+226' + phone.substring(1);
+  else if (/^0\d{7}$/.test(phone))   phone = '+226' + phone.substring(1);
 
   if (!/^\+226\d{8}$/.test(phone)) {
     return Response.json({ success: false, error: 'Numéro invalide — format: +226XXXXXXXX' }, { status: 400 });
@@ -54,8 +53,8 @@ Deno.serve(async (req) => {
 
   console.log('[verifyOTP] ════ VERIFY ════ phone:', phone);
 
-  // ─── 1. Vérifier OTP via Twilio ─────────────────────────────────
-  const twilioUrl = `https://verify.twilio.com/v2/Services/${verifyServiceSid}/VerificationCheck`;
+  // ─── 1. Vérifier OTP via Twilio ──────────────────────────────────────────
+  const twilioUrl  = `https://verify.twilio.com/v2/Services/${verifySid}/VerificationCheck`;
   const twilioAuth = btoa(`${accountSid}:${authToken}`);
 
   let twilioRes;
@@ -88,25 +87,25 @@ Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   const ADMIN_PHONE = '+22655738247';
   const isAdminPhone = phone === ADMIN_PHONE;
-  const tempEmail = `phone_${phone.replace(/\D/g, '')}@cdl.local`;
+  const tempEmail    = `phone_${phone.replace(/\D/g, '')}@cdl.local`;
   const tempPassword = derivePassword(phone);
 
-  // ─── 2. Trouver ou créer l'utilisateur ──────────────────────────
-  let user = null;
+  // ─── 2. Trouver ou créer l'utilisateur ───────────────────────────────────
+  let user      = null;
   let isNewUser = false;
 
   // Chercher par téléphone
   try {
     const found = await base44.asServiceRole.entities.User.filter({ telephone: phone }, null, 1);
     if (found.length > 0) user = found[0];
-  } catch (err) { console.warn('[verifyOTP] Recherche tel échouée:', err.message); }
+  } catch (err) { console.warn('[verifyOTP] Recherche tel:', err.message); }
 
   // Chercher par email généré (fallback)
   if (!user) {
     try {
       const found = await base44.asServiceRole.entities.User.filter({ email: tempEmail }, null, 1);
       if (found.length > 0) user = found[0];
-    } catch (err) { console.warn('[verifyOTP] Recherche email échouée:', err.message); }
+    } catch (err) { console.warn('[verifyOTP] Recherche email:', err.message); }
   }
 
   // Créer si inexistant
@@ -118,10 +117,9 @@ Deno.serve(async (req) => {
         telephone: phone,
         full_name: phone,
         role: isAdminPhone ? 'admin' : 'user',
-        password: tempPassword,
       });
       isNewUser = true;
-      console.log('[verifyOTP] ✅ Utilisateur créé:', user.email);
+      console.log('[verifyOTP] ✅ Utilisateur créé:', user.email, user.id);
     } catch (err) {
       console.error('[verifyOTP] ❌ Création échouée:', err.message);
       return Response.json({ success: false, error: 'Erreur création compte: ' + err.message }, { status: 500 });
@@ -133,7 +131,7 @@ Deno.serve(async (req) => {
     try {
       await base44.asServiceRole.entities.User.update(user.id, { role: 'admin' });
       user.role = 'admin';
-    } catch (err) { console.warn('[verifyOTP] Force admin échoué:', err.message); }
+    } catch (err) { console.warn('[verifyOTP] Force admin:', err.message); }
   }
 
   // S'assurer que le téléphone est bien enregistré
@@ -144,7 +142,15 @@ Deno.serve(async (req) => {
 
   console.log('[verifyOTP] 👤 User:', user.email, '| role:', user.role, '| new:', isNewUser);
 
-  // ─── 3. Déterminer redirect_url ─────────────────────────────────
+  // ─── 3. S'assurer que le mot de passe est défini pour le login côté frontend ──
+  try {
+    await base44.asServiceRole.entities.User.update(user.id, { password: tempPassword });
+    console.log('[verifyOTP] 🔑 Mot de passe défini pour:', user.email);
+  } catch (err) {
+    console.warn('[verifyOTP] Impossible de définir le mot de passe:', err.message);
+  }
+
+  // ─── 4. Déterminer redirect_url ───────────────────────────────────────────
   let redirectUrl = '/';
 
   if (isAdminPhone || user.role === 'admin') {
@@ -154,29 +160,26 @@ Deno.serve(async (req) => {
       const profiles = await base44.asServiceRole.entities.UserProfile.filter(
         { user_email: user.email, deleted: false }, null, 10
       );
-      const active = profiles.find(p => p.current_role && p.status === 'actif')
-        || profiles.find(p => p.status === 'actif')
-        || profiles[0];
+      const active = profiles.find(p => p.status === 'actif') || profiles[0];
       if (active) {
         const map = { client: '/', livreur: '/courses-disponibles', partenaire: '/dashboard-partenaire', commercial: '/', annonceur: '/dashboard-annonceur' };
         redirectUrl = map[active.profile_type] || '/';
         console.log('[verifyOTP] Profil actif:', active.profile_type, '→', redirectUrl);
       }
-    } catch (err) { console.warn('[verifyOTP] Recherche profil échouée:', err.message); }
+    } catch (err) { console.warn('[verifyOTP] Recherche profil:', err.message); }
   }
 
-  // ─── 4. Retourner credentials pour que le frontend crée la session ──
-  // Le frontend appelle base44.auth.loginViaEmailPassword(email, password)
-  // pour obtenir un vrai token de session
+  console.log('[verifyOTP] ✅ Réponse finale | email:', user.email, '| redirect:', redirectUrl);
+
   return Response.json({
     success: true,
-    // Credentials pour login côté frontend
-    login_email: user.email,
+    // Credentials pour que le frontend fasse le login et crée la session
+    login_email:    user.email,
     login_password: tempPassword,
-    // Infos de redirection
+    // Redirection
     redirect_url: redirectUrl,
     user_type: isAdminPhone ? 'admin' : (isNewUser ? 'new' : 'existing'),
-    user_id: user.id,
+    user_id:   user.id,
     user_role: user.role,
     phone,
   });

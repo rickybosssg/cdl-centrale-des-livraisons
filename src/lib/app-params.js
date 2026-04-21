@@ -79,9 +79,17 @@ const getAppParams = () => {
 		}
 	}
 
+	// Lire le token : priorité localStorage (post-OTP APK) > URL param
+	const urlToken = getAppParamValue("access_token", { removeFromUrl: true });
+	const storedToken = (() => {
+		try { return isNode ? null : localStorage.getItem('base44_access_token'); }
+		catch { return null; }
+	})();
+	const effectiveToken = urlToken || storedToken || null;
+
 	return {
 		appId: appId || 'MISSING_APP_ID',
-		token: getAppParamValue("access_token", { removeFromUrl: true }),
+		token: effectiveToken,
 		fromUrl: safeFromUrl,
 		functionsVersion: getAppParamValue("functions_version", { defaultValue: import.meta.env.VITE_BASE44_FUNCTIONS_VERSION }),
 		appBaseUrl,

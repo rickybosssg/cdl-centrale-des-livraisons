@@ -301,39 +301,42 @@ export default function PhoneAuth() {
         response: data,
       });
 
-      // ✅ CODE BON : login via credentials puis rediriger
+      // ✅ OTP VALIDÉ : créer la session puis rediriger
       if (data?.success === true) {
-        const redirectUrl = data?.redirect_url || "/";
-        const loginEmail = data?.login_email;
+        const redirectUrl   = data?.redirect_url || "/";
+        const loginEmail    = data?.login_email;
         const loginPassword = data?.login_password;
         console.log("[PhoneAuth] ✅ OTP validé | email:", loginEmail, "| redirect:", redirectUrl);
 
         setStep("loading");
 
-        // Créer la session Base44 avec les credentials retournés par le backend
+        // Créer la session Base44 via loginViaEmailPassword
+        // Le backend a défini le mot de passe → le login doit fonctionner
         if (loginEmail && loginPassword) {
           try {
-            console.log("[PhoneAuth] 🔑 Login avec email/password...");
-            const loginResult = await base44.auth.loginViaEmailPassword(loginEmail, loginPassword);
-            const token = loginResult?.access_token || loginResult?.token;
-            if (token) {
-              // Sauvegarder explicitement pour APK Android (localStorage peut être isolé)
-              try {
-                localStorage.setItem("base44_access_token", token);
-                localStorage.setItem("token", token);
-              } catch (_) {}
-              console.log("[PhoneAuth] ✅ Session créée, token sauvegardé");
+            console.log("[PhoneAuth] 🔑 Login email/password en cours...");
+            const result = await base44.auth.loginViaEmailPassword(loginEmail, loginPassword);
+            const accessToken = result?.access_token || result?.token;
+            if (accessToken) {
+              // Persistance explicite pour APK Android (WebView localStorage isolé)
+              try { localStorage.setItem("base44_access_token", accessToken); } catch (_) {}
+              // Aussi sur le SDK en mémoire
+              try { base44.auth.setToken(accessToken); } catch (_) {}
+              console.log("[PhoneAuth] ✅ Session créée et token persisté");
+            } else {
+              console.warn("[PhoneAuth] ⚠️ Pas de token retourné par loginViaEmailPassword — result:", JSON.stringify(result));
             }
           } catch (loginErr) {
-            console.warn("[PhoneAuth] ⚠️ Login échoué:", loginErr?.message);
-            // Continuer quand même vers la redirection — l'AuthContext retentera
+            console.error("[PhoneAuth] ❌ Login échoué:", loginErr?.message, loginErr?.status);
+            // Ne pas bloquer la redirection — l'app essaiera de reconnecter
           }
         }
 
         const safeUrl = (redirectUrl || "").startsWith("/") ? redirectUrl : "/";
+        // Délai 800ms pour laisser localStorage se propager (APK Android WebView)
         setTimeout(() => {
           window.location.href = safeUrl;
-        }, 300);
+        }, 800);
       } else {
         // ❌ CODE MAUVAIS : rester sur l'écran code, champ toujours accessible
         const errorMsg = data?.error || data?.twilio_message || "Code incorrect ou expiré";
