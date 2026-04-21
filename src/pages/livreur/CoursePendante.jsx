@@ -1,11 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { CheckCircle2, XCircle, MapPin, Phone, Package, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { reassignerCourse } from "@/lib/dispatch";
-
 export default function CoursePendante({ course, onRespond }) {
   const TIMER = 60;
   const [remaining, setRemaining] = useState(TIMER);
@@ -20,9 +18,11 @@ export default function CoursePendante({ course, onRespond }) {
       date_acceptation: new Date().toISOString(),
       telephone_livreur: user.telephone || "",
     });
+    // Pas de +1 sur nombre_courses_actives : déjà incrémenté à la proposition (autoDispatch)
     await base44.auth.updateMe({
-      nombre_courses_actives: (user.nombre_courses_actives || 0) + 1,
       derniere_course_attribuee_at: new Date().toISOString(),
+      courses_acceptees: (user.courses_acceptees || 0) + 1,
+      courses_refusees_consecutives: 0,
     });
     toast.success("✅ Course acceptée !");
     onRespond?.('accepted');
@@ -36,7 +36,6 @@ export default function CoursePendante({ course, onRespond }) {
     const user = await base44.auth.me();
     const newRefusals = (user.nombre_refus_consecutifs || 0) + 1;
     await base44.auth.updateMe({
-      nombre_courses_actives: Math.max(0, (user.nombre_courses_actives || 0) - 1),
       nombre_refus_consecutifs: newRefusals,
       // Pénalité score si 3+ refus consécutifs
       score_performance: newRefusals >= 3 ? Math.max(0, (user.score_performance || 80) - 5) : (user.score_performance || 80),
@@ -48,10 +47,15 @@ export default function CoursePendante({ course, onRespond }) {
     setResponding(false);
   };
 
-  const handleTimeout = async () => {
-    await base44.functions.invoke('reDispatch', { course_id: course.id });
+  const handleTimeout = useCallback(async () => {
+    try {
+      await base44.functions.invoke('checkPendingAssignments', {
+        course_id: course.id,
+        force_immediate: true,
+      });
+    } catch (_) {}
     onRespond?.('timeout');
-  };
+  }, [course.id, onRespond]);
 
   useEffect(() => {
     // Vibration + son à l'arrivée
@@ -88,7 +92,7 @@ export default function CoursePendante({ course, onRespond }) {
       });
     }, 1000);
     return () => { isMounted = false; clearInterval(interval); };
-  }, []);
+  }, [handleTimeout]);
 
   const gainLivreur = Math.round((course.prix || 0) * 0.8);
 

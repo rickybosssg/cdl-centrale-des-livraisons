@@ -262,3 +262,56 @@ export async function getPermissionStatus() {
     return 'unknown';
   }
 }
+
+/**
+ * Demande la permission native + enregistre FCM (pour la bannière « Activer » sur APK).
+ * Retourne le token ou null si refus / erreur.
+ */
+export async function requestNativePushToken() {
+  if (!isNativeApp()) return null;
+
+  let PushNotifications;
+  try {
+    const mod = await import('@capacitor/push-notifications');
+    PushNotifications = mod.PushNotifications;
+  } catch {
+    return null;
+  }
+
+  await createAndroidChannels(PushNotifications);
+
+  const req = await PushNotifications.requestPermissions();
+  if (req.receive !== 'granted') return null;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let regHandle;
+    let errHandle;
+    const finish = (token) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        regHandle?.remove?.();
+      } catch (_) {}
+      try {
+        errHandle?.remove?.();
+      } catch (_) {}
+      resolve(token ?? null);
+    };
+
+    const timer = setTimeout(() => finish(null), 20000);
+
+    void (async () => {
+      try {
+        regHandle = await PushNotifications.addListener('registration', (t) => {
+          finish(t?.value || null);
+        });
+        errHandle = await PushNotifications.addListener('registrationError', () => finish(null));
+        await PushNotifications.register();
+      } catch {
+        finish(null);
+      }
+    })();
+  });
+}

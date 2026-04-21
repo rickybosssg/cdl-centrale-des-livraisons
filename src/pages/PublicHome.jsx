@@ -48,10 +48,10 @@ export default function PublicHome() {
 
   const handleSignupForm = () => {
     localStorage.setItem('cdl_pending_role', selectedRole);
-    // Dans APK Capacitor → navigation interne vers /phone-auth
+    // Dans APK Capacitor → navigation interne vers /connexion
     const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
     if (isNative) {
-      window.history.replaceState({}, '', '/phone-auth');
+      window.history.replaceState({}, '', '/connexion');
       window.dispatchEvent(new PopStateEvent('popstate'));
     } else {
       base44.auth.redirectToLogin();

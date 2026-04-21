@@ -1,11 +1,19 @@
 /**
  * CDL — Timer visuel pour livreur (60s pour accepter une course proposée)
+ * onExpire : appelé une fois à l’expiration (ex. relance serveur sans attendre le cron 5 min)
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Clock } from "lucide-react";
 
-export default function DispatchTimer({ heureAssignation, dureeSecondes = 60 }) {
+export default function DispatchTimer({ heureAssignation, dureeSecondes = 60, onExpire }) {
   const [remaining, setRemaining] = useState(null);
+  const expireCb = useRef(onExpire);
+  const fired = useRef(false);
+  expireCb.current = onExpire;
+
+  useEffect(() => {
+    fired.current = false;
+  }, [heureAssignation]);
 
   useEffect(() => {
     if (!heureAssignation) return;
@@ -17,7 +25,15 @@ export default function DispatchTimer({ heureAssignation, dureeSecondes = 60 }) 
     const interval = setInterval(() => {
       const r = calcRemaining();
       setRemaining(r);
-      if (r <= 0) clearInterval(interval);
+      if (r <= 0) {
+        clearInterval(interval);
+        if (!fired.current && expireCb.current) {
+          fired.current = true;
+          try {
+            expireCb.current();
+          } catch (_) {}
+        }
+      }
     }, 1000);
     return () => clearInterval(interval);
   }, [heureAssignation, dureeSecondes]);

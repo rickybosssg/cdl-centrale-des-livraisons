@@ -202,10 +202,10 @@ export default function Home() {
   }
   console.log('[HOME] Loading done, user:', user?.email, 'profiles:', allProfiles.length);
 
-  // Pas authentifié → redirection immédiate vers /phone-auth
+  // Pas authentifié → redirection immédiate vers /connexion
   if (!user) {
-    console.log('[HOME] NOT AUTHENTICATED - redirecting to /phone-auth');
-    window.location.replace('/phone-auth');
+    console.log('[HOME] NOT AUTHENTICATED - redirecting to /connexion');
+    window.location.replace('/connexion');
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-primary to-blue-700">
         <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />

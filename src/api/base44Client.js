@@ -19,15 +19,15 @@ function getServerUrl() {
   return '';
 }
 
-// Lire le token depuis localStorage en priorité (APK Android : persisté après OTP)
+// Lire le token depuis localStorage en priorité (APK Android : persisté après connexion)
 // appParams.token est résolu une seule fois au démarrage depuis l'URL
-// localStorage peut contenir un token plus récent (sauvegardé après OTP)
+// localStorage peut contenir un token plus récent (sauvegardé après login)
 function getEffectiveToken() {
   const urlToken = token; // depuis appParams (URL param ou ancien localStorage)
   try {
     const stored = localStorage.getItem('base44_access_token');
     if (stored && stored !== urlToken) {
-      console.log('[CDL] base44Client: token depuis localStorage (post-OTP)');
+      console.log('[CDL] base44Client: token depuis localStorage (post-login)');
       return stored;
     }
   } catch (_) {}

@@ -179,6 +179,12 @@ export default function ManualDispatch() {
       telephone_livreur: livreur.telephone, statut: "assignee_attente",
       mode_assignation: "manuel", heure_assignation: now,
     });
+    // Aligné sur autoDispatch : la proposition compte dans la charge livreur
+    await base44.entities.User.update(livreur.id, {
+      nombre_courses_actives: (livreur.nombre_courses_actives || 0) + 1,
+      courses_proposees: (livreur.courses_proposees || 0) + 1,
+      derniere_proposition_at: now,
+    }).catch(() => {});
     await base44.entities.Notification.create({ destinataire_email: livreur.email, destinataire_role: "livreur", titre: "📦 Nouvelle course assignée", message: `Course de ${course.quartier_depart} → ${course.quartier_arrivee} (${course.prix} F). Ouvrez l'app pour accepter.`, type: "info", lue: false, course_id: course.id, target_screen: `/course-livreur/${course.id}` });
     if (course.client_email) {
       await base44.entities.Notification.create({ destinataire_email: course.client_email, destinataire_role: "client", titre: "🛵 Livreur trouvé !", message: `${livreur.full_name} a été assigné à votre course.`, type: "success", lue: false, course_id: course.id, target_screen: `/course/${course.id}` });

@@ -107,14 +107,13 @@ export default function AppPublicLink() {
           <ol className="space-y-2 text-blue-800 ml-4 list-decimal">
             <li><strong>Copier le lien public</strong> ci-dessus</li>
             <li><strong>Ouvrir dans le navigateur</strong></li>
-            <li><strong>Aller à `/phone-auth`</strong></li>
-            <li><strong>Cliquer "🧪 Tester sendOTP"</strong></li>
+            <li><strong>Aller à `/connexion`</strong></li>
+            <li><strong>Tester la connexion</strong> (email / mot de passe ou Facebook)</li>
             <li>
               <strong>Vérifier:</strong>
               <ul className="mt-1 ml-4 space-y-1 list-disc">
                 <li>✅ Pas d'erreur 403 "Platform domain"</li>
-                <li>✅ sendOTP appelé depuis le bon sous-domaine</li>
-                <li>✅ Erreur Twilio affichée clairement</li>
+                <li>✅ Session créée après connexion</li>
               </ul>
             </li>
           </ol>
@@ -123,10 +122,10 @@ export default function AppPublicLink() {
         {/* Navigation */}
         <div className="text-center space-y-3">
           <a
-            href="/phone-auth"
+            href="/connexion"
             className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
           >
-            → Aller à Phone Auth
+            → Connexion
           </a>
         </div>
       </div>

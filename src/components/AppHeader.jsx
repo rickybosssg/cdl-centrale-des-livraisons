@@ -56,10 +56,10 @@ export default function AppHeader({ userRole, userEmail }) {
               const isNative = proto === 'capacitor:' || proto === 'file:' || typeof window.Capacitor !== 'undefined';
               if (isNative) {
                 try { localStorage.removeItem('base44_access_token'); localStorage.removeItem('token'); } catch(_) {}
-                window.history.replaceState({}, '', '/phone-auth');
+                window.history.replaceState({}, '', '/connexion');
                 window.dispatchEvent(new PopStateEvent('popstate'));
               } else {
-                base44.auth.logout('/phone-auth');
+                base44.auth.logout('/connexion');
               }
             }}
           >

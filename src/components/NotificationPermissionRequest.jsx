@@ -3,7 +3,7 @@
  * Fonctionne dans : Chrome, WebView Android (APK Base44), Safari iOS
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Settings, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,9 +19,48 @@ export default function NotificationPermissionRequest({
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   );
 
+  // Sur APK, la permission Web Notification ≠ permission push native Capacitor
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { isNativeApp, getPermissionStatus } = await import('@/lib/nativePush');
+      if (!isNativeApp() || cancelled) return;
+      const p = await getPermissionStatus();
+      if (cancelled) return;
+      if (p === 'granted') setPermission('granted');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleRequest = async () => {
     setRequesting(true);
     try {
+      const { isNativeApp, requestNativePushToken } = await import('@/lib/nativePush');
+
+      if (isNativeApp()) {
+        const token = await requestNativePushToken();
+        const perm = token ? 'granted' : 'denied';
+        setPermission(perm);
+
+        if (!token) {
+          toast.error('❌ Notifications refusées ou indisponibles');
+          return;
+        }
+
+        try {
+          await base44.functions.invoke('saveFcmToken', {
+            token,
+            deviceType: 'android_native',
+          });
+        } catch (_) {}
+
+        toast.success('✅ Notifications activées !');
+        onSuccess?.();
+        return;
+      }
+
       const { requestWebPushToken } = await import('@/lib/webPush');
       const { token, permission: perm, error } = await requestWebPushToken();
 

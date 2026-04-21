@@ -12,8 +12,12 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-    if (!user || user.role !== 'admin') {
-      return Response.json({ error: 'Accès refusé — admin requis' }, { status: 403 });
+    const isStaff =
+      user?.role === 'admin' ||
+      user?.role === 'dispatcher' ||
+      user?.user_type === 'admin';
+    if (!user || !isStaff) {
+      return Response.json({ error: 'Accès refusé — administration requise' }, { status: 403 });
     }
 
     const { course_id, action, raison } = await req.json();

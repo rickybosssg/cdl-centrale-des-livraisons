@@ -9,10 +9,23 @@ export default function NotificationPermissionBanner({ showAlways = false }) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    // Afficher seulement si permission !== granted (et si API Notification existe)
-    if (typeof Notification !== 'undefined' && (showAlways || Notification.permission !== 'granted')) {
-      setShow(true);
-    }
+    let cancelled = false;
+    (async () => {
+      const { isNativeApp, getPermissionStatus } = await import('@/lib/nativePush');
+      if (isNativeApp()) {
+        const perm = await getPermissionStatus();
+        if (cancelled) return;
+        setShow(showAlways || perm !== 'granted');
+        return;
+      }
+      // Web : API Notification du navigateur (pas fiable sur WebView APK → branche native ci-dessus)
+      if (typeof Notification !== 'undefined' && (showAlways || Notification.permission !== 'granted')) {
+        setShow(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [showAlways]);
 
   if (!show) return null;

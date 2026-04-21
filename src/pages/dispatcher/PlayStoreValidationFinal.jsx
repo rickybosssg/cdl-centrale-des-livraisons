@@ -202,7 +202,7 @@ const SECTIONS = [
     icon: "🧪",
     instructions: "Tester manuellement sur appareil Android physique",
     checks: [
-      { id: "test_login", label: "✅ Connexion OTP téléphone", required: true },
+      { id: "test_login", label: "✅ Connexion email / Facebook", required: true },
       { id: "test_multiprofil", label: "✅ Multi-profils — switch entre espaces", required: true },
       { id: "test_livreur_signup", label: "✅ Création profil livreur", required: true },
       { id: "test_camera", label: "✅ Upload documents via caméra APK", required: true },

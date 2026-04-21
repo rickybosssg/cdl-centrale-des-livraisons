@@ -5,7 +5,7 @@ import { base44 } from "@/api/base44Client";
 // Couleur unique : même bleu que Facebook #1877f2
 const BLUE = "#1877f2";
 
-export default function PhoneAuth() {
+export default function EmailLogin() {
   const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

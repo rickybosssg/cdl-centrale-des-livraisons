@@ -107,7 +107,10 @@ export default function CourseTracking() {
   useEffect(() => {
     if (!id) return;
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.id === id && event.type === "update") { setCourse(event.data); setLastUpdate(new Date()); }
+      if (event.id === id && event.data) {
+        setCourse(event.data);
+        setLastUpdate(new Date());
+      }
     });
     return unsub;
   }, [id]);
@@ -128,7 +131,12 @@ export default function CourseTracking() {
     setCancelling(true);
     try {
       if (FREE_CANCEL.includes(course.statut)) {
-        await base44.entities.Course.update(course.id, { statut: "annulee", annulee_par: "client", frais_annulation: 0 });
+        await base44.entities.Course.update(course.id, {
+          statut: "annulee",
+          annulee_par: "client",
+          frais_annulation: 0,
+          date_annulation: new Date().toISOString(),
+        });
         // Libérer le livreur s'il était en attente de confirmation
         if (course.livreur_email && course.statut === "assignee_attente") {
           base44.entities.User.filter({ email: course.livreur_email }).then(livs => {
@@ -148,11 +156,16 @@ export default function CourseTracking() {
           setCourse(c => ({ ...c, statut: "annulee", frais_annulation: r.data.fraisAnnulation }));
         } else if (r.data?.error === "insufficient_balance") {
           toast.error("Solde insuffisant.");
-        } else toast.error(r.data?.message || "Erreur");
+        } else {
+          toast.error(r.data?.message || r.data?.error || "Erreur d'annulation");
+        }
       }
-    } catch (err) { toast.error(err.message); }
-    setCancelling(false);
-    setCancelDialog(false);
+    } catch (err) {
+      toast.error(err.message || "Erreur");
+    } finally {
+      setCancelling(false);
+      setCancelDialog(false);
+    }
   };
 
   if (loading) return (

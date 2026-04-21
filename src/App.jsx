@@ -116,7 +116,7 @@ import AdminAuthDiagnostics from './pages/dispatcher/AdminAuthDiagnostics';
 import TestNotifications from './pages/dispatcher/TestNotifications';
 import FcmDiagnostic from './pages/FcmDiagnostic';
 import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
-import PhoneAuth from './pages/PhoneAuth';
+import EmailLogin from './pages/EmailLogin';
 import AppPublicLink from './pages/AppPublicLink';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
@@ -216,8 +216,11 @@ const AuthenticatedApp = () => {
   if (window.location.pathname === '/admin-login-secure') {
     return <AdminLoginSecure />;
   }
-  if (window.location.pathname === LOGIN_PATH) {
-    return <PhoneAuth />;
+  if (window.location.pathname === LOGIN_PATH || window.location.pathname === '/phone-auth') {
+    if (window.location.pathname === '/phone-auth') {
+      window.history.replaceState({}, '', LOGIN_PATH);
+    }
+    return <EmailLogin />;
   }
 
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -255,7 +258,7 @@ const AuthenticatedApp = () => {
       const _p = new URLSearchParams(window.location.search);
       const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
       if (_ref) localStorage.setItem('cdl_promo_code', _ref);
-      return <PhoneAuth />;
+      return <EmailLogin />;
     }
   }
 
@@ -264,7 +267,7 @@ const AuthenticatedApp = () => {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
-    return <PhoneAuth />;
+    return <EmailLogin />;
   }
 
   return (
@@ -274,8 +277,8 @@ const AuthenticatedApp = () => {
       <Routes>
         {/* Routes publiques sans layout */}
         <Route path="/admin-login-secure" element={<AdminLoginSecure />} />
-        <Route path="/connexion" element={<PhoneAuth />} />
-        <Route path="/phone-auth" element={<PhoneAuth />} />
+        <Route path="/connexion" element={<EmailLogin />} />
+        <Route path="/phone-auth" element={<Navigate to="/connexion" replace />} />
         <Route path="/app-public-link" element={<AppPublicLink />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />

@@ -67,13 +67,16 @@ async function sendToToken(accessToken, fcmToken, title, body, data = {}) {
         token: fcmToken,
         notification: { title, body },
         data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
-        // Android spécifique — canal et priorité pour app fermée
+        // Android — priorité haute + canal "default" (créé côté app nativePush.js)
+        // Pas de click_action Flutter : incompatible avec Capacitor / MainActivity
         android: {
           priority: "high",
           notification: {
             channel_id: "default",
             sound: "default",
-            click_action: "FLUTTER_NOTIFICATION_CLICK",
+            visibility: "PUBLIC",
+            default_vibrate_timings: true,
+            notification_priority: "PRIORITY_MAX",
           },
         },
         webpush: {
