@@ -82,7 +82,7 @@ const getAppParams = () => {
 		}
 	}
 
-	// Lire le token : priorité localStorage (post-OTP APK) > URL param
+	// Lire le token : priorité localStorage (post-login APK) > URL param
 	const urlToken = getAppParamValue("access_token", { removeFromUrl: true });
 	const storedToken = (() => {
 		try { return isNode ? null : localStorage.getItem('base44_access_token'); }
