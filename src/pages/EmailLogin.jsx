@@ -190,20 +190,20 @@ export default function EmailLogin() {
         )}
 
         {/* Toggle login ↔ register */}
-        <div style={s.toggleRow}>
-          {mode === "login" ? (
-            <>
-              <span style={s.toggleText}>Pas encore de compte ?</span>
-              <button style={s.toggleBtn} onClick={() => { setMode("register"); setMessage(""); setSuccessMsg(""); }}>
-                Créer un compte
-              </button>
-            </>
-          ) : (
+        {mode === "login" ? (
+          <div style={s.registerBox}>
+            <span style={s.registerText}>Pas encore de compte ?</span>
+            <button style={s.registerBtn} onClick={() => { setMode("register"); setMessage(""); setSuccessMsg(""); }}>
+              Créer un compte →
+            </button>
+          </div>
+        ) : (
+          <div style={s.toggleRow}>
             <button style={s.toggleBtn} onClick={() => { setMode("login"); setMessage(""); setSuccessMsg(""); }}>
               ← Retour à la connexion
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
       </div>
     </div>
@@ -367,5 +367,33 @@ const s = {
     cursor: "pointer",
     padding: "4px",
     textDecoration: "underline",
+  },
+  registerBox: {
+    marginTop: "8px",
+    background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
+    borderRadius: "14px",
+    padding: "14px 18px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    boxShadow: "0 4px 12px rgba(22,163,74,0.25)",
+  },
+  registerText: {
+    fontSize: "13px",
+    color: "#dcfce7",
+    fontWeight: "500",
+  },
+  registerBtn: {
+    background: "white",
+    border: "none",
+    color: "#15803d",
+    fontSize: "13px",
+    fontWeight: "800",
+    cursor: "pointer",
+    padding: "8px 16px",
+    borderRadius: "10px",
+    whiteSpace: "nowrap",
+    boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
   },
 };
