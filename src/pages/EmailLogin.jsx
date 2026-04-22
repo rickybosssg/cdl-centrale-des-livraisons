@@ -5,15 +5,6 @@ import { useAuth } from "@/lib/AuthContext";
 
 const BLUE = "#1877f2";
 
-function isCapacitorApp() {
-  if (typeof window === "undefined") return false;
-  return (
-    window.location?.protocol === "capacitor:" ||
-    typeof window.Capacitor !== "undefined" ||
-    window.location?.protocol === "file:"
-  );
-}
-
 // Sauvegarde le token partout + met à jour le SDK immédiatement
 function saveToken(token) {
   try { localStorage.setItem("base44_access_token", token); } catch (_) {}
@@ -113,27 +104,18 @@ export default function EmailLogin() {
     setGoogleLoading(true);
     setMessage("");
     try {
-      const isNative = isCapacitorApp();
-      if (isNative) {
-        const appId = import.meta.env.VITE_BASE44_APP_ID;
-        const oauthUrl = `https://app.base44.com/api/apps/${appId}/auth/social/google?redirect_uri=${encodeURIComponent("https://cdl.base44.app/connexion")}`;
-        try {
-          const { Browser } = await import("@capacitor/browser");
-          await Browser.open({ url: oauthUrl, presentationStyle: "fullscreen" });
-        } catch (_) {
-          window.open(oauthUrl, "_system");
-        }
-        setGoogleLoading(false);
-      } else {
-        await base44.auth.loginWithSocialProvider("google");
-      }
+      // Utiliser toujours le SDK Base44 — il gère le redirect OAuth correctement
+      await base44.auth.loginWithSocialProvider("google");
+      // Si on arrive ici (pas de redirect), naviguer
+      await navigateHome();
     } catch (err) {
       const msg = (err?.message || "").toLowerCase();
+      // Les erreurs de navigation/redirect sont normales (la page change), ignorer
       const isRedirect = msg.includes("redirect") || msg.includes("navigation") || msg.includes("aborted");
       if (!isRedirect) {
         setMessage("Connexion Google non disponible — réessayez");
+        setGoogleLoading(false);
       }
-      setGoogleLoading(false);
     }
   };
 
