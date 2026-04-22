@@ -33,6 +33,10 @@ export default function EmailLogin() {
     if (token) {
       try { localStorage.setItem("base44_access_token", token); } catch (_) {}
       try { base44.auth.setToken(token); } catch (_) {}
+      // Fermer le browser Capacitor s'il est ouvert (APK)
+      import("@capacitor/browser").then(({ Browser }) => {
+        Browser.close().catch(() => {});
+      }).catch(() => {});
       // Nettoyer l'URL et rediriger
       window.history.replaceState({}, "", "/connexion");
       window.location.replace("/");
@@ -111,17 +115,35 @@ export default function EmailLogin() {
     setLoading(true);
     setMessage("");
     try {
-      // loginWithSocialProvider déclenche un redirect OAuth — la page se recharge
-      // Le token revient dans l'URL et est capturé par le useEffect ci-dessus
-      await base44.auth.loginWithSocialProvider("facebook");
-      // Si pas de redirect (résolution immédiate), naviguer
-      window.location.replace("/");
+      if (isNative) {
+        // APK Android : ouvrir le flow OAuth dans le browser système (pas la WebView)
+        // pour éviter les restrictions de Facebook sur les WebViews embarquées
+        const appId = import.meta.env.VITE_BASE44_APP_ID;
+        const redirectUri = "https://app.base44.com/api/auth/callback/facebook";
+        const oauthUrl = `https://app.base44.com/api/apps/${appId}/auth/social/facebook?redirect_uri=${encodeURIComponent("https://cdl.base44.app/connexion")}`;
+
+        try {
+          // Tenter Capacitor Browser (ouvre le navigateur système externe)
+          const { Browser } = await import("@capacitor/browser");
+          await Browser.open({ url: oauthUrl, presentationStyle: "fullscreen" });
+          // Le résultat arrive via deep link sur /connexion?access_token=...
+          // Le useEffect captera le token au retour sur la page
+          setLoading(false);
+        } catch (_) {
+          // Fallback : ouvrir dans le navigateur système via window.open
+          window.open(oauthUrl, "_system");
+          setLoading(false);
+        }
+      } else {
+        // Web : redirect OAuth standard via SDK Base44
+        await base44.auth.loginWithSocialProvider("facebook");
+        window.location.replace("/");
+      }
     } catch (err) {
       const msg = (err?.message || "").toLowerCase();
-      // Ignorer les erreurs de navigation (redirect en cours = comportement normal)
       const isExpectedRedirect = msg.includes("redirect") || msg.includes("navigation") || msg.includes("aborted") || msg.includes("blocked");
       if (!isExpectedRedirect) {
-        setMessage("Connexion Facebook non disponible — contactez le support CDL");
+        setMessage("Connexion Facebook non disponible — vérifiez la configuration");
       }
       setLoading(false);
     }
