@@ -1,9 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
 // Couleur unique : même bleu que Facebook #1877f2
 const BLUE = "#1877f2";
+
+// Détecte si on est dans un APK Capacitor (Android WebView)
+function isCapacitorApp() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.location?.protocol === "capacitor:" ||
+    typeof window.Capacitor !== "undefined" ||
+    window.location?.protocol === "file:"
+  );
+}
 
 export default function EmailLogin() {
   const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
@@ -14,6 +24,39 @@ export default function EmailLogin() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [isNative] = useState(() => isCapacitorApp());
+
+  // Gérer le retour OAuth (Facebook redirect → /connexion?access_token=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("access_token") || params.get("token");
+    if (token) {
+      try { localStorage.setItem("base44_access_token", token); } catch (_) {}
+      try { base44.auth.setToken(token); } catch (_) {}
+      // Nettoyer l'URL et rediriger
+      window.history.replaceState({}, "", "/connexion");
+      window.location.replace("/");
+    }
+  }, []);
+
+  // Sur APK : après login, vérifier que le token est bien lu par base44.auth.me()
+  // avant de naviguer, pour éviter l'écran blanc
+  const navigateHome = async () => {
+    try {
+      // Forcer la relecture du token par le SDK
+      const me = await base44.auth.me();
+      if (me) {
+        // Utiliser replace pour éviter les problèmes de history dans WebView
+        window.location.replace("/");
+      } else {
+        setMessage("Erreur de session — réessayez");
+      }
+    } catch (_) {
+      // me() peut échouer si le SDK n'a pas encore le token en mémoire
+      // On navigue quand même, AuthContext refera le check
+      window.location.replace("/");
+    }
+  };
 
   const handleLogin = async () => {
     if (!email || !password) { setMessage("Email et mot de passe requis"); return; }
@@ -22,16 +65,18 @@ export default function EmailLogin() {
       const result = await base44.auth.loginViaEmailPassword(email.trim().toLowerCase(), password);
       const token = result?.access_token || result?.token;
       if (token) {
+        // Stocker avant tout dans localStorage (APK + web)
         try { localStorage.setItem("base44_access_token", token); } catch (_) {}
         try { base44.auth.setToken(token); } catch (_) {}
       }
-      window.location.href = "/";
+      await navigateHome();
     } catch (err) {
       const status = err?.status || err?.response?.status;
       setMessage(status === 401 || status === 400 || err?.message?.includes("credentials")
         ? "Email ou mot de passe incorrect"
         : "Erreur de connexion — réessayez");
-    } finally { setLoading(false); }
+      setLoading(false);
+    }
   };
 
   const handleRegister = async () => {
@@ -45,7 +90,7 @@ export default function EmailLogin() {
       if (token) {
         try { localStorage.setItem("base44_access_token", token); } catch (_) {}
         try { base44.auth.setToken(token); } catch (_) {}
-        window.location.href = "/";
+        await navigateHome();
       } else {
         setSuccessMsg("Compte créé ! Vérifiez votre email puis connectez-vous.");
         setMode("login");
@@ -72,20 +117,40 @@ export default function EmailLogin() {
   };
 
   const handleFacebook = async () => {
-    // loginWithSocialProvider gère l'OAuth (redirect ou popup) et la session automatiquement
-    // Sur APK Capacitor, cela ouvre le navigateur interne pour le flow OAuth Facebook
     setLoading(true);
     setMessage("");
     try {
-      await base44.auth.loginWithSocialProvider("facebook");
-      // Si on arrive ici (pas de redirect), la session est créée — recharger
-      window.location.href = "/";
+      if (isNative) {
+        // Sur APK Capacitor : ouvrir le flow OAuth dans le Browser plugin Capacitor
+        // puis écouter l'appDeepLink pour récupérer le token de retour
+        try {
+          const { Browser } = await import("@capacitor/browser");
+          // Construire l'URL OAuth Base44 pour Facebook
+          const appId = import.meta.env.VITE_BASE44_APP_ID;
+          const redirectUri = encodeURIComponent("https://cdl.base44.app/connexion");
+          const oauthUrl = `https://api.base44.app/api/apps/${appId}/auth/social/facebook?redirect_uri=${redirectUri}`;
+          await Browser.open({ url: oauthUrl, presentationStyle: "popover" });
+          // Le redirect après auth renvoie vers /connexion?access_token=...
+          // L'écouteur dans App.jsx gère la navigation — on stoppe le loading ici
+          setLoading(false);
+        } catch (browserErr) {
+          // @capacitor/browser non disponible — fallback window.open
+          const appId = import.meta.env.VITE_BASE44_APP_ID;
+          const redirectUri = encodeURIComponent("https://cdl.base44.app/connexion");
+          const oauthUrl = `https://api.base44.app/api/apps/${appId}/auth/social/facebook?redirect_uri=${redirectUri}`;
+          window.open(oauthUrl, "_system");
+          setLoading(false);
+        }
+      } else {
+        // Sur web : redirect OAuth standard géré par Base44 SDK
+        await base44.auth.loginWithSocialProvider("facebook");
+        window.location.replace("/");
+      }
     } catch (err) {
-      // Ne pas afficher d'erreur si c'est un simple reject de navigation (pop-up fermée, redirect attendue)
       const msg = err?.message || "";
-      const isNavigationError = msg.includes("redirect") || msg.includes("navigation") || msg.includes("blocked");
-      if (!isNavigationError) {
-        setMessage("Connexion Facebook non disponible sur cet appareil");
+      // Ne pas afficher d'erreur pour les redirects normaux
+      if (!msg.includes("redirect") && !msg.includes("navigation")) {
+        setMessage("Connexion Facebook non disponible — utilisez email/mot de passe");
       }
       setLoading(false);
     }
@@ -191,7 +256,7 @@ export default function EmailLogin() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="white" style={{ marginRight: 10, flexShrink: 0 }}>
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
-              Continuer avec Facebook
+              {isNative ? "Continuer avec Facebook (navigateur)" : "Continuer avec Facebook"}
             </button>
           </>
         )}
