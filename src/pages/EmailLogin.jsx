@@ -26,20 +26,51 @@ export default function EmailLogin() {
   const [successMsg, setSuccessMsg] = useState("");
   const [isNative] = useState(() => isCapacitorApp());
 
-  // Gérer le retour OAuth (Facebook redirect → /connexion?access_token=...)
+  // Gérer le retour OAuth Facebook (redirect → /connexion?code=... ou ?access_token=...)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const token = params.get("access_token") || params.get("token");
-    if (token) {
-      try { localStorage.setItem("base44_access_token", token); } catch (_) {}
-      try { base44.auth.setToken(token); } catch (_) {}
-      // Fermer le browser Capacitor s'il est ouvert (APK)
-      import("@capacitor/browser").then(({ Browser }) => {
-        Browser.close().catch(() => {});
-      }).catch(() => {});
-      // Nettoyer l'URL et rediriger
+    
+    // Cas 1 : token direct (flow Base44 natif)
+    const directToken = params.get("access_token") || params.get("token");
+    if (directToken) {
+      try { localStorage.setItem("base44_access_token", directToken); } catch (_) {}
+      try { base44.auth.setToken(directToken); } catch (_) {}
+      import("@capacitor/browser").then(({ Browser }) => Browser.close().catch(() => {})).catch(() => {});
       window.history.replaceState({}, "", "/connexion");
       window.location.replace("/");
+      return;
+    }
+
+    // Cas 2 : code Facebook (flow custom via facebookAuth backend function)
+    const fbCode = params.get("code");
+    const fbError = params.get("error");
+    if (fbError) {
+      window.history.replaceState({}, "", "/connexion");
+      setMessage("Connexion Facebook annulée");
+      return;
+    }
+    if (fbCode) {
+      window.history.replaceState({}, "", "/connexion");
+      setLoading(true);
+      // Fermer le browser Capacitor immédiatement
+      import("@capacitor/browser").then(({ Browser }) => Browser.close().catch(() => {})).catch(() => {});
+      // Échanger le code contre un token via notre backend function
+      base44.functions.invoke("facebookAuth", { code: fbCode })
+        .then((res) => {
+          const token = res.data?.access_token;
+          if (token) {
+            try { localStorage.setItem("base44_access_token", token); } catch (_) {}
+            try { base44.auth.setToken(token); } catch (_) {}
+            setTimeout(() => window.location.replace("/"), 150);
+          } else {
+            setMessage(res.data?.error || "Erreur de connexion Facebook");
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          setMessage("Erreur de connexion Facebook : " + err.message);
+          setLoading(false);
+        });
     }
   }, []);
 
@@ -115,36 +146,31 @@ export default function EmailLogin() {
     setLoading(true);
     setMessage("");
     try {
-      if (isNative) {
-        // APK Android : ouvrir le flow OAuth dans le browser système (pas la WebView)
-        // pour éviter les restrictions de Facebook sur les WebViews embarquées
-        const appId = import.meta.env.VITE_BASE44_APP_ID;
-        const redirectUri = "https://app.base44.com/api/auth/callback/facebook";
-        const oauthUrl = `https://app.base44.com/api/apps/${appId}/auth/social/facebook?redirect_uri=${encodeURIComponent("https://cdl.base44.app/connexion")}`;
+      // Récupérer l'URL OAuth Facebook depuis notre backend function
+      const res = await base44.functions.invoke("facebookAuth", {});
+      const oauthUrl = res.data?.oauth_url;
+      if (!oauthUrl) {
+        setMessage("Impossible de démarrer la connexion Facebook");
+        setLoading(false);
+        return;
+      }
 
+      if (isNative) {
+        // APK : ouvrir dans le navigateur système externe (Facebook bloque les WebViews)
         try {
-          // Tenter Capacitor Browser (ouvre le navigateur système externe)
           const { Browser } = await import("@capacitor/browser");
           await Browser.open({ url: oauthUrl, presentationStyle: "fullscreen" });
-          // Le résultat arrive via deep link sur /connexion?access_token=...
-          // Le useEffect captera le token au retour sur la page
-          setLoading(false);
         } catch (_) {
-          // Fallback : ouvrir dans le navigateur système via window.open
           window.open(oauthUrl, "_system");
-          setLoading(false);
         }
+        // Le retour arrivera sur /connexion?code=... et sera capté par le useEffect
+        setLoading(false);
       } else {
-        // Web : redirect OAuth standard via SDK Base44
-        await base44.auth.loginWithSocialProvider("facebook");
-        window.location.replace("/");
+        // Web : redirect direct
+        window.location.href = oauthUrl;
       }
     } catch (err) {
-      const msg = (err?.message || "").toLowerCase();
-      const isExpectedRedirect = msg.includes("redirect") || msg.includes("navigation") || msg.includes("aborted") || msg.includes("blocked");
-      if (!isExpectedRedirect) {
-        setMessage("Connexion Facebook non disponible — vérifiez la configuration");
-      }
+      setMessage("Connexion Facebook non disponible : " + err.message);
       setLoading(false);
     }
   };
