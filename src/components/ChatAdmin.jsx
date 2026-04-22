@@ -107,17 +107,20 @@ export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser
 
   return (
     <div className="flex flex-col h-72">
-      <div className="flex-1 overflow-y-auto space-y-2 p-2 bg-muted/30 rounded-lg mb-2">
+      {/* Zone messages */}
+      <div className="flex-1 overflow-y-auto space-y-2 p-2 bg-slate-100 rounded-xl mb-2">
         {messages.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-6">Aucun message pour l'instant</p>
+          <p className="text-xs text-slate-500 text-center py-6">Aucun message pour l'instant</p>
         )}
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${isMe(msg) ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
-              isMe(msg) ? "bg-primary text-white" : "bg-white border text-foreground"
+            <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm shadow-sm ${
+              isMe(msg)
+                ? "bg-primary text-white"
+                : "bg-white border border-slate-200 text-slate-900"
             }`}>
-              <p>{msg.contenu}</p>
-              <p className={`text-[10px] mt-0.5 ${isMe(msg) ? "text-white/70 text-right" : "text-muted-foreground"}`}>
+              <p className={isMe(msg) ? "text-white" : "text-slate-900"}>{msg.contenu}</p>
+              <p className={`text-[10px] mt-0.5 ${isMe(msg) ? "text-white/80 text-right" : "text-slate-500"}`}>
                 {ROLE_LABELS[msg.sender_role] || msg.sender_role} · {moment(msg.created_date).format("HH:mm")}
               </p>
             </div>
@@ -125,20 +128,23 @@ export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser
         ))}
         <div ref={bottomRef} />
       </div>
+
       {/* Messages rapides admin */}
       {isAdmin && showQuick && (
-        <div className="mb-2 p-2 rounded-lg bg-muted/50 border space-y-1">
+        <div className="mb-2 p-2 rounded-lg bg-white border border-slate-200 shadow-sm space-y-1">
           {QUICK_MESSAGES.map((msg, i) => (
             <button
               key={i}
               onClick={() => { setNewMsg(msg); setShowQuick(false); }}
-              className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-primary/10 hover:text-primary transition-colors"
+              className="w-full text-left text-xs px-2 py-1.5 rounded text-slate-700 hover:bg-primary/10 hover:text-primary transition-colors"
             >
               {msg}
             </button>
           ))}
         </div>
       )}
+
+      {/* Barre de saisie */}
       <div className="flex gap-2">
         {isAdmin && (
           <Button
@@ -146,19 +152,28 @@ export default function ChatAdmin({ userEmail, userRole = "livreur", currentUser
             variant="outline"
             onClick={() => setShowQuick(v => !v)}
             title="Messages rapides"
-            className="flex-shrink-0"
+            className="flex-shrink-0 border-slate-300"
           >
-            <span className="text-xs font-bold">⚡</span>
+            <span className="text-xs font-bold text-slate-700">⚡</span>
           </Button>
         )}
-        <Input
-          placeholder="Écrire un message..."
-          value={newMsg}
-          onChange={e => setNewMsg(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && sendMessage()}
-          className="flex-1 text-sm"
-        />
-        <Button size="icon" onClick={sendMessage} disabled={sending || !newMsg.trim()}>
+        <div className="flex-1 flex items-center bg-white border-2 border-slate-300 rounded-xl px-3 focus-within:border-primary transition-colors">
+          <input
+            type="text"
+            placeholder="Écrire un message..."
+            value={newMsg}
+            onChange={e => setNewMsg(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
+            className="flex-1 py-2 text-sm text-slate-900 placeholder-slate-400 bg-transparent outline-none"
+            style={{ color: "#0f172a" }}
+          />
+        </div>
+        <Button
+          size="icon"
+          onClick={sendMessage}
+          disabled={sending || !newMsg.trim()}
+          className="flex-shrink-0"
+        >
           <Send className="h-4 w-4" />
         </Button>
       </div>
