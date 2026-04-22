@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 
 const BLUE = "#1877f2";
 
@@ -13,7 +14,14 @@ function isCapacitorApp() {
   );
 }
 
+// Sauvegarde le token partout + met à jour le SDK immédiatement
+function saveToken(token) {
+  try { localStorage.setItem("base44_access_token", token); } catch (_) {}
+  try { base44.auth.setToken(token); } catch (_) {}
+}
+
 export default function EmailLogin() {
+  const { checkAppState } = useAuth();
   const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,16 +37,19 @@ export default function EmailLogin() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("access_token") || params.get("token");
     if (token) {
-      try { localStorage.setItem("base44_access_token", token); } catch (_) {}
-      try { base44.auth.setToken(token); } catch (_) {}
+      saveToken(token);
       import("@capacitor/browser").then(({ Browser }) => Browser.close().catch(() => {})).catch(() => {});
       window.history.replaceState({}, "", "/connexion");
-      window.location.replace("/");
+      navigateHome();
     }
   }, []);
 
-  const navigateHome = () => {
-    setTimeout(() => { window.location.replace("/"); }, 150);
+  // Après login : mettre à jour le contexte auth PUIS naviguer vers /
+  const navigateHome = async () => {
+    try {
+      await checkAppState();
+    } catch (_) {}
+    window.location.replace("/");
   };
 
   const handleLogin = async () => {
@@ -48,10 +59,9 @@ export default function EmailLogin() {
       const result = await base44.auth.loginViaEmailPassword(email.trim().toLowerCase(), password);
       const token = result?.access_token || result?.token;
       if (token) {
-        try { localStorage.setItem("base44_access_token", token); } catch (_) {}
-        try { base44.auth.setToken(token); } catch (_) {}
+        saveToken(token);
       }
-      navigateHome();
+      await navigateHome();
     } catch (err) {
       const status = err?.status || err?.response?.status;
       setMessage(status === 401 || status === 400 || err?.message?.includes("credentials")
@@ -70,20 +80,21 @@ export default function EmailLogin() {
       const result = await base44.auth.register({ email: email.trim().toLowerCase(), password });
       const token = result?.access_token || result?.token;
       if (token) {
-        try { localStorage.setItem("base44_access_token", token); } catch (_) {}
-        try { base44.auth.setToken(token); } catch (_) {}
-        navigateHome();
+        saveToken(token);
+        await navigateHome();
       } else {
         setSuccessMsg("Compte créé ! Vérifiez votre email puis connectez-vous.");
         setMode("login");
         setPassword(""); setConfirmPassword("");
+        setLoading(false);
       }
     } catch (err) {
       const msg = err?.message || "";
       setMessage(msg.toLowerCase().includes("exist") || msg.toLowerCase().includes("already")
         ? "Un compte existe déjà avec cet email"
         : "Erreur lors de la création — réessayez");
-    } finally { setLoading(false); }
+      setLoading(false);
+    }
   };
 
   const handleForgot = async () => {
@@ -104,7 +115,6 @@ export default function EmailLogin() {
     try {
       const isNative = isCapacitorApp();
       if (isNative) {
-        // APK : ouvrir dans le navigateur système pour éviter les restrictions WebView
         const appId = import.meta.env.VITE_BASE44_APP_ID;
         const oauthUrl = `https://app.base44.com/api/apps/${appId}/auth/social/google?redirect_uri=${encodeURIComponent("https://cdl.base44.app/connexion")}`;
         try {
@@ -115,7 +125,6 @@ export default function EmailLogin() {
         }
         setGoogleLoading(false);
       } else {
-        // Web : redirect OAuth standard
         await base44.auth.loginWithSocialProvider("google");
       }
     } catch (err) {
