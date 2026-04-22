@@ -84,7 +84,10 @@ export default function Home() {
       // mais le dashboard rendu se base toujours sur current_role.
       const trueRole = me.current_role || me.active_profile_type;
 
-      if (trueRole && profsArray.length > 0) {
+      // Si admin → pas de UserProfile admin, c'est normal, ne pas corriger
+      const isAdminUser = me.role === 'admin' || ADMIN_EMAILS.includes(me.email);
+
+      if (trueRole && profsArray.length > 0 && !isAdminUser) {
         // Chercher le profil UserProfile correspondant au current_role réel
         const matchingProfile = profsArray.find(p => p.profile_type === trueRole && !p.deleted);
         if (matchingProfile) {
@@ -99,14 +102,14 @@ export default function Home() {
           if (fallback?.id) {
             localStorage.setItem('activeProfileId', fallback.id);
             setActiveProfileId(fallback.id);
-            // Corriger current_role en BDD pour pointer vers le vrai profil actif
+            // Corriger current_role en BDD uniquement si pas admin
             if (fallback.profile_type !== trueRole) {
               base44.functions.invoke('switchActiveProfile', { profile_type: fallback.profile_type }).catch(() => {});
               console.log(`[Home] Correction current_role: ${trueRole} → ${fallback.profile_type}`);
             }
           }
         }
-      } else {
+      } else if (!isAdminUser) {
         // Pas de current_role en BDD — fallback localStorage puis premier profil
         const storedId = localStorage.getItem('activeProfileId');
         const resolved = resolveActiveProfile(profsArray, storedId);
