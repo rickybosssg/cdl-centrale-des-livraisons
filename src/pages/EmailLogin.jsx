@@ -1,18 +1,186 @@
-import { useState, useEffect } from "react";
-import { Loader2, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Loader2, Eye, EyeOff, Mail, Lock, Phone, ArrowLeft } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 
-const BLUE = "#1877f2";
+const BLUE  = "#1877f2";
+const GREEN = "#16a34a";
 
 function saveToken(token) {
   try { localStorage.setItem("base44_access_token", token); } catch (_) {}
   try { base44.auth.setToken(token); } catch (_) {}
 }
 
+// ── Normalisation numéro Burkina Faso ──────────────────────────────────────
+function formatPhoneDisplay(raw) {
+  let n = raw.replace(/\D/g, "");
+  if (n.startsWith("226")) n = n.slice(3);
+  return n;
+}
+
+// ── Composant OTP Phone ────────────────────────────────────────────────────
+function PhoneOtpFlow({ onSuccess, onBack }) {
+  const [phoneLocal, setPhoneLocal] = useState("");
+  const [otpStep, setOtpStep]       = useState("phone"); // "phone" | "otp"
+  const [otp, setOtp]               = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [message, setMessage]       = useState("");
+  const [countdown, setCountdown]   = useState(0);
+  const otpRef = useRef(null);
+
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const fullPhone = "+226" + phoneLocal.replace(/\D/g, "");
+
+  const sendOtp = async () => {
+    const digits = phoneLocal.replace(/\D/g, "");
+    if (digits.length < 8) { setMessage("Numéro invalide — 8 chiffres attendus"); return; }
+    setLoading(true); setMessage("");
+    try {
+      const res = await base44.functions.invoke("phoneOtp", { action: "send", phone: fullPhone });
+      if (res.data?.success) {
+        setOtpStep("otp");
+        setCountdown(60);
+        setOtp("");
+        setTimeout(() => otpRef.current?.focus(), 300);
+      } else {
+        setMessage(res.data?.error || "Impossible d'envoyer le SMS. Réessayez.");
+      }
+    } catch (err) {
+      setMessage(err?.message || "Erreur réseau — réessayez.");
+    } finally { setLoading(false); }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length < 6) { setMessage("Saisissez les 6 chiffres du code"); return; }
+    setLoading(true); setMessage("");
+    try {
+      const res = await base44.functions.invoke("phoneOtp", { action: "verify", phone: fullPhone, code: otp });
+      if (res.data?.success && res.data?.access_token) {
+        saveToken(res.data.access_token);
+        onSuccess();
+      } else {
+        setMessage(res.data?.error || "Code incorrect ou expiré.");
+        setOtp("");
+      }
+    } catch (err) {
+      setMessage(err?.message || "Erreur vérification.");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ width: "100%" }}>
+      {/* Retour */}
+      <button type="button" onClick={onBack} style={sp.backBtn}>
+        <ArrowLeft size={14} style={{ marginRight: 4 }} /> Retour à la connexion
+      </button>
+
+      <h2 style={sp.title}>
+        {otpStep === "phone" ? "Connexion par téléphone" : "Vérifier votre numéro"}
+      </h2>
+
+      {otpStep === "phone" && (
+        <>
+          <p style={sp.sub}>Numéro Burkina Faso (+226)</p>
+          <div style={sp.phoneWrap}>
+            <div style={sp.prefix}>🇧🇫 +226</div>
+            <input
+              style={sp.phoneInput}
+              type="tel"
+              inputMode="numeric"
+              placeholder="07 XX XX XX"
+              value={phoneLocal}
+              maxLength={10}
+              onChange={e => { setPhoneLocal(formatPhoneDisplay(e.target.value)); setMessage(""); }}
+              onKeyDown={e => e.key === "Enter" && sendOtp()}
+              autoComplete="tel-national"
+            />
+          </div>
+          {message && <p style={sp.error}>{message}</p>}
+          <button
+            style={{ ...sp.btn, opacity: loading ? 0.7 : 1 }}
+            onClick={sendOtp}
+            disabled={loading}
+            type="button"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" style={{ marginRight: 8 }} /> : null}
+            {loading ? "Envoi en cours..." : "📲 Recevoir le code SMS"}
+          </button>
+        </>
+      )}
+
+      {otpStep === "otp" && (
+        <>
+          <p style={sp.sub}>
+            Code envoyé au <strong>{fullPhone}</strong>
+          </p>
+          <p style={sp.sub2}>Saisissez le code à 6 chiffres reçu par SMS</p>
+          <input
+            ref={otpRef}
+            style={sp.otpInput}
+            type="tel"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="• • • • • •"
+            value={otp}
+            onChange={e => { setOtp(e.target.value.replace(/\D/g, "")); setMessage(""); }}
+            onKeyDown={e => e.key === "Enter" && verifyOtp()}
+            autoComplete="one-time-code"
+            autoFocus
+          />
+          {message && <p style={sp.error}>{message}</p>}
+          <button
+            style={{ ...sp.btn, opacity: loading ? 0.7 : 1 }}
+            onClick={verifyOtp}
+            disabled={loading || otp.length < 6}
+            type="button"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" style={{ marginRight: 8 }} /> : null}
+            {loading ? "Vérification..." : "✅ Valider le code"}
+          </button>
+          <button
+            type="button"
+            style={{ ...sp.resendBtn, opacity: countdown > 0 ? 0.5 : 1 }}
+            disabled={countdown > 0}
+            onClick={sendOtp}
+          >
+            {countdown > 0 ? `Renvoyer dans ${countdown}s` : "📩 Renvoyer le code"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setOtpStep("phone"); setOtp(""); setMessage(""); }}
+            style={sp.changePhone}
+          >
+            Changer de numéro
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+const sp = {
+  backBtn: { display: "flex", alignItems: "center", background: "none", border: "none", color: "#94a3b8", fontSize: "12px", cursor: "pointer", marginBottom: "14px", padding: 0 },
+  title: { fontSize: "18px", fontWeight: "700", color: "#111", margin: "0 0 6px", textAlign: "center" },
+  sub: { fontSize: "12px", color: "#64748b", textAlign: "center", margin: "0 0 12px" },
+  sub2: { fontSize: "12px", color: "#64748b", textAlign: "center", margin: "0 0 16px" },
+  phoneWrap: { display: "flex", alignItems: "center", border: "2px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", marginBottom: "12px", overflow: "hidden" },
+  prefix: { padding: "14px 12px", background: "#f1f5f9", borderRight: "2px solid #e2e8f0", fontSize: "14px", fontWeight: "600", color: "#334155", flexShrink: 0 },
+  phoneInput: { flex: 1, padding: "14px 12px", border: "none", background: "transparent", fontSize: "18px", color: "#111", outline: "none", letterSpacing: "2px", fontWeight: "600" },
+  otpInput: { width: "100%", padding: "18px", border: "2px solid #e2e8f0", borderRadius: "14px", background: "#f8fafc", fontSize: "28px", color: "#111", outline: "none", textAlign: "center", letterSpacing: "10px", fontWeight: "700", boxSizing: "border-box", marginBottom: "12px" },
+  btn: { width: "100%", padding: "15px", marginBottom: "10px", background: BLUE, color: "white", border: "none", borderRadius: "14px", fontWeight: "700", fontSize: "15px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 15px rgba(24,119,242,0.35)" },
+  error: { color: "#dc2626", fontSize: "13px", marginBottom: "12px", fontWeight: "500", textAlign: "left" },
+  resendBtn: { width: "100%", padding: "10px", background: "none", border: "2px solid #e2e8f0", borderRadius: "12px", color: "#475569", fontSize: "13px", fontWeight: "600", cursor: "pointer", marginBottom: "8px" },
+  changePhone: { display: "block", width: "100%", background: "none", border: "none", color: "#94a3b8", fontSize: "12px", cursor: "pointer", textDecoration: "underline", textAlign: "center", padding: "4px" },
+};
+
 export default function EmailLogin() {
   const { checkAppState } = useAuth();
-  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
+  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot" | "phone"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -97,6 +265,16 @@ export default function EmailLogin() {
   return (
     <div style={s.container}>
       <div style={s.card}>
+
+        {/* ── Mode téléphone OTP ── */}
+        {mode === "phone" && (
+          <PhoneOtpFlow
+            onSuccess={navigateHome}
+            onBack={() => { setMode("login"); setMessage(""); }}
+          />
+        )}
+
+        {mode !== "phone" && (<>
 
         {/* Logo */}
         <div style={s.logoBox}>
@@ -205,6 +383,24 @@ export default function EmailLogin() {
           </div>
         )}
 
+        {/* Séparateur + bouton téléphone */}
+        {(mode === "login" || mode === "register") && (
+          <>
+            <div style={s.divider}>
+              <div style={s.dividerLine} /><span style={s.dividerText}>ou</span><div style={s.dividerLine} />
+            </div>
+            <button
+              type="button"
+              style={s.phoneBtn}
+              onClick={() => { setMode("phone"); setMessage(""); setSuccessMsg(""); }}
+            >
+              <Phone size={16} style={{ marginRight: 8, flexShrink: 0 }} />
+              Continuer avec mon numéro de téléphone
+            </button>
+          </>
+        )}
+
+        </>)}
       </div>
     </div>
   );
@@ -367,6 +563,25 @@ const s = {
     cursor: "pointer",
     padding: "4px",
     textDecoration: "underline",
+  },
+  divider: { display: "flex", alignItems: "center", gap: "10px", margin: "12px 0 10px" },
+  dividerLine: { flex: 1, height: "1px", background: "#e2e8f0" },
+  dividerText: { fontSize: "12px", color: "#94a3b8", fontWeight: "500", whiteSpace: "nowrap" },
+  phoneBtn: {
+    width: "100%",
+    padding: "13px 16px",
+    marginBottom: "8px",
+    background: "#f8fafc",
+    color: "#334155",
+    border: "2px solid #e2e8f0",
+    borderRadius: "14px",
+    fontWeight: "600",
+    fontSize: "14px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "border-color 0.2s",
   },
   registerBox: {
     marginTop: "8px",
