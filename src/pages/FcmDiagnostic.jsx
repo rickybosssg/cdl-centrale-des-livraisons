@@ -112,199 +112,58 @@ export default function FcmDiagnostic() {
   }, []);
 
   // ── Enregistrement natif Capacitor ─────────────────────────────────────────
+  // Utilise requestNativePushToken() de nativePush.js qui est déjà stable et testé.
+  // Évite le double appel register() / double listener qui causait le crash natif.
   const registerNative = async () => {
-    console.log('[FcmDiag] ▶ registerNative() — DÉBUT');
+    console.log('[FcmDiag] ▶ registerNative() START');
     setRegistering(true);
     setChain(c => ({ ...c, permission: 'loading', register: 'loading' }));
 
-    // ÉTAPE 1 : Vérifier que le plugin est disponible
-    let PushNotifications;
     try {
-      const mod = await import('@capacitor/push-notifications');
-      PushNotifications = mod.PushNotifications;
-      console.log('[FcmDiag] ✅ Plugin @capacitor/push-notifications importé');
-    } catch (importErr) {
-      console.error('[FcmDiag] ❌ Import plugin échoué:', importErr?.message);
-      toast.error('Plugin push-notifications non disponible. Vérifiez npx cap sync android.', { duration: 8000 });
-      setChain(c => ({ ...c, permission: 'error', register: 'error' }));
-      setRegistering(false);
-      return;
-    }
+      // Déléguer entièrement à requestNativePushToken qui gère:
+      // canal Android, permission, listeners, register(), timeout
+      const { requestNativePushToken } = await import('@/lib/nativePush');
 
-    // ÉTAPE 2 : Créer canal Android (Android 8+)
-    try {
-      await PushNotifications.createChannel({
-        id: 'default',
-        name: 'CDL Notifications',
-        importance: 5,
-        sound: 'default',
-        vibration: true,
-        lights: true,
-      });
-      console.log('[FcmDiag] ✅ Canal Android "default" créé');
-    } catch (chanErr) {
-      // Non bloquant — le canal peut déjà exister
-      console.warn('[FcmDiag] Canal creation (non bloquant):', chanErr?.message);
-    }
-
-    // ÉTAPE 3 : Vérifier / demander permission
-    try {
-      const current = await PushNotifications.checkPermissions();
-      console.log('[FcmDiag] Permission actuelle:', current?.receive);
-
-      if (current?.receive !== 'granted') {
-        console.log('[FcmDiag] Demande de permission...');
-        const req = await PushNotifications.requestPermissions();
-        console.log('[FcmDiag] Résultat permission:', req?.receive);
-
-        if (req?.receive !== 'granted') {
-          toast.error('Permission refusée. Allez dans Paramètres Android → Apps → CDL → Notifications → Activer.', { duration: 8000 });
-          setChain(c => ({ ...c, permission: 'error', register: 'error' }));
-          setRegistering(false);
-          return;
-        }
-      }
       setChain(c => ({ ...c, permission: 'ok' }));
-      console.log('[FcmDiag] ✅ Permission accordée');
-    } catch (permErr) {
-      console.error('[FcmDiag] ❌ Erreur permission:', permErr?.message);
-      toast.error('Erreur vérification permission : ' + permErr?.message);
-      setChain(c => ({ ...c, permission: 'error', register: 'error' }));
-      setRegistering(false);
-      return;
-    }
+      toast.info('Demande de permission FCM en cours...', { duration: 3000 });
 
-    // ÉTAPE 4 : Attacher les listeners AVANT register()
-    let tokenListener = null;
-    let errListener = null;
-    let foregroundListener = null;
-    let timeoutId = null;
-    let tokenReceived = false;
+      const token = await requestNativePushToken();
 
-    const cleanup = async () => {
-      try { if (tokenListener) await tokenListener.remove(); } catch (_) {}
-      try { if (errListener) await errListener.remove(); } catch (_) {}
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-
-    try {
-      tokenListener = await PushNotifications.addListener('registration', async (tokenObj) => {
-        if (tokenReceived) return; // éviter double appel
-        tokenReceived = true;
-        const tkValue = tokenObj?.value;
-        console.log('[FcmDiag] ✅ Token FCM reçu:', tkValue ? tkValue.substring(0, 30) + '...' : 'VIDE');
-
-        if (!tkValue) {
-          console.error('[FcmDiag] ❌ Token vide reçu !');
-          toast.error('Token FCM vide reçu — problème google-services.json ou Firebase.');
-          setChain(c => ({ ...c, register: 'error', token: 'error' }));
-          setRegistering(false);
-          await cleanup();
-          return;
-        }
-
-        setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
-
-        // Sauvegarder en base
-        try {
-          await base44.functions.invoke('saveFcmToken', { token: tkValue, deviceType: 'android_native' });
-          setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
-          toast.success('✅ Token FCM enregistré ! Notifications activées.', { duration: 5000 });
-          // Recharger tokens affichés
-          const tokens = await base44.entities.FcmToken.filter(
-            { user_email: user?.email, is_active: true }, '-registered_at', 5
-          );
-          setFcmTokens(tokens);
-        } catch (saveErr) {
-          console.error('[FcmDiag] ❌ Sauvegarde token échouée:', saveErr?.message);
-          setChain(c => ({ ...c, token: 'error', db: 'error' }));
-          toast.error('Token reçu mais erreur sauvegarde : ' + saveErr?.message);
-        }
-
-        setRegistering(false);
-        await cleanup();
-      });
-
-      errListener = await PushNotifications.addListener('registrationError', async (err) => {
-        console.error('[FcmDiag] ❌ registrationError:', JSON.stringify(err));
-        setChain(c => ({ ...c, register: 'error' }));
-        const msg = err?.error || err?.message || JSON.stringify(err) || 'Inconnu';
+      if (!token) {
+        console.warn('[FcmDiag] Pas de token reçu (permission refusée ou timeout)');
         toast.error(
-          'FCM registrationError: ' + msg + '\n→ Vérifiez google-services.json dans android/app/',
-          { duration: 10000 }
-        );
-        setRegistering(false);
-        await cleanup();
-      });
-
-      // Écouter notifications foreground (diagnostic)
-      foregroundListener = await PushNotifications.addListener('pushNotificationReceived', (notif) => {
-        console.log('[FcmDiag] 📬 Notif foreground:', notif?.title);
-        setLastNotif({ title: notif?.title || '(sans titre)', body: notif?.body || '', time: new Date().toLocaleTimeString() });
-        toast.success('📬 Notification reçue : ' + (notif?.title || ''));
-      });
-      cleanupRef.current = () => { try { foregroundListener?.remove(); } catch (_) {} };
-
-      console.log('[FcmDiag] ✅ Listeners attachés — appel register()...');
-    } catch (listenerErr) {
-      console.error('[FcmDiag] ❌ Erreur attache listeners:', listenerErr?.message);
-      toast.error('Erreur préparation FCM : ' + listenerErr?.message);
-      setChain(c => ({ ...c, register: 'error' }));
-      setRegistering(false);
-      return;
-    }
-
-    // ÉTAPE 5 : register() — appelé via setTimeout pour éviter crash thread natif
-    // Le crash Android se produit quand register() est appelé dans le même tick JS
-    // que requestPermissions(). Le délai laisse le thread natif se stabiliser.
-    console.log('[FcmDiag] Pause 500ms avant register() pour stabiliser le thread natif...');
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Vérifier que Capacitor est toujours disponible (l'app n'a pas crashé)
-    if (!window.Capacitor) {
-      toast.error('Capacitor non disponible — l\'APK doit être rebuild avec npx cap sync android', { duration: 10000 });
-      setChain(c => ({ ...c, register: 'error' }));
-      setRegistering(false);
-      await cleanup();
-      return;
-    }
-
-    try {
-      console.log('[FcmDiag] Appel PushNotifications.register()...');
-      // Appel synchrone intentionnel — ne pas await pour éviter le crash natif
-      // Le résultat arrive via le listener 'registration' ou 'registrationError'
-      PushNotifications.register();
-      console.log('[FcmDiag] register() lancé (résultat attendu via listener)');
-      toast.info('Enregistrement FCM lancé — token attendu dans 5-15 sec...', { duration: 6000 });
-    } catch (regErr) {
-      console.error('[FcmDiag] ❌ register() a throw:', regErr?.message, regErr?.stack);
-      toast.error(
-        'register() échoué : ' + (regErr?.message || 'Erreur inconnue') +
-        ' — Vérifiez google-services.json dans android/app/ puis npx cap sync android',
-        { duration: 12000 }
-      );
-      setChain(c => ({ ...c, register: 'error' }));
-      setRegistering(false);
-      await cleanup();
-      return;
-    }
-
-    // ÉTAPE 6 : Timeout sécurité 45s
-    timeoutId = setTimeout(async () => {
-      if (!tokenReceived) {
-        console.warn('[FcmDiag] ⏱ Timeout 45s — token non reçu');
-        toast.error(
-          'Timeout 45s : token FCM non reçu.\n' +
-          '→ Vérifiez :\n1. google-services.json dans android/app/\n' +
-          '2. npx cap sync android + rebuild APK\n' +
-          '3. Connexion réseau active',
+          'Token FCM non obtenu. Causes possibles :\n' +
+          '1. Permission refusée → Paramètres → Apps → CDL → Notifications\n' +
+          '2. google-services.json absent dans android/app/\n' +
+          '3. APK pas rebuild après npx cap sync android',
           { duration: 12000 }
         );
-        setChain(c => ({ ...c, register: 'error' }));
+        setChain(c => ({ ...c, permission: 'warn', register: 'error', token: 'error', db: 'error' }));
         setRegistering(false);
-        await cleanup();
+        return;
       }
-    }, 45000);
+
+      console.log('[FcmDiag] ✅ Token reçu:', token.substring(0, 30) + '...');
+      setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
+
+      // Sauvegarder en base
+      await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native' });
+      setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
+      toast.success('✅ Token FCM enregistré ! Notifications activées.', { duration: 5000 });
+
+      // Rafraîchir la liste des tokens
+      const tokens = await base44.entities.FcmToken.filter(
+        { user_email: user?.email, is_active: true }, '-registered_at', 5
+      );
+      setFcmTokens(tokens);
+
+    } catch (err) {
+      console.error('[FcmDiag] ❌ registerNative error:', err?.message);
+      toast.error('Erreur FCM : ' + (err?.message || 'Inconnue'), { duration: 8000 });
+      setChain(c => ({ ...c, register: 'error', token: 'error', db: 'error' }));
+    } finally {
+      setRegistering(false);
+    }
   };
 
   // ── Enregistrement Web (PWA) ───────────────────────────────────────────────
