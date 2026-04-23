@@ -389,7 +389,7 @@ export default function FcmDiagnostic() {
     setServerDiagLoading(true);
     setServerDiag(null);
     try {
-      const res = await base44.functions.invoke('fcmDiagnostic' + (withSend ? '?test_send=1' : ''), {});
+      const res = await base44.functions.invoke('fcmDiagnostic', { test_send: withSend });
       setServerDiag(res.data);
       addLog('Diagnostic serveur: ' + res.data?.summary);
     } catch (e) {

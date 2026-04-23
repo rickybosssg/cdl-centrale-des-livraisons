@@ -6,6 +6,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   try {
+    // Lire le body en premier (avant createClientFromRequest qui consomme le stream)
+    let bodyData = {};
+    try {
+      const text = await req.text();
+      if (text) bodyData = JSON.parse(text);
+    } catch (_) {}
+
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
@@ -119,7 +126,7 @@ Deno.serve(async (req) => {
     }
 
     // ── 5. Test envoi réel si token disponible ───────────────────────────────
-    const { test_send } = Object.fromEntries(new URL(req.url).searchParams);
+    const test_send = bodyData.test_send === true || bodyData.test_send === '1' || bodyData.test_send === 1 ? '1' : null;
     if (test_send === '1' && accessToken && report.tokensCount > 0) {
       try {
         const tokens = await base44.asServiceRole.entities.FcmToken.filter({
@@ -167,10 +174,11 @@ Deno.serve(async (req) => {
     if (report.tokensCount === 0) {
       report.native_checklist = [
         'Vérifier que android/app/google-services.json existe',
-        `Le package_name dans google-services.json doit être "com.cdl.ouaga"`,
+        'Le package_name dans google-services.json doit être "com.cdl.app" (package réel de l\'APK)',
+        'Si google-services.json contient "com.cdl.ouaga" → re-télécharger depuis Firebase Console avec le bon package',
         'Vérifier apply plugin: com.google.gms.google-services dans android/app/build.gradle',
         'Exécuter: npx cap sync android',
-        'Rebuild APK dans Android Studio',
+        'Rebuild APK dans Android Studio (Build → Clean → Rebuild)',
         'Logcat: adb logcat -s FirebaseMessaging:* AndroidRuntime:E',
       ];
     }
