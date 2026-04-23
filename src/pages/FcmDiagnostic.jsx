@@ -312,8 +312,9 @@ export default function FcmDiagnostic() {
 
       // Re-sync avant la lecture BDD (APK : le SDK peut ne pas avoir le token à jour)
       syncBase44Token();
-      const tokens = await base44.functions.invoke('getFcmTokens', { user_email: user?.email });
-      setFcmTokens(tokens?.data?.tokens || []);
+      const authTokRefresh = localStorage.getItem('base44_access_token') || '';
+      const tokensRes = await base44.functions.invoke('getFcmTokens', { auth_token: authTokRefresh });
+      setFcmTokens(tokensRes?.data?.tokens || []);
 
     } catch (err) {
       addLog('ERREUR GLOBALE: ' + err?.message, 'error');

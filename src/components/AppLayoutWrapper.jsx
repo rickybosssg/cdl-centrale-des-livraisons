@@ -161,15 +161,17 @@ export default function AppLayoutWrapper({ user }) {
             onToken: async (token) => {
               console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
               try {
-                // Resynchroniser le token d'auth avant d'appeler le backend
-                // (le SDK est initialisé au démarrage, mais le token login peut arriver après)
+                // Double sync : s'assurer que le SDK utilise le token post-login
                 syncBase44Token();
+                syncBase44Token();
+                const authTok = getAuthToken();
+                console.log('[FCM] auth_token présent:', !!authTok, authTok ? authTok.substring(0, 12) + '...' : 'VIDE');
                 const res = await base44.functions.invoke('saveFcmToken', {
                   token,
                   deviceType: 'android_native',
-                  auth_token: getAuthToken(),
+                  auth_token: authTok,
                 });
-                console.log('[FCM] ✅ TOKEN SAVED:', res.data?.action, '| user:', userEmail);
+                console.log('[FCM] ✅ TOKEN SAVED:', res.data?.action, '| user:', res.data?.user_email || userEmail);
               } catch (saveErr) {
                 console.error('[FCM] ❌ saveFcmToken error:', saveErr?.message);
               }

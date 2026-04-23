@@ -1,16 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
- * saveFcmToken — Enregistrer/mettre à jour le token FCM natif en BDD (APK Android)
+ * saveFcmToken — Enregistrer/mettre à jour le token FCM en BDD
  *
- * Stratégie auth robuste pour APK natif :
- * Le body est lu en premier, puis le token d'auth peut venir :
- *   1. Du header Authorization (chemin normal web/SDK)
- *   2. Du champ "auth_token" dans le body (fallback APK natif si header absent)
+ * Auth robuste APK Android :
+ * - Lit le body EN PREMIER (avant createClientFromRequest qui consomme le stream)
+ * - auth_token peut venir du header Authorization OU du champ body.auth_token
+ * - Utilise asServiceRole pour les opérations BDD (pas de 403 sur entités)
  */
 Deno.serve(async (req) => {
   try {
-    // ── Lire le body EN PREMIER (avant createClientFromRequest) ─────────────
+    // ── ÉTAPE 1 : Lire le body AVANT tout ──────────────────────────────────
     let body = {};
     let rawBody = '';
     try {
@@ -20,28 +20,24 @@ Deno.serve(async (req) => {
 
     const { token, deviceType, auth_token: bodyAuthToken } = body;
 
-    // ── Auth : header en priorité, sinon body.auth_token ────────────────────
-    // Si l'APK n'envoie pas le header Authorization, on reconstruit la requête
-    // avec le token du body pour que createClientFromRequest l'utilise.
-    let authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
-    
-    console.log('[saveFcmToken] auth header présent:', !!authHeader, '| body auth_token présent:', !!bodyAuthToken);
+    // ── ÉTAPE 2 : Construire la requête avec le bon header Authorization ───
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    console.log('[saveFcmToken] auth header:', !!authHeader, '| body auth_token:', !!bodyAuthToken, '| deviceType:', deviceType);
 
-    // Recréer une requête avec le bon header si nécessaire
     let effectiveReq = req;
     if (!authHeader && bodyAuthToken) {
       const newHeaders = new Headers(req.headers);
       newHeaders.set('Authorization', `Bearer ${bodyAuthToken}`);
+      // body déjà consommé — on reconstruit sans body (auth_token déjà extrait)
       effectiveReq = new Request(req.url, {
         method: req.method,
         headers: newHeaders,
-        body: rawBody,
       });
       console.log('[saveFcmToken] Token auth injecté depuis le body');
     }
 
+    // ── ÉTAPE 3 : Authentifier l'utilisateur ──────────────────────────────
     const base44 = createClientFromRequest(effectiveReq);
-
     let user;
     try {
       user = await base44.auth.me();
@@ -62,27 +58,44 @@ Deno.serve(async (req) => {
     const resolvedDeviceType = deviceType || 'android_native';
     console.log('[saveFcmToken] user:', user.email, '| deviceType:', resolvedDeviceType, '| token:', cleanToken.substring(0, 25) + '...');
 
-    // ── 1. Ce token existe déjà en BDD ? ────────────────────────────────────
+    // ── ÉTAPE 4 : Vérifier si ce token existe déjà ────────────────────────
     const existing = await base44.asServiceRole.entities.FcmToken.filter({ token: cleanToken });
 
     if (existing.length > 0) {
       const record = existing[0];
       if (record.user_email === user.email) {
+        // Même user — juste mettre à jour last_used + is_active
         await base44.asServiceRole.entities.FcmToken.update(record.id, {
           is_active: true,
           last_used: new Date().toISOString(),
           device_type: resolvedDeviceType,
         });
         console.log('[saveFcmToken] ✅ Token existant mis à jour pour', user.email);
-        return Response.json({ success: true, token_id: record.id, action: 'updated' });
+        return Response.json({ success: true, token_id: record.id, action: 'updated', user_email: user.email });
       } else {
-        // Appareil réassigné — désactiver l'ancien
+        // Appareil réassigné — désactiver l'ancien enregistrement
         await base44.asServiceRole.entities.FcmToken.update(record.id, { is_active: false });
         console.log('[saveFcmToken] ⚠️ Token réassigné de', record.user_email, '→', user.email);
       }
     }
 
-    // ── 2. Créer un nouveau record ───────────────────────────────────────────
+    // ── ÉTAPE 5 : Désactiver les anciens tokens du même user/device ────────
+    // Pour éviter l'accumulation de tokens obsolètes
+    try {
+      const userTokens = await base44.asServiceRole.entities.FcmToken.filter({
+        user_email: user.email,
+        device_type: resolvedDeviceType,
+        is_active: true,
+      });
+      for (const old of userTokens) {
+        if (old.token !== cleanToken) {
+          await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
+          console.log('[saveFcmToken] Ancien token désactivé:', old.token.substring(0, 20) + '...');
+        }
+      }
+    } catch (_) {}
+
+    // ── ÉTAPE 6 : Créer le nouveau record ─────────────────────────────────
     const result = await base44.asServiceRole.entities.FcmToken.create({
       user_email: user.email,
       token: cleanToken,
