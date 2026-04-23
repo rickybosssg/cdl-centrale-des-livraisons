@@ -52,3 +52,17 @@ export const base44 = createClient({
   requiresAuth: false,
   appBaseUrl: 'https://cdl.base44.app' // Force production URL, never platform
 });
+
+/**
+ * Resynchronise le token du client SDK depuis localStorage.
+ * À appeler avant tout appel sensible (saveFcmToken, etc.)
+ * pour s'assurer que le token post-login est bien utilisé.
+ */
+export function syncBase44Token() {
+  try {
+    const stored = localStorage.getItem('base44_access_token');
+    if (stored) {
+      base44.auth.setToken(stored);
+    }
+  } catch (_) {}
+}

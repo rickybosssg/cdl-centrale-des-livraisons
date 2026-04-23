@@ -3,7 +3,7 @@
  * Natif Capacitor (APK) ou Web (PWA)
  */
 import { useState, useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44, syncBase44Token } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -299,6 +299,7 @@ export default function FcmDiagnostic() {
       addLog(`Token reçu: ${token.slice(0, 20)}...`);
       setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
 
+      syncBase44Token();
       await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native' });
       addLog('Token sauvegardé en BDD ✅');
       setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
@@ -340,6 +341,7 @@ export default function FcmDiagnostic() {
       const { requestWebPushToken } = await import('@/lib/webPush');
       const { token } = await requestWebPushToken();
       if (token) {
+        syncBase44Token();
         await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web' });
         setChain(c => ({ ...c, register: 'ok', token: 'ok', db: 'ok' }));
         toast.success('✅ Token Web Push enregistré !');

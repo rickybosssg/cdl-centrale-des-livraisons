@@ -5,6 +5,7 @@ import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
+import { syncBase44Token } from "@/api/base44Client";
 
 export default function AppLayoutWrapper({ user }) {
   // ⚠️ Tous les hooks d'abord — jamais après un return conditionnel (Rules of Hooks)
@@ -155,6 +156,9 @@ export default function AppLayoutWrapper({ user }) {
             onToken: async (token) => {
               console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
               try {
+                // Resynchroniser le token d'auth avant d'appeler le backend
+                // (le SDK est initialisé au démarrage, mais le token login peut arriver après)
+                syncBase44Token();
                 const res = await base44.functions.invoke('saveFcmToken', {
                   token,
                   deviceType: 'android_native',
@@ -203,6 +207,7 @@ export default function AppLayoutWrapper({ user }) {
           }
 
           try {
+            syncBase44Token();
             const res = await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web' });
             console.log('[FCM] ✅ TOKEN SAVED (web):', res.data?.action);
           } catch (saveErr) {
