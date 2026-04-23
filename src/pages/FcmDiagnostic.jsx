@@ -254,18 +254,34 @@ export default function FcmDiagnostic() {
       return;
     }
 
-    // ÉTAPE 5 : register() — dans son propre try/catch isolé
+    // ÉTAPE 5 : register() — appelé via setTimeout pour éviter crash thread natif
+    // Le crash Android se produit quand register() est appelé dans le même tick JS
+    // que requestPermissions(). Le délai laisse le thread natif se stabiliser.
+    console.log('[FcmDiag] Pause 500ms avant register() pour stabiliser le thread natif...');
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Vérifier que Capacitor est toujours disponible (l'app n'a pas crashé)
+    if (!window.Capacitor) {
+      toast.error('Capacitor non disponible — l\'APK doit être rebuild avec npx cap sync android', { duration: 10000 });
+      setChain(c => ({ ...c, register: 'error' }));
+      setRegistering(false);
+      await cleanup();
+      return;
+    }
+
     try {
       console.log('[FcmDiag] Appel PushNotifications.register()...');
-      await PushNotifications.register();
-      console.log('[FcmDiag] register() retourné (en attente du token via listener)');
+      // Appel synchrone intentionnel — ne pas await pour éviter le crash natif
+      // Le résultat arrive via le listener 'registration' ou 'registrationError'
+      PushNotifications.register();
+      console.log('[FcmDiag] register() lancé (résultat attendu via listener)');
       toast.info('Enregistrement FCM lancé — token attendu dans 5-15 sec...', { duration: 6000 });
     } catch (regErr) {
       console.error('[FcmDiag] ❌ register() a throw:', regErr?.message, regErr?.stack);
       toast.error(
-        'register() a échoué : ' + regErr?.message +
-        '\n→ Vérifiez google-services.json et npx cap sync android',
-        { duration: 10000 }
+        'register() échoué : ' + (regErr?.message || 'Erreur inconnue') +
+        ' — Vérifiez google-services.json dans android/app/ puis npx cap sync android',
+        { duration: 12000 }
       );
       setChain(c => ({ ...c, register: 'error' }));
       setRegistering(false);
@@ -539,17 +555,42 @@ export default function FcmDiagnostic() {
         </CardContent>
       </Card>
 
-      {/* Guide debug */}
+      {/* Guide crash Android */}
+      {isNative && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 space-y-2 text-xs text-red-900">
+            <p className="font-bold">🔴 Si l'app se ferme au clic "Enregistrer" :</p>
+            <p className="font-semibold mt-1">Causes les plus fréquentes :</p>
+            <ul className="space-y-1 ml-3 list-disc">
+              <li><strong>google-services.json manquant</strong> dans <code>android/app/</code> → crash FirebaseApp</li>
+              <li><strong>npx cap sync android</strong> non exécuté après modification</li>
+              <li><strong>APK non rebuild</strong> après sync dans Android Studio</li>
+              <li>Package name dans google-services.json ≠ package Android réel</li>
+            </ul>
+            <p className="font-semibold mt-2">Commandes Logcat pour identifier le crash :</p>
+            <div className="bg-red-100 rounded p-2 font-mono text-[10px] space-y-1">
+              <p># Voir tous les crashs</p>
+              <p>adb logcat -s AndroidRuntime:E</p>
+              <p># Voir logs FCM</p>
+              <p>adb logcat -s FirebaseMessaging:* Firebase:*</p>
+              <p># Voir logs CDL</p>
+              <p>adb logcat | grep -i "cdl\|capacitor\|firebase"</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Guide debug général */}
       <Card className="border-blue-200 bg-blue-50">
         <CardContent className="p-4 space-y-2 text-xs text-blue-800">
-          <p className="font-bold">🔍 Si le token n'arrive pas (APK natif) :</p>
+          <p className="font-bold">🔍 Checklist FCM Android :</p>
           <ul className="space-y-1 ml-3 list-disc">
             <li><strong>google-services.json</strong> présent dans <code>android/app/</code> ?</li>
-            <li>Projet rebuild dans Android Studio après ajout de <code>google-services.json</code> ?</li>
-            <li><code>@capacitor/push-notifications</code> synchronisé (<code>npx cap sync android</code>) ?</li>
-            <li>Connexion réseau active sur l'appareil ?</li>
+            <li>Rebuild APK dans Android Studio après <code>npx cap sync android</code> ?</li>
+            <li>Package name <strong>identique</strong> dans google-services.json et AndroidManifest.xml ?</li>
+            <li>Connexion réseau active (FCM nécessite internet) ?</li>
             <li>Android 13+ : permission <code>POST_NOTIFICATIONS</code> dans le manifest ?</li>
-            <li>Logcat → filtre tag <code>CDL</code> ou <code>FirebaseMessaging</code> pour les erreurs</li>
+            <li>Logcat filtre : <code>FirebaseMessaging</code> ou <code>CdlApp</code></li>
           </ul>
         </CardContent>
       </Card>
