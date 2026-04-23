@@ -161,9 +161,12 @@ export default function FcmDiagnostic() {
       }
     }
 
-    // Tokens BDD
+    // Tokens BDD — via backend pour éviter 403 sur APK natif
     try {
-      const tokens = await base44.entities.FcmToken.filter({ user_email: me.email, is_active: true }, '-registered_at', 5);
+      const authTok = localStorage.getItem('base44_access_token') || '';
+      syncBase44Token();
+      const res = await base44.functions.invoke('getFcmTokens', { user_email: me.email, auth_token: authTok });
+      const tokens = res?.data?.tokens || [];
       setFcmTokens(tokens);
       const has = tokens.length > 0;
       setChain(c => ({ ...c, token: has ? 'ok' : 'error', db: has ? 'ok' : 'error', register: has ? 'ok' : 'pending' }));
@@ -300,16 +303,17 @@ export default function FcmDiagnostic() {
       setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
 
       syncBase44Token();
+      syncBase44Token();
       const authTok = localStorage.getItem('base44_access_token') || '';
       await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
       addLog('Token sauvegardé en BDD ✅');
       setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
       toast.success('✅ Token FCM enregistré !');
 
-      const tokens = await base44.entities.FcmToken.filter(
-        { user_email: user?.email, is_active: true }, '-registered_at', 5
-      );
-      setFcmTokens(tokens);
+      // Re-sync avant la lecture BDD (APK : le SDK peut ne pas avoir le token à jour)
+      syncBase44Token();
+      const tokens = await base44.functions.invoke('getFcmTokens', { user_email: user?.email });
+      setFcmTokens(tokens?.data?.tokens || []);
 
     } catch (err) {
       addLog('ERREUR GLOBALE: ' + err?.message, 'error');

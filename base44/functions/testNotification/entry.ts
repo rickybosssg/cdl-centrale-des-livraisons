@@ -1,57 +1,94 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-/**
- * testNotification — Envoyer une notification de test
- * Logs détaillés pour debug : token → enregistrement → envoi → réception
- */
+const PROJECT_ID = "cdl-app-4743c";
+const FCM_URL = `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`;
+
+async function getAccessToken(serviceAccount) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: serviceAccount.client_email,
+    sub: serviceAccount.client_email,
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+  };
+  const encodeB64Url = (obj) =>
+    btoa(JSON.stringify(obj)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const headerB64 = encodeB64Url({ alg: "RS256", typ: "JWT" });
+  const payloadB64 = encodeB64Url(payload);
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const pemContents = serviceAccount.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, "");
+  const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8", binaryKey,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false, ["sign"]
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5", cryptoKey,
+    new TextEncoder().encode(signingInput)
+  );
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const jwt = `${signingInput}.${sigB64}`;
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) throw new Error("OAuth échoué: " + JSON.stringify(tokenData));
+  return tokenData.access_token;
+}
+
+async function sendToToken(accessToken, fcmToken, title, body, data = {}) {
+  const res = await fetch(FCM_URL, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: {
+        token: fcmToken,
+        notification: { title, body },
+        data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+        android: {
+          priority: "high",
+          notification: { channel_id: "default", sound: "default", visibility: "PUBLIC", default_vibrate_timings: true, notification_priority: "PRIORITY_MAX" },
+        },
+      },
+    }),
+  });
+  const result = await res.json();
+  if (!res.ok) console.error('[testNotification] FCM error for token:', fcmToken.slice(0, 20), JSON.stringify(result));
+  return { ok: res.ok, status: res.status, result };
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-
-    if (!user) {
-      return Response.json({ error: 'Non authentifié' }, { status: 401 });
-    }
+    if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
 
     const { recipient_email, recipient_role } = await req.json();
-
     if (!recipient_email || !recipient_role) {
-      return Response.json({
-        error: 'recipient_email et recipient_role requis',
-      }, { status: 400 });
+      return Response.json({ error: 'recipient_email et recipient_role requis' }, { status: 400 });
     }
-
-    // Un utilisateur ne peut envoyer un test qu'à lui-même, sauf l'admin
     if (user.role !== 'admin' && recipient_email !== user.email) {
       return Response.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    console.log(
-      `[testNotification] Test initié par ${user.email}`,
-      `→ vers ${recipient_email} (${recipient_role})`
-    );
+    console.log(`[testNotification] Test initié par ${user.email} → ${recipient_email} (${recipient_role})`);
 
-    // ── 1. Récupérer les tokens FCM du destinataire ──────────────────────
+    // ── 1. Récupérer tokens FCM ──────────────────────────────────────────────
     const tokens = await base44.asServiceRole.entities.FcmToken.filter({
       user_email: recipient_email,
       is_active: true,
     });
-
-    console.log(`[testNotification] Tokens trouvés pour ${recipient_email}:`, tokens.length);
-    tokens.forEach((t, i) => {
-      console.log(
-        `  Token ${i + 1}:`,
-        t.token.substring(0, 25) + '...',
-        `| device: ${t.device_type}`,
-        `| registered: ${t.registered_at}`
-      );
-    });
+    console.log(`[testNotification] Tokens trouvés: ${tokens.length}`);
+    tokens.forEach((t, i) => console.log(`  Token ${i+1}: ${t.token.slice(0,25)}... | ${t.device_type} | ${t.registered_at}`));
 
     if (tokens.length === 0) {
-      console.warn(
-        `[testNotification] ⚠️ Aucun token FCM pour ${recipient_email}`,
-        `L'utilisateur doit se connecter + autoriser les notifications`
-      );
       return Response.json({
         success: false,
         message: 'Aucun token FCM trouvé',
@@ -60,84 +97,59 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── 2. Préparer le payload de notification ───────────────────────────
-    const notifPayload = {
-      title: '🧪 Test Notification CDL',
-      body: `Notification de test reçue à ${new Date().toLocaleTimeString()}`,
-      data: {
-        test_mode: 'true',
-        sender_email: user.email,
-        timestamp: new Date().toISOString(),
-        notif_route: '/mes-notifications',
-        target_screen: '/mes-notifications',
-      },
-    };
+    // ── 2. Obtenir access token Firebase ────────────────────────────────────
+    const rawJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
+    if (!rawJson) return Response.json({ error: 'FIREBASE_SERVICE_ACCOUNT_JSON manquant' }, { status: 500 });
+    const serviceAccount = JSON.parse(rawJson);
+    const accessToken = await getAccessToken(serviceAccount);
 
-    console.log(`[testNotification] Payload:`, notifPayload);
+    // ── 3. Envoyer via FCM ───────────────────────────────────────────────────
+    const title = '🧪 Test Notification CDL';
+    const body = `Reçue à ${new Date().toLocaleTimeString()}`;
+    const data = { test_mode: 'true', sender_email: user.email, notif_route: '/mes-notifications' };
 
-    // ── 3. Invoquer sendFcmNotification avec les tokens ──────────────────
-    const sendResult = await base44.asServiceRole.functions.invoke(
-      'sendFcmNotification',
-      {
-        title: notifPayload.title,
-        body: notifPayload.body,
-        data: notifPayload.data,
-        tokens: tokens.map(t => t.token), // Passer les tokens directement
-      }
+    const results = await Promise.allSettled(
+      tokens.map(t => sendToToken(accessToken, t.token, title, body, data))
     );
 
-    console.log(`[testNotification] Résultat sendFcmNotification:`, sendResult.data);
+    const sent = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+    const failed = results.length - sent;
+    console.log(`[testNotification] Résultat: ${sent}/${tokens.length} envoyés`);
 
-    // ── 4. Enregistrer un log de test en BDD ──────────────────────────────
+    // ── 4. Log + notification feedback ──────────────────────────────────────
     try {
       await base44.asServiceRole.entities.NotificationTestLog.create({
         admin_email: user.email,
         recipient_email,
         recipient_role,
         tokens_count: tokens.length,
-        sent_count: sendResult.data?.sent || 0,
-        failed_count: sendResult.data?.failed || 0,
+        sent_count: sent,
+        failed_count: failed,
         timestamp: new Date().toISOString(),
-        status: (sendResult.data?.sent || 0) > 0 ? 'sent' : 'failed',
-        details: JSON.stringify({
-          payload: notifPayload,
-          sendResult: sendResult.data,
-        }),
+        status: sent > 0 ? 'sent' : 'failed',
+        details: JSON.stringify({ sent, failed, tokens_count: tokens.length }),
       });
-      console.log(`[testNotification] ✅ Log de test créé`);
-    } catch (logErr) {
-      console.warn(`[testNotification] Erreur création log:`, logErr.message);
-    }
+    } catch (_) {}
 
-    // ── 5. Créer une notification de feedback pour l'admin ────────────────
     try {
-      const sent = sendResult.data?.sent || 0;
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: user.email,
         destinataire_role: 'admin',
         titre: `🧪 Test notification ${sent > 0 ? 'ENVOYÉ' : 'ÉCHOUÉ'}`,
         message: sent > 0
           ? `Notification envoyée à ${recipient_email} (${sent}/${tokens.length} tokens)`
-          : `Échec envoi vers ${recipient_email}. ${sendResult.data?.message || ''}`,
+          : `Échec envoi vers ${recipient_email}. Vérifiez les tokens FCM.`,
         type: sent > 0 ? 'success' : 'danger',
         lue: false,
       });
     } catch (_) {}
 
-    console.log(`[testNotification] ✅ Test terminé`);
-
     return Response.json({
-      success: sendResult.data?.sent > 0,
-      message: `Notification envoyée à ${sent}/${tokens.length} tokens`,
-      details: {
-        recipient_email,
-        recipient_role,
-        tokens_found: tokens.length,
-        sent: sendResult.data?.sent || 0,
-        failed: sendResult.data?.failed || 0,
-        timestamp: new Date().toISOString(),
-      },
+      success: sent > 0,
+      message: `${sent}/${tokens.length} notification(s) envoyée(s)`,
+      details: { recipient_email, recipient_role, tokens_found: tokens.length, sent, failed, timestamp: new Date().toISOString() },
     });
+
   } catch (error) {
     console.error('[testNotification] Erreur:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
