@@ -262,6 +262,9 @@ export async function getPermissionStatus() {
 /**
  * Demande la permission native + enregistre FCM (pour la bannière « Activer » sur APK).
  * Retourne le token ou null si refus / erreur.
+ *
+ * IMPORTANT : retire tous les listeners existants avant d'en ajouter de nouveaux
+ * pour éviter le crash Android causé par les doubles listeners sur 'registration'.
  */
 export async function requestNativePushToken() {
   if (!isNativeApp()) return null;
@@ -270,42 +273,80 @@ export async function requestNativePushToken() {
   try {
     const mod = await import('@capacitor/push-notifications');
     PushNotifications = mod.PushNotifications;
-  } catch {
+  } catch (err) {
+    console.error('[NativePush] requestNativePushToken: plugin non disponible:', err?.message);
     return null;
   }
 
+  // ── Nettoyer TOUS les listeners existants pour éviter le crash double-register ──
+  try {
+    await PushNotifications.removeAllListeners();
+    console.log('[NativePush] requestNativePushToken: listeners nettoyés');
+  } catch (err) {
+    console.warn('[NativePush] removeAllListeners (non bloquant):', err?.message);
+  }
+
+  // Petite pause pour laisser le bridge natif se stabiliser après cleanup
+  await new Promise(r => setTimeout(r, 300));
+
   await createAndroidChannels(PushNotifications);
 
-  const req = await PushNotifications.requestPermissions();
-  if (req.receive !== 'granted') return null;
+  // Vérifier / demander permission
+  let permStatus;
+  try {
+    permStatus = await PushNotifications.checkPermissions();
+  } catch (_) {
+    permStatus = { receive: 'prompt' };
+  }
+
+  if (permStatus.receive !== 'granted') {
+    try {
+      const req = await PushNotifications.requestPermissions();
+      if (req.receive !== 'granted') {
+        console.warn('[NativePush] requestNativePushToken: permission refusée');
+        return null;
+      }
+    } catch (err) {
+      console.error('[NativePush] requestPermissions error:', err?.message);
+      return null;
+    }
+  }
+
+  console.log('[NativePush] requestNativePushToken: permission OK, enregistrement...');
 
   return new Promise((resolve) => {
     let settled = false;
     let regHandle;
     let errHandle;
-    const finish = (token) => {
+
+    const finish = async (token) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      try {
-        regHandle?.remove?.();
-      } catch (_) {}
-      try {
-        errHandle?.remove?.();
-      } catch (_) {}
+      try { if (regHandle) await regHandle.remove(); } catch (_) {}
+      try { if (errHandle) await errHandle.remove(); } catch (_) {}
       resolve(token ?? null);
     };
 
-    const timer = setTimeout(() => finish(null), 20000);
+    const timer = setTimeout(() => {
+      console.warn('[NativePush] requestNativePushToken: timeout 25s');
+      finish(null);
+    }, 25000);
 
     void (async () => {
       try {
         regHandle = await PushNotifications.addListener('registration', (t) => {
+          console.log('[NativePush] requestNativePushToken: token reçu');
           finish(t?.value || null);
         });
-        errHandle = await PushNotifications.addListener('registrationError', () => finish(null));
-        await PushNotifications.register();
-      } catch {
+        errHandle = await PushNotifications.addListener('registrationError', (err) => {
+          console.error('[NativePush] requestNativePushToken: registrationError:', err?.error);
+          finish(null);
+        });
+        // register() sans await — le résultat arrive via les listeners
+        PushNotifications.register();
+      } catch (err) {
+        console.error('[NativePush] requestNativePushToken: register error:', err?.message);
         finish(null);
       }
     })();
