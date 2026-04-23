@@ -5,12 +5,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe } from 'lucide-react';
+import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 function isNativePlatform() {
   if (typeof window === 'undefined') return false;
   if (window.location?.protocol === 'capacitor:') return true;
@@ -37,7 +36,6 @@ function StatusRow({ label, status, detail }) {
   );
 }
 
-// ── Composant principal ───────────────────────────────────────────────────────
 export default function FcmDiagnostic() {
   const navigate = useNavigate();
   const [user, setUser]           = useState(null);
@@ -46,132 +44,284 @@ export default function FcmDiagnostic() {
   const [registering, setRegistering] = useState(false);
   const [sending, setSending]     = useState(false);
   const [sendResult, setSendResult] = useState(null);
-  const [lastNotif, setLastNotif] = useState(null);
-  const cleanupRef = useRef(null);
+  const [nativeInfo, setNativeInfo] = useState(null);
+  const [registrationError, setRegistrationError] = useState(null);
+  const [logs, setLogs]           = useState([]);
+  const cleanupListenersRef       = useRef([]);
+
+  const addLog = (msg, type = 'info') => {
+    const ts = new Date().toLocaleTimeString('fr-FR');
+    setLogs(prev => [...prev.slice(-30), { ts, msg, type }]);
+    console.log(`[FcmDiag][${type}] ${msg}`);
+  };
 
   const [chain, setChain] = useState({
-    user:       'loading',
-    permission: 'pending',
-    register:   'pending',
-    token:      'pending',
-    db:         'pending',
+    user: 'loading', permission: 'pending', register: 'pending', token: 'pending', db: 'pending',
   });
 
-  // ── Chargement initial ─────────────────────────────────────────────────────
+  // ── Infos Capacitor natives ─────────────────────────────────────────────────
+  const loadNativeInfo = async () => {
+    if (!isNativePlatform()) return;
+    try {
+      const info = {
+        platform: window.Capacitor?.getPlatform?.() || 'unknown',
+        isNative: window.Capacitor?.isNativePlatform?.() || false,
+        protocol: window.location.protocol,
+        appVersion: null,
+        deviceInfo: null,
+      };
+
+      try {
+        const { App } = await import('@capacitor/app');
+        const appInfo = await App.getInfo();
+        info.appVersion = `${appInfo.name} v${appInfo.version} (${appInfo.build})`;
+        info.appId = appInfo.id;
+      } catch (_) {}
+
+      try {
+        // @capacitor/device peut ne pas être installé — utiliser l'API web navigator comme fallback
+        const ua = navigator.userAgent || '';
+        const androidMatch = ua.match(/Android ([0-9.]+)/);
+        info.deviceInfo = androidMatch ? `Android ${androidMatch[1]}` : ua.slice(0, 60);
+      } catch (_) {}
+
+      setNativeInfo(info);
+      addLog(`Platform: ${info.platform} | App: ${info.appVersion || '?'} | Device: ${info.deviceInfo || '?'}`);
+      if (info.appId) addLog(`App ID (package): ${info.appId}`);
+    } catch (e) {
+      addLog('Erreur lecture infos natives: ' + e?.message, 'error');
+    }
+  };
+
+  // ── Chargement initial ──────────────────────────────────────────────────────
   const load = async () => {
     setChain({ user: 'loading', permission: 'pending', register: 'pending', token: 'pending', db: 'pending' });
     setFcmTokens([]);
     setSendResult(null);
+    setRegistrationError(null);
+    setLogs([]);
 
-    // 1. User
+    addLog('Démarrage diagnostic...');
+
+    // Nettoyer les anciens listeners de diagnostic
+    for (const h of cleanupListenersRef.current) {
+      try { await h.remove(); } catch (_) {}
+    }
+    cleanupListenersRef.current = [];
+
+    // User
     let me;
     try {
       me = await base44.auth.me();
       setUser(me);
       setChain(c => ({ ...c, user: 'ok' }));
-    } catch {
+      addLog(`User: ${me.email}`);
+    } catch (e) {
       setChain(c => ({ ...c, user: 'error' }));
+      addLog('Erreur auth: ' + e?.message, 'error');
       return;
     }
 
-    // 2. Permission
-    if (isNative) {
+    // Permission
+    if (isNativePlatform()) {
       try {
         const { PushNotifications } = await import('@capacitor/push-notifications');
         const perm = await PushNotifications.checkPermissions();
+        addLog(`Permission Capacitor: ${perm.receive}`);
         setChain(c => ({ ...c, permission: perm.receive === 'granted' ? 'ok' : perm.receive === 'denied' ? 'error' : 'warn' }));
+
+        // Attacher un listener registrationError permanent pour capturer les erreurs Firebase
+        try {
+          const errHandle = await PushNotifications.addListener('registrationError', (err) => {
+            const msg = JSON.stringify(err);
+            console.error('[FcmDiag] registrationError natif:', msg);
+            setRegistrationError(msg);
+            addLog('registrationError: ' + msg, 'error');
+          });
+          cleanupListenersRef.current.push(errHandle);
+          addLog('Listener registrationError actif');
+        } catch (le) {
+          addLog('Impossible attacher listener: ' + le?.message, 'warn');
+        }
+
       } catch (e) {
-        console.error('[FcmDiag] checkPermissions error:', e?.message);
+        addLog('checkPermissions error: ' + e?.message, 'error');
         setChain(c => ({ ...c, permission: 'error' }));
       }
     } else {
-      // Web : window.Notification peut ne pas exister (normal en APK sans Notification API)
       if ('Notification' in window) {
         const p = Notification.permission;
+        addLog(`Permission Web: ${p}`);
         setChain(c => ({ ...c, permission: p === 'granted' ? 'ok' : p === 'default' ? 'warn' : 'error' }));
       } else {
-        // Pas d'API Notification web — pas bloquant si natif
+        addLog('API Notification non disponible (normal en APK)', 'warn');
         setChain(c => ({ ...c, permission: 'warn' }));
       }
     }
 
-    // 3. Tokens en BDD
+    // Tokens BDD
     try {
       const tokens = await base44.entities.FcmToken.filter({ user_email: me.email, is_active: true }, '-registered_at', 5);
       setFcmTokens(tokens);
-      const hasToken = tokens.length > 0;
-      setChain(c => ({ ...c, token: hasToken ? 'ok' : 'error', db: hasToken ? 'ok' : 'error', register: hasToken ? 'ok' : 'pending' }));
-    } catch {
+      const has = tokens.length > 0;
+      setChain(c => ({ ...c, token: has ? 'ok' : 'error', db: has ? 'ok' : 'error', register: has ? 'ok' : 'pending' }));
+      addLog(`Tokens en BDD: ${tokens.length}`);
+    } catch (e) {
       setChain(c => ({ ...c, token: 'error', db: 'error' }));
+      addLog('Erreur lecture tokens: ' + e?.message, 'error');
     }
+
+    // Infos natives
+    await loadNativeInfo();
   };
 
   useEffect(() => {
     load();
-    return () => { cleanupRef.current?.(); };
+    return () => {
+      cleanupListenersRef.current.forEach(h => { try { h.remove(); } catch (_) {} });
+    };
   }, []);
 
-  // ── Enregistrement natif Capacitor ─────────────────────────────────────────
-  // Utilise requestNativePushToken() de nativePush.js qui est déjà stable et testé.
-  // Évite le double appel register() / double listener qui causait le crash natif.
+  // ── Enregistrement natif ────────────────────────────────────────────────────
   const registerNative = async () => {
-    console.log('[FcmDiag] ▶ registerNative() START');
+    addLog('▶ registerNative() START');
     setRegistering(true);
+    setRegistrationError(null);
     setChain(c => ({ ...c, permission: 'loading', register: 'loading' }));
 
     try {
-      // Déléguer entièrement à requestNativePushToken qui gère:
-      // canal Android, permission, listeners, register(), timeout
-      const { requestNativePushToken } = await import('@/lib/nativePush');
+      const { PushNotifications } = await import('@capacitor/push-notifications');
 
-      setChain(c => ({ ...c, permission: 'ok' }));
-      toast.info('Demande de permission FCM en cours...', { duration: 3000 });
+      // Canal Android
+      try {
+        await PushNotifications.createChannel({
+          id: 'default', name: 'CDL Notifications', description: 'Toutes les notifications CDL',
+          importance: 5, sound: 'default', vibration: true, lights: true, lightColor: '#1a73e8',
+        });
+        addLog('Canal Android "default" créé');
+      } catch (ce) {
+        addLog('createChannel (ignoré, peut déjà exister): ' + ce?.message, 'warn');
+      }
 
-      const token = await requestNativePushToken();
+      // Permission
+      let perm;
+      try {
+        const check = await PushNotifications.checkPermissions();
+        perm = check.receive;
+        addLog(`Permission actuelle: ${perm}`);
+      } catch (e) {
+        addLog('checkPermissions error: ' + e?.message, 'warn');
+        perm = 'prompt';
+      }
 
-      if (!token) {
-        console.warn('[FcmDiag] Pas de token reçu (permission refusée ou timeout)');
-        toast.error(
-          'Token FCM non obtenu. Causes possibles :\n' +
-          '1. Permission refusée → Paramètres → Apps → CDL → Notifications\n' +
-          '2. google-services.json absent dans android/app/\n' +
-          '3. APK pas rebuild après npx cap sync android',
-          { duration: 12000 }
-        );
-        setChain(c => ({ ...c, permission: 'warn', register: 'error', token: 'error', db: 'error' }));
+      if (perm !== 'granted') {
+        try {
+          const req = await PushNotifications.requestPermissions();
+          perm = req.receive;
+          addLog(`Permission après demande: ${perm}`);
+        } catch (e) {
+          addLog('requestPermissions CRASH: ' + e?.message, 'error');
+          setChain(c => ({ ...c, permission: 'error', register: 'error' }));
+          toast.error('Crash requestPermissions: ' + e?.message);
+          setRegistering(false);
+          return;
+        }
+      }
+
+      if (perm !== 'granted') {
+        addLog('Permission refusée', 'error');
+        setChain(c => ({ ...c, permission: 'error', register: 'error' }));
+        toast.error('Permission Android refusée. Allez dans Paramètres → Apps → CDL → Notifications');
         setRegistering(false);
         return;
       }
 
-      console.log('[FcmDiag] ✅ Token reçu:', token.substring(0, 30) + '...');
+      setChain(c => ({ ...c, permission: 'ok' }));
+      addLog('Permission OK ✅');
+
+      // Attendre token via Promise + timeout
+      const token = await new Promise((resolve) => {
+        let done = false;
+        let regHandle, errHandle;
+
+        const finish = async (val) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          try { if (regHandle) await regHandle.remove(); } catch (_) {}
+          try { if (errHandle) await errHandle.remove(); } catch (_) {}
+          resolve(val ?? null);
+        };
+
+        const timer = setTimeout(() => {
+          addLog('⏱ Timeout 30s — token non reçu (Firebase non initialisé ?)', 'error');
+          finish(null);
+        }, 30000);
+
+        (async () => {
+          try {
+            regHandle = await PushNotifications.addListener('registration', (t) => {
+              addLog('✅ Token reçu via listener registration');
+              finish(t?.value || null);
+            });
+
+            errHandle = await PushNotifications.addListener('registrationError', (err) => {
+              const msg = JSON.stringify(err);
+              addLog('❌ registrationError: ' + msg, 'error');
+              setRegistrationError(msg);
+              finish(null);
+            });
+
+            addLog('Appel register()...');
+            try {
+              await PushNotifications.register();
+              addLog('register() retourné OK (token arrive via listener)');
+            } catch (re) {
+              addLog('register() EXCEPTION: ' + re?.message, 'error');
+              finish(null);
+            }
+          } catch (outer) {
+            addLog('Erreur setup listeners: ' + outer?.message, 'error');
+            finish(null);
+          }
+        })();
+      });
+
+      if (!token) {
+        setChain(c => ({ ...c, register: 'error', token: 'error', db: 'error' }));
+        toast.error('Token non reçu. Vérifiez les logs ci-dessous et Logcat Android.', { duration: 10000 });
+        setRegistering(false);
+        return;
+      }
+
+      addLog(`Token reçu: ${token.slice(0, 20)}...`);
       setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
 
-      // Sauvegarder en base
       await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native' });
+      addLog('Token sauvegardé en BDD ✅');
       setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
-      toast.success('✅ Token FCM enregistré ! Notifications activées.', { duration: 5000 });
+      toast.success('✅ Token FCM enregistré !');
 
-      // Rafraîchir la liste des tokens
       const tokens = await base44.entities.FcmToken.filter(
         { user_email: user?.email, is_active: true }, '-registered_at', 5
       );
       setFcmTokens(tokens);
 
     } catch (err) {
-      console.error('[FcmDiag] ❌ registerNative error:', err?.message);
-      toast.error('Erreur FCM : ' + (err?.message || 'Inconnue'), { duration: 8000 });
+      addLog('ERREUR GLOBALE: ' + err?.message, 'error');
+      toast.error('Erreur FCM : ' + (err?.message || 'Inconnue'));
       setChain(c => ({ ...c, register: 'error', token: 'error', db: 'error' }));
     } finally {
       setRegistering(false);
     }
   };
 
-  // ── Enregistrement Web (PWA) ───────────────────────────────────────────────
+  // ── Enregistrement Web ──────────────────────────────────────────────────────
   const registerWeb = async () => {
     setRegistering(true);
     try {
       if (!('Notification' in window)) {
-        toast.error('API Notification non disponible dans ce navigateur/WebView.');
+        toast.error('API Notification non disponible.');
         setRegistering(false);
         return;
       }
@@ -183,7 +333,6 @@ export default function FcmDiagnostic() {
         return;
       }
       setChain(c => ({ ...c, permission: 'ok' }));
-
       const { registerSW } = await import('@/lib/swRegister');
       await registerSW();
       const { requestWebPushToken } = await import('@/lib/webPush');
@@ -205,7 +354,7 @@ export default function FcmDiagnostic() {
     }
   };
 
-  // ── Test d'envoi ───────────────────────────────────────────────────────────
+  // ── Test envoi ──────────────────────────────────────────────────────────────
   const sendTest = async () => {
     if (!user?.email) return;
     setSending(true);
@@ -221,11 +370,9 @@ export default function FcmDiagnostic() {
         toast.success('Notification envoyée — vérifiez votre téléphone');
       } else {
         setSendResult({ ok: false, msg: d?.details || d?.message || 'Échec envoi' });
-        toast.error('Échec: ' + (d?.details || d?.message));
       }
     } catch (err) {
       setSendResult({ ok: false, msg: err.message });
-      toast.error(err.message);
     } finally {
       setSending(false);
     }
@@ -236,20 +383,21 @@ export default function FcmDiagnostic() {
     toast.success('Token copié');
   };
 
-  // ── Rendu ──────────────────────────────────────────────────────────────────
+  // ── Rendu ───────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4 pb-20 max-w-lg mx-auto">
+    <div className="space-y-4 pb-20 max-w-lg mx-auto px-2">
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-lg font-bold">🔔 Diagnostic Notifications</h1>
+          <h1 className="text-lg font-bold">🔔 Diagnostic FCM</h1>
           <div className="flex items-center gap-2 mt-0.5">
             {isNative
-              ? <><Smartphone className="h-3.5 w-3.5 text-green-600" /><span className="text-xs text-green-700 font-semibold">Mode natif Android (Capacitor)</span></>
-              : <><Globe className="h-3.5 w-3.5 text-blue-600" /><span className="text-xs text-blue-700 font-semibold">Mode Web / PWA</span></>
+              ? <><Smartphone className="h-3.5 w-3.5 text-green-600" /><span className="text-xs text-green-700 font-semibold">Natif Android (Capacitor)</span></>
+              : <><Globe className="h-3.5 w-3.5 text-blue-600" /><span className="text-xs text-blue-700 font-semibold">Web / PWA</span></>
             }
           </div>
         </div>
@@ -258,14 +406,30 @@ export default function FcmDiagnostic() {
         </Button>
       </div>
 
-      {/* Note explicative mode natif */}
-      {isNative && (
+      {/* Infos natives */}
+      {nativeInfo && (
         <Card className="border-green-300 bg-green-50">
-          <CardContent className="p-3">
-            <p className="text-xs text-green-800 font-semibold">📱 APK Android natif détecté</p>
-            <p className="text-xs text-green-700 mt-1">
-              En mode natif, les notifications utilisent <strong>Capacitor PushNotifications</strong> (Firebase FCM), 
-              et non l'API Notification web du navigateur. C'est normal de ne pas voir "API Notification disponible" ici.
+          <CardContent className="p-3 space-y-1">
+            <p className="text-xs font-bold text-green-800">📱 Infos appareil</p>
+            <p className="text-xs text-green-700">Platform: <strong>{nativeInfo.platform}</strong></p>
+            {nativeInfo.appVersion && <p className="text-xs text-green-700">App: <strong>{nativeInfo.appVersion}</strong></p>}
+            {nativeInfo.appId && <p className="text-xs text-green-700">Package ID: <strong className="font-mono">{nativeInfo.appId}</strong></p>}
+            {nativeInfo.deviceInfo && <p className="text-xs text-green-700">Appareil: {nativeInfo.deviceInfo}</p>}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Erreur registrationError capturée */}
+      {registrationError && (
+        <Card className="border-red-400 bg-red-50">
+          <CardContent className="p-3 space-y-1">
+            <p className="text-xs font-bold text-red-800">❌ Erreur Firebase (registrationError)</p>
+            <p className="text-xs font-mono text-red-700 break-all">{registrationError}</p>
+            <p className="text-xs text-red-600 mt-1 font-semibold">
+              Cette erreur vient de Firebase natif. Causes habituelles :<br />
+              • google-services.json absent ou mauvais package name<br />
+              • APK non rebuild après npx cap sync android<br />
+              • Google Play Services non disponible sur l'appareil
             </p>
           </CardContent>
         </Card>
@@ -274,76 +438,52 @@ export default function FcmDiagnostic() {
       {/* Chaîne d'état */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">État de la chaîne FCM</CardTitle>
+          <CardTitle className="text-sm">État FCM</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
+          <StatusRow label="1. Utilisateur connecté" status={chain.user}
+            detail={user ? `${user.full_name} (${user.email})` : 'Non connecté'} />
           <StatusRow
-            label="1. Utilisateur connecté"
-            status={chain.user}
-            detail={user ? `${user.full_name} (${user.email})` : 'Non connecté'}
-          />
-          <StatusRow
-            label={isNative ? "2. Permission Android (Capacitor)" : "2. Permission Notification (Web)"}
+            label={isNative ? "2. Permission Android" : "2. Permission Web"}
             status={chain.permission}
             detail={
-              chain.permission === 'ok'      ? 'Permission accordée ✅' :
-              chain.permission === 'warn'    ? isNative ? 'Non encore demandée — cliquez Enregistrer ci-dessous' : 'Non encore demandée' :
-              chain.permission === 'error'   ? 'Refusée — Paramètres → Apps → CDL → Notifications' :
-              chain.permission === 'loading' ? 'Vérification en cours...' :
-              'En attente'
+              chain.permission === 'ok' ? 'Permission accordée ✅' :
+              chain.permission === 'warn' ? 'Non encore demandée' :
+              chain.permission === 'error' ? 'Refusée → Paramètres → Apps → CDL → Notifications' :
+              chain.permission === 'loading' ? 'Vérification...' : 'En attente'
             }
           />
-          <StatusRow
-            label="3. Enregistrement FCM (register)"
-            status={chain.register}
+          <StatusRow label="3. register() FCM" status={chain.register}
             detail={
-              chain.register === 'ok'      ? 'register() exécuté avec succès ✅' :
-              chain.register === 'error'   ? 'Échec — vérifiez google-services.json' :
-              chain.register === 'loading' ? 'register() en cours...' :
-              'Non encore appelé'
+              chain.register === 'ok' ? 'register() exécuté ✅' :
+              chain.register === 'error' ? 'Échec — voir erreur ci-dessus + Logcat' :
+              chain.register === 'loading' ? 'En cours...' : 'Non appelé'
             }
           />
-          <StatusRow
-            label="4. Token FCM généré et en BDD"
-            status={chain.token}
-            detail={fcmTokens.length > 0
-              ? `${fcmTokens.length} token(s) — dernier: ${fcmTokens[0]?.device_type}`
-              : 'Aucun token enregistré'}
-          />
-          <StatusRow
-            label="5. Prêt à recevoir des notifications"
-            status={chain.db}
-            detail={chain.db === 'ok' ? 'Tout est configuré ✅' : 'Token manquant en base'}
-          />
+          <StatusRow label="4. Token en BDD" status={chain.token}
+            detail={fcmTokens.length > 0 ? `${fcmTokens.length} token(s)` : 'Aucun token enregistré'} />
+          <StatusRow label="5. Prêt à recevoir" status={chain.db}
+            detail={chain.db === 'ok' ? 'Tout configuré ✅' : 'Token manquant'} />
         </CardContent>
       </Card>
 
-      {/* Bouton principal : Enregistrer */}
+      {/* Bouton enregistrer */}
       {chain.db !== 'ok' && (
         <Card className="border-amber-300 bg-amber-50">
           <CardContent className="p-4 space-y-3">
             <p className="text-sm font-semibold text-amber-900">
               {isNative ? '📱 Enregistrer ce téléphone Android' : '🌐 Enregistrer ce navigateur'}
             </p>
-            <p className="text-xs text-amber-700">
-              {isNative
-                ? 'Demande la permission Android et génère le token FCM via Capacitor PushNotifications.'
-                : 'Demande la permission web et génère le token via Firebase Web Push.'}
-            </p>
-            <Button
-              onClick={isNative ? registerNative : registerWeb}
-              disabled={registering}
-              className="w-full"
-            >
+            <Button onClick={isNative ? registerNative : registerWeb} disabled={registering} className="w-full">
               {registering
-                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enregistrement en cours...</>
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enregistrement...</>
                 : '🔑 Demander permission + Enregistrer FCM'}
             </Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Tokens FCM en BDD */}
+      {/* Tokens BDD */}
       {fcmTokens.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
@@ -360,99 +500,72 @@ export default function FcmDiagnostic() {
                     <Copy className="h-3 w-3 mr-1" /> Copier
                   </Button>
                 </div>
-                <p className="text-xs font-mono text-muted-foreground break-all">
-                  {t.token.substring(0, 60)}...
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Enregistré: {new Date(t.registered_at).toLocaleString()}
-                </p>
+                <p className="text-xs font-mono text-muted-foreground break-all">{t.token.substring(0, 60)}...</p>
+                <p className="text-xs text-muted-foreground">Enregistré: {new Date(t.registered_at).toLocaleString()}</p>
               </div>
             ))}
           </CardContent>
         </Card>
       )}
 
-      {/* Dernière notification reçue (foreground) */}
-      {lastNotif && (
-        <Card className="border-green-300 bg-green-50">
-          <CardContent className="p-3 space-y-1">
-            <p className="text-xs font-bold text-green-800">📬 Dernière notification reçue (foreground)</p>
-            <p className="text-sm font-semibold text-green-900">{lastNotif.title}</p>
-            {lastNotif.body && <p className="text-xs text-green-700">{lastNotif.body}</p>}
-            <p className="text-xs text-green-600">{lastNotif.time}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Test d'envoi */}
+      {/* Test envoi */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Envoyer une notification de test</CardTitle>
+          <CardTitle className="text-sm">Envoyer notification de test</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 px-4 pb-4">
-          <p className="text-xs text-muted-foreground">
-            Envoie une notification push à <strong>{user?.email}</strong> via Firebase FCM.
-          </p>
           <Button onClick={sendTest} disabled={sending || fcmTokens.length === 0} className="w-full">
-            {sending
-              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Envoi...</>
-              : <><Send className="h-4 w-4 mr-2" /> Envoyer test à moi-même</>
-            }
+            {sending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Envoi...</> : <><Send className="h-4 w-4 mr-2" />Envoyer test</>}
           </Button>
-          {fcmTokens.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center">
-              ⚠️ Enregistrez d'abord un token FCM ci-dessus.
-            </p>
-          )}
+          {fcmTokens.length === 0 && <p className="text-xs text-muted-foreground text-center">⚠️ Enregistrez d'abord un token FCM.</p>}
           {sendResult && (
-            <div className={`p-3 rounded-lg text-sm font-medium ${sendResult.ok
-              ? 'bg-green-50 text-green-800 border border-green-200'
-              : 'bg-red-50 text-red-800 border border-red-200'}`}>
+            <div className={`p-3 rounded-lg text-sm font-medium ${sendResult.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
               {sendResult.msg}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Guide crash Android */}
-      {isNative && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4 space-y-2 text-xs text-red-900">
-            <p className="font-bold">🔴 Si l'app se ferme au clic "Enregistrer" :</p>
-            <p className="font-semibold mt-1">Causes les plus fréquentes :</p>
-            <ul className="space-y-1 ml-3 list-disc">
-              <li><strong>google-services.json manquant</strong> dans <code>android/app/</code> → crash FirebaseApp</li>
-              <li><strong>npx cap sync android</strong> non exécuté après modification</li>
-              <li><strong>APK non rebuild</strong> après sync dans Android Studio</li>
-              <li>Package name dans google-services.json ≠ package Android réel</li>
-            </ul>
-            <p className="font-semibold mt-2">Commandes Logcat pour identifier le crash :</p>
-            <div className="bg-red-100 rounded p-2 font-mono text-[10px] space-y-1">
-              <p># Voir tous les crashs</p>
-              <p>adb logcat -s AndroidRuntime:E</p>
-              <p># Voir logs FCM</p>
-              <p>adb logcat -s FirebaseMessaging:* Firebase:*</p>
-              <p># Voir logs CDL</p>
-              <p>adb logcat | grep -i "cdl\|capacitor\|firebase"</p>
+      {/* Logs temps réel */}
+      {logs.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Terminal className="h-4 w-4" /> Logs temps réel
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 pb-3">
+            <div className="bg-slate-900 rounded-lg p-3 max-h-48 overflow-y-auto space-y-0.5">
+              {logs.map((l, i) => (
+                <p key={i} className={`text-[10px] font-mono ${l.type === 'error' ? 'text-red-400' : l.type === 'warn' ? 'text-amber-400' : 'text-green-400'}`}>
+                  <span className="text-slate-500">{l.ts}</span> {l.msg}
+                </p>
+              ))}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Guide debug général */}
-      <Card className="border-blue-200 bg-blue-50">
-        <CardContent className="p-4 space-y-2 text-xs text-blue-800">
-          <p className="font-bold">🔍 Checklist FCM Android :</p>
-          <ul className="space-y-1 ml-3 list-disc">
-            <li><strong>google-services.json</strong> présent dans <code>android/app/</code> ?</li>
-            <li>Rebuild APK dans Android Studio après <code>npx cap sync android</code> ?</li>
-            <li>Package name <strong>identique</strong> dans google-services.json et AndroidManifest.xml ?</li>
-            <li>Connexion réseau active (FCM nécessite internet) ?</li>
-            <li>Android 13+ : permission <code>POST_NOTIFICATIONS</code> dans le manifest ?</li>
-            <li>Logcat filtre : <code>FirebaseMessaging</code> ou <code>CdlApp</code></li>
-          </ul>
-        </CardContent>
-      </Card>
+      {/* Checklist natif Firebase */}
+      {isNative && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 space-y-2 text-xs text-red-900">
+            <p className="font-bold">🔴 Checklist Firebase Android (à faire sur votre machine)</p>
+            <ul className="space-y-1.5 ml-2">
+              <li>✅ <strong>google-services.json</strong> dans <code>android/app/</code></li>
+              <li>✅ Package name dans google-services.json = <code className="font-bold">com.cdl.ouaga</code></li>
+              <li>✅ <code>apply plugin: 'com.google.gms.google-services'</code> en bas de <code>android/app/build.gradle</code></li>
+              <li>✅ <code>classpath 'com.google.gms:google-services:4.4.0'</code> dans <code>android/build.gradle</code></li>
+              <li>✅ <code>npx cap sync android</code> exécuté après modifications</li>
+              <li>✅ APK rebuild dans Android Studio après sync</li>
+            </ul>
+            <p className="font-semibold mt-2">Logcat (collez dans terminal) :</p>
+            <div className="bg-red-100 rounded p-2 font-mono text-[10px] space-y-1">
+              <p>adb logcat -s FirebaseMessaging:* FirebaseApp:* AndroidRuntime:E</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
