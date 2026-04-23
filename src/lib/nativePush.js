@@ -23,8 +23,8 @@ let _onPermissionDenied = null;
 export function isNativeApp() {
   if (typeof window === 'undefined') return false;
   if (window.location?.protocol === 'capacitor:') return true;
+  // Seule vérification fiable : isNativePlatform() doit retourner true explicitement
   if (window.Capacitor?.isNativePlatform?.() === true) return true;
-  if (typeof window.Capacitor !== 'undefined') return true;
   return false;
 }
 
