@@ -92,7 +92,7 @@ function PhoneOtpFlow({ onSuccess, onBack }) {
               style={sp.phoneInput}
               type="tel"
               inputMode="numeric"
-              placeholder="07 XX XX XX"
+              placeholder="XX XX XX XX"
               value={phoneLocal}
               maxLength={10}
               onChange={e => { setPhoneLocal(formatPhoneDisplay(e.target.value)); setMessage(""); }}
@@ -571,17 +571,18 @@ const s = {
     width: "100%",
     padding: "13px 16px",
     marginBottom: "8px",
-    background: "#f8fafc",
-    color: "#334155",
-    border: "2px solid #e2e8f0",
+    background: "#FFC107",
+    color: "#1a1a1a",
+    border: "2px solid #FFB300",
     borderRadius: "14px",
-    fontWeight: "600",
+    fontWeight: "700",
     fontSize: "14px",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    transition: "border-color 0.2s",
+    boxShadow: "0 4px 15px rgba(255,193,7,0.35)",
+    transition: "opacity 0.2s",
   },
   registerBox: {
     marginTop: "8px",
