@@ -24,7 +24,8 @@ export default function RoleSetup({ onComplete }) {
   const [selectedRole, setSelectedRole] = useState(pendingRole || null);
   const [showPartenaire, setShowPartenaire] = useState(false);
   const ROLES = PUBLIC_ROLES;
-  const [form, setForm] = useState({ telephone: "", whatsapp: "", quartier: "", code_promo: "" });
+  const verifiedPhone = localStorage.getItem("cdl_verified_phone") || "";
+  const [form, setForm] = useState({ telephone: verifiedPhone, whatsapp: "", quartier: "", code_promo: "" });
   const [checkingCode, setCheckingCode] = useState(false);
   const [codePromoApplique, setCodePromoApplique] = useState(null);
   const [autoAppliedCode, setAutoAppliedCode] = useState(null);
@@ -218,6 +219,7 @@ export default function RoleSetup({ onComplete }) {
     setLoading(false);
     localStorage.removeItem('cdl_pending_role');
     localStorage.removeItem('cdl_promo_code');
+    localStorage.removeItem('cdl_verified_phone');
 
     // Notifier le commercial si code parrainage utilisé
     if (selectedRole === 'client' && resolvedCode) {
