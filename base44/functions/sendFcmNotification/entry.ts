@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const PROJECT_ID = "cdl-app-4743c";
 const FCM_URL = `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`;
@@ -95,23 +95,26 @@ async function sendToToken(accessToken, fcmToken, title, body, data = {}) {
 }
 
 Deno.serve(async (req) => {
-  // Lire le body en premier avant tout
-  let body_text = "";
   try {
-    body_text = await req.text();
-  } catch(e) {
-    return Response.json({ error: "Cannot read body: " + e.message }, { status: 400 });
-  }
+    // ── Lire le body AVANT tout (stream ne peut être consommé qu'une fois) ──
+    let parsedBody = {};
+    let bodyAuthToken = '';
+    try {
+      const bodyText = await req.text();
+      if (bodyText) parsedBody = JSON.parse(bodyText);
+      bodyAuthToken = parsedBody.auth_token || '';
+    } catch(_) {}
 
-  let parsedBody = {};
-  try {
-    parsedBody = body_text ? JSON.parse(body_text) : {};
-  } catch(e) {
-    return Response.json({ error: "Invalid JSON: " + e.message, received: body_text.substring(0, 100) }, { status: 400 });
-  }
+    // ── Injecter auth_token dans le header si besoin (APK Android) ──────────
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    let effectiveReq = req;
+    if (!authHeader && bodyAuthToken) {
+      const newHeaders = new Headers(req.headers);
+      newHeaders.set('Authorization', `Bearer ${bodyAuthToken}`);
+      effectiveReq = new Request(req.url, { method: req.method, headers: newHeaders });
+    }
 
-  try {
-    const base44 = createClientFromRequest(req);
+    const base44 = createClientFromRequest(effectiveReq);
     const { user_email, tokens: directTokens, title, body, data = {} } = parsedBody;
 
     if (!title || !body) {
