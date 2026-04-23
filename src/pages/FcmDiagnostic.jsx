@@ -300,7 +300,8 @@ export default function FcmDiagnostic() {
       setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
 
       syncBase44Token();
-      await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native' });
+      const authTok = localStorage.getItem('base44_access_token') || '';
+      await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
       addLog('Token sauvegardé en BDD ✅');
       setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
       toast.success('✅ Token FCM enregistré !');
@@ -342,7 +343,8 @@ export default function FcmDiagnostic() {
       const { token } = await requestWebPushToken();
       if (token) {
         syncBase44Token();
-        await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web' });
+        const authTokWeb = localStorage.getItem('base44_access_token') || '';
+        await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web', auth_token: authTokWeb });
         setChain(c => ({ ...c, register: 'ok', token: 'ok', db: 'ok' }));
         toast.success('✅ Token Web Push enregistré !');
         await load();
@@ -617,7 +619,7 @@ export default function FcmDiagnostic() {
             <p className="font-bold">🔴 Checklist Firebase Android (à faire sur votre machine)</p>
             <ul className="space-y-1.5 ml-2">
               <li>✅ <strong>google-services.json</strong> dans <code>android/app/</code></li>
-              <li>✅ Package name dans google-services.json = <code className="font-bold">com.cdl.ouaga</code></li>
+              <li>✅ Package name dans google-services.json = <code className="font-bold">com.cdl.app</code></li>
               <li>✅ <code>apply plugin: 'com.google.gms.google-services'</code> en bas de <code>android/app/build.gradle</code></li>
               <li>✅ <code>classpath 'com.google.gms:google-services:4.4.0'</code> dans <code>android/build.gradle</code></li>
               <li>✅ <code>npx cap sync android</code> exécuté après modifications</li>

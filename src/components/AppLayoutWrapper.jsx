@@ -5,6 +5,11 @@ import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
+
+// Récupère le token d'auth depuis localStorage pour le fallback APK natif
+function getAuthToken() {
+  try { return localStorage.getItem('base44_access_token') || ''; } catch (_) { return ''; }
+}
 import { syncBase44Token } from "@/api/base44Client";
 
 export default function AppLayoutWrapper({ user }) {
@@ -162,6 +167,7 @@ export default function AppLayoutWrapper({ user }) {
                 const res = await base44.functions.invoke('saveFcmToken', {
                   token,
                   deviceType: 'android_native',
+                  auth_token: getAuthToken(),
                 });
                 console.log('[FCM] ✅ TOKEN SAVED:', res.data?.action, '| user:', userEmail);
               } catch (saveErr) {
@@ -208,7 +214,7 @@ export default function AppLayoutWrapper({ user }) {
 
           try {
             syncBase44Token();
-            const res = await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web' });
+            const res = await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web', auth_token: getAuthToken() });
             console.log('[FCM] ✅ TOKEN SAVED (web):', res.data?.action);
           } catch (saveErr) {
             console.error('[FCM] ❌ saveFcmToken web error:', saveErr?.message);
