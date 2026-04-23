@@ -47,6 +47,8 @@ export default function FcmDiagnostic() {
   const [nativeInfo, setNativeInfo] = useState(null);
   const [registrationError, setRegistrationError] = useState(null);
   const [logs, setLogs]           = useState([]);
+  const [serverDiag, setServerDiag] = useState(null);
+  const [serverDiagLoading, setServerDiagLoading] = useState(false);
   const cleanupListenersRef       = useRef([]);
 
   const addLog = (msg, type = 'info') => {
@@ -383,6 +385,21 @@ export default function FcmDiagnostic() {
     toast.success('Token copié');
   };
 
+  const runServerDiag = async (withSend = false) => {
+    setServerDiagLoading(true);
+    setServerDiag(null);
+    try {
+      const res = await base44.functions.invoke('fcmDiagnostic' + (withSend ? '?test_send=1' : ''), {});
+      setServerDiag(res.data);
+      addLog('Diagnostic serveur: ' + res.data?.summary);
+    } catch (e) {
+      addLog('Erreur diagnostic serveur: ' + e?.message, 'error');
+      toast.error('Erreur: ' + e?.message);
+    } finally {
+      setServerDiagLoading(false);
+    }
+  };
+
   // ── Rendu ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4 pb-20 max-w-lg mx-auto px-2">
@@ -507,6 +524,51 @@ export default function FcmDiagnostic() {
           </CardContent>
         </Card>
       )}
+
+      {/* Diagnostic serveur Firebase */}
+      <Card className="border-purple-200 bg-purple-50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-purple-900">🔧 Diagnostic Firebase côté serveur</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 px-4 pb-4">
+          <p className="text-xs text-purple-700">Vérifie : service account, accès API FCM, tokens en BDD.</p>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => runServerDiag(false)} disabled={serverDiagLoading} className="flex-1 border-purple-300 text-purple-800 text-xs">
+              {serverDiagLoading ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Analyse...</> : '🔍 Analyser config'}
+            </Button>
+            <Button onClick={() => runServerDiag(true)} disabled={serverDiagLoading || !fcmTokens.length} className="flex-1 bg-purple-600 hover:bg-purple-700 text-xs">
+              {serverDiagLoading ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />...</> : '📤 Analyser + Envoyer'}
+            </Button>
+          </div>
+          {serverDiag && (
+            <div className="space-y-2">
+              <div className={`p-2 rounded text-xs font-bold ${serverDiag.errors?.length ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                {serverDiag.summary}
+              </div>
+              {Object.entries(serverDiag.checks || {}).map(([key, val]) => (
+                <div key={key} className={`p-2 rounded text-xs border ${val.status === 'OK' ? 'border-green-200 bg-green-50' : val.status === 'WARN' ? 'border-amber-200 bg-amber-50' : 'border-red-200 bg-red-50'}`}>
+                  <span className="font-bold">{val.status === 'OK' ? '✅' : val.status === 'WARN' ? '⚠️' : '❌'} {key.replace(/_/g, ' ')}</span>
+                  <p className="text-muted-foreground mt-0.5 break-all">{val.detail}</p>
+                </div>
+              ))}
+              {serverDiag.native_checklist && (
+                <div className="p-3 rounded bg-amber-50 border border-amber-200 text-xs space-y-1">
+                  <p className="font-bold text-amber-900">📋 Actions requises sur votre machine :</p>
+                  {serverDiag.native_checklist.map((item, i) => (
+                    <p key={i} className="text-amber-800">• {item}</p>
+                  ))}
+                </div>
+              )}
+              {serverDiag.errors?.length > 0 && (
+                <div className="p-2 rounded bg-red-50 border border-red-200 text-xs">
+                  <p className="font-bold text-red-800">Erreurs :</p>
+                  {serverDiag.errors.map((e, i) => <p key={i} className="text-red-700">• {e}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Test envoi */}
       <Card>
