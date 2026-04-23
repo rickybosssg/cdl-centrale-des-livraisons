@@ -66,11 +66,29 @@ async function sendToToken(accessToken, fcmToken, title, body, data = {}) {
 
 Deno.serve(async (req) => {
   try {
-    const base44 = createClientFromRequest(req);
+    // ── Lire le body EN PREMIER (stream consommable une seule fois) ──────────
+    let parsedBody = {};
+    let bodyAuthToken = '';
+    try {
+      const bodyText = await req.text();
+      if (bodyText) parsedBody = JSON.parse(bodyText);
+      bodyAuthToken = parsedBody.auth_token || '';
+    } catch (_) {}
+
+    // ── Injecter auth_token dans le header si besoin (APK Android) ──────────
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    let effectiveReq = req;
+    if (!authHeader && bodyAuthToken) {
+      const newHeaders = new Headers(req.headers);
+      newHeaders.set('Authorization', `Bearer ${bodyAuthToken}`);
+      effectiveReq = new Request(req.url, { method: req.method, headers: newHeaders });
+    }
+
+    const base44 = createClientFromRequest(effectiveReq);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const { recipient_email, recipient_role } = await req.json();
+    const { recipient_email, recipient_role } = parsedBody;
     if (!recipient_email || !recipient_role) {
       return Response.json({ error: 'recipient_email et recipient_role requis' }, { status: 400 });
     }

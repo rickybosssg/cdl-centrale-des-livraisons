@@ -14,7 +14,6 @@ function isNativePlatform() {
   if (typeof window === 'undefined') return false;
   if (window.location?.protocol === 'capacitor:') return true;
   if (window.Capacitor?.isNativePlatform?.() === true) return true;
-  if (typeof window.Capacitor !== 'undefined') return true;
   return false;
 }
 
