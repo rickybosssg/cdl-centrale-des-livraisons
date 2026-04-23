@@ -151,13 +151,6 @@ export default function AppLayoutWrapper({ user }) {
         if (isNative) {
           const { initCapacitorPush } = await import('@/lib/nativePush');
 
-          // Ne pas lancer initCapacitorPush si on est sur la page de diagnostic
-          // (l'utilisateur gère manuellement le flow FCM depuis FcmDiagnostic)
-          if (window.location.pathname === '/fcm-diagnostic') {
-            console.log('[FCM] Page diagnostic active — init auto skippée');
-            return;
-          }
-
           await initCapacitorPush({
             onToken: async (token) => {
               console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
