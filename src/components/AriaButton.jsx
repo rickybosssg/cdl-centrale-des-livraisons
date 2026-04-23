@@ -242,7 +242,7 @@ export default function AriaButton({ userRole = "client" }) {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50">
+          <div className="flex-1 overflow-y-auto p-3 space-y-3" style={{ background: "#F5F5F5" }}>
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 {m.role === "assistant" && (
@@ -251,25 +251,28 @@ export default function AriaButton({ userRole = "client" }) {
                   </div>
                 )}
                 <div
-                  className={`max-w-[82%] px-3 py-2 rounded-2xl text-sm ${
+                  className="max-w-[82%] px-3 py-2 rounded-2xl text-sm"
+                  style={
                     m.role === "user"
-                      ? "bg-primary text-white rounded-br-sm"
-                      : "bg-white border border-border text-foreground rounded-bl-sm shadow-sm"
-                  }`}
+                      ? { background: "#1877f2", color: "#FFFFFF", borderBottomRightRadius: "4px" }
+                      : { background: "#FFFFFF", color: "#111111", border: "1px solid #E0E0E0", borderBottomLeftRadius: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
+                  }
                 >
                   {m.role === "assistant" ? (
                     <ReactMarkdown
-                      className="prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 text-sm"
+                      className="prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
                       components={{
-                        p: ({ children }) => <p className="my-0.5 leading-relaxed">{children}</p>,
-                        ul: ({ children }) => <ul className="my-1 ml-3 list-disc">{children}</ul>,
-                        li: ({ children }) => <li className="my-0">{children}</li>,
+                        p: ({ children }) => <p style={{ color: "#111111", margin: "2px 0", lineHeight: "1.5" }}>{children}</p>,
+                        ul: ({ children }) => <ul style={{ color: "#111111", margin: "4px 0", paddingLeft: "16px" }}>{children}</ul>,
+                        li: ({ children }) => <li style={{ color: "#111111", margin: 0 }}>{children}</li>,
+                        strong: ({ children }) => <strong style={{ color: "#111111" }}>{children}</strong>,
+                        a: ({ children, href }) => <a href={href} style={{ color: "#1877f2" }}>{children}</a>,
                       }}
                     >
                       {m.content}
                     </ReactMarkdown>
                   ) : (
-                    <p>{m.content}</p>
+                    <p style={{ color: "#FFFFFF", margin: 0 }}>{m.content}</p>
                   )}
                 </div>
               </div>
@@ -279,7 +282,7 @@ export default function AriaButton({ userRole = "client" }) {
                 <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary to-blue-700 flex items-center justify-center flex-shrink-0">
                   <Sparkles className="h-3 w-3 text-white" />
                 </div>
-                <div className="bg-white border border-border px-3 py-2 rounded-2xl rounded-bl-sm shadow-sm">
+                <div className="px-3 py-2 rounded-2xl rounded-bl-sm" style={{ background: "#FFFFFF", border: "1px solid #E0E0E0", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
                   <div className="flex gap-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
                     <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -307,14 +310,15 @@ export default function AriaButton({ userRole = "client" }) {
           )}
 
           {/* Input */}
-          <div className="flex items-center gap-2 px-3 py-2.5 border-t border-border bg-white flex-shrink-0">
+          <div className="flex items-center gap-2 px-3 py-2.5 border-t flex-shrink-0" style={{ background: "#FFFFFF", borderColor: "#E0E0E0" }}>
             <input
               ref={inputRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
               placeholder="Posez votre question..."
-              className="flex-1 text-sm bg-gray-100 rounded-xl px-3 py-2 outline-none focus:bg-gray-50 focus:ring-1 focus:ring-primary/30 transition-all"
+              className="flex-1 text-sm rounded-xl px-3 py-2 outline-none transition-all"
+              style={{ background: "#FFFFFF", color: "#111111", border: "1.5px solid #E0E0E0", caretColor: "#111111" }}
               disabled={loading}
             />
             <button
