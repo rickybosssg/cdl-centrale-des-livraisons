@@ -247,96 +247,116 @@ export default function FcmDiagnostic() {
       addLog('Permission OK ✅');
 
       // Attendre token via Promise + timeout
+      // IMPORTANT : attacher les listeners AVANT register() pour ne pas rater l'événement
       const token = await new Promise((resolve) => {
         let done = false;
         let regHandle, errHandle;
 
-        const finish = async (val) => {
+        const finish = async (val, reason) => {
           if (done) return;
           done = true;
           clearTimeout(timer);
+          addLog(`finish() appelé | raison: ${reason} | token: ${val ? val.slice(0, 20) + '...' : 'NULL'}`);
           try { if (regHandle) await regHandle.remove(); } catch (_) {}
           try { if (errHandle) await errHandle.remove(); } catch (_) {}
           resolve(val ?? null);
         };
 
         const timer = setTimeout(() => {
-          addLog('⏱ Timeout 30s — token non reçu (Firebase non initialisé ?)', 'error');
-          finish(null);
-        }, 30000);
+          addLog('⏱ Timeout 45s — token non reçu', 'error');
+          addLog('Causes possibles: google-services.json invalide, Google Play Services absent/désactivé, SHA-1 non enregistré dans Firebase Console', 'error');
+          finish(null, 'timeout');
+        }, 45000);
 
         (async () => {
           try {
+            // 1. Attacher listeners EN PREMIER
+            addLog('📡 Attachement listener registration...');
             regHandle = await PushNotifications.addListener('registration', (t) => {
-              addLog('✅ Token reçu via listener registration');
-              finish(t?.value || null);
+              const val = t?.value;
+              addLog('🎉 LISTENER registration DÉCLENCHÉ | token: ' + (val ? val.slice(0, 25) + '...' : 'VIDE'));
+              if (!val) {
+                addLog('token.value est vide !', 'error');
+                finish(null, 'empty_token');
+              } else {
+                finish(val, 'token_received');
+              }
             });
+            addLog('✅ Listener registration attaché');
 
             errHandle = await PushNotifications.addListener('registrationError', (err) => {
-              const msg = JSON.stringify(err);
-              addLog('❌ registrationError: ' + msg, 'error');
+              const msg = typeof err === 'string' ? err : JSON.stringify(err);
+              addLog('❌ registrationError REÇU: ' + msg, 'error');
               setRegistrationError(msg);
-              finish(null);
+              finish(null, 'registration_error');
             });
+            addLog('✅ Listener registrationError attaché');
 
-            addLog('Appel register()...');
+            // 2. Appeler register() APRÈS les listeners
+            addLog('📲 Appel PushNotifications.register()...');
             try {
               await PushNotifications.register();
-              addLog('register() retourné OK (token arrive via listener)');
+              addLog('✅ register() retourné — en attente du token via listener...');
             } catch (re) {
-              addLog('register() EXCEPTION: ' + re?.message, 'error');
-              finish(null);
+              addLog('❌ register() EXCEPTION: ' + re?.message, 'error');
+              finish(null, 'register_exception');
             }
           } catch (outer) {
-            addLog('Erreur setup listeners: ' + outer?.message, 'error');
-            finish(null);
+            addLog('❌ Erreur setup: ' + outer?.message, 'error');
+            finish(null, 'setup_error');
           }
         })();
       });
 
       if (!token) {
         setChain(c => ({ ...c, register: 'error', token: 'error', db: 'error' }));
-        toast.error('Token non reçu. Vérifiez les logs ci-dessous et Logcat Android.', { duration: 10000 });
+        addLog('❌ Aucun token reçu — register() a échoué silencieusement', 'error');
+        addLog('→ Vérifier Logcat : adb logcat -s FirebaseMessaging:* FirebaseApp:* com.google.firebase:*', 'error');
+        toast.error('Token non reçu. Voir logs détaillés ci-dessous.', { duration: 10000 });
         setRegistering(false);
         return;
       }
 
-      addLog(`Token reçu: ${token.slice(0, 20)}...`);
+      addLog(`✅ Token FCM reçu: ${token.slice(0, 30)}... (longueur: ${token.length})`);
       setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
 
-      // Sur APK natif : utiliser saveFcmTokenPublic (pas de dépendance auth header)
-      // Sur web : utiliser saveFcmToken classique avec auth_token
       const currentUser = user;
-      addLog(`Sauvegarde token pour: ${currentUser?.email}`);
+      addLog(`📤 Sauvegarde token pour: ${currentUser?.email || 'EMAIL VIDE!'}`);
 
-      let saveOk = false;
+      if (!currentUser?.email) {
+        addLog('❌ user.email est vide — impossible de sauvegarder !', 'error');
+        toast.error('Utilisateur non identifié — reconnectez-vous');
+        setRegistering(false);
+        return;
+      }
+
       try {
-        // Toujours essayer saveFcmTokenPublic en premier sur APK (évite 403)
+        addLog('Appel saveFcmTokenPublic...');
         const saveRes = await base44.functions.invoke('saveFcmTokenPublic', {
-          user_email: currentUser?.email,
+          user_email: currentUser.email,
           token,
           device_type: 'android_native',
         });
-        addLog(`saveFcmTokenPublic → ${saveRes.data?.action || 'ok'}`);
-        saveOk = true;
+        addLog(`✅ saveFcmTokenPublic → action: ${saveRes.data?.action} | id: ${saveRes.data?.token_id}`);
       } catch (saveErr) {
-        addLog(`saveFcmTokenPublic échoué (${saveErr?.message}), fallback saveFcmToken...`, 'warn');
-        // Fallback : saveFcmToken avec auth_token
+        addLog(`⚠️ saveFcmTokenPublic échoué: ${saveErr?.message} — fallback...`, 'warn');
         syncBase44Token();
         const authTok = localStorage.getItem('base44_access_token') || '';
+        addLog(`Fallback saveFcmToken | auth_token présent: ${!!authTok}`);
         await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
-        saveOk = true;
+        addLog('✅ saveFcmToken (fallback) réussi');
       }
 
-      if (!saveOk) throw new Error('Impossible de sauvegarder le token FCM');
-
-      addLog('Token sauvegardé en BDD ✅');
+      addLog('✅ Token sauvegardé en BDD');
       setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
       toast.success('✅ Token FCM enregistré !');
 
       // Relire les tokens (user_email dans body → pas de 403)
-      const tokensRes = await base44.functions.invoke('getFcmTokens', { user_email: currentUser?.email });
-      setFcmTokens(tokensRes?.data?.tokens || []);
+      addLog('Rechargement tokens BDD...');
+      const tokensRes = await base44.functions.invoke('getFcmTokens', { user_email: currentUser.email });
+      const freshTokens = tokensRes?.data?.tokens || [];
+      setFcmTokens(freshTokens);
+      addLog(`Tokens en BDD après save: ${freshTokens.length}`);
 
     } catch (err) {
       addLog('ERREUR GLOBALE: ' + err?.message, 'error');
