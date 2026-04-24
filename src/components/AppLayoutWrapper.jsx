@@ -161,19 +161,24 @@ export default function AppLayoutWrapper({ user }) {
             onToken: async (token) => {
               console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
               try {
-                // Double sync : s'assurer que le SDK utilise le token post-login
-                syncBase44Token();
-                syncBase44Token();
-                const authTok = getAuthToken();
-                console.log('[FCM] auth_token présent:', !!authTok, authTok ? authTok.substring(0, 12) + '...' : 'VIDE');
-                const res = await base44.functions.invoke('saveFcmToken', {
+                // Sur APK natif : utiliser saveFcmTokenPublic (évite 403 auth header manquant)
+                const res = await base44.functions.invoke('saveFcmTokenPublic', {
+                  user_email: userEmail,
                   token,
-                  deviceType: 'android_native',
-                  auth_token: authTok,
+                  device_type: 'android_native',
                 });
-                console.log('[FCM] ✅ TOKEN SAVED:', res.data?.action, '| user:', res.data?.user_email || userEmail);
+                console.log('[FCM] ✅ TOKEN SAVED via saveFcmTokenPublic:', res.data?.action, '| user:', res.data?.user_email || userEmail);
               } catch (saveErr) {
-                console.error('[FCM] ❌ saveFcmToken error:', saveErr?.message);
+                console.error('[FCM] ❌ saveFcmTokenPublic error:', saveErr?.message, '— fallback saveFcmToken...');
+                // Fallback avec auth_token
+                try {
+                  syncBase44Token();
+                  const authTok = getAuthToken();
+                  const res2 = await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
+                  console.log('[FCM] ✅ TOKEN SAVED via fallback:', res2.data?.action);
+                } catch (fallbackErr) {
+                  console.error('[FCM] ❌ Fallback aussi échoué:', fallbackErr?.message);
+                }
               }
             },
             onForegroundNotif: (notification) => {

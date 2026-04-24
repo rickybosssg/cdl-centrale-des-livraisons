@@ -304,18 +304,38 @@ export default function FcmDiagnostic() {
       addLog(`Token reçu: ${token.slice(0, 20)}...`);
       setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
 
-      syncBase44Token();
-      syncBase44Token();
-      const authTok = localStorage.getItem('base44_access_token') || '';
-      await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
+      // Sur APK natif : utiliser saveFcmTokenPublic (pas de dépendance auth header)
+      // Sur web : utiliser saveFcmToken classique avec auth_token
+      const currentUser = user;
+      addLog(`Sauvegarde token pour: ${currentUser?.email}`);
+
+      let saveOk = false;
+      try {
+        // Toujours essayer saveFcmTokenPublic en premier sur APK (évite 403)
+        const saveRes = await base44.functions.invoke('saveFcmTokenPublic', {
+          user_email: currentUser?.email,
+          token,
+          device_type: 'android_native',
+        });
+        addLog(`saveFcmTokenPublic → ${saveRes.data?.action || 'ok'}`);
+        saveOk = true;
+      } catch (saveErr) {
+        addLog(`saveFcmTokenPublic échoué (${saveErr?.message}), fallback saveFcmToken...`, 'warn');
+        // Fallback : saveFcmToken avec auth_token
+        syncBase44Token();
+        const authTok = localStorage.getItem('base44_access_token') || '';
+        await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
+        saveOk = true;
+      }
+
+      if (!saveOk) throw new Error('Impossible de sauvegarder le token FCM');
+
       addLog('Token sauvegardé en BDD ✅');
       setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
       toast.success('✅ Token FCM enregistré !');
 
-      // Re-sync avant la lecture BDD (APK : le SDK peut ne pas avoir le token à jour)
-      syncBase44Token();
-      const authTokRefresh = localStorage.getItem('base44_access_token') || '';
-      const tokensRes = await base44.functions.invoke('getFcmTokens', { auth_token: authTokRefresh });
+      // Relire les tokens (user_email dans body → pas de 403)
+      const tokensRes = await base44.functions.invoke('getFcmTokens', { user_email: currentUser?.email });
       setFcmTokens(tokensRes?.data?.tokens || []);
 
     } catch (err) {
