@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { base44, syncBase44Token } from '@/api/base44Client';
+import { forceRegister } from '@/lib/nativePush.js';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -207,106 +208,35 @@ export default function FcmDiagnostic() {
         });
         addLog('Canal Android "default" créé');
       } catch (ce) {
-        addLog('createChannel (ignoré, peut déjà exister): ' + ce?.message, 'warn');
+        addLog('createChannel (déjà existant, ignoré): ' + ce?.message, 'warn');
       }
 
-      // Permission
-      let perm;
+      // Vérifier permission d'abord (forceRegister la demandera aussi mais on log ici)
       try {
         const check = await PushNotifications.checkPermissions();
-        perm = check.receive;
-        addLog(`Permission actuelle: ${perm}`);
-      } catch (e) {
-        addLog('checkPermissions error: ' + e?.message, 'warn');
-        perm = 'prompt';
-      }
-
-      if (perm !== 'granted') {
-        try {
-          const req = await PushNotifications.requestPermissions();
-          perm = req.receive;
-          addLog(`Permission après demande: ${perm}`);
-        } catch (e) {
-          addLog('requestPermissions CRASH: ' + e?.message, 'error');
+        addLog(`Permission actuelle: ${check.receive}`);
+        if (check.receive === 'denied') {
+          addLog('Permission refusée définitivement', 'error');
           setChain(c => ({ ...c, permission: 'error', register: 'error' }));
-          toast.error('Crash requestPermissions: ' + e?.message);
+          toast.error('Permission refusée. Allez dans Paramètres → Apps → CDL → Notifications');
           setRegistering(false);
           return;
         }
-      }
-
-      if (perm !== 'granted') {
-        addLog('Permission refusée', 'error');
-        setChain(c => ({ ...c, permission: 'error', register: 'error' }));
-        toast.error('Permission Android refusée. Allez dans Paramètres → Apps → CDL → Notifications');
-        setRegistering(false);
-        return;
-      }
+      } catch (_) {}
 
       setChain(c => ({ ...c, permission: 'ok' }));
       addLog('Permission OK ✅');
 
-      // Attendre token via Promise + timeout
-      // IMPORTANT : attacher les listeners AVANT register() pour ne pas rater l'événement
-      const token = await new Promise((resolve) => {
-        let done = false;
-        let regHandle, errHandle;
-
-        const finish = async (val, reason) => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          addLog(`finish() appelé | raison: ${reason} | token: ${val ? val.slice(0, 20) + '...' : 'NULL'}`);
-          try { if (regHandle) await regHandle.remove(); } catch (_) {}
-          try { if (errHandle) await errHandle.remove(); } catch (_) {}
-          resolve(val ?? null);
-        };
-
-        const timer = setTimeout(() => {
-          addLog('⏱ Timeout 45s — token non reçu', 'error');
-          addLog('Causes possibles: google-services.json invalide, Google Play Services absent/désactivé, SHA-1 non enregistré dans Firebase Console', 'error');
-          finish(null, 'timeout');
-        }, 45000);
-
-        (async () => {
-          try {
-            // 1. Attacher listeners EN PREMIER
-            addLog('📡 Attachement listener registration...');
-            regHandle = await PushNotifications.addListener('registration', (t) => {
-              const val = t?.value;
-              addLog('🎉 LISTENER registration DÉCLENCHÉ | token: ' + (val ? val.slice(0, 25) + '...' : 'VIDE'));
-              if (!val) {
-                addLog('token.value est vide !', 'error');
-                finish(null, 'empty_token');
-              } else {
-                finish(val, 'token_received');
-              }
-            });
-            addLog('✅ Listener registration attaché');
-
-            errHandle = await PushNotifications.addListener('registrationError', (err) => {
-              const msg = typeof err === 'string' ? err : JSON.stringify(err);
-              addLog('❌ registrationError REÇU: ' + msg, 'error');
-              setRegistrationError(msg);
-              finish(null, 'registration_error');
-            });
-            addLog('✅ Listener registrationError attaché');
-
-            // 2. Appeler register() APRÈS les listeners
-            addLog('📲 Appel PushNotifications.register()...');
-            try {
-              await PushNotifications.register();
-              addLog('✅ register() retourné — en attente du token via listener...');
-            } catch (re) {
-              addLog('❌ register() EXCEPTION: ' + re?.message, 'error');
-              finish(null, 'register_exception');
-            }
-          } catch (outer) {
-            addLog('❌ Erreur setup: ' + outer?.message, 'error');
-            finish(null, 'setup_error');
-          }
-        })();
-      });
+      // Utiliser forceRegister() — bypass le singleton _registered, listeners propres
+      addLog('📡 Lancement forceRegister()...');
+      const token = await forceRegister(
+        (val) => addLog('🎉 TOKEN REÇU VIA forceRegister: ' + val.slice(0, 25) + '...'),
+        (errMsg) => {
+          addLog('❌ registrationError: ' + errMsg, 'error');
+          setRegistrationError(errMsg);
+        }
+      );
+      addLog(token ? `✅ forceRegister OK | token longueur: ${token.length}` : '❌ forceRegister: aucun token retourné', token ? 'info' : 'error');
 
       if (!token) {
         setChain(c => ({ ...c, register: 'error', token: 'error', db: 'error' }));

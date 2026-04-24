@@ -13,6 +13,12 @@ let _PN = null;           // instance PushNotifications (chargée une fois)
 let _registered = false;  // register() déjà appelé
 let _listeners = [];      // handles des listeners actifs
 
+// Expose pour reset externe (FcmDiagnostic peut forcer un nouveau register)
+export function resetNativePushState() {
+  _registered = false;
+  console.log('[NativePush] State reset — register() sera rappelé au prochain initCapacitorPush');
+}
+
 // Callbacks installés par initCapacitorPush (remplacés à chaque init)
 let _onToken = null;
 let _onForegroundNotif = null;
@@ -130,9 +136,9 @@ async function attachListeners(PN) {
   }
 }
 
-// ── register() — appelé UNE SEULE FOIS ───────────────────────────────────────
-async function doRegister(PN) {
-  if (_registered) {
+// ── register() ───────────────────────────────────────────────────────────────
+async function doRegister(PN, force = false) {
+  if (_registered && !force) {
     console.log('[NativePush] register() déjà effectué, skip');
     return true;
   }
@@ -251,20 +257,11 @@ export async function requestNativePushToken() {
     // Re-attacher les listeners avec le nouveau _onToken
     await attachListeners(PN);
 
-    // register() — si déjà fait, Firebase peut renvoyer le token existant
-    // via le listener 'registration' lors du re-register
-    const ok = await doRegister(PN);
+    // Toujours forcer un nouveau register() depuis le diagnostic pour générer un token frais
+    const ok = await doRegister(PN, true);
     if (!ok) {
-      // register() a échoué → essayer quand même un re-register
-      try {
-        _registered = false; // reset pour forcer un nouveau register
-        await PN.register();
-        _registered = true;
-        console.log('[NativePush] register() (retry) lancé');
-      } catch (e) {
-        console.error('[NativePush] register() retry crash:', e?.message);
-        finish(null);
-      }
+      console.error('[NativePush] register() a échoué — token non disponible');
+      finish(null);
     }
   });
 }
