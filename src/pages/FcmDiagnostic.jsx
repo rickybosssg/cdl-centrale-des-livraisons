@@ -150,20 +150,23 @@ export default function FcmDiagnostic() {
         setChain(c => ({ ...c, permission: 'error' }));
       }
     } else {
+      // Web : l'API Notification n'existe pas sur APK (normal)
       if ('Notification' in window) {
         const p = Notification.permission;
         addLog(`Permission Web: ${p}`);
         setChain(c => ({ ...c, permission: p === 'granted' ? 'ok' : p === 'default' ? 'warn' : 'error' }));
       } else {
-        addLog('API Notification non disponible (normal en APK)', 'warn');
+        addLog('API Notification non disponible — mode web uniquement', 'warn');
         setChain(c => ({ ...c, permission: 'warn' }));
       }
     }
 
     // Tokens BDD — via backend pour éviter 403 sur APK natif
     try {
-      const authTok = localStorage.getItem('base44_access_token') || '';
       syncBase44Token();
+      syncBase44Token(); // double sync pour s'assurer que le SDK est à jour
+      const authTok = localStorage.getItem('base44_access_token') || '';
+      addLog(`auth_token présent: ${!!authTok} | ${authTok ? authTok.slice(0, 12) + '...' : 'VIDE'}`);
       const res = await base44.functions.invoke('getFcmTokens', { user_email: me.email, auth_token: authTok });
       const tokens = res?.data?.tokens || [];
       setFcmTokens(tokens);
@@ -172,7 +175,7 @@ export default function FcmDiagnostic() {
       addLog(`Tokens en BDD: ${tokens.length}`);
     } catch (e) {
       setChain(c => ({ ...c, token: 'error', db: 'error' }));
-      addLog('Erreur lecture tokens: ' + e?.message, 'error');
+      addLog('Erreur lecture tokens: ' + e?.message + ' | status: ' + (e?.status || e?.response?.status || '?'), 'error');
     }
 
     // Infos natives
