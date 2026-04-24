@@ -4,7 +4,6 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { base44, syncBase44Token } from '@/api/base44Client';
-import { forceRegister } from '@/lib/nativePush.js';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -191,6 +190,8 @@ export default function FcmDiagnostic() {
   }, []);
 
   // ── Enregistrement natif ────────────────────────────────────────────────────
+  // Utilise requestNativePushToken() de nativePush.js qui gère correctement
+  // les listeners globaux partagés avec AppLayoutWrapper, évitant les conflits.
   const registerNative = async () => {
     addLog('▶ registerNative() START');
     setRegistering(true);
@@ -198,72 +199,68 @@ export default function FcmDiagnostic() {
     setChain(c => ({ ...c, permission: 'loading', register: 'loading' }));
 
     try {
+      const { requestNativePushToken } = await import('@/lib/nativePush');
       const { PushNotifications } = await import('@capacitor/push-notifications');
 
-      // Canal Android
-      try {
-        await PushNotifications.createChannel({
-          id: 'default', name: 'CDL Notifications', description: 'Toutes les notifications CDL',
-          importance: 5, sound: 'default', vibration: true, lights: true, lightColor: '#1a73e8',
-        });
-        addLog('Canal Android "default" créé');
-      } catch (ce) {
-        addLog('createChannel (déjà existant, ignoré): ' + ce?.message, 'warn');
-      }
+      // Vérifier/demander permission
+      let perm;
+      try { perm = (await PushNotifications.checkPermissions()).receive; }
+      catch (_) { perm = 'prompt'; }
+      addLog(`Permission actuelle: ${perm}`);
 
-      // Vérifier permission d'abord (forceRegister la demandera aussi mais on log ici)
-      try {
-        const check = await PushNotifications.checkPermissions();
-        addLog(`Permission actuelle: ${check.receive}`);
-        if (check.receive === 'denied') {
-          addLog('Permission refusée définitivement', 'error');
+      if (perm !== 'granted') {
+        try {
+          perm = (await PushNotifications.requestPermissions()).receive;
+          addLog(`Permission après demande: ${perm}`);
+        } catch (e) {
+          addLog('requestPermissions CRASH: ' + e?.message, 'error');
           setChain(c => ({ ...c, permission: 'error', register: 'error' }));
-          toast.error('Permission refusée. Allez dans Paramètres → Apps → CDL → Notifications');
+          toast.error('Crash requestPermissions: ' + e?.message);
           setRegistering(false);
           return;
         }
-      } catch (_) {}
+      }
 
-      setChain(c => ({ ...c, permission: 'ok' }));
-      addLog('Permission OK ✅');
-
-      // Utiliser forceRegister() — bypass le singleton _registered, listeners propres
-      addLog('📡 Lancement forceRegister()...');
-      const token = await forceRegister(
-        (val) => addLog('🎉 TOKEN REÇU VIA forceRegister: ' + val.slice(0, 25) + '...'),
-        (errMsg) => {
-          addLog('❌ registrationError: ' + errMsg, 'error');
-          setRegistrationError(errMsg);
-        }
-      );
-      addLog(token ? `✅ forceRegister OK | token longueur: ${token.length}` : '❌ forceRegister: aucun token retourné', token ? 'info' : 'error');
-
-      if (!token) {
-        setChain(c => ({ ...c, register: 'error', token: 'error', db: 'error' }));
-        addLog('❌ Aucun token reçu — register() a échoué silencieusement', 'error');
-        addLog('→ Vérifier Logcat : adb logcat -s FirebaseMessaging:* FirebaseApp:* com.google.firebase:*', 'error');
-        toast.error('Token non reçu. Voir logs détaillés ci-dessous.', { duration: 10000 });
+      if (perm !== 'granted') {
+        addLog('Permission refusée', 'error');
+        setChain(c => ({ ...c, permission: 'error', register: 'error' }));
+        toast.error('Permission refusée → Paramètres → Apps → CDL → Notifications');
         setRegistering(false);
         return;
       }
 
-      addLog(`✅ Token FCM reçu: ${token.slice(0, 30)}... (longueur: ${token.length})`);
+      setChain(c => ({ ...c, permission: 'ok' }));
+      addLog('Permission OK ✅ — Appel requestNativePushToken()...');
+
+      // requestNativePushToken() gère les listeners globaux + register() avec timeout 25s
+      const token = await requestNativePushToken();
+
+      addLog(token
+        ? `🎉 Token reçu: ${token.slice(0, 30)}... (longueur: ${token.length})`
+        : '❌ Aucun token reçu (timeout ou registrationError)', token ? 'info' : 'error');
+
+      if (!token) {
+        setChain(c => ({ ...c, register: 'error', token: 'error', db: 'error' }));
+        addLog('→ Voir Logcat: adb logcat -s FirebaseMessaging:* FirebaseApp:* AndroidRuntime:E', 'error');
+        addLog('→ Cause probable: SHA-1 du keystore non enregistré dans Firebase Console', 'error');
+        toast.error('Token non reçu. Voir logs + Logcat Android.', { duration: 10000 });
+        setRegistering(false);
+        return;
+      }
+
       setChain(c => ({ ...c, register: 'ok', token: 'loading', db: 'loading' }));
 
-      const currentUser = user;
-      addLog(`📤 Sauvegarde token pour: ${currentUser?.email || 'EMAIL VIDE!'}`);
-
-      if (!currentUser?.email) {
-        addLog('❌ user.email est vide — impossible de sauvegarder !', 'error');
+      if (!user?.email) {
+        addLog('❌ user.email vide — impossible de sauvegarder !', 'error');
         toast.error('Utilisateur non identifié — reconnectez-vous');
         setRegistering(false);
         return;
       }
 
+      addLog(`📤 Sauvegarde token pour: ${user.email}`);
       try {
-        addLog('Appel saveFcmTokenPublic...');
         const saveRes = await base44.functions.invoke('saveFcmTokenPublic', {
-          user_email: currentUser.email,
+          user_email: user.email,
           token,
           device_type: 'android_native',
         });
@@ -272,7 +269,6 @@ export default function FcmDiagnostic() {
         addLog(`⚠️ saveFcmTokenPublic échoué: ${saveErr?.message} — fallback...`, 'warn');
         syncBase44Token();
         const authTok = localStorage.getItem('base44_access_token') || '';
-        addLog(`Fallback saveFcmToken | auth_token présent: ${!!authTok}`);
         await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
         addLog('✅ saveFcmToken (fallback) réussi');
       }
@@ -281,12 +277,11 @@ export default function FcmDiagnostic() {
       setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
       toast.success('✅ Token FCM enregistré !');
 
-      // Relire les tokens (user_email dans body → pas de 403)
       addLog('Rechargement tokens BDD...');
-      const tokensRes = await base44.functions.invoke('getFcmTokens', { user_email: currentUser.email });
+      const tokensRes = await base44.functions.invoke('getFcmTokens', { user_email: user.email });
       const freshTokens = tokensRes?.data?.tokens || [];
       setFcmTokens(freshTokens);
-      addLog(`Tokens en BDD après save: ${freshTokens.length}`);
+      addLog(`Tokens en BDD: ${freshTokens.length}`);
 
     } catch (err) {
       addLog('ERREUR GLOBALE: ' + err?.message, 'error');
