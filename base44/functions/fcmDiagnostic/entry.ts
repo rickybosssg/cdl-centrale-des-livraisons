@@ -13,7 +13,16 @@ Deno.serve(async (req) => {
       if (text) bodyData = JSON.parse(text);
     } catch (_) {}
 
-    const base44 = createClientFromRequest(req);
+    // Injecter auth_token depuis le body si le header Authorization est absent (APK Android)
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    let effectiveReq = req;
+    if (!authHeader && bodyData.auth_token) {
+      const newHeaders = new Headers(req.headers);
+      newHeaders.set('Authorization', `Bearer ${bodyData.auth_token}`);
+      effectiveReq = new Request(req.url, { method: req.method, headers: newHeaders });
+    }
+
+    const base44 = createClientFromRequest(effectiveReq);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
 

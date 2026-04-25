@@ -437,9 +437,16 @@ export default function FcmDiagnostic() {
     setServerDiagLoading(true);
     setServerDiag(null);
     try {
-      const res = await base44.functions.invoke('fcmDiagnostic', { test_send: withSend });
-      setServerDiag(res.data);
-      addLog('Diagnostic serveur: ' + res.data?.summary);
+      // Utiliser fetch direct avec auth_token pour éviter 403 sur APK natif
+      const authTok = localStorage.getItem('base44_access_token') || '';
+      const res = await fetch('https://cdl.base44.app/api/v3/functions/fcmDiagnostic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test_send: withSend, auth_token: authTok }),
+      });
+      const data = await res.json();
+      setServerDiag(data);
+      addLog('Diagnostic serveur: ' + data?.summary);
     } catch (e) {
       addLog('Erreur diagnostic serveur: ' + e?.message, 'error');
       toast.error('Erreur: ' + e?.message);
