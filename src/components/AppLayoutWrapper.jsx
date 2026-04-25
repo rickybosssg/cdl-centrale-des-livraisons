@@ -171,21 +171,20 @@ export default function AppLayoutWrapper({ user }) {
                   return;
                 }
                 const authTok = getAuthToken();
-                const appId = '69c3c74fc4b62396dca61751';
-                // Utiliser la même URL que le SDK Base44 (app.base44.com)
-                const res = await fetch(`https://app.base44.com/api/apps/${appId}/functions/saveFcmTokenPublic`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    ...(authTok ? { 'Authorization': `Bearer ${authTok}` } : {}),
-                  },
-                  body: JSON.stringify({ user_email: resolvedEmail, token, device_type: 'android_native', auth_token: authTok }),
+                // Utiliser base44.functions.invoke — le SDK gère l'auth et le routing correctement
+                // même dans la WebView Capacitor (pas de problème CORS/403)
+                syncBase44Token();
+                const res = await base44.functions.invoke('saveFcmTokenPublic', {
+                  user_email: resolvedEmail,
+                  token,
+                  device_type: 'android_native',
+                  auth_token: authTok,
                 });
-                const data = await res.json();
+                const data = res.data;
                 if (data?.success) {
                   console.log('[FCM] ✅ TOKEN SAVED:', data.action, '| user:', data.user_email);
                 } else {
-                  throw new Error(data?.error || `HTTP ${res.status}`);
+                  throw new Error(data?.error || 'Échec sauvegarde token');
                 }
               } catch (saveErr) {
                 console.error('[FCM] ❌ saveFcmTokenPublic error:', saveErr?.message);
