@@ -299,14 +299,22 @@ export default function FcmDiagnostic() {
         // Supprimer les listeners temporaires
         for (const l of listeners) { try { await l.remove(); } catch (_) {} }
 
-        // ── 5. Sauvegarder via fetch direct → saveFcmTokenPublic ─────────
-        const currentEmail = user?.email;
+        // ── 5. Résoudre l'email MAINTENANT (closure async — user peut être null) ─
+        let currentEmail = user?.email;
+        if (!currentEmail) {
+          // Fallback : re-fetch depuis le SDK au moment du callback
+          try {
+            const me = await base44.auth.me();
+            currentEmail = me?.email;
+          } catch (_) {}
+        }
         if (!currentEmail) {
           addLog('❌ user.email vide — impossible de sauvegarder !', 'error');
           done(false);
           toast.error('Utilisateur non identifié — reconnectez-vous');
           return;
         }
+        addLog(`📧 Email résolu: ${currentEmail}`);
 
         addLog(`📤 Sauvegarde token pour: ${currentEmail}`);
         try {

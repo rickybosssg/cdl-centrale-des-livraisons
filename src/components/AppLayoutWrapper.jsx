@@ -161,6 +161,15 @@ export default function AppLayoutWrapper({ user }) {
             onToken: async (token) => {
               console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
               try {
+                // Résoudre l'email au moment du callback (closure peut être stale)
+                let resolvedEmail = userEmail;
+                if (!resolvedEmail) {
+                  try { const me = await base44.auth.me(); resolvedEmail = me?.email; } catch (_) {}
+                }
+                if (!resolvedEmail) {
+                  console.error('[FCM] ❌ Impossible de résoudre user.email pour sauvegarder le token');
+                  return;
+                }
                 const authTok = getAuthToken();
                 const appId = '69c3c74fc4b62396dca61751';
                 // Utiliser la même URL que le SDK Base44 (app.base44.com)
@@ -170,7 +179,7 @@ export default function AppLayoutWrapper({ user }) {
                     'Content-Type': 'application/json',
                     ...(authTok ? { 'Authorization': `Bearer ${authTok}` } : {}),
                   },
-                  body: JSON.stringify({ user_email: userEmail, token, device_type: 'android_native', auth_token: authTok }),
+                  body: JSON.stringify({ user_email: resolvedEmail, token, device_type: 'android_native', auth_token: authTok }),
                 });
                 const data = await res.json();
                 if (data?.success) {
