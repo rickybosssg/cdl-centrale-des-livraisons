@@ -161,24 +161,21 @@ export default function AppLayoutWrapper({ user }) {
             onToken: async (token) => {
               console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
               try {
-                // Sur APK natif : utiliser saveFcmTokenPublic (évite 403 auth header manquant)
-                const res = await base44.functions.invoke('saveFcmTokenPublic', {
-                  user_email: userEmail,
-                  token,
-                  device_type: 'android_native',
+                const authTok = getAuthToken();
+                // fetch direct avec auth_token dans le body — contourne le 403 du gateway sur APK
+                const res = await fetch('https://cdl.base44.app/api/v3/functions/saveFcmTokenPublic', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': authTok ? `Bearer ${authTok}` : '' },
+                  body: JSON.stringify({ user_email: userEmail, token, device_type: 'android_native', auth_token: authTok }),
                 });
-                console.log('[FCM] ✅ TOKEN SAVED via saveFcmTokenPublic:', res.data?.action, '| user:', res.data?.user_email || userEmail);
-              } catch (saveErr) {
-                console.error('[FCM] ❌ saveFcmTokenPublic error:', saveErr?.message, '— fallback saveFcmToken...');
-                // Fallback avec auth_token
-                try {
-                  syncBase44Token();
-                  const authTok = getAuthToken();
-                  const res2 = await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
-                  console.log('[FCM] ✅ TOKEN SAVED via fallback:', res2.data?.action);
-                } catch (fallbackErr) {
-                  console.error('[FCM] ❌ Fallback aussi échoué:', fallbackErr?.message);
+                const data = await res.json();
+                if (data?.success) {
+                  console.log('[FCM] ✅ TOKEN SAVED:', data.action, '| user:', data.user_email);
+                } else {
+                  throw new Error(data?.error || `HTTP ${res.status}`);
                 }
+              } catch (saveErr) {
+                console.error('[FCM] ❌ saveFcmTokenPublic error:', saveErr?.message);
               }
             },
             onForegroundNotif: (notification) => {

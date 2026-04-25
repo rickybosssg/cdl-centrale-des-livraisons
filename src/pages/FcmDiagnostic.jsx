@@ -306,25 +306,35 @@ export default function FcmDiagnostic() {
 
         addLog(`📤 Sauvegarde token pour: ${currentEmail}`);
         try {
-          const saveRes = await base44.functions.invoke('saveFcmTokenPublic', {
-            user_email: currentEmail,
-            token,
-            device_type: 'android_native',
+          const authTok = localStorage.getItem('base44_access_token') || '';
+          addLog(`auth_token pour save: ${authTok ? authTok.slice(0, 12) + '...' : 'VIDE'}`);
+          const saveRes = await fetch('https://cdl.base44.app/api/v3/functions/saveFcmTokenPublic', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authTok ? { 'Authorization': `Bearer ${authTok}` } : {}),
+            },
+            body: JSON.stringify({ user_email: currentEmail, token, device_type: 'android_native', auth_token: authTok }),
           });
-          const saveData = saveRes.data;
-          if (!saveData?.success) {
-            throw new Error('saveFcmTokenPublic échoué: ' + (saveData?.error || 'Erreur inconnue'));
+          const saveData = await saveRes.json();
+          if (!saveRes.ok || !saveData?.success) {
+            throw new Error(`saveFcmTokenPublic échoué: HTTP ${saveRes.status} — ${saveData?.error || 'Erreur inconnue'}`);
           }
           addLog(`✅ Token sauvegardé en BDD → action: ${saveData.action} | id: ${saveData.token_id}`);
           setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
           toast.success('✅ Token FCM enregistré !');
 
           // Recharger la liste
-          const tokRes = await base44.functions.invoke('getFcmTokens', {
-            user_email: currentEmail,
-            auth_token: localStorage.getItem('base44_access_token') || '',
+          const authTok2 = localStorage.getItem('base44_access_token') || '';
+          const tokRes = await fetch('https://cdl.base44.app/api/v3/functions/getFcmTokens', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authTok2 ? { 'Authorization': `Bearer ${authTok2}` } : {}),
+            },
+            body: JSON.stringify({ user_email: currentEmail, auth_token: authTok2 }),
           });
-          const tokData = tokRes.data;
+          const tokData = await tokRes.json();
           setFcmTokens(tokData?.tokens || []);
           addLog(`Tokens en BDD: ${(tokData?.tokens || []).length}`);
         } catch (saveErr) {
