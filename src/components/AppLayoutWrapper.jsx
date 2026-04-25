@@ -162,10 +162,14 @@ export default function AppLayoutWrapper({ user }) {
               console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
               try {
                 const authTok = getAuthToken();
-                // fetch direct avec auth_token dans le body — contourne le 403 du gateway sur APK
-                const res = await fetch('https://cdl.base44.app/api/v3/functions/saveFcmTokenPublic', {
+                const appId = '69c3c74fc4b62396dca61751';
+                // Utiliser la même URL que le SDK Base44 (app.base44.com)
+                const res = await fetch(`https://app.base44.com/api/apps/${appId}/functions/saveFcmTokenPublic`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': authTok ? `Bearer ${authTok}` : '' },
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(authTok ? { 'Authorization': `Bearer ${authTok}` } : {}),
+                  },
                   body: JSON.stringify({ user_email: userEmail, token, device_type: 'android_native', auth_token: authTok }),
                 });
                 const data = await res.json();

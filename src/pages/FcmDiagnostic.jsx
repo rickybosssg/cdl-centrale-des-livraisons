@@ -161,13 +161,17 @@ export default function FcmDiagnostic() {
       }
     }
 
-    // Tokens BDD — fetch direct (sans SDK) pour éviter 403 sur APK natif
+    // Tokens BDD — fetch direct avec Bearer token pour éviter 403 sur APK natif
     try {
       const authTok = localStorage.getItem('base44_access_token') || '';
       addLog(`auth_token présent: ${!!authTok} | ${authTok ? authTok.slice(0, 12) + '...' : 'VIDE'}`);
-      const tokRes = await fetch('https://cdl.base44.app/api/v3/functions/getFcmTokens', {
+      const appId = '69c3c74fc4b62396dca61751';
+      const tokRes = await fetch(`https://app.base44.com/api/apps/${appId}/functions/getFcmTokens`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authTok ? { 'Authorization': `Bearer ${authTok}` } : {}),
+        },
         body: JSON.stringify({ user_email: me.email, auth_token: authTok }),
       });
       const tokData = await tokRes.json();
@@ -308,7 +312,8 @@ export default function FcmDiagnostic() {
         try {
           const authTok = localStorage.getItem('base44_access_token') || '';
           addLog(`auth_token pour save: ${authTok ? authTok.slice(0, 12) + '...' : 'VIDE'}`);
-          const saveRes = await fetch('https://cdl.base44.app/api/v3/functions/saveFcmTokenPublic', {
+          const appId = '69c3c74fc4b62396dca61751';
+          const saveRes = await fetch(`https://app.base44.com/api/apps/${appId}/functions/saveFcmTokenPublic`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -326,7 +331,8 @@ export default function FcmDiagnostic() {
 
           // Recharger la liste
           const authTok2 = localStorage.getItem('base44_access_token') || '';
-          const tokRes = await fetch('https://cdl.base44.app/api/v3/functions/getFcmTokens', {
+          const appId2 = '69c3c74fc4b62396dca61751';
+          const tokRes = await fetch(`https://app.base44.com/api/apps/${appId2}/functions/getFcmTokens`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -448,9 +454,13 @@ export default function FcmDiagnostic() {
     try {
       // Utiliser fetch direct avec auth_token pour éviter 403 sur APK natif
       const authTok = localStorage.getItem('base44_access_token') || '';
-      const res = await fetch('https://cdl.base44.app/api/v3/functions/fcmDiagnostic', {
+      const appId = '69c3c74fc4b62396dca61751';
+      const res = await fetch(`https://app.base44.com/api/apps/${appId}/functions/fcmDiagnostic`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authTok ? { 'Authorization': `Bearer ${authTok}` } : {}),
+        },
         body: JSON.stringify({ test_send: withSend, auth_token: authTok }),
       });
       const data = await res.json();
