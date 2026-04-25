@@ -161,14 +161,17 @@ export default function FcmDiagnostic() {
       }
     }
 
-    // Tokens BDD — via backend pour éviter 403 sur APK natif
+    // Tokens BDD — fetch direct (sans SDK) pour éviter 403 sur APK natif
     try {
-      syncBase44Token();
-      syncBase44Token(); // double sync pour s'assurer que le SDK est à jour
       const authTok = localStorage.getItem('base44_access_token') || '';
       addLog(`auth_token présent: ${!!authTok} | ${authTok ? authTok.slice(0, 12) + '...' : 'VIDE'}`);
-      const res = await base44.functions.invoke('getFcmTokens', { user_email: me.email, auth_token: authTok });
-      const tokens = res?.data?.tokens || [];
+      const tokRes = await fetch('https://cdl.base44.app/api/v3/functions/getFcmTokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_email: me.email, auth_token: authTok }),
+      });
+      const tokData = await tokRes.json();
+      const tokens = tokData?.tokens || [];
       setFcmTokens(tokens);
       const has = tokens.length > 0;
       setChain(c => ({ ...c, token: has ? 'ok' : 'error', db: has ? 'ok' : 'error', register: has ? 'ok' : 'pending' }));
@@ -258,28 +261,34 @@ export default function FcmDiagnostic() {
       }
 
       addLog(`📤 Sauvegarde token pour: ${user.email}`);
-      try {
-        const saveRes = await base44.functions.invoke('saveFcmTokenPublic', {
-          user_email: user.email,
-          token,
-          device_type: 'android_native',
-        });
-        addLog(`✅ saveFcmTokenPublic → action: ${saveRes.data?.action} | id: ${saveRes.data?.token_id}`);
-      } catch (saveErr) {
-        addLog(`⚠️ saveFcmTokenPublic échoué: ${saveErr?.message} — fallback...`, 'warn');
-        syncBase44Token();
-        const authTok = localStorage.getItem('base44_access_token') || '';
-        await base44.functions.invoke('saveFcmToken', { token, deviceType: 'android_native', auth_token: authTok });
-        addLog('✅ saveFcmToken (fallback) réussi');
+      // Sur APK Capacitor, base44.functions.invoke peut échouer (403) car le SDK
+      // ne transmet pas le header auth correctement. On utilise fetch direct vers
+      // saveFcmTokenPublic qui est sans auth (asServiceRole uniquement).
+      const savePayload = { user_email: user.email, token, device_type: 'android_native' };
+      const saveRes = await fetch('https://cdl.base44.app/api/v3/functions/saveFcmTokenPublic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(savePayload),
+      });
+      const saveData = await saveRes.json();
+      if (!saveRes.ok || !saveData.success) {
+        throw new Error('saveFcmTokenPublic échoué: ' + (saveData.error || saveRes.status));
       }
+      addLog(`✅ Token sauvegardé → action: ${saveData.action} | id: ${saveData.token_id}`);
 
       addLog('✅ Token sauvegardé en BDD');
       setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
       toast.success('✅ Token FCM enregistré !');
 
       addLog('Rechargement tokens BDD...');
-      const tokensRes = await base44.functions.invoke('getFcmTokens', { user_email: user.email });
-      const freshTokens = tokensRes?.data?.tokens || [];
+      const authTok2 = localStorage.getItem('base44_access_token') || '';
+      const tokensRes = await fetch('https://cdl.base44.app/api/v3/functions/getFcmTokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_email: user.email, auth_token: authTok2 }),
+      });
+      const tokensData = await tokensRes.json();
+      const freshTokens = tokensData?.tokens || [];
       setFcmTokens(freshTokens);
       addLog(`Tokens en BDD: ${freshTokens.length}`);
 
