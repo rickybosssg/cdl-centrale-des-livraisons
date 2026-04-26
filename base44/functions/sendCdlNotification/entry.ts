@@ -202,6 +202,24 @@ Deno.serve(async (req) => {
       await deactivateToken(base44, t);
     }
 
+    // ── Log notification en BDD (best-effort) ────────────────────────────────
+    try {
+      const logEmail = user_email || `role:${role}`;
+      const logRole  = data?.role || role || '';
+      await base44.asServiceRole.entities.Notification.create({
+        destinataire_email: logEmail,
+        destinataire_role: logRole,
+        titre: title,
+        message: msgBody,
+        type: sent > 0 ? 'success' : 'warning',
+        lue: false,
+        target_screen: data?.screen || '',
+        target_entity_id: data?.entity_id || '',
+        target_entity_type: data?.type || '',
+        notification_key: `${logEmail}__${data?.type || ''}__${data?.entity_id || ''}__${Date.now()}`,
+      });
+    } catch (_) {}
+
     console.log(`[sendCdlNotification] ✅ sent=${sent} failed=${failed} total=${targetTokenRecords.length}`);
     return Response.json({ sent, failed, total: targetTokenRecords.length });
 
