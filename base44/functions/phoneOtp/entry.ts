@@ -90,23 +90,28 @@ async function twilioVerifyOtp(phone, code) {
 // ── AUTH_PHONE_ONLY : login ou création sans vérification email ───────────
 // Stratégie :
 //   1. Tentative de login avec credentials dérivés → si OK, retourne token
-//   2. Si échec login → créer le compte via adminCreateUser (service role,
-//      bypasse email verification) → puis login immédiat
-async function phoneAuth(base44ServiceRole, phone) {
+//   2. Si échec login → créer via /auth/register (API publique)
+//   3. Login immédiat après création (bypasse message email côté frontend)
+//
+// NOTE : Base44 n'expose pas de méthode adminCreateUser dans le SDK.
+// On utilise l'API /auth/register + login immédiat.
+// L'email dérivé (phone_XXX@cdl.phone) est opaque — jamais vu par l'user.
+async function phoneAuth(phone) {
   const email    = phoneToEmail(phone);
   const password = phoneToPassword(phone);
 
   // ── ÉTAPE 1 : Tenter une connexion (compte existant) ──────────────────
+  console.log('[phoneOtp] ÉTAPE 1 — login tentative pour:', phone);
   const loginRes = await fetch(`https://api.base44.app/api/apps/${BASE44_APP_ID}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
   const loginData = await loginRes.json();
+  console.log('[phoneOtp] Login status:', loginRes.status, '| has token:', !!loginData.access_token);
 
   if (loginRes.ok && loginData.access_token) {
     console.log('[phoneOtp] ✅ AUTH_PHONE_ONLY — compte existant connecté:', phone);
-    // Mettre à jour téléphone si absent (best-effort)
     try {
       const client = createClientFromRequest({ headers: { authorization: `Bearer ${loginData.access_token}` } });
       const me = await client.auth.me();
@@ -115,51 +120,56 @@ async function phoneAuth(base44ServiceRole, phone) {
     return { access_token: loginData.access_token, is_new_user: false };
   }
 
-  console.log('[phoneOtp] Compte inexistant — création via adminCreateUser | phone:', phone);
-
-  // ── ÉTAPE 2 : Créer via adminCreateUser (service role = pas d'email vérif) ─
-  try {
-    await base44ServiceRole.users.adminCreateUser({
-      email,
-      password,
-      full_name: phone,
-      role: 'user',
-      telephone: phone,
-      // Marquer ce compte comme AUTH_PHONE_ONLY
-      auth_method: 'phone',
-    });
-    console.log('[phoneOtp] adminCreateUser OK pour:', phone);
-  } catch (createErr) {
-    // Si "already exists" → tentative de login quand même (race condition)
-    const msg = createErr?.message || '';
-    if (!msg.toLowerCase().includes('exist') && !msg.toLowerCase().includes('already')) {
-      console.error('[phoneOtp] adminCreateUser failed:', msg);
-      throw new Error('Impossible de créer le compte téléphone : ' + msg);
-    }
-    console.warn('[phoneOtp] Compte signalé existant par adminCreateUser — retry login');
-  }
-
-  // ── ÉTAPE 3 : Login immédiat après création ───────────────────────────
-  const loginRes2 = await fetch(`https://api.base44.app/api/apps/${BASE44_APP_ID}/auth/login`, {
+  // ── ÉTAPE 2 : Compte inexistant → créer via /auth/register ───────────
+  console.log('[phoneOtp] ÉTAPE 2 — création compte pour:', phone);
+  const regRes = await fetch(`https://api.base44.app/api/apps/${BASE44_APP_ID}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, full_name: phone }),
   });
-  const loginData2 = await loginRes2.json();
+  const regData = await regRes.json();
+  console.log('[phoneOtp] Register status:', regRes.status, '| has token:', !!regData.access_token, '| data:', JSON.stringify(regData).slice(0, 200));
 
-  if (loginRes2.ok && loginData2.access_token) {
-    console.log('[phoneOtp] ✅ AUTH_PHONE_ONLY — nouveau compte connecté:', phone);
+  // Si register retourne directement un token → connexion immédiate
+  if (regData.access_token) {
+    console.log('[phoneOtp] ✅ Register avec token direct');
     try {
-      const client = createClientFromRequest({ headers: { authorization: `Bearer ${loginData2.access_token}` } });
-      await client.auth.updateMe({ telephone: phone, auth_method: 'phone' });
+      const client = createClientFromRequest({ headers: { authorization: `Bearer ${regData.access_token}` } });
+      await client.auth.updateMe({ telephone: phone });
     } catch (_) {}
-    return { access_token: loginData2.access_token, is_new_user: true };
+    return { access_token: regData.access_token, is_new_user: true };
   }
 
-  // Échec irrécupérable
-  const errMsg = loginData2?.error || loginData2?.detail || loginData2?.message || 'Login post-création échoué';
-  console.error('[phoneOtp] Login post-création failed:', errMsg, '| status:', loginRes2.status);
-  throw new Error('Erreur connexion après création : ' + errMsg);
+  // Register OK mais sans token (vérif email demandée) → login immédiat quand même
+  // Le compte existe maintenant en BDD — on force le login
+  if (regRes.ok || regRes.status === 201) {
+    console.log('[phoneOtp] ÉTAPE 3 — login post-register (sans token initial)');
+    const loginRes2 = await fetch(`https://api.base44.app/api/apps/${BASE44_APP_ID}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const loginData2 = await loginRes2.json();
+    console.log('[phoneOtp] Login post-register status:', loginRes2.status, '| has token:', !!loginData2.access_token);
+
+    if (loginData2.access_token) {
+      console.log('[phoneOtp] ✅ AUTH_PHONE_ONLY — nouveau compte connecté après register:', phone);
+      try {
+        const client = createClientFromRequest({ headers: { authorization: `Bearer ${loginData2.access_token}` } });
+        await client.auth.updateMe({ telephone: phone });
+      } catch (_) {}
+      return { access_token: loginData2.access_token, is_new_user: true };
+    }
+
+    const errLogin = loginData2?.error || loginData2?.detail || loginData2?.message || 'Login post-register échoué';
+    console.error('[phoneOtp] Login post-register failed:', errLogin);
+    throw new Error('Connexion impossible après création : ' + errLogin);
+  }
+
+  // Échec register
+  const errReg = regData?.error || regData?.detail || regData?.message || 'Erreur register inconnue';
+  console.error('[phoneOtp] Register failed:', errReg, '| status:', regRes.status);
+  throw new Error('Impossible de créer le compte : ' + errReg);
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────
@@ -204,8 +214,7 @@ Deno.serve(async (req) => {
       }
 
       // OTP valide — AUTH_PHONE_ONLY
-      const base44 = createClientFromRequest(req);
-      const result = await phoneAuth(base44.asServiceRole, phone);
+      const result = await phoneAuth(phone);
 
       return Response.json({
         success: true,
