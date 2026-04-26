@@ -9,14 +9,30 @@
  *  → Si nouveau  : stocke le numéro + code promo, onNewUser() → RoleSetup
  */
 import { useState, useEffect, useRef } from "react";
-import { Loader2, ArrowLeft, Phone } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
 const BLUE = "#1877f2";
+// AppID hardcodé — identique à VITE_BASE44_APP_ID, requis pour appels non-authentifiés depuis APK
+const APP_ID = "69c3c74fc4b62396dca61751";
 
 function saveToken(token) {
   try { localStorage.setItem("base44_access_token", token); } catch (_) {}
   try { base44.auth.setToken(token); } catch (_) {}
+}
+
+// Appelle une fonction backend SANS authentification (user non connecté)
+// Évite le 403 que base44.functions.invoke() génère quand pas de session
+async function callPublicFunction(name, payload) {
+  const url = `https://cdl.base44.app/api/apps/${APP_ID}/functions/${name}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Erreur ${res.status}`);
+  return data;
 }
 
 function formatPhoneDisplay(raw) {
@@ -58,14 +74,14 @@ export default function PhoneOtpFlow({ onSuccess, onNewUser, onBack }) {
     if (digits.length < 8) { setMessage("Numéro invalide — 8 chiffres attendus"); return; }
     setLoading(true); setMessage("");
     try {
-      const res = await base44.functions.invoke("phoneOtp", { action: "send", phone: fullPhone });
-      if (res.data?.success) {
+      const data = await callPublicFunction("phoneOtp", { action: "send", phone: fullPhone });
+      if (data?.success) {
         setStep("otp");
         setCountdown(60);
         setOtp("");
         setTimeout(() => otpRef.current?.focus(), 300);
       } else {
-        setMessage(res.data?.error || "Impossible d'envoyer le SMS. Réessayez.");
+        setMessage(data?.error || "Impossible d'envoyer le SMS. Réessayez.");
       }
     } catch (err) {
       setMessage(err?.message || "Erreur réseau — réessayez.");
@@ -77,18 +93,13 @@ export default function PhoneOtpFlow({ onSuccess, onNewUser, onBack }) {
     if (otp.length < 6) { setMessage("Saisissez les 6 chiffres du code"); return; }
     setLoading(true); setMessage("");
     try {
-      const res = await base44.functions.invoke("phoneOtp", { action: "verify", phone: fullPhone, code: otp });
-      const d = res.data;
+      const d = await callPublicFunction("phoneOtp", { action: "verify", phone: fullPhone, code: otp });
       if (d?.success && d?.access_token) {
         saveToken(d.access_token);
-        // Stocker le numéro validé pour préremplissage
         localStorage.setItem("cdl_verified_phone", fullPhone);
-
         if (d.is_new_user) {
-          // Nouvel utilisateur → écran code promo
           setStep("promo");
         } else {
-          // Utilisateur existant → connexion directe
           onSuccess();
         }
       } else {
