@@ -1,16 +1,11 @@
 /**
  * phoneOtp — AUTH PAR TÉLÉPHONE (OTP Twilio)
  *
- * Stratégie définitive (otp_code inaccessible via API) :
- *
  * SEND   : envoie OTP SMS via Twilio Verify
  * VERIFY : après OTP Twilio validé →
- *   1. Login direct (si compte déjà vérifié)
- *   2. Si non vérifié : inviteUser (service role) → crée compte sans email verify
- *   3. Obtenir token via /auth/admin-login (service role Bearer)
- *
- * Remarque : inviteUser crée le compte avec role=user, sans vérification email.
- * L'email est opaque (phone_XXXX@cdl.phone), jamais affiché à l'utilisateur.
+ *   1. Login direct (compte existant et vérifié → password déterministe)
+ *   2. Si non trouvé : adminCreateUser (service role SDK) → retourne access_token directement
+ *   3. Si existant non vérifié : adminCreateUser avec upsert
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
@@ -27,7 +22,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function normalizePhone(raw) {
   if (!raw) return null;
   let n = String(raw).replace(/\s+/g, '').replace(/-/g, '');
@@ -47,14 +42,17 @@ function phoneToPassword(phone) {
   return `CDL_PHONE_${phone}_OTP_2025`;
 }
 
-// ── Twilio : envoyer OTP ────────────────────────────────────────────────────
+// ── Twilio : envoyer OTP ─────────────────────────────────────────────────────
 async function twilioSendOtp(phone) {
   const creds = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
   const res = await fetch(
     `https://verify.twilio.com/v2/Services/${TWILIO_VERIFY_SID}/Verifications`,
     {
       method: 'POST',
-      headers: { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Authorization': `Basic ${creds}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
       body: new URLSearchParams({ To: phone, Channel: 'sms' }).toString(),
     }
   );
@@ -64,14 +62,17 @@ async function twilioSendOtp(phone) {
   return data;
 }
 
-// ── Twilio : vérifier OTP ───────────────────────────────────────────────────
+// ── Twilio : vérifier OTP ────────────────────────────────────────────────────
 async function twilioVerifyOtp(phone, code) {
   const creds = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
   const res = await fetch(
     `https://verify.twilio.com/v2/Services/${TWILIO_VERIFY_SID}/VerificationCheck`,
     {
       method: 'POST',
-      headers: { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Authorization': `Basic ${creds}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
       body: new URLSearchParams({ To: phone, Code: code }).toString(),
     }
   );
@@ -81,165 +82,49 @@ async function twilioVerifyOtp(phone, code) {
   return data?.status === 'approved';
 }
 
-// ── Login direct (compte déjà vérifié) ──────────────────────────────────────
-async function tryLogin(email, password) {
+// ── Login direct avec password déterministe ──────────────────────────────────
+async function tryDirectLogin(email, password) {
   const res = await fetch(`${BASE_AUTH}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
   const data = await res.json();
-  console.log('[phoneOtp] tryLogin:', res.status, '| token:', !!data.access_token);
+  console.log('[phoneOtp] tryDirectLogin:', res.status, '| token:', !!data.access_token);
   return data.access_token || null;
 }
 
-// ── Admin login via service role token ──────────────────────────────────────
-async function tryAdminLogin(userId, email, serviceToken) {
-  if (!serviceToken) return null;
-
-  // Essai 1 : admin-login par user_id
-  const r1 = await fetch(`${BASE_AUTH}/admin-login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceToken}` },
-    body: JSON.stringify({ user_id: userId }),
-  });
-  const d1 = await r1.json();
-  console.log('[phoneOtp] admin-login(user_id):', r1.status, '| token:', !!d1.access_token);
-  if (d1.access_token) return d1.access_token;
-
-  // Essai 2 : admin-login par email
-  const r2 = await fetch(`${BASE_AUTH}/admin-login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceToken}` },
-    body: JSON.stringify({ email }),
-  });
-  const d2 = await r2.json();
-  console.log('[phoneOtp] admin-login(email):', r2.status, '| token:', !!d2.access_token);
-  if (d2.access_token) return d2.access_token;
-
-  // Essai 3 : impersonate
-  const r3 = await fetch(`${BASE_AUTH}/impersonate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceToken}` },
-    body: JSON.stringify({ user_id: userId }),
-  });
-  const d3 = await r3.json();
-  console.log('[phoneOtp] impersonate:', r3.status, '| token:', !!d3.access_token);
-  if (d3.access_token) return d3.access_token;
-
-  return null;
-}
-
-// ── Flux auth principal (après OTP Twilio validé) ───────────────────────────
-async function phoneAuth(req, phone) {
+// ── Flux auth principal ──────────────────────────────────────────────────────
+async function phoneAuth(base44, phone) {
   const email    = phoneToEmail(phone);
   const password = phoneToPassword(phone);
-  const base44   = createClientFromRequest(req);
-
-  // Extraire le service token depuis la requête (injecté par Base44 en service role)
-  const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
-  const serviceToken = authHeader.replace(/^Bearer\s+/i, '').trim() || null;
-
-  console.log('[phoneOtp] phoneAuth | phone:', phone, '| serviceToken:', !!serviceToken);
 
   // ÉTAPE 1 : Login direct (compte existant et déjà vérifié)
-  const token1 = await tryLogin(email, password);
-  if (token1) {
+  const existingToken = await tryDirectLogin(email, password);
+  if (existingToken) {
     console.log('[phoneOtp] ✅ Login direct OK');
-    try {
-      const c = createClientFromRequest({ headers: { authorization: `Bearer ${token1}` } });
-      const me = await c.auth.me();
-      if (!me.telephone) await c.auth.updateMe({ telephone: phone });
-    } catch (_) {}
-    return { access_token: token1, is_new_user: false };
+    return { access_token: existingToken, is_new_user: false };
   }
 
-  // ÉTAPE 2 : Chercher si user existe en BDD
-  let userId = null;
-  let isNewUser = true;
-  try {
-    const existing = await base44.asServiceRole.entities.User.filter({ email });
-    if (existing.length > 0) {
-      userId = existing[0].id;
-      isNewUser = false;
-      console.log('[phoneOtp] User existant id:', userId);
-    }
-  } catch (e) {
-    console.warn('[phoneOtp] Recherche BDD:', e.message);
-  }
-
-  // ÉTAPE 3 : Si user existant non vérifié → tenter admin-login
-  if (userId && !isNewUser) {
-    const adminTok = await tryAdminLogin(userId, email, serviceToken);
-    if (adminTok) {
-      console.log('[phoneOtp] ✅ Admin-login OK (user existant non vérifié)');
-      try {
-        const c = createClientFromRequest({ headers: { authorization: `Bearer ${adminTok}` } });
-        const me = await c.auth.me();
-        if (!me.telephone) await c.auth.updateMe({ telephone: phone });
-      } catch (_) {}
-      return { access_token: adminTok, is_new_user: false };
-    }
-  }
-
-  // ÉTAPE 4 : Créer via inviteUser (sans vérification email)
-  if (!userId) {
-    console.log('[phoneOtp] Création via inviteUser...');
-    try {
-      await base44.users.inviteUser(email, 'user');
-      console.log('[phoneOtp] inviteUser OK');
-      await new Promise(r => setTimeout(r, 2000));
-
-      const newUsers = await base44.asServiceRole.entities.User.filter({ email });
-      if (newUsers.length > 0) {
-        userId = newUsers[0].id;
-        isNewUser = true;
-        console.log('[phoneOtp] User créé id:', userId);
-      }
-    } catch (e) {
-      const msg = e.message || '';
-      // Si user déjà existant (doublon race)
-      if (msg.toLowerCase().includes('exist') || msg.toLowerCase().includes('already')) {
-        console.warn('[phoneOtp] inviteUser: user déjà existant');
-        const retry = await base44.asServiceRole.entities.User.filter({ email }).catch(() => []);
-        if (retry.length > 0) userId = retry[0].id;
-      } else {
-        throw new Error('Impossible de créer le compte : ' + msg);
-      }
-    }
-  }
-
-  if (!userId) {
-    throw new Error('Compte introuvable après création. Réessayez.');
-  }
-
-  // ÉTAPE 5 : Obtenir token via admin-login (service role)
-  const adminToken = await tryAdminLogin(userId, email, serviceToken);
-  if (adminToken) {
-    console.log('[phoneOtp] ✅ Admin-login OK (nouveau user)');
-    try {
-      const c = createClientFromRequest({ headers: { authorization: `Bearer ${adminToken}` } });
-      await c.auth.updateMe({ telephone: phone, full_name: phone });
-    } catch (_) {}
-    return { access_token: adminToken, is_new_user: isNewUser };
-  }
-
-  // ÉTAPE 6 : Fallback — register + verify-otp (si admin-login indisponible)
-  console.log('[phoneOtp] admin-login indisponible, tentative register+verify...');
-  const rReg = await fetch(`${BASE_AUTH}/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+  // ÉTAPE 2 : Créer ou récupérer le user via adminCreateUser (service role SDK)
+  console.log('[phoneOtp] adminCreateUser pour:', email);
+  const result = await base44.asServiceRole.auth.adminCreateUser({
+    email,
+    password,
+    full_name: phone,
+    role: 'user',
   });
-  const dReg = await rReg.json();
-  if (dReg.access_token) {
-    return { access_token: dReg.access_token, is_new_user: true };
+
+  console.log('[phoneOtp] adminCreateUser résultat:', JSON.stringify(result));
+
+  if (!result?.access_token) {
+    throw new Error('adminCreateUser n\'a pas retourné de token. Réessayez.');
   }
 
-  throw new Error('Connexion impossible. Réessayez dans quelques secondes.');
+  return { access_token: result.access_token, is_new_user: result.is_new_user ?? true };
 }
 
-// ── Handler principal ────────────────────────────────────────────────────────
+// ── Handler principal ─────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS });
@@ -258,16 +143,21 @@ Deno.serve(async (req) => {
 
     const phone = normalizePhone(rawPhone);
     if (!phone) {
-      return Response.json({ error: 'Numéro invalide. Format attendu : +226XXXXXXXX' }, { status: 400, headers: CORS });
+      return Response.json(
+        { error: 'Numéro invalide. Format attendu : +226XXXXXXXX' },
+        { status: 400, headers: CORS }
+      );
     }
 
     console.log('[phoneOtp] action:', action, '| phone:', phone);
 
+    // ── SEND ──────────────────────────────────────────────────────────────────
     if (action === 'send') {
       await twilioSendOtp(phone);
       return Response.json({ success: true, phone }, { headers: CORS });
     }
 
+    // ── VERIFY ────────────────────────────────────────────────────────────────
     if (action === 'verify') {
       if (!code || String(code).length < 4) {
         return Response.json({ error: 'Code OTP invalide.' }, { status: 400, headers: CORS });
@@ -275,23 +165,46 @@ Deno.serve(async (req) => {
 
       const approved = await twilioVerifyOtp(phone, String(code).trim());
       if (!approved) {
-        return Response.json({ error: 'Code incorrect ou expiré. Réessayez.' }, { status: 400, headers: CORS });
+        return Response.json(
+          { error: 'Code incorrect ou expiré. Réessayez.' },
+          { status: 400, headers: CORS }
+        );
       }
 
-      const result = await phoneAuth(req, phone);
+      // Créer le client avec le service role (req contient le token injecté par Base44)
+      const base44 = createClientFromRequest(req);
+
+      const authResult = await phoneAuth(base44, phone);
+
+      // Mettre à jour le numéro de téléphone si nécessaire (best-effort)
+      try {
+        const userClient = createClientFromRequest({
+          headers: { get: (h) => h === 'authorization' ? `Bearer ${authResult.access_token}` : null },
+        });
+        const me = await userClient.auth.me();
+        if (!me.telephone) {
+          await userClient.auth.updateMe({ telephone: phone });
+        }
+      } catch (_) {}
 
       return Response.json({
         success: true,
-        access_token: result.access_token,
-        is_new_user: result.is_new_user,
+        access_token: authResult.access_token,
+        is_new_user: authResult.is_new_user,
         phone,
       }, { headers: CORS });
     }
 
-    return Response.json({ error: 'Action inconnue : "send" ou "verify".' }, { status: 400, headers: CORS });
+    return Response.json(
+      { error: 'Action inconnue : "send" ou "verify".' },
+      { status: 400, headers: CORS }
+    );
 
   } catch (err) {
     console.error('[phoneOtp] Exception:', err.message);
-    return Response.json({ error: err.message || 'Erreur serveur' }, { status: 500, headers: CORS });
+    return Response.json(
+      { error: err.message || 'Erreur serveur' },
+      { status: 500, headers: CORS }
+    );
   }
 });
