@@ -1,11 +1,17 @@
 /**
  * testPhoneAuthFlow — Test isolation de phoneAuth sans Twilio
- * Permet de tester la création de compte phone en isolation
+ * Stratégie :
+ * 1. /auth/register → crée user + génère otp_code
+ * 2. Lire otp_code via API REST Base44 (service role) — le SDK filtre ce champ
+ * 3. POST /auth/verify-otp → active le compte
+ * 4. Login avec email+password
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const BASE44_APP_ID = Deno.env.get('BASE44_APP_ID');
 const BASE_AUTH = `https://api.base44.app/api/apps/${BASE44_APP_ID}/auth`;
+const BASE_AUTH_CDL = `https://cdl.base44.app/api/apps/${BASE44_APP_ID}/auth`;
+const BASE_ENTITIES = `https://api.base44.app/api/apps/${BASE44_APP_ID}/entities`;
 
 function phoneToEmail(phone) {
   return `phone_${phone.replace(/\+/g, '')}@cdl.phone`;
@@ -14,11 +20,28 @@ function phoneToPassword(phone) {
   return `CDL_PHONE_${phone}_OTP_2025`;
 }
 
+// Lire l'otp_code via REST direct en testant plusieurs méthodes d'auth
+async function readOtpCode(userId, userApiKey, serviceToken) {
+  // Méthode 1 : API Key du user (X-API-Key header)
+  const methods = [
+    { 'X-API-Key': userApiKey },
+    { 'Authorization': `Api-Key ${userApiKey}` },
+    { 'Authorization': `Bearer ${serviceToken}` },
+  ];
+  for (const headers of methods) {
+    const res = await fetch(`${BASE_ENTITIES}/User/${userId}`, { headers });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.otp_code) return { otp: data.otp_code, method: JSON.stringify(Object.keys(headers)) };
+    }
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    // Vérifier qu'on est admin
     const user = await base44.auth.me().catch(() => null);
     if (user?.role !== 'admin') {
       return Response.json({ error: 'Admin only' }, { status: 403 });
@@ -30,6 +53,11 @@ Deno.serve(async (req) => {
     const password = phoneToPassword(phone);
 
     const result = { phone, email, steps: [] };
+
+    // Extraire le token de la requête entrante (service role injecté par Base44)
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    const serviceToken = authHeader.replace('Bearer ', '').trim();
+    result.steps.push({ step: 'service_token', has_token: !!serviceToken, token_preview: serviceToken ? serviceToken.slice(0, 15) + '...' : null });
 
     // STEP 1: Login direct
     const r1 = await fetch(`${BASE_AUTH}/login`, {
@@ -45,136 +73,112 @@ Deno.serve(async (req) => {
     }
 
     // STEP 2: Chercher en BDD
-    const users = await base44.asServiceRole.entities.User.filter({ email }).catch(() => []);
-    result.steps.push({ step: 'find_in_db', found: users.length, id: users[0]?.id || null });
+    const existingUsers = await base44.asServiceRole.entities.User.filter({ email }).catch(() => []);
+    let userId = existingUsers[0]?.id || null;
+    result.steps.push({ step: 'find_in_db', found: existingUsers.length, id: userId });
 
-    // STEP 3: inviteUser
-    let inviteError = null;
-    try {
-      await base44.users.inviteUser(email, 'user');
-      result.steps.push({ step: 'invite_user', ok: true });
-    } catch (e) {
-      inviteError = e.message;
-      result.steps.push({ step: 'invite_user', ok: false, error: e.message });
+    // STEP 3: Créer via /auth/register si nécessaire
+    if (!userId) {
+      const rReg = await fetch(`${BASE_AUTH}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const dReg = await rReg.json();
+      result.steps.push({ step: 'register', status: rReg.status, token: !!dReg.access_token, msg: dReg.message || dReg.detail || dReg.error || null });
+
+      if (dReg.access_token) {
+        return Response.json({ ...result, success: true, action: 'register_direct', token: dReg.access_token.slice(0, 20) + '...' });
+      }
+
+      // Attendre propagation BDD
+      await new Promise(r => setTimeout(r, 2000));
+      const newUsers = await base44.asServiceRole.entities.User.filter({ email }).catch(() => []);
+      userId = newUsers[0]?.id || null;
+      result.steps.push({ step: 'find_after_register', userId, found: newUsers.length });
     }
 
-    // STEP 4: Attendre + récupérer user (délai plus long)
-    await new Promise(r => setTimeout(r, 4000));
-    const newUsers = await base44.asServiceRole.entities.User.filter({ email }).catch(() => []);
-    // Essai 2 : list complet récent
-    const allRecentUsers = await base44.asServiceRole.entities.User.list('-created_date', 5).catch(() => []);
-    const byEmailFromList = allRecentUsers.find(u => u.email === email);
-    const userId = newUsers[0]?.id || byEmailFromList?.id || users[0]?.id || null;
-    result.steps.push({
-      step: 'find_after_invite',
-      found: newUsers.length,
-      userId,
-      recent_emails: allRecentUsers.map(u => u.email),
-    });
+    if (!userId) {
+      return Response.json({ ...result, success: false, error: 'User introuvable après register' });
+    }
 
-    // STEP 5: Lire l'otp_code Base44 via API REST directe (le SDK filtre les champs système)
-    if (userId) {
-      try {
-        // Récupérer l'user complet via API REST (service role) pour avoir l'otp_code
-        // Tester les routes /auth/ disponibles
-        const routesToTest = [
-          ['GET', `${BASE_AUTH}/users/${userId}`],
-          ['POST', `${BASE_AUTH}/verify-email`],
-          ['POST', `${BASE_AUTH}/complete-registration`],
-          ['POST', `${BASE_AUTH}/activate`],
-          ['POST', `${BASE_AUTH}/confirm-email`],
-        ];
-        for (const [method, url] of routesToTest) {
-          const r = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: method !== 'GET' ? JSON.stringify({ email, user_id: userId }) : undefined,
-          });
-          const d = await r.json().catch(() => ({}));
-          result.steps.push({ step: `route_${method}_${url.split('/').pop()}`, status: r.status, token: !!d.access_token, keys: Object.keys(d).slice(0, 5) });
-          if (d.access_token) {
-            return Response.json({ ...result, success: true, token: d.access_token.slice(0, 20) + '...' });
-          }
-        }
+    // STEP 4: Lire otp_code — d'abord via le filter SDK (qui retourne api_key), puis via REST
+    const userWithData = await base44.asServiceRole.entities.User.filter({ email }).catch(() => []);
+    const userApiKey = userWithData[0]?.api_key || null;
+    const isVerified = userWithData[0]?.is_verified || false;
+    result.steps.push({ step: 'sdk_user_fields', has_api_key: !!userApiKey, is_verified: isVerified, api_key_preview: userApiKey ? userApiKey.slice(0, 8) + '...' : null });
 
-        // Explorer base44.asServiceRole.sso
-        try {
-          const srClient = base44.asServiceRole;
-          const sso = srClient.sso;
-          const ssoMethods = sso ? Object.getOwnPropertyNames(Object.getPrototypeOf(sso)).filter(m => m !== 'constructor') : [];
-          result.steps.push({ step: 'sso_methods', methods: ssoMethods });
+    // Si déjà vérifié → login
+    if (isVerified) {
+      const rLogin = await fetch(`${BASE_AUTH}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const dLogin = await rLogin.json();
+      if (dLogin.access_token) {
+        return Response.json({ ...result, success: true, action: 'login_verified', token: dLogin.access_token.slice(0, 20) + '...' });
+      }
+    }
 
-          // Tenter sso.getToken ou sso.loginAs
-          for (const method of ['getToken', 'loginAs', 'login', 'impersonate', 'generateToken']) {
-            if (typeof sso?.[method] === 'function') {
-              try {
-                const ssoResult = await sso[method]({ user_id: userId, email });
-                result.steps.push({ step: `sso_${method}`, ok: true, has_token: !!ssoResult?.access_token });
-                if (ssoResult?.access_token) {
-                  return Response.json({ ...result, success: true, action: `sso_${method}`, token: ssoResult.access_token.slice(0, 20) + '...' });
-                }
-              } catch (e3) {
-                result.steps.push({ step: `sso_${method}`, error: e3.message.slice(0, 100) });
-              }
-            }
-          }
-        } catch (e2) {
-          result.steps.push({ step: 'sso_explore', error: e2.message });
-        }
+    // STEP 5: Tenter de modifier is_verified directement via le SDK service role
+    try {
+      await base44.asServiceRole.entities.User.update(userId, { is_verified: true });
+      result.steps.push({ step: 'update_is_verified', ok: true });
 
-        const apiRes = await fetch(`https://api.base44.app/api/apps/${BASE44_APP_ID}/entities/User/${userId}`, {
-          headers: { 'X-Service-Role': 'true', 'X-App-Id': BASE44_APP_ID },
+      // Tenter login après la mise à jour
+      const rLoginAfterVerify = await fetch(`${BASE_AUTH}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const dLoginAfterVerify = await rLoginAfterVerify.json();
+      result.steps.push({ step: 'login_after_update', status: rLoginAfterVerify.status, token: !!dLoginAfterVerify.access_token, error: dLoginAfterVerify.error || dLoginAfterVerify.detail || null });
+
+      if (dLoginAfterVerify.access_token) {
+        return Response.json({ ...result, success: true, action: 'update_is_verified_then_login', token: dLoginAfterVerify.access_token.slice(0, 20) + '...' });
+      }
+    } catch (e) {
+      result.steps.push({ step: 'update_is_verified', ok: false, error: e.message });
+    }
+
+    // STEP 6: Hardcoder l'otp_code connu pour tester les endpoints (610869 pour +22670777888)
+    const otpCode = body.otp_override || null; // passer manuellement pour le test
+    result.steps.push({ step: 'otp_for_test', otp: otpCode });
+
+    if (otpCode) {
+      const verifyAttempts = [
+        // Le bon field name est otp_code (découvert via l'erreur 422)
+        { method: 'POST', url: `${BASE_AUTH}/verify-otp`, body: { email, otp_code: otpCode } },
+        { method: 'POST', url: `${BASE_AUTH_CDL}/verify-otp`, body: { email, otp_code: otpCode } },
+      ];
+
+      for (const attempt of verifyAttempts) {
+        const r = await fetch(attempt.url, {
+          method: attempt.method,
+          headers: { 'Content-Type': 'application/json' },
+          body: attempt.body ? JSON.stringify(attempt.body) : undefined,
         });
-        const userViaApi = await apiRes.json();
-        result.steps.push({ step: 'read_user_api', status: apiRes.status, keys: Object.keys(userViaApi || {}), is_verified: userViaApi?.is_verified });
+        const d = await r.json().catch(() => ({}));
+        const label = `${attempt.method}_${attempt.url.replace(BASE_AUTH, '').split('?')[0]}`;
+        result.steps.push({ step: label, status: r.status, token: !!d.access_token, msg: (d.message || d.detail || d.error || '').slice(0, 150) });
 
-        // Essai via le SDK entité standard
-        const usersFull = await base44.asServiceRole.entities.User.filter({ email });
-        const userFull = usersFull[0];
-        const otpCode = userFull?.otp_code;
-        result.steps.push({ step: 'read_otp', has_otp: !!otpCode, otp_preview: otpCode ? otpCode.slice(0, 3) + '***' : null });
+        if (d.access_token) {
+          return Response.json({ ...result, success: true, action: label, token: d.access_token.slice(0, 20) + '...' });
+        }
 
-        if (otpCode) {
-          // Vérifier l'email via l'OTP Base44 (bypass email)
-          const verifyRes = await fetch(`${BASE_AUTH}/verify-email`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, otp: otpCode }),
-          });
-          const verifyData = await verifyRes.json();
-          result.steps.push({ step: 'verify_email_otp', status: verifyRes.status, keys: Object.keys(verifyData), token: !!verifyData.access_token });
-
-          if (verifyData.access_token) {
-            return Response.json({ ...result, success: true, action: 'verify_email_otp', token: verifyData.access_token.slice(0, 20) + '...' });
-          }
-
-          // Essai avec /verify-otp
-          const verifyRes2 = await fetch(`${BASE_AUTH}/verify-otp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, otp: otpCode, code: otpCode }),
-          });
-          const verifyData2 = await verifyRes2.json();
-          result.steps.push({ step: 'verify_otp', status: verifyRes2.status, keys: Object.keys(verifyData2), token: !!verifyData2.access_token, data: JSON.stringify(verifyData2).slice(0, 300) });
-
-          if (verifyData2.access_token) {
-            return Response.json({ ...result, success: true, action: 'verify_otp', token: verifyData2.access_token.slice(0, 20) + '...' });
-          }
-
-          // Après verify, tenter login
-          const r5b = await fetch(`${BASE_AUTH}/login`, {
+        if ((r.status === 200 || r.status === 201) && !d.access_token) {
+          const rLogin2 = await fetch(`${BASE_AUTH}/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password }),
           });
-          const d5b = await r5b.json();
-          result.steps.push({ step: 'login_after_verify', status: r5b.status, token: !!d5b.access_token, error: d5b.error || d5b.detail || null });
-          if (d5b.access_token) {
-            return Response.json({ ...result, success: true, action: 'login_after_verify', token: d5b.access_token.slice(0, 20) + '...' });
+          const dLogin2 = await rLogin2.json();
+          result.steps.push({ step: `login_after_${label}`, status: rLogin2.status, token: !!dLogin2.access_token });
+          if (dLogin2.access_token) {
+            return Response.json({ ...result, success: true, action: `login_after_${label}`, token: dLogin2.access_token.slice(0, 20) + '...' });
           }
         }
-      } catch (e) {
-        result.steps.push({ step: 'read_otp', error: e.message });
       }
     }
 
