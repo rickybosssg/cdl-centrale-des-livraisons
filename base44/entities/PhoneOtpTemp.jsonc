@@ -1,0 +1,28 @@
+{
+  "name": "PhoneOtpTemp",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "title": "Email d\u00e9riv\u00e9 du t\u00e9l\u00e9phone",
+      "index": true
+    },
+    "otp_code": {
+      "type": "string",
+      "title": "Code OTP temporaire"
+    },
+    "expires_at": {
+      "type": "string",
+      "title": "Expiration"
+    },
+    "used": {
+      "type": "boolean",
+      "title": "Utilis\u00e9",
+      "default": false
+    }
+  },
+  "required": [
+    "email",
+    "otp_code"
+  ]
+}

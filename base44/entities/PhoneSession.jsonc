@@ -1,0 +1,39 @@
+{
+  "name": "PhoneSession",
+  "type": "object",
+  "properties": {
+    "phone": {
+      "type": "string",
+      "title": "Num\u00e9ro de t\u00e9l\u00e9phone",
+      "index": true
+    },
+    "session_token": {
+      "type": "string",
+      "title": "Token de session",
+      "index": true
+    },
+    "user_email": {
+      "type": "string",
+      "title": "Email Base44 d\u00e9riv\u00e9",
+      "index": true
+    },
+    "user_id": {
+      "type": "string",
+      "title": "ID utilisateur Base44"
+    },
+    "expires_at": {
+      "type": "string",
+      "title": "Expiration de la session"
+    },
+    "is_new_user": {
+      "type": "boolean",
+      "title": "Nouvel utilisateur",
+      "default": false
+    }
+  },
+  "required": [
+    "phone",
+    "session_token",
+    "user_email"
+  ]
+}
