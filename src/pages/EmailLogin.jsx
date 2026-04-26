@@ -64,17 +64,11 @@ export default function EmailLogin() {
     window.location.replace("/");
   };
 
-  // Google Login — utilise la méthode native Base44
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    try {
-      // Base44 gère tout : OAuth, tokens, redirection
-      // La méthode redirectToGoogle() va rediriger vers Google puis revenir ici avec le token
-      await base44.auth.redirectToGoogle();
-    } catch (err) {
-      setMessage("Erreur Google Login — vérifiez votre connexion ou réessayez");
-      setLoading(false);
-    }
+  // Google Login — redirection directe vers Google OAuth
+  const handleGoogleLogin = () => {
+    const redirectUri = `${window.location.origin}/connexion`;
+    const googleAuthUrl = `${AUTH_BASE}/oauth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
+    window.location.href = googleAuthUrl;
   };
 
   const handleLogin = async () => {
