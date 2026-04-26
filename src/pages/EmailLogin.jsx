@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
-import { Loader2, Eye, EyeOff, Mail, Lock, Phone } from "lucide-react";
+import { Loader2, Eye, EyeOff, Mail, Lock, Chrome } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import PhoneOtpFlow from "@/components/PhoneOtpFlow";
 
 const BLUE   = "#1877f2";
 const APP_ID = "69c3c74fc4b62396dca61751";
@@ -26,7 +25,7 @@ async function authFetch(endpoint, body) {
 
 export default function EmailLogin() {
   const { checkAppState } = useAuth();
-  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot" | "phone"
+  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -51,11 +50,21 @@ export default function EmailLogin() {
     window.location.replace("/");
   };
 
-  // Nouvel utilisateur OTP → stocker le numéro validé et aller vers RoleSetup
-  const handleNewUser = () => {
-    // Le numéro est déjà stocké dans cdl_verified_phone par PhoneOtpFlow
-    // navigateHome() déclenchera RoleSetup via AppLayoutWrapper
-    navigateHome();
+  // Google Login — redirige vers oauth/google
+  const handleGoogleLogin = () => {
+    try {
+      const redirectUri = `${window.location.origin}/connexion`;
+      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
+        client_id: "YOUR_GOOGLE_CLIENT_ID",
+        redirect_uri: redirectUri,
+        response_type: "token",
+        scope: "openid email profile",
+      }).toString()}`;
+      // Note: Google Login via Base44 — utiliser le bouton natif si disponible
+      window.location.href = googleAuthUrl;
+    } catch (_) {
+      setMessage("Google Login non disponible");
+    }
   };
 
   const handleLogin = async () => {
@@ -135,17 +144,6 @@ export default function EmailLogin() {
   return (
     <div style={s.container}>
       <div style={s.card}>
-
-        {/* ── Mode téléphone OTP ── */}
-        {mode === "phone" && (
-          <PhoneOtpFlow
-            onSuccess={navigateHome}
-            onNewUser={handleNewUser}
-            onBack={() => { setMode("login"); setMessage(""); }}
-          />
-        )}
-
-        {mode !== "phone" && (<>
 
         {/* Logo */}
         <div style={s.logoBox}>
@@ -254,7 +252,7 @@ export default function EmailLogin() {
           </div>
         )}
 
-        {/* Séparateur + bouton téléphone */}
+        {/* Séparateur + Google Login */}
         {(mode === "login" || mode === "register") && (
           <>
             <div style={s.divider}>
@@ -262,16 +260,14 @@ export default function EmailLogin() {
             </div>
             <button
               type="button"
-              style={s.phoneBtn}
-              onClick={() => { setMode("phone"); setMessage(""); setSuccessMsg(""); }}
+              style={s.googleBtn}
+              onClick={handleGoogleLogin}
             >
-              <Phone size={16} style={{ marginRight: 8, flexShrink: 0 }} />
-              Continuer avec mon numéro de téléphone
+              <Chrome size={16} style={{ marginRight: 8, flexShrink: 0 }} />
+              Continuer avec Google
             </button>
           </>
         )}
-
-        </>)}
       </div>
     </div>
   );
@@ -339,11 +335,11 @@ const s = {
   divider: { display: "flex", alignItems: "center", gap: "10px", margin: "12px 0 10px" },
   dividerLine: { flex: 1, height: "1px", background: "#e2e8f0" },
   dividerText: { fontSize: "12px", color: "#94a3b8", fontWeight: "500", whiteSpace: "nowrap" },
-  phoneBtn: {
-    width: "100%", padding: "13px 16px", marginBottom: "8px", background: "#FFC107",
-    color: "#1a1a1a", border: "2px solid #FFB300", borderRadius: "14px", fontWeight: "700",
+  googleBtn: {
+    width: "100%", padding: "13px 16px", marginBottom: "8px", background: "#ffffff",
+    color: "#1f2937", border: "2px solid #d1d5db", borderRadius: "14px", fontWeight: "600",
     fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-    boxShadow: "0 4px 15px rgba(255,193,7,0.35)", transition: "opacity 0.2s",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1)", transition: "opacity 0.2s",
   },
   registerBox: {
     marginTop: "8px", background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",

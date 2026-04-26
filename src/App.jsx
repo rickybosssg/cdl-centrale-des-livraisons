@@ -216,10 +216,7 @@ const AuthenticatedApp = () => {
   if (window.location.pathname === '/admin-login-secure') {
     return <AdminLoginSecure />;
   }
-  if (window.location.pathname === LOGIN_PATH || window.location.pathname === '/phone-auth') {
-    if (window.location.pathname === '/phone-auth') {
-      window.history.replaceState({}, '', LOGIN_PATH);
-    }
+  if (window.location.pathname === LOGIN_PATH) {
     return <EmailLogin />;
   }
 
@@ -278,7 +275,6 @@ const AuthenticatedApp = () => {
         {/* Routes publiques sans layout */}
         <Route path="/admin-login-secure" element={<AdminLoginSecure />} />
         <Route path="/connexion" element={<EmailLogin />} />
-        <Route path="/phone-auth" element={<Navigate to="/connexion" replace />} />
         <Route path="/app-public-link" element={<AppPublicLink />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />

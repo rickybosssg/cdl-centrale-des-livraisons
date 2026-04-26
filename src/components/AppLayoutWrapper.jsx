@@ -37,7 +37,8 @@ export default function AppLayoutWrapper({ user }) {
         const ADMIN_EMAILS = ['weezyh2@gmail.com'];
         const isAdmin = me.role === 'admin' || ADMIN_EMAILS.includes(me.email);
 
-        if (!isAdmin && (!me.user_type && !me.active_profile_type)) {
+        // Vérifier si nouvel user (pas de profil)
+        if (!isAdmin) {
           try {
             const existingProfiles = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
             if (!isMounted) return;
@@ -106,9 +107,10 @@ export default function AppLayoutWrapper({ user }) {
         const firstName = me.full_name?.split(' ')[0] || '';
         setPrenom(firstName);
 
-        const key = `splash_shown_${me.id}`;
-        if (!sessionStorage.getItem(key)) {
-          sessionStorage.setItem(key, '1');
+        // Afficher splash bienvenue une seule fois par session
+        const splashKey = `splash_shown_${me.id}`;
+        if (!sessionStorage.getItem(splashKey)) {
+          sessionStorage.setItem(splashKey, '1');
           setShowSplash(true);
         }
       } catch (error) {
@@ -127,9 +129,8 @@ export default function AppLayoutWrapper({ user }) {
     return () => { isMounted = false; };
   }, [initialized, userReady]);
 
-  // FCM — lancé seulement quand le user est authentifié
+  // Navigation depuis notifications push
   useEffect(() => {
-    // Navigation CDL depuis notifications
     const onCdlNavigate = (e) => {
       const route = e.detail?.route;
       if (route && route.startsWith('/')) {
@@ -143,10 +144,10 @@ export default function AppLayoutWrapper({ user }) {
   }, []);
 
   useEffect(() => {
-    // Attendre que userEmail soit disponible (user authentifié) avant de lancer FCM
+    // Initialiser FCM une fois l'user authentifié
     if (!userEmail) return;
 
-    // Flush un éventuel token FCM en attente (race condition premier lancement APK)
+    // Flush FCM token en attente si nécessaire
     flushPendingFcmToken().catch(() => {});
 
     const initFcm = async () => {
