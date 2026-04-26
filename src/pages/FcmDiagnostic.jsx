@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
+import { saveFcmToken as saveFcmTokenDirect, getFcmTokens as getFcmTokensDirect } from '@/lib/fcmApi';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -163,17 +164,14 @@ export default function FcmDiagnostic() {
 
     // Tokens BDD
     try {
-      const tokRes = await base44.functions.invoke('getFcmTokens', {
-        user_email: me.email,
-      });
-      const tokens = tokRes.data?.tokens || [];
+      const tokens = await getFcmTokensDirect(me.email);
       setFcmTokens(tokens);
       const has = tokens.length > 0;
       setChain(c => ({ ...c, token: has ? 'ok' : 'error', db: has ? 'ok' : 'error', register: has ? 'ok' : 'pending' }));
       addLog(`Tokens en BDD: ${tokens.length}`);
     } catch (e) {
       setChain(c => ({ ...c, token: 'error', db: 'error' }));
-      addLog('Erreur lecture tokens: ' + e?.message + ' | status: ' + (e?.status || e?.response?.status || '?'), 'error');
+      addLog('Erreur lecture tokens: ' + e?.message, 'error');
     }
 
     // Infos natives
@@ -308,35 +306,24 @@ export default function FcmDiagnostic() {
         addLog(`📧 Email résolu: ${currentEmail}`);
 
         addLog(`📤 Sauvegarde token pour: ${currentEmail}`);
-        try {
-          const saveRes = await base44.functions.invoke('saveFcmTokenPublic', {
-            user_email: currentEmail,
-            token,
-            device_type: 'android_native',
-          });
-          const saveData = saveRes.data;
-          if (!saveData?.success) {
-            throw new Error(`saveFcmTokenPublic échoué: ${saveData?.error || 'Erreur inconnue'}`);
-          }
-          addLog(`✅ Token sauvegardé en BDD → action: ${saveData.action} | id: ${saveData.token_id}`);
+        const saveData = await saveFcmTokenDirect({ user_email: currentEmail, token, device_type: 'android_native' });
+        if (saveData?.success) {
+          addLog(`✅ Token FCM sauvegardé avec succès → action: ${saveData.action} | id: ${saveData.token_id}`);
           setChain(c => ({ ...c, token: 'ok', db: 'ok' }));
           toast.success('✅ Token FCM enregistré !');
-
           // Recharger la liste
-          const tokRes = await base44.functions.invoke('getFcmTokens', {
-            user_email: currentEmail,
-          });
-          setFcmTokens(tokRes.data?.tokens || []);
-          addLog(`Tokens en BDD: ${(tokRes.data?.tokens || []).length}`);
-        } catch (saveErr) {
-          addLog('❌ Erreur sauvegarde: ' + saveErr?.message, 'error');
+          const tokens = await getFcmTokensDirect(currentEmail);
+          setFcmTokens(tokens);
+          addLog(`Tokens en BDD: ${tokens.length}`);
+        } else {
+          addLog('❌ Erreur sauvegarde: ' + (saveData?.error || 'inconnue'), 'error');
           setChain(c => ({ ...c, token: 'error', db: 'error' }));
-          toast.error('Erreur sauvegarde: ' + saveErr?.message);
+          toast.error('Erreur sauvegarde: ' + (saveData?.error || 'inconnue'));
         }
 
-        done(true);
-        setRegistering(false);
-      });
+          done(true);
+          setRegistering(false);
+        });
       listeners.push(regHandle);
 
       const errHandle = await PushNotifications.addListener('registrationError', async (err) => {
@@ -386,7 +373,8 @@ export default function FcmDiagnostic() {
       const { requestWebPushToken } = await import('@/lib/webPush');
       const { token } = await requestWebPushToken();
       if (token) {
-          await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web' });
+        const me = await base44.auth.me();
+        await saveFcmTokenDirect({ user_email: me?.email || user?.email, token, device_type: 'web' });
         setChain(c => ({ ...c, register: 'ok', token: 'ok', db: 'ok' }));
         toast.success('✅ Token Web Push enregistré !');
         await load();

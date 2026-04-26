@@ -5,6 +5,7 @@ import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
+import { saveFcmToken as saveFcmTokenDirect } from "@/lib/fcmApi";
 
 // Récupère le token d'auth depuis localStorage pour le fallback APK natif
 function getAuthToken() {
@@ -159,31 +160,19 @@ export default function AppLayoutWrapper({ user }) {
           await initCapacitorPush({
             onToken: async (token) => {
               console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
-              try {
-                // Résoudre l'email au moment du callback (closure peut être stale)
-                let resolvedEmail = userEmail;
-                if (!resolvedEmail) {
-                  try { const me = await base44.auth.me(); resolvedEmail = me?.email; } catch (_) {}
-                }
-                if (!resolvedEmail) {
-                  console.error('[FCM] ❌ Impossible de résoudre user.email pour sauvegarder le token');
-                  return;
-                }
-                const authTok = getAuthToken();
-                const res = await base44.functions.invoke('saveFcmTokenPublic', {
-                  user_email: resolvedEmail,
-                  token,
-                  device_type: 'android_native',
-                  auth_token: authTok,
-                });
-                const data = res.data;
-                if (data?.success) {
-                  console.log('[FCM] ✅ TOKEN SAVED:', data.action, '| user:', data.user_email);
-                } else {
-                  throw new Error(data?.error || 'Échec sauvegarde token');
-                }
-              } catch (saveErr) {
-                console.error('[FCM] ❌ saveFcmTokenPublic error:', saveErr?.message);
+              // Résoudre l'email au moment du callback (closure peut être stale)
+              let resolvedEmail = userEmail;
+              if (!resolvedEmail) {
+                try { const me = await base44.auth.me(); resolvedEmail = me?.email; } catch (_) {}
+              }
+              if (!resolvedEmail) {
+                console.error('[FCM] ❌ Impossible de résoudre user.email pour sauvegarder le token');
+                return;
+              }
+              // Appel direct via fetch + Bearer token (contourne le 403 SDK dans APK)
+              const result = await saveFcmTokenDirect({ user_email: resolvedEmail, token, device_type: 'android_native' });
+              if (result.success) {
+                console.log('[FCM] ✅ TOKEN SAVED:', result.action, '| user:', resolvedEmail);
               }
             },
             onForegroundNotif: (notification) => {
@@ -224,12 +213,8 @@ export default function AppLayoutWrapper({ user }) {
             return;
           }
 
-          try {
-            const res = await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web', auth_token: getAuthToken() });
-            console.log('[FCM] ✅ TOKEN SAVED (web):', res.data?.action);
-          } catch (saveErr) {
-            console.error('[FCM] ❌ saveFcmToken web error:', saveErr?.message);
-          }
+          await saveFcmTokenDirect({ user_email: userEmail, token, device_type: 'web' });
+          console.log('[FCM] ✅ TOKEN SAVED (web)');
 
           onForegroundMessage((payload) => {
             console.log('[FCM] 📬 NOTIFICATION RECEIVED (web foreground):', payload.notification?.title);
