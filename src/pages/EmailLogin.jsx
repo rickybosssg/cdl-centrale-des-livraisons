@@ -4,11 +4,24 @@ import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import PhoneOtpFlow from "@/components/PhoneOtpFlow";
 
-const BLUE  = "#1877f2";
+const BLUE   = "#1877f2";
+const APP_ID = "69c3c74fc4b62396dca61751";
+const AUTH_BASE = `https://cdl.base44.app/api/apps/${APP_ID}/auth`;
 
 function saveToken(token) {
   try { localStorage.setItem("base44_access_token", token); } catch (_) {}
   try { base44.auth.setToken(token); } catch (_) {}
+}
+
+// Auth via fetch direct — évite le 403 du SDK Base44 dans la WebView Capacitor non authentifiée
+async function authFetch(endpoint, body) {
+  const res = await fetch(`${AUTH_BASE}${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  return { ok: res.ok, status: res.status, data };
 }
 
 export default function EmailLogin() {
@@ -49,15 +62,22 @@ export default function EmailLogin() {
     if (!email || !password) { setMessage("Email et mot de passe requis"); return; }
     setLoading(true); setMessage("");
     try {
-      const result = await base44.auth.loginViaEmailPassword(email.trim().toLowerCase(), password);
-      const token = result?.access_token || result?.token;
-      if (token) saveToken(token);
-      await navigateHome();
+      const { ok, status, data } = await authFetch("/login", {
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      const token = data?.access_token || data?.token;
+      if (ok && token) {
+        saveToken(token);
+        await navigateHome();
+      } else {
+        setMessage(status === 401 || status === 400
+          ? "Email ou mot de passe incorrect"
+          : (data?.error || data?.detail || "Erreur de connexion — réessayez"));
+        setLoading(false);
+      }
     } catch (err) {
-      const status = err?.status || err?.response?.status;
-      setMessage(status === 401 || status === 400 || (err?.message || "").includes("credentials")
-        ? "Email ou mot de passe incorrect"
-        : "Erreur de connexion — réessayez");
+      setMessage("Erreur réseau — vérifiez votre connexion");
       setLoading(false);
     }
   };
@@ -68,22 +88,28 @@ export default function EmailLogin() {
     if (password !== confirmPassword) { setMessage("Les mots de passe ne correspondent pas"); return; }
     setLoading(true); setMessage("");
     try {
-      const result = await base44.auth.register({ email: email.trim().toLowerCase(), password });
-      const token = result?.access_token || result?.token;
-      if (token) {
+      const { ok, status, data } = await authFetch("/register", {
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      const token = data?.access_token || data?.token;
+      if (ok && token) {
         saveToken(token);
         await navigateHome();
-      } else {
+      } else if (ok) {
         setSuccessMsg("Compte créé ! Vérifiez votre email puis connectez-vous.");
         setMode("login");
         setPassword(""); setConfirmPassword("");
         setLoading(false);
+      } else {
+        const msg = data?.error || data?.detail || "";
+        setMessage(msg.toLowerCase().includes("exist") || msg.toLowerCase().includes("already")
+          ? "Un compte existe déjà avec cet email"
+          : "Erreur lors de la création — réessayez");
+        setLoading(false);
       }
     } catch (err) {
-      const msg = err?.message || "";
-      setMessage(msg.toLowerCase().includes("exist") || msg.toLowerCase().includes("already")
-        ? "Un compte existe déjà avec cet email"
-        : "Erreur lors de la création — réessayez");
+      setMessage("Erreur réseau — vérifiez votre connexion");
       setLoading(false);
     }
   };
@@ -92,9 +118,13 @@ export default function EmailLogin() {
     if (!email) { setMessage("Entrez votre adresse email"); return; }
     setLoading(true); setMessage("");
     try {
-      await base44.auth.sendPasswordResetEmail(email.trim().toLowerCase());
-      setSuccessMsg("Email de réinitialisation envoyé ! Vérifiez votre boîte mail.");
-      setMode("login");
+      const { ok } = await authFetch("/reset-password", { email: email.trim().toLowerCase() });
+      if (ok) {
+        setSuccessMsg("Email de réinitialisation envoyé ! Vérifiez votre boîte mail.");
+        setMode("login");
+      } else {
+        setMessage("Impossible d'envoyer l'email — vérifiez l'adresse");
+      }
     } catch (_) {
       setMessage("Impossible d'envoyer l'email — vérifiez l'adresse");
     } finally { setLoading(false); }
