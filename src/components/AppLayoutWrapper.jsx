@@ -5,7 +5,7 @@ import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
-import { saveFcmToken as saveFcmTokenDirect } from "@/lib/fcmApi";
+import { saveFcmToken as saveFcmTokenDirect, flushPendingFcmToken } from "@/lib/fcmApi";
 
 // Récupère le token d'auth depuis localStorage pour le fallback APK natif
 function getAuthToken() {
@@ -145,6 +145,9 @@ export default function AppLayoutWrapper({ user }) {
   useEffect(() => {
     // Attendre que userEmail soit disponible (user authentifié) avant de lancer FCM
     if (!userEmail) return;
+
+    // Flush un éventuel token FCM en attente (race condition premier lancement APK)
+    flushPendingFcmToken().catch(() => {});
 
     const initFcm = async () => {
       try {
