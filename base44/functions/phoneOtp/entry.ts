@@ -1,11 +1,11 @@
 /**
  * phoneOtp — AUTH PAR TÉLÉPHONE (OTP Twilio)
  *
- * SEND   : envoie OTP SMS via Twilio Verify
- * VERIFY : après OTP Twilio validé →
- *   1. Login direct (compte existant et vérifié → password déterministe)
- *   2. Si non trouvé : adminCreateUser (service role SDK) → retourne access_token directement
- *   3. Si existant non vérifié : adminCreateUser avec upsert
+ * Flux :
+ *  SEND   : envoie OTP SMS via Twilio Verify
+ *  VERIFY : valide OTP Twilio →
+ *    1. Tente login direct (user déjà vérifié)
+ *    2. Si échec → inviteUser (crée sans vérification email) + register → token direct
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
@@ -34,12 +34,14 @@ function normalizePhone(raw) {
   return null;
 }
 
+// email interne dérivé du téléphone (domaine @cdl.app)
 function phoneToEmail(phone) {
-  return `phone_${phone.replace(/\+/g, '')}@cdl.phone`;
+  return `phone_${phone.replace(/\+/g, '')}@cdl.app`;
 }
 
+// password déterministe — jamais exposé à l'utilisateur
 function phoneToPassword(phone) {
-  return `CDL_PHONE_${phone}_OTP_2025`;
+  return `CDL_${phone.replace(/\+/g, '')}_2025!`;
 }
 
 // ── Twilio : envoyer OTP ─────────────────────────────────────────────────────
@@ -82,15 +84,28 @@ async function twilioVerifyOtp(phone, code) {
   return data?.status === 'approved';
 }
 
-// ── Login direct avec password déterministe ──────────────────────────────────
-async function tryDirectLogin(email, password) {
+// ── Login direct ─────────────────────────────────────────────────────────────
+async function tryLogin(email, password) {
   const res = await fetch(`${BASE_AUTH}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
   const data = await res.json();
-  console.log('[phoneOtp] tryDirectLogin:', res.status, '| token:', !!data.access_token);
+  console.log('[phoneOtp] tryLogin:', res.status, '| token:', !!data.access_token);
+  return data.access_token || null;
+}
+
+// ── Register direct ──────────────────────────────────────────────────────────
+// Retourne le token si le user est invité (pré-créé) — pas de vérif email
+async function tryRegister(email, password, fullName) {
+  const res = await fetch(`${BASE_AUTH}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, full_name: fullName }),
+  });
+  const data = await res.json();
+  console.log('[phoneOtp] tryRegister:', res.status, '| token:', !!data.access_token, '| fields:', Object.keys(data));
   return data.access_token || null;
 }
 
@@ -98,30 +113,67 @@ async function tryDirectLogin(email, password) {
 async function phoneAuth(base44, phone) {
   const email    = phoneToEmail(phone);
   const password = phoneToPassword(phone);
+  const fullName = phone; // nom = numéro de téléphone par défaut
 
-  // ÉTAPE 1 : Login direct (compte existant et déjà vérifié)
-  const existingToken = await tryDirectLogin(email, password);
-  if (existingToken) {
-    console.log('[phoneOtp] ✅ Login direct OK');
-    return { access_token: existingToken, is_new_user: false };
+  // ── ÉTAPE 1 : Login direct (user existant et vérifié) ─────────────────────
+  const token1 = await tryLogin(email, password);
+  if (token1) {
+    console.log('[phoneOtp] ✅ ÉTAPE 1 — Login direct réussi');
+    return { access_token: token1, is_new_user: false };
   }
 
-  // ÉTAPE 2 : Créer ou récupérer le user via adminCreateUser (service role SDK)
-  console.log('[phoneOtp] adminCreateUser pour:', email);
-  const result = await base44.asServiceRole.auth.adminCreateUser({
-    email,
-    password,
-    full_name: phone,
-    role: 'user',
-  });
+  // ── ÉTAPE 2 : Vérifier si le user existe en BDD (non vérifié ou invité) ──
+  const existingUsers = await base44.asServiceRole.entities.User.filter({ email }).catch(() => []);
+  const existingUser = existingUsers[0] || null;
+  console.log('[phoneOtp] ÉTAPE 2 — user en BDD:', !!existingUser, '| is_verified:', existingUser?.is_verified);
 
-  console.log('[phoneOtp] adminCreateUser résultat:', JSON.stringify(result));
-
-  if (!result?.access_token) {
-    throw new Error('adminCreateUser n\'a pas retourné de token. Réessayez.');
+  if (existingUser) {
+    // User existe mais login a échoué → tenter register (peut retourner token si invité)
+    const token2 = await tryRegister(email, password, fullName);
+    if (token2) {
+      console.log('[phoneOtp] ✅ ÉTAPE 2a — Register sur user existant → token');
+      return { access_token: token2, is_new_user: false };
+    }
+    // Retenter login (register peut avoir défini le password)
+    await new Promise(r => setTimeout(r, 1000));
+    const token2b = await tryLogin(email, password);
+    if (token2b) {
+      console.log('[phoneOtp] ✅ ÉTAPE 2b — Login après register → token');
+      return { access_token: token2b, is_new_user: false };
+    }
   }
 
-  return { access_token: result.access_token, is_new_user: result.is_new_user ?? true };
+  // ── ÉTAPE 3 : Nouvel utilisateur — inviteUser + register ─────────────────
+  console.log('[phoneOtp] ÉTAPE 3 — Nouvel utilisateur: inviteUser + register');
+
+  // inviteUser crée le compte sans exiger la vérification email
+  try {
+    await base44.users.inviteUser(email, 'user');
+    console.log('[phoneOtp] inviteUser OK');
+  } catch (e) {
+    console.warn('[phoneOtp] inviteUser warn:', e.message);
+    // Continuer même si déjà existant
+  }
+
+  // Attendre la propagation BDD
+  await new Promise(r => setTimeout(r, 2000));
+
+  // register sur le user invité → retourne un token DIRECT (pas d'OTP email)
+  const token3 = await tryRegister(email, password, fullName);
+  if (token3) {
+    console.log('[phoneOtp] ✅ ÉTAPE 3a — register après inviteUser → token');
+    return { access_token: token3, is_new_user: true };
+  }
+
+  // Dernier recours : login (au cas où register a défini le mot de passe)
+  await new Promise(r => setTimeout(r, 1000));
+  const token3b = await tryLogin(email, password);
+  if (token3b) {
+    console.log('[phoneOtp] ✅ ÉTAPE 3b — login après inviteUser+register → token');
+    return { access_token: token3b, is_new_user: true };
+  }
+
+  throw new Error('Impossible de créer la session. Réessayez dans quelques instants.');
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────
@@ -171,18 +223,16 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Créer le client avec le service role (req contient le token injecté par Base44)
       const base44 = createClientFromRequest(req);
-
       const authResult = await phoneAuth(base44, phone);
 
-      // Mettre à jour le numéro de téléphone si nécessaire (best-effort)
+      // Mettre à jour le profil avec le numéro de téléphone (best-effort)
       try {
         const userClient = createClientFromRequest({
           headers: { get: (h) => h === 'authorization' ? `Bearer ${authResult.access_token}` : null },
         });
         const me = await userClient.auth.me();
-        if (!me.telephone) {
+        if (me && !me.telephone) {
           await userClient.auth.updateMe({ telephone: phone });
         }
       } catch (_) {}
