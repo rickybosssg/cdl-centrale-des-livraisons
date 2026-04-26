@@ -110,7 +110,7 @@ async function tryRegister(email, password, fullName) {
 }
 
 // ── Flux auth principal ──────────────────────────────────────────────────────
-async function phoneAuth(base44, phone) {
+async function phoneAuth(base44, phone, otpCode = null) {
   const email    = phoneToEmail(phone);
   const password = phoneToPassword(phone);
   const fullName = phone; // nom = numéro de téléphone par défaut
@@ -157,6 +157,44 @@ async function phoneAuth(base44, phone) {
 
   // Attendre la propagation BDD
   await new Promise(r => setTimeout(r, 2000));
+
+  // ── ÉTAPE 3b : Attendre l'interception de l'OTP via webhook Mailgun ──────
+  // (register déclenche un email OTP que Mailgun intercepte)
+  let storedOtp = otpCode; // OTP passé en param, sinon attend le webhook
+  if (!storedOtp) {
+    console.log('[phoneOtp] ÉTAPE 3b — Attente OTP intercepté par webhook (max 8s)...');
+    for (let i = 0; i < 8; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const otps = await base44.asServiceRole.entities.PhoneOtpTemp.filter({ email, used: false }).catch(() => []);
+      if (otps.length > 0) {
+        storedOtp = otps[0].otp_code;
+        console.log('[phoneOtp] ✅ OTP reçu via webhook:', storedOtp);
+        break;
+      }
+    }
+  }
+
+  if (storedOtp) {
+    console.log('[phoneOtp] ÉTAPE 3c — Vérification OTP intercepté...');
+    // Vérifier l'OTP via l'API Base44
+    const rVerify = await fetch(`${BASE_AUTH}/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp_code: storedOtp }),
+    });
+    const dVerify = await rVerify.json();
+    if (dVerify.access_token) {
+      console.log('[phoneOtp] ✅ ÉTAPE 3c — OTP vérifié → token');
+      // Marquer l'OTP comme utilisé
+      try {
+        const otpRecords = await base44.asServiceRole.entities.PhoneOtpTemp.filter({ email, otp_code: storedOtp });
+        if (otpRecords.length > 0) {
+          await base44.asServiceRole.entities.PhoneOtpTemp.update(otpRecords[0].id, { used: true });
+        }
+      } catch (_) {}
+      return { access_token: dVerify.access_token, is_new_user: true };
+    }
+  }
 
   // register sur le user invité → retourne un token DIRECT (pas d'OTP email)
   const token3 = await tryRegister(email, password, fullName);
@@ -224,7 +262,7 @@ Deno.serve(async (req) => {
       }
 
       const base44 = createClientFromRequest(req);
-      const authResult = await phoneAuth(base44, phone);
+      const authResult = await phoneAuth(base44, phone, null);
 
       // Mettre à jour le profil avec le numéro de téléphone (best-effort)
       try {
