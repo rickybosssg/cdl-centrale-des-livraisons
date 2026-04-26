@@ -34,15 +34,29 @@ export default function EmailLogin() {
   const [message, setMessage] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Gérer le retour OAuth token dans l'URL (Google redirect legacy)
+  // Gérer le retour OAuth token dans l'URL (Google redirect)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("access_token") || params.get("token");
-    if (token) {
-      saveToken(token);
-      window.history.replaceState({}, "", "/connexion");
-      navigateHome();
-    }
+    const handleOAuthReturn = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("access_token") || params.get("token") || params.get("code");
+      const error = params.get("error");
+      const errorDescription = params.get("error_description");
+
+      if (error) {
+        console.warn('[EmailLogin] OAuth error:', error, errorDescription);
+        setMessage(`Erreur Google : ${error === 'access_denied' ? 'Accès refusé' : error}`);
+        window.history.replaceState({}, "", "/connexion");
+        return;
+      }
+
+      if (token) {
+        saveToken(token);
+        window.history.replaceState({}, "", "/connexion");
+        await navigateHome();
+      }
+    };
+    
+    handleOAuthReturn();
   }, []);
 
   const navigateHome = async () => {
@@ -50,20 +64,16 @@ export default function EmailLogin() {
     window.location.replace("/");
   };
 
-  // Google Login — redirige vers oauth/google
-  const handleGoogleLogin = () => {
+  // Google Login — utilise la méthode native Base44
+  const handleGoogleLogin = async () => {
+    setLoading(true);
     try {
-      const redirectUri = `${window.location.origin}/connexion`;
-      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
-        client_id: "YOUR_GOOGLE_CLIENT_ID",
-        redirect_uri: redirectUri,
-        response_type: "token",
-        scope: "openid email profile",
-      }).toString()}`;
-      // Note: Google Login via Base44 — utiliser le bouton natif si disponible
-      window.location.href = googleAuthUrl;
-    } catch (_) {
-      setMessage("Google Login non disponible");
+      // Base44 gère tout : OAuth, tokens, redirection
+      // La méthode redirectToGoogle() va rediriger vers Google puis revenir ici avec le token
+      await base44.auth.redirectToGoogle();
+    } catch (err) {
+      setMessage("Erreur Google Login — vérifiez votre connexion ou réessayez");
+      setLoading(false);
     }
   };
 
