@@ -10,7 +10,6 @@ import NotificationPermissionBanner from "./NotificationPermissionBanner";
 function getAuthToken() {
   try { return localStorage.getItem('base44_access_token') || ''; } catch (_) { return ''; }
 }
-import { syncBase44Token } from "@/api/base44Client";
 
 export default function AppLayoutWrapper({ user }) {
   // ⚠️ Tous les hooks d'abord — jamais après un return conditionnel (Rules of Hooks)
@@ -171,9 +170,6 @@ export default function AppLayoutWrapper({ user }) {
                   return;
                 }
                 const authTok = getAuthToken();
-                // Utiliser base44.functions.invoke — le SDK gère l'auth et le routing correctement
-                // même dans la WebView Capacitor (pas de problème CORS/403)
-                syncBase44Token();
                 const res = await base44.functions.invoke('saveFcmTokenPublic', {
                   user_email: resolvedEmail,
                   token,
@@ -229,7 +225,6 @@ export default function AppLayoutWrapper({ user }) {
           }
 
           try {
-            syncBase44Token();
             const res = await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web', auth_token: getAuthToken() });
             console.log('[FCM] ✅ TOKEN SAVED (web):', res.data?.action);
           } catch (saveErr) {

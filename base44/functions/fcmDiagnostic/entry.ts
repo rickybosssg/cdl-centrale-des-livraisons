@@ -6,23 +6,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   try {
-    // Lire le body en premier (avant createClientFromRequest qui consomme le stream)
     let bodyData = {};
     try {
       const text = await req.text();
       if (text) bodyData = JSON.parse(text);
     } catch (_) {}
 
-    // Injecter auth_token depuis le body si le header Authorization est absent (APK Android)
-    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
-    let effectiveReq = req;
-    if (!authHeader && bodyData.auth_token) {
-      const newHeaders = new Headers(req.headers);
-      newHeaders.set('Authorization', `Bearer ${bodyData.auth_token}`);
-      effectiveReq = new Request(req.url, { method: req.method, headers: newHeaders });
-    }
-
-    const base44 = createClientFromRequest(effectiveReq);
+    const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
 

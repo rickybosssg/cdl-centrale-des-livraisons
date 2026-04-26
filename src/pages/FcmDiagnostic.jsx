@@ -3,7 +3,7 @@
  * Natif Capacitor (APK) ou Web (PWA)
  */
 import { useState, useEffect, useRef } from 'react';
-import { base44, syncBase44Token } from '@/api/base44Client';
+import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -161,14 +161,10 @@ export default function FcmDiagnostic() {
       }
     }
 
-    // Tokens BDD — via SDK (évite les 403 CORS de la WebView Capacitor)
+    // Tokens BDD
     try {
-      const authTok = localStorage.getItem('base44_access_token') || '';
-      addLog(`auth_token présent: ${!!authTok} | ${authTok ? authTok.slice(0, 12) + '...' : 'VIDE'}`);
-      syncBase44Token();
       const tokRes = await base44.functions.invoke('getFcmTokens', {
         user_email: me.email,
-        auth_token: authTok,
       });
       const tokens = tokRes.data?.tokens || [];
       setFcmTokens(tokens);
@@ -313,15 +309,10 @@ export default function FcmDiagnostic() {
 
         addLog(`📤 Sauvegarde token pour: ${currentEmail}`);
         try {
-          const authTok = localStorage.getItem('base44_access_token') || '';
-          addLog(`auth_token pour save: ${authTok ? authTok.slice(0, 12) + '...' : 'VIDE'}`);
-          // Utiliser base44.functions.invoke — évite les 403 CORS de la WebView Capacitor
-          syncBase44Token();
           const saveRes = await base44.functions.invoke('saveFcmTokenPublic', {
             user_email: currentEmail,
             token,
             device_type: 'android_native',
-            auth_token: authTok,
           });
           const saveData = saveRes.data;
           if (!saveData?.success) {
@@ -334,7 +325,6 @@ export default function FcmDiagnostic() {
           // Recharger la liste
           const tokRes = await base44.functions.invoke('getFcmTokens', {
             user_email: currentEmail,
-            auth_token: authTok,
           });
           setFcmTokens(tokRes.data?.tokens || []);
           addLog(`Tokens en BDD: ${(tokRes.data?.tokens || []).length}`);
@@ -396,9 +386,7 @@ export default function FcmDiagnostic() {
       const { requestWebPushToken } = await import('@/lib/webPush');
       const { token } = await requestWebPushToken();
       if (token) {
-        syncBase44Token();
-        const authTokWeb = localStorage.getItem('base44_access_token') || '';
-        await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web', auth_token: authTokWeb });
+          await base44.functions.invoke('saveFcmToken', { token, deviceType: 'web' });
         setChain(c => ({ ...c, register: 'ok', token: 'ok', db: 'ok' }));
         toast.success('✅ Token Web Push enregistré !');
         await load();
@@ -447,11 +435,8 @@ export default function FcmDiagnostic() {
     setServerDiagLoading(true);
     setServerDiag(null);
     try {
-      const authTok = localStorage.getItem('base44_access_token') || '';
-      syncBase44Token();
       const res = await base44.functions.invoke('fcmDiagnostic', {
         test_send: withSend,
-        auth_token: authTok,
       });
       const data = res.data;
       setServerDiag(data);

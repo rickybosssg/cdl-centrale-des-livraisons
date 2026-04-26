@@ -1,68 +1,66 @@
 import { createClient } from '@base44/sdk';
 import { appParams } from '@/lib/app-params';
 
-const { appId, token, functionsVersion, appBaseUrl } = appParams;
+const { appId, token, functionsVersion } = appParams;
 
-// Avec capacitor.config.json server.url = https://cdl.base44.app,
-// la WebView charge directement depuis le sous-domaine de l'app.
-// Les appels relatifs (/api/...) fonctionnent donc sans serverUrl explicite.
-// On garde le serverUrl explicite uniquement si on est en mode file:// (fallback)
 function getServerUrl() {
   if (typeof window === 'undefined') return '';
-  const proto = window.location?.protocol;
-  // file:// = vieux mode sans server.url dans capacitor.config
-  if (proto === 'file:') {
-    console.log('[CDL] base44Client: mode file:// → serverUrl=https://cdl.base44.app');
-    return 'https://cdl.base44.app';
-  }
-  // capacitor:// ou https:// avec server.url → les URLs relatives fonctionnent
+  if (window.location?.protocol === 'file:') return 'https://cdl.base44.app';
   return '';
 }
 
-// Lire le token depuis localStorage en priorité (APK Android : persisté après connexion)
-// appParams.token est résolu une seule fois au démarrage depuis l'URL
-// localStorage peut contenir un token plus récent (sauvegardé après login)
-function getEffectiveToken() {
-  const urlToken = token; // depuis appParams (URL param ou ancien localStorage)
-  try {
-    const stored = localStorage.getItem('base44_access_token');
-    if (stored && stored !== urlToken) {
-      console.log('[CDL] base44Client: token depuis localStorage (post-login)');
-      return stored;
-    }
-  } catch (_) {}
-  return urlToken;
+function getStoredToken() {
+  try { return localStorage.getItem('base44_access_token') || null; } catch (_) { return null; }
 }
 
-const effectiveToken = getEffectiveToken();
+const effectiveToken = getStoredToken() || token;
 
-console.log('========================================');
-console.log('BASE44 CLIENT INIT');
-console.log('========================================');
-console.log('appId: ' + appId);
-console.log('serverUrl: ' + getServerUrl());
-console.log('token (effective): ' + (effectiveToken ? 'OUI (' + effectiveToken.substring(0, 12) + '...)' : 'NON'));
-console.log('========================================');
+console.log('[CDL] base44Client init | appId:', appId, '| token:', effectiveToken ? 'OUI' : 'NON');
 
-export const base44 = createClient({
+// Client SDK interne — ne pas exporter directement
+const _client = createClient({
   appId,
   token: effectiveToken,
   functionsVersion,
   serverUrl: getServerUrl(),
   requiresAuth: false,
-  appBaseUrl: 'https://cdl.base44.app' // Force production URL, never platform
+  appBaseUrl: 'https://cdl.base44.app',
 });
 
 /**
- * Resynchronise le token du client SDK depuis localStorage.
- * À appeler avant tout appel sensible (saveFcmToken, etc.)
- * pour s'assurer que le token post-login est bien utilisé.
+ * syncBase44Token — resynchronise le token SDK depuis localStorage.
+ * Essentiel pour APK Android où le login arrive après l'init du client.
  */
 export function syncBase44Token() {
   try {
-    const stored = localStorage.getItem('base44_access_token');
-    if (stored) {
-      base44.auth.setToken(stored);
-    }
+    const stored = getStoredToken();
+    if (stored) _client.auth.setToken(stored);
   } catch (_) {}
 }
+
+/**
+ * Proxy base44 : intercepte chaque accès et synchro le token automatiquement.
+ * Ainsi, TOUS les appels (entities, functions, auth, etc.) utilisent
+ * toujours le token le plus récent — sans aucun changement dans les composants.
+ */
+function makeAutoSyncProxy(target) {
+  return new Proxy(target, {
+    get(obj, prop) {
+      // Synchronise le token à chaque accès à une propriété du client
+      syncBase44Token();
+      const val = obj[prop];
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        return makeAutoSyncProxy(val);
+      }
+      if (typeof val === 'function') {
+        return (...args) => {
+          syncBase44Token();
+          return val.apply(obj, args);
+        };
+      }
+      return val;
+    },
+  });
+}
+
+export const base44 = makeAutoSyncProxy(_client);
