@@ -57,24 +57,35 @@ export default function CreateCourse() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
-      setUser(me);
-      setForm(f => ({ ...f, telephone_expediteur: me.telephone || '', nom_expediteur: me.full_name || '' }));
-      const res = await base44.functions.invoke('bedouEngine', { action: 'get_bedou' });
-      setSoldeBedou(res.data.bedou?.solde_disponible || 0);
-      // Auto-GPS départ depuis le profil utilisateur
-      if (me.gps_latitude && me.gps_longitude) {
-        setGpsDepart({ lat: me.gps_latitude, lng: me.gps_longitude });
-      }
-      // NEW: Auto-fill code promo from URL param
-      const params = new URLSearchParams(window.location.search);
-      const promoCode = params.get('promo');
-      if (promoCode) {
-        setForm(f => ({ ...f, code_promo: promoCode.toUpperCase() }));
+      try {
+        const me = await base44.auth.me();
+        setUser(me);
+        setForm(f => ({ ...f, telephone_expediteur: me.telephone || '', nom_expediteur: me.full_name || '' }));
+        try {
+          const res = await base44.functions.invoke('bedouEngine', { action: 'get_bedou' });
+          setSoldeBedou(res.data.bedou?.solde_disponible || 0);
+        } catch (err) {
+          console.error('[CreateCourse] Error bedouEngine:', err);
+          setSoldeBedou(0);
+        }
+        // Auto-GPS départ depuis le profil utilisateur
+        if (me.gps_latitude && me.gps_longitude) {
+          setGpsDepart({ lat: me.gps_latitude, lng: me.gps_longitude });
+        }
+        // NEW: Auto-fill code promo from URL param
+        const params = new URLSearchParams(window.location.search);
+        const promoCode = params.get('promo');
+        if (promoCode) {
+          setForm(f => ({ ...f, code_promo: promoCode.toUpperCase() }));
+        }
+      } catch (err) {
+        console.error('[CreateCourse] Auth error:', err);
+        toast.error("Erreur authentification — reconnectez-vous");
+        navigate('/connexion');
       }
     };
     load();
-  }, []); 
+  }, [navigate]); 
 
   const [gpsDepart, setGpsDepart] = useState(null);
 
