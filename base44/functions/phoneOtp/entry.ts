@@ -127,25 +127,46 @@ async function loginOrCreateByPhone(base44, phone) {
     body: JSON.stringify({
       email: derivedEmail,
       password: derivedPassword,
-      full_name: phone, // Sera mis à jour par l'utilisateur ensuite
+      full_name: phone,
     }),
   });
   const regData = await regRes.json();
-  console.log('[phoneOtp] Register status:', regRes.status);
+  console.log('[phoneOtp] Register status:', regRes.status, '| has token:', !!regData.access_token);
 
+  // Si l'inscription a réussi avec un token → connexion directe
   if (regRes.ok && regData.access_token) {
-    // Sauvegarder le numéro de téléphone sur le profil
     try {
       const tempBase44 = createClientFromRequest({ headers: { authorization: `Bearer ${regData.access_token}` } });
       await tempBase44.auth.updateMe({ telephone: phone });
     } catch (_) {}
-    console.log('[phoneOtp] ✅ Nouveau compte créé pour:', phone);
+    console.log('[phoneOtp] ✅ Nouveau compte créé + connecté pour:', phone);
     return { access_token: regData.access_token, is_new_user: true };
   }
 
-  // 3. Cas edge : compte existant mais avec un autre mot de passe (ne devrait pas arriver)
+  // Si l'inscription a réussi MAIS sans token (ex: vérif email demandée par la plateforme)
+  // → forcer une connexion immédiate avec les credentials dérivés
+  if (regRes.ok || regRes.status === 201) {
+    console.log('[phoneOtp] Inscription OK sans token — tentative de connexion immédiate...');
+    const loginRes2 = await fetch(`https://api.base44.app/api/apps/${BASE44_APP_ID}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: derivedEmail, password: derivedPassword }),
+    });
+    const loginData2 = await loginRes2.json();
+    if (loginRes2.ok && loginData2.access_token) {
+      try {
+        const tempBase44 = createClientFromRequest({ headers: { authorization: `Bearer ${loginData2.access_token}` } });
+        await tempBase44.auth.updateMe({ telephone: phone });
+      } catch (_) {}
+      console.log('[phoneOtp] ✅ Connexion après inscription pour:', phone);
+      return { access_token: loginData2.access_token, is_new_user: true };
+    }
+    console.warn('[phoneOtp] Login post-register échoué:', loginData2);
+  }
+
+  // 3. Cas edge : échec complet
   const errMsg = regData?.detail || regData?.message || regData?.error || 'Erreur création compte';
-  console.error('[phoneOtp] Register failed:', errMsg);
+  console.error('[phoneOtp] Register failed:', errMsg, '| status:', regRes.status);
   throw new Error('Impossible de créer ou connecter le compte : ' + errMsg);
 }
 
