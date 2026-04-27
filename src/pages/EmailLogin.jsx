@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { Loader2, Eye, EyeOff, Mail, Lock, Chrome } from "lucide-react";
+import { Loader2, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 
-const BLUE   = "#1877f2";
+const BLUE = "#1877f2";
 const APP_ID = "69c3c74fc4b62396dca61751";
 const AUTH_BASE = `https://cdl.base44.app/api/apps/${APP_ID}/auth`;
 
@@ -12,7 +12,6 @@ function saveToken(token) {
   try { base44.auth.setToken(token); } catch (_) {}
 }
 
-// Auth via fetch direct — évite le 403 du SDK Base44 dans la WebView Capacitor non authentifiée
 async function authFetch(endpoint, body) {
   const res = await fetch(`${AUTH_BASE}${endpoint}`, {
     method: "POST",
@@ -34,48 +33,9 @@ export default function EmailLogin() {
   const [message, setMessage] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Gérer le retour OAuth token dans l'URL (Google redirect)
-  useEffect(() => {
-    const handleOAuthReturn = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get("access_token") || params.get("token");
-      const error = params.get("error");
-
-      if (error) {
-        setMessage(`Erreur Google : ${error === 'access_denied' ? 'Accès refusé' : error}`);
-        window.history.replaceState({}, "", "/connexion");
-        return;
-      }
-
-      if (token) {
-        saveToken(token);
-        window.history.replaceState({}, "", "/");
-        await navigateHome();
-        return;
-      }
-
-      // Si on revient sur la page sans token mais qu'on est déjà auth (retour OAuth)
-      try {
-        const isAuth = await base44.auth.isAuthenticated();
-        if (isAuth) {
-          await navigateHome();
-        }
-      } catch (_) {}
-    };
-    
-    handleOAuthReturn();
-  }, []);
-
   const navigateHome = async () => {
     try { await checkAppState(); } catch (_) {}
     window.location.replace("/");
-  };
-
-  // Google Login — utilise le SDK Base44 natif
-  const handleGoogleLogin = () => {
-    // Utiliser l'URL complète pour forcer le retour sur le bon domaine
-    const returnUrl = `${window.location.origin}/`;
-    base44.auth.loginWithProvider("google", returnUrl);
   };
 
   const handleLogin = async () => {
@@ -263,22 +223,6 @@ export default function EmailLogin() {
           </div>
         )}
 
-        {/* Séparateur + Google Login */}
-        {(mode === "login" || mode === "register") && (
-          <>
-            <div style={s.divider}>
-              <div style={s.dividerLine} /><span style={s.dividerText}>ou</span><div style={s.dividerLine} />
-            </div>
-            <button
-              type="button"
-              style={s.googleBtn}
-              onClick={handleGoogleLogin}
-            >
-              <Chrome size={16} style={{ marginRight: 8, flexShrink: 0 }} />
-              Continuer avec Google
-            </button>
-          </>
-        )}
       </div>
     </div>
   );
@@ -341,17 +285,8 @@ const s = {
     cursor: "pointer", marginBottom: "12px", padding: "4px", textDecoration: "underline",
     display: "block", width: "100%", textAlign: "center",
   },
-  toggleRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" },
+  toggleRow: { display: "flex", alignItems: "center", justifyContent: "center", marginTop: "4px" },
   toggleBtn: { background: "none", border: "none", color: BLUE, fontSize: "13px", fontWeight: "700", cursor: "pointer", padding: "4px", textDecoration: "underline" },
-  divider: { display: "flex", alignItems: "center", gap: "10px", margin: "12px 0 10px" },
-  dividerLine: { flex: 1, height: "1px", background: "#e2e8f0" },
-  dividerText: { fontSize: "12px", color: "#94a3b8", fontWeight: "500", whiteSpace: "nowrap" },
-  googleBtn: {
-    width: "100%", padding: "13px 16px", marginBottom: "8px", background: "#ffffff",
-    color: "#1f2937", border: "2px solid #d1d5db", borderRadius: "14px", fontWeight: "600",
-    fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)", transition: "opacity 0.2s",
-  },
   registerBox: {
     marginTop: "8px", background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
     borderRadius: "14px", padding: "14px 18px", display: "flex", alignItems: "center",
