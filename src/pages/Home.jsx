@@ -183,19 +183,34 @@ export default function Home() {
     setShowSwitch(false);
     const prof = allProfiles?.find(p => p?.id === profileId);
     if (!prof?.profile_type) return;
-    try {
-      await base44.functions.invoke('switchActiveProfile', { profile_type: prof.profile_type });
-      localStorage.setItem('activeProfileId', profileId);
-      console.log(`[Home] Switch confirmé → ${prof.profile_type}`);
-      setActiveProfileId(profileId);
-      // Notifier AppLayoutWrapper pour mise à jour instantanée du userRole + nav bas
-      window.dispatchEvent(new CustomEvent('cdl_profile_switch', { detail: { role: prof.profile_type } }));
-      // Aussi mettre à jour le user local pour que resolveActiveProfile retourne le bon profil
-      setUser(prev => prev ? { ...prev, current_role: prof.profile_type, active_profile_type: prof.profile_type } : prev);
-    } catch (err) {
-      console.error('[Home] Erreur switchProfile:', err);
-      window.location.reload();
-    }
+
+    const newRole = prof.profile_type;
+    console.log(`[Home] switchProfile START — profileId: ${profileId}, newRole: ${newRole}`);
+    console.log(`[Home] current_role BEFORE: ${user?.current_role}`);
+
+    // 1. Mettre à jour le state local IMMÉDIATEMENT pour un rendu instantané
+    localStorage.setItem('activeProfileId', profileId);
+    setActiveProfileId(profileId);
+    setUser(prev => {
+      const updated = prev ? { ...prev, current_role: newRole, active_profile_type: newRole } : prev;
+      console.log(`[Home] user state updated — current_role: ${updated?.current_role}`);
+      return updated;
+    });
+
+    // 2. Notifier AppLayoutWrapper (nav bas + header)
+    window.dispatchEvent(new CustomEvent('cdl_profile_switch', { detail: { role: newRole } }));
+    console.log(`[Home] cdl_profile_switch dispatched → ${newRole}`);
+
+    // 3. Persister en BDD (non bloquant pour l'UI)
+    base44.functions.invoke('switchActiveProfile', { profile_type: newRole })
+      .then((res) => {
+        console.log(`[Home] switchActiveProfile BDD OK → ${newRole}`, res?.data);
+      })
+      .catch(err => {
+        console.error('[Home] Erreur switchActiveProfile BDD:', err);
+        // En cas d'erreur BDD, recharger pour rétablir la cohérence
+        window.location.reload();
+      });
   };
 
   if (loading) {
@@ -227,12 +242,36 @@ export default function Home() {
     return <AdminDashboardPro />;
   }
 
-  // Multi-profil — SOURCE DE VÉRITÉ : current_role en BDD
-  const activeUserProfile = resolveActiveProfile(
-    Array.isArray(allProfiles) ? allProfiles : [],
-    activeProfileId,
-    user?.current_role || user?.active_profile_type  // source de vérité BDD
-  );
+  // SOURCE DE VÉRITÉ pour le rendu : activeProfileId (state local, mis à jour immédiatement au switch)
+  // user.current_role sert de fallback de synchronisation BDD uniquement
+  const profilesArray = Array.isArray(allProfiles) ? allProfiles : [];
+
+  // Priorité 1 : profil dont l'ID est dans activeProfileId (state local mis à jour au switch)
+  // Priorité 2 : profil correspondant à current_role BDD
+  // Priorité 3 : fallback premier profil actif
+  const activeUserProfile = (() => {
+    // P1 : par ID (mis à jour immédiatement lors du switch)
+    if (activeProfileId) {
+      const byId = profilesArray.find(p => p?.id === activeProfileId && !p?.deleted);
+      if (byId) {
+        console.log(`[Home] resolveActiveProfile → P1 (byId): ${byId.profile_type}`);
+        return byId;
+      }
+    }
+    // P2 : par current_role BDD
+    const trueRole = user?.current_role || user?.active_profile_type;
+    if (trueRole) {
+      const byRole = profilesArray.find(p => p?.profile_type === trueRole && !p?.deleted);
+      if (byRole) {
+        console.log(`[Home] resolveActiveProfile → P2 (byRole): ${byRole.profile_type}`);
+        return byRole;
+      }
+    }
+    // P3 : fallback premier profil actif
+    const fallback = profilesArray.find(p => p?.status === 'actif' && !p?.deleted) || profilesArray.find(p => !p?.deleted);
+    console.log(`[Home] resolveActiveProfile → P3 (fallback): ${fallback?.profile_type}`);
+    return fallback || null;
+  })();
 
   // Pas de profil
   if (!activeUserProfile) {
@@ -285,20 +324,21 @@ export default function Home() {
   }
 
   // Render dashboard selon profil
-  console.log('[HOME] renderDashboard called for:', activeProfileType);
+  console.log('[HOME] renderDashboard — activeProfileId:', activeProfileId, '| activeProfileType:', activeProfileType, '| user.current_role:', user?.current_role);
   const renderDashboard = () => {
-    console.log('[HOME] Dashboard switch:', activeProfileType);
+    console.log('[HOME] Dashboard switch → rendering:', activeProfileType);
     switch (activeProfileType) {
       case 'client':     return <ClientHome user={user} />;
       case 'livreur':    return <LivreurHome user={user} />;
       case 'partenaire': return <DashboardPartenaire user={user} />;
       case 'commercial': return <DashboardCommercial user={user} />;
       case 'annonceur':  return <DashboardAnnonceur user={user} />;
-      default:           return <ClientHome user={user} />;
+      default:
+        console.warn('[HOME] activeProfileType inconnu, fallback client. Valeur:', activeProfileType);
+        return <ClientHome user={user} />;
     }
   };
 
-  const profilesArray = Array.isArray(allProfiles) ? allProfiles : [];
   const activeProfiles = profilesArray.filter(p => p?.status === 'actif');
   const pendingProfiles = profilesArray.filter(p => p?.status === 'en_attente');
   const incompleteProfiles = profilesArray.filter(p => p?.status === 'incomplet');
