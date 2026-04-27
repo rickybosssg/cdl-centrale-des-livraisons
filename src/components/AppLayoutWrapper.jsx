@@ -7,6 +7,7 @@ import RoleSetup from "./RoleSetup";
 import PromoCodeStep from "../pages/PromoCodeStep";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
 import { saveFcmToken as saveFcmTokenDirect, flushPendingFcmToken } from "@/lib/fcmApi";
+import PermissionsOnboarding, { needsPermissionsOnboarding, markPermissionsConfigured } from "./PermissionsOnboarding";
 
 // Récupère le token d'auth depuis localStorage pour le fallback APK natif
 function getAuthToken() {
@@ -23,6 +24,7 @@ export default function AppLayoutWrapper({ user }) {
   const [needsRole, setNeedsRole] = useState(false);
   const [needsPromoStep, setNeedsPromoStep] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [showPermissions, setShowPermissions] = useState(false);
 
   const userReady = !!user?.email && !!user?.id;
 
@@ -121,6 +123,11 @@ export default function AppLayoutWrapper({ user }) {
           sessionStorage.setItem(splashKey, '1');
           setShowSplash(true);
         }
+
+        // Demander les permissions au premier lancement (après le splash)
+        if (needsPermissionsOnboarding()) {
+          setShowPermissions(true);
+        }
       } catch (error) {
         console.error('[AppLayoutWrapper] Load error:', error);
         if (isMounted) setLoading(false);
@@ -149,6 +156,19 @@ export default function AppLayoutWrapper({ user }) {
     };
     window.addEventListener('cdl_navigate', onCdlNavigate);
     return () => window.removeEventListener('cdl_navigate', onCdlNavigate);
+  }, []);
+
+  // ── Changement de profil instantané ─────────────────────────────────────────
+  useEffect(() => {
+    const onProfileSwitch = (e) => {
+      const newRole = e.detail?.role;
+      if (newRole) {
+        console.log('[AppLayoutWrapper] Profile switch →', newRole);
+        setUserRole(newRole);
+      }
+    };
+    window.addEventListener('cdl_profile_switch', onProfileSwitch);
+    return () => window.removeEventListener('cdl_profile_switch', onProfileSwitch);
   }, []);
 
   useEffect(() => {
@@ -291,6 +311,9 @@ export default function AppLayoutWrapper({ user }) {
       <NotificationPermissionBanner />
       {showSplash && (
         <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />
+      )}
+      {showPermissions && !showSplash && (
+        <PermissionsOnboarding onDone={() => setShowPermissions(false)} />
       )}
       <AppLayout userRole={userRole} userEmail={userEmail} />
     </>

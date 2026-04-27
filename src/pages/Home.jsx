@@ -183,16 +183,19 @@ export default function Home() {
     setShowSwitch(false);
     const prof = allProfiles?.find(p => p?.id === profileId);
     if (!prof?.profile_type) return;
-    // Attendre la confirmation backend AVANT de recharger
-    // pour garantir que current_role est bien à jour en BDD
     try {
       await base44.functions.invoke('switchActiveProfile', { profile_type: prof.profile_type });
       localStorage.setItem('activeProfileId', profileId);
       console.log(`[Home] Switch confirmé → ${prof.profile_type}`);
+      // Mettre à jour le rôle actif localement et notifier AppLayoutWrapper
+      setActiveProfileId(profileId);
+      // Dispatcher un événement pour que AppLayoutWrapper mette à jour userRole immédiatement
+      window.dispatchEvent(new CustomEvent('cdl_profile_switch', { detail: { role: prof.profile_type } }));
     } catch (err) {
       console.error('[Home] Erreur switchProfile:', err);
+      // Fallback : rechargement complet
+      window.location.href = '/';
     }
-    window.location.href = '/';
   };
 
   if (loading) {

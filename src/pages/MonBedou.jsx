@@ -59,15 +59,25 @@ export default function MonBedou() {
   const [filterStatut, setFilterStatut] = useState("tous");
 
   const load = async () => {
-    const me = await base44.auth.me();
-    setUser(me);
-    const res = await base44.functions.invoke("bedouEngine", { action: "get_bedou" });
-    setBedou(res.data.bedou);
-    setTransactions(res.data.transactions || []);
-    setLoading(false);
+    setLoading(true);
+    // Timeout de sécurité 10s pour éviter boucle infinie
+    const safetyTimeout = setTimeout(() => { setLoading(false); }, 10000);
+    try {
+      const me = await base44.auth.me();
+      setUser(me);
+      const res = await base44.functions.invoke("bedouEngine", { action: "get_bedou" });
+      setBedou(res.data.bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
+      setTransactions(res.data.transactions || []);
+    } catch (err) {
+      console.error('[MonBedou] Erreur chargement:', err);
+      setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
+    } finally {
+      clearTimeout(safetyTimeout);
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, []); // Dépendances vides — ne se relance pas en boucle
 
   const handleRecharge = async () => {
     const montant = parseInt(form.montant);
