@@ -64,11 +64,9 @@ export default function EmailLogin() {
     window.location.replace("/");
   };
 
-  // Google Login — redirection directe vers Google OAuth
+  // Google Login — utilise le SDK Base44 natif
   const handleGoogleLogin = () => {
-    const redirectUri = `${window.location.origin}/connexion`;
-    const googleAuthUrl = `${AUTH_BASE}/oauth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
-    window.location.href = googleAuthUrl;
+    base44.auth.loginWithProvider("google", "/");
   };
 
   const handleLogin = async () => {
