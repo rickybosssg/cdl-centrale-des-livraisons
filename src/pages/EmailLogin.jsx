@@ -98,15 +98,17 @@ export default function EmailLogin() {
     if (!email) { setMessage("Entrez votre adresse email"); return; }
     setLoading(true); setMessage("");
     try {
-      const { ok } = await authFetch("/reset-password", { email: email.trim().toLowerCase() });
-      if (ok) {
-        setSuccessMsg("Email de réinitialisation envoyé ! Vérifiez votre boîte mail.");
+      const res = await base44.functions.invoke('sendPasswordResetEmail', {
+        email: email.trim().toLowerCase(),
+      });
+      if (res?.data?.success) {
+        setSuccessMsg("✅ Email de réinitialisation envoyé ! Vérifiez votre boîte mail (et les spams).");
         setMode("login");
       } else {
-        setMessage("Impossible d'envoyer l'email — vérifiez l'adresse");
+        setMessage(res?.data?.error || "Impossible d'envoyer l'email — vérifiez l'adresse");
       }
-    } catch (_) {
-      setMessage("Impossible d'envoyer l'email — vérifiez l'adresse");
+    } catch (err) {
+      setMessage("Erreur lors de l'envoi — réessayez dans quelques secondes");
     } finally { setLoading(false); }
   };
 
