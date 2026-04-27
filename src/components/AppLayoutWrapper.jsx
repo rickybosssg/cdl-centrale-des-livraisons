@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
+import PromoCodeStep from "../pages/PromoCodeStep";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
 import { saveFcmToken as saveFcmTokenDirect, flushPendingFcmToken } from "@/lib/fcmApi";
 
@@ -20,6 +21,7 @@ export default function AppLayoutWrapper({ user }) {
   const [prenom, setPrenom] = useState("");
   const [showSplash, setShowSplash] = useState(false);
   const [needsRole, setNeedsRole] = useState(false);
+  const [needsPromoStep, setNeedsPromoStep] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   const userReady = !!user?.email && !!user?.id;
@@ -43,7 +45,13 @@ export default function AppLayoutWrapper({ user }) {
             const existingProfiles = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
             if (!isMounted) return;
             if (existingProfiles.length === 0) {
-              setNeedsRole(true);
+              // Nouvel utilisateur : afficher d'abord l'étape code promo
+              const promoShown = sessionStorage.getItem(`cdl_promo_shown_${me.id}`);
+              if (!promoShown) {
+                setNeedsPromoStep(true);
+              } else {
+                setNeedsRole(true);
+              }
               setLoading(false);
               setInitialized(true);
               return;
@@ -250,6 +258,18 @@ export default function AppLayoutWrapper({ user }) {
       <div className="fixed inset-0 flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
+    );
+  }
+
+  if (needsPromoStep) {
+    return (
+      <PromoCodeStep
+        onContinue={() => {
+          sessionStorage.setItem(`cdl_promo_shown_${user?.id}`, '1');
+          setNeedsPromoStep(false);
+          setNeedsRole(true);
+        }}
+      />
     );
   }
 
