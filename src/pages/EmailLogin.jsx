@@ -38,12 +38,10 @@ export default function EmailLogin() {
   useEffect(() => {
     const handleOAuthReturn = async () => {
       const params = new URLSearchParams(window.location.search);
-      const token = params.get("access_token") || params.get("token") || params.get("code");
+      const token = params.get("access_token") || params.get("token");
       const error = params.get("error");
-      const errorDescription = params.get("error_description");
 
       if (error) {
-        console.warn('[EmailLogin] OAuth error:', error, errorDescription);
         setMessage(`Erreur Google : ${error === 'access_denied' ? 'Accès refusé' : error}`);
         window.history.replaceState({}, "", "/connexion");
         return;
@@ -51,9 +49,18 @@ export default function EmailLogin() {
 
       if (token) {
         saveToken(token);
-        window.history.replaceState({}, "", "/connexion");
+        window.history.replaceState({}, "", "/");
         await navigateHome();
+        return;
       }
+
+      // Si on revient sur la page sans token mais qu'on est déjà auth (retour OAuth)
+      try {
+        const isAuth = await base44.auth.isAuthenticated();
+        if (isAuth) {
+          await navigateHome();
+        }
+      } catch (_) {}
     };
     
     handleOAuthReturn();
@@ -66,7 +73,9 @@ export default function EmailLogin() {
 
   // Google Login — utilise le SDK Base44 natif
   const handleGoogleLogin = () => {
-    base44.auth.loginWithProvider("google", "/");
+    // Utiliser l'URL complète pour forcer le retour sur le bon domaine
+    const returnUrl = `${window.location.origin}/`;
+    base44.auth.loginWithProvider("google", returnUrl);
   };
 
   const handleLogin = async () => {
