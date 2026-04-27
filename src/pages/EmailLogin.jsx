@@ -5,8 +5,9 @@ import { useAuth } from "@/lib/AuthContext";
 
 const BLUE = "#1E6BFF";
 const DARK = "#0F2A5C";
-const APP_ID = "69c3c74fc4b62396dca61751";
-const AUTH_BASE = `https://cdl.base44.app/api/apps/${APP_ID}/auth`;
+// Utiliser l'appId injecté par Vite — fallback sur valeur hardcodée
+const APP_ID = import.meta.env?.VITE_BASE44_APP_ID || "69c3c74fc4b62396dca61751";
+const AUTH_BASE = `https://app.base44.com/api/apps/${APP_ID}/auth`;
 
 function saveToken(token) {
   try { localStorage.setItem("base44_access_token", token); } catch (_) {}
@@ -75,11 +76,32 @@ export default function EmailLogin() {
     if (!email) { setMessage("Entrez votre adresse email"); return; }
     setLoading(true); setMessage("");
     try {
-      const res = await base44.functions.invoke("sendPasswordResetEmail", { email: email.trim().toLowerCase() });
-      if (res?.data?.success) { setSuccessMsg("✅ Email de réinitialisation envoyé ! Vérifiez votre boîte mail."); setMode("login"); }
-      else setMessage(res?.data?.error || "Impossible d'envoyer l'email — vérifiez l'adresse");
-    } catch (err) { setMessage("Erreur lors de l'envoi — réessayez"); }
-    finally { setLoading(false); }
+      // Essayer d'abord la fonction backend CDL
+      let sent = false;
+      try {
+        const res = await base44.functions.invoke("sendPasswordResetEmail", { email: email.trim().toLowerCase() });
+        if (res?.data?.success) sent = true;
+      } catch (_) {}
+      // Fallback : endpoint natif Base44
+      if (!sent) {
+        const res = await fetch(`${AUTH_BASE}/send-reset-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        });
+        if (res.ok) sent = true;
+      }
+      if (sent) {
+        setSuccessMsg("✅ Email de réinitialisation envoyé ! Vérifiez votre boîte mail (et les spams).");
+        setMode("login");
+      } else {
+        setMessage("Impossible d'envoyer l'email — vérifiez l'adresse saisie");
+      }
+    } catch (err) {
+      setMessage("Erreur réseau — vérifiez votre connexion et réessayez");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const submit = mode === "login" ? handleLogin : mode === "register" ? handleRegister : handleForgot;

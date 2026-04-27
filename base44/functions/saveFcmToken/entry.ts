@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
       if (rawBody) body = JSON.parse(rawBody);
     } catch (_) {}
 
-    const { token, deviceType, auth_token: bodyAuthToken } = body;
+    const { token, deviceType, device_type, auth_token: bodyAuthToken, user_email: bodyUserEmail } = body;
 
     // ── ÉTAPE 2 : Construire la requête avec le bon header Authorization ───
     const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
@@ -46,7 +46,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized', details: authErr.message }, { status: 401 });
     }
 
-    if (!user?.email) {
+    const resolvedEmail = user?.email || bodyUserEmail;
+    if (!resolvedEmail) {
       return Response.json({ error: 'User email required' }, { status: 401 });
     }
 
@@ -55,23 +56,23 @@ Deno.serve(async (req) => {
     }
 
     const cleanToken = String(token).trim();
-    const resolvedDeviceType = deviceType || 'android_native';
-    console.log('[saveFcmToken] user:', user.email, '| deviceType:', resolvedDeviceType, '| token:', cleanToken.substring(0, 25) + '...');
+    const resolvedDeviceType = device_type || deviceType || 'android_native';
+    console.log('[saveFcmToken] user:', resolvedEmail, '| deviceType:', resolvedDeviceType, '| token:', cleanToken.substring(0, 25) + '...');
 
     // ── ÉTAPE 4 : Vérifier si ce token existe déjà ────────────────────────
     const existing = await base44.asServiceRole.entities.FcmToken.filter({ token: cleanToken });
 
     if (existing.length > 0) {
       const record = existing[0];
-      if (record.user_email === user.email) {
+      if (record.user_email === resolvedEmail) {
         // Même user — juste mettre à jour last_used + is_active
         await base44.asServiceRole.entities.FcmToken.update(record.id, {
           is_active: true,
           last_used: new Date().toISOString(),
           device_type: resolvedDeviceType,
         });
-        console.log('[saveFcmToken] ✅ Token existant mis à jour pour', user.email);
-        return Response.json({ success: true, token_id: record.id, action: 'updated', user_email: user.email });
+        console.log('[saveFcmToken] ✅ Token existant mis à jour pour', resolvedEmail);
+        return Response.json({ success: true, token_id: record.id, action: 'updated', user_email: resolvedEmail });
       } else {
         // Appareil réassigné — désactiver l'ancien enregistrement
         await base44.asServiceRole.entities.FcmToken.update(record.id, { is_active: false });
@@ -83,7 +84,7 @@ Deno.serve(async (req) => {
     // Pour éviter l'accumulation de tokens obsolètes
     try {
       const userTokens = await base44.asServiceRole.entities.FcmToken.filter({
-        user_email: user.email,
+        user_email: resolvedEmail,
         device_type: resolvedDeviceType,
         is_active: true,
       });
@@ -97,7 +98,7 @@ Deno.serve(async (req) => {
 
     // ── ÉTAPE 6 : Créer le nouveau record ─────────────────────────────────
     const result = await base44.asServiceRole.entities.FcmToken.create({
-      user_email: user.email,
+      user_email: resolvedEmail,
       token: cleanToken,
       device_type: resolvedDeviceType,
       registered_at: new Date().toISOString(),
@@ -105,8 +106,8 @@ Deno.serve(async (req) => {
       is_active: true,
     });
 
-    console.log('[saveFcmToken] ✅ Nouveau token créé — id:', result.id, '| user:', user.email);
-    return Response.json({ success: true, token_id: result.id, user_email: user.email, action: 'created' });
+    console.log('[saveFcmToken] ✅ Nouveau token créé — id:', result.id, '| user:', resolvedEmail);
+    return Response.json({ success: true, token_id: result.id, user_email: resolvedEmail, action: 'created' });
 
   } catch (error) {
     console.error('[saveFcmToken] ❌ ERROR:', error?.message);

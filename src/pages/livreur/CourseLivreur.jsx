@@ -100,7 +100,7 @@ export default function CourseLivreur() {
   const BEDOU_INVOKE_MS = 45000;
 
   const livrerColis = async () => {
-    if (updating) return;
+    if (updating || livreeVerrouilleRef.current) return;
     setUpdating(true);
     console.log('[CourseLivreur] livrerColis START — course.id:', course.id, 'statut:', course.statut);
     const montant = course.prix || 0;
@@ -109,6 +109,16 @@ export default function CourseLivreur() {
 
     try {
       // 1. Débiter client + créditer livreur via Bedou (timeout pour ne pas rester bloqué sur "Mise à jour...")
+      // Vérification idempotence : relire la course pour s'assurer qu'elle n'est pas déjà livrée
+      const freshCourses = await base44.entities.Course.filter({ id: course.id });
+      if (freshCourses?.[0]?.statut === 'livree') {
+        livreeVerrouilleRef.current = true;
+        setCourse(prev => ({ ...prev, statut: 'livree' }));
+        toast.success('Course déjà marquée comme livrée !');
+        setUpdating(false);
+        return;
+      }
+
       let res;
       try {
         res = await Promise.race([

@@ -162,14 +162,16 @@ export default function AppLayoutWrapper({ user }) {
   useEffect(() => {
     const onProfileSwitch = (e) => {
       const newRole = e.detail?.role;
-      if (newRole) {
+      if (newRole && newRole !== userRole) {
         console.log('[AppLayoutWrapper] Profile switch →', newRole);
         setUserRole(newRole);
+        // Forcer la re-lecture du user pour avoir current_role à jour
+        base44.auth.me().catch(() => {});
       }
     };
     window.addEventListener('cdl_profile_switch', onProfileSwitch);
     return () => window.removeEventListener('cdl_profile_switch', onProfileSwitch);
-  }, []);
+  }, [userRole]);
 
   useEffect(() => {
     // Initialiser FCM une fois l'user authentifié
@@ -293,9 +295,21 @@ export default function AppLayoutWrapper({ user }) {
     );
   }
 
+  // RoleSetup en cours — onComplete recharge le user
   if (needsRole) {
-    return <RoleSetup onComplete={() => { window.location.reload(); }} />;
+    return <RoleSetup onComplete={async () => {
+      setNeedsRole(false);
+      // Relire le user depuis la BDD pour avoir current_role à jour
+      try {
+        const me = await base44.auth.me();
+        if (me?.current_role) setUserRole(me.current_role);
+        setUserEmail(me.email);
+      } catch (_) {}
+      setInitialized(false); // Re-déclenche le useEffect principal
+    }} />;
   }
+
+
 
   // ⚠️ Double-check : userEmail et userRole prêts avant render
   if (!userEmail || !userRole) {

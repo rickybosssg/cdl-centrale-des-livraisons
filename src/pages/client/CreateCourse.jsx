@@ -43,6 +43,9 @@ export default function CreateCourse() {
     prix_base: "",
     instructions_speciales: "",
   });
+  // Nettoyer le localStorage code promo pour qu'il n'apparaisse pas ici
+  // (le code promo est uniquement pour l'onboarding, pas pour les courses)
+  const _cleanupPromo = (() => { /* code promo géré dans PromoCodeStep uniquement */ })();
 
   const handleGpsLocationUpdate = async (locationData) => {
     try {

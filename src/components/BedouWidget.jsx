@@ -68,14 +68,25 @@ export default function BedouWidget({ user, compact = false }) {
   if (compact) {
     return (
       <Link to="/mon-bedou">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/15 border border-white/20">
-          <Wallet className="h-4 w-4 text-white" />
-          <span className="text-sm font-bold text-white">{fmt(safeBedou.solde_disponible || 0)}</span>
-          {error && (
-            <button onClick={(e) => { e.preventDefault(); loadBedou(); }} className="ml-1 opacity-60 hover:opacity-100">
-              <RefreshCw className="h-3 w-3 text-white" />
-            </button>
-          )}
+        <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/15 border border-white/20">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-white" />
+            <div>
+              <p className="text-[10px] text-white/60">Solde Bedou</p>
+              <p className="text-sm font-extrabold text-white">{fmt(safeBedou.solde_disponible || 0)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-center">
+              <p className="text-[10px] text-white/60">Disponible</p>
+              <p className="text-xs font-bold text-emerald-300">{fmt(safeBedou.solde_disponible || 0)}</p>
+            </div>
+            {error && (
+              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); loadBedou(); }} className="opacity-60 hover:opacity-100">
+                <RefreshCw className="h-3 w-3 text-white" />
+              </button>
+            )}
+          </div>
         </div>
       </Link>
     );

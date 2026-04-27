@@ -11,8 +11,9 @@
  */
 
 const APP_ID = import.meta.env.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
-const SAVE_URL = `https://api.base44.app/api/apps/${APP_ID}/functions/saveFcmTokenPublic`;
-const GET_URL  = `https://api.base44.app/api/apps/${APP_ID}/functions/getFcmTokens`;
+// Utiliser saveFcmToken (avec auth) — upsert strict anti-doublon
+const SAVE_URL = `https://app.base44.com/api/apps/${APP_ID}/functions/saveFcmToken`;
+const GET_URL  = `https://app.base44.com/api/apps/${APP_ID}/functions/getFcmTokens`;
 
 // Clé localStorage pour token en attente
 const PENDING_KEY = 'cdl_fcm_pending_token';
