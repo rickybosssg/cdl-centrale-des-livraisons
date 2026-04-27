@@ -1,200 +1,260 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
- * Annulation de course acceptée avec prélèvement de 50% du prix
- * Transaction ATOMIQUE : tout ou rien
- * - 50% du prix prélevé au client
- * - 20% de ces 50% à CDL
- * - 80% de ces 50% au livreur
+ * Annulation de course avec ou sans frais selon la règle CDL :
+ * - Pas encore acceptée → annulation gratuite (statuts: en_attente, assignee_attente, aucun_livreur)
+ * - Acceptée mais colis non récupéré (statut: acceptee) → 50% de frais
+ *   - CDL prend 20% des frais
+ *   - Le livreur reçoit 80% des frais
+ * - En cours (statut: en_cours) → annulation client impossible (admin seulement)
+ *
+ * IMPORTANT : Le Bedou n'est PAS débité à la création de course.
+ * Le débit Bedou client n'intervient qu'à la finalisation (livrerColis).
+ * Donc, l'annulation avec frais débite directement du Bedou client.
  */
+
+const CDL_EMAIL = 'weezyh2@gmail.com';
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return Response.json({ error: 'POST required' }, { status: 405 });
   }
 
-  try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  const base44 = createClientFromRequest(req);
+  const user = await base44.auth.me();
 
-    const { courseId } = await req.json();
-    if (!courseId) {
-      return Response.json({ error: 'courseId required' }, { status: 400 });
-    }
-
-    // 1. Récupérer la course
-    const course = await base44.entities.Course.filter({ id: courseId });
-    if (!course || course.length === 0) {
-      return Response.json({ error: 'Course not found' }, { status: 404 });
-    }
-
-    const c = course[0];
-
-    // 2. Vérifier les conditions
-    if (!['acceptee', 'en_cours'].includes(c.statut)) {
-      return Response.json({ error: 'Course must be accepted or in progress', statut: c.statut }, { status: 400 });
-    }
-    if (!c.livreur_email) {
-      return Response.json({ error: 'No delivery assigned' }, { status: 400 });
-    }
-    if (c.client_email !== user.email) {
-      return Response.json({ error: 'Only client can cancel' }, { status: 403 });
-    }
-
-    // 3. Calculer les frais
-    const prix = parseFloat(c.prix) || 0;
-    const fraisAnnulation = Math.round(prix * 0.5);
-    const partCdl = Math.round(fraisAnnulation * 0.2);
-    const partLivreur = Math.round(fraisAnnulation * 0.8);
-
-    console.log(`[cancelCourseWithFees] Course ${courseId}:`);
-    console.log(`  Prix: ${prix}F`);
-    console.log(`  Frais (50%): ${fraisAnnulation}F`);
-    console.log(`  CDL (20%): ${partCdl}F`);
-    console.log(`  Livreur (80%): ${partLivreur}F`);
-
-    // 4. Vérifier solde client
-    const clientBedou = await base44.entities.Bedou.filter({ user_email: user.email, role: 'client' });
-    if (!clientBedou || clientBedou.length === 0) {
-      return Response.json({ error: 'Client Bedou not found' }, { status: 400 });
-    }
-
-    const clientBedouRecord = clientBedou[0];
-    const soldeDisponible = parseFloat(clientBedouRecord.solde_disponible) || 0;
-
-    if (soldeDisponible < fraisAnnulation) {
-      return Response.json({
-        error: 'insufficient_balance',
-        required: fraisAnnulation,
-        available: soldeDisponible,
-        message: `Solde insuffisant. Vous devez recharger de ${fraisAnnulation - soldeDisponible}F.`,
-      });
-    }
-
-    // 5. Transaction ATOMIQUE
-    const now = new Date().toISOString();
-    const transactionId = `TX_CANCEL_${courseId}_${Date.now()}`;
-
-    try {
-      // Débiter client
-      const newClientSolde = soldeDisponible - fraisAnnulation;
-      await base44.entities.Bedou.update(clientBedouRecord.id, {
-        solde_disponible: newClientSolde,
-        solde: (parseFloat(clientBedouRecord.solde) || 0) - fraisAnnulation,
-      });
-
-      // Créditer CDL
-      const cdlBedou = await base44.entities.Bedou.filter({ user_email: 'cdl@system', role: 'cdl' });
-      if (cdlBedou && cdlBedou.length > 0) {
-        const cdlRecord = cdlBedou[0];
-        await base44.entities.Bedou.update(cdlRecord.id, {
-          solde: (parseFloat(cdlRecord.solde) || 0) + partCdl,
-          solde_disponible: (parseFloat(cdlRecord.solde_disponible) || 0) + partCdl,
-        });
-      }
-
-      // Créditer livreur
-      const livreurBedou = await base44.entities.Bedou.filter({ user_email: c.livreur_email, role: 'livreur' });
-      if (livreurBedou && livreurBedou.length > 0) {
-        const livreurRecord = livreurBedou[0];
-        const gain = parseFloat(livreurRecord.gains_totaux) || 0;
-        await base44.entities.Bedou.update(livreurRecord.id, {
-          solde: (parseFloat(livreurRecord.solde) || 0) + partLivreur,
-          solde_disponible: (parseFloat(livreurRecord.solde_disponible) || 0) + partLivreur,
-          gains_totaux: gain + partLivreur,
-        });
-      }
-
-      // Créer transactions historique
-      await Promise.all([
-        base44.entities.Transaction.create({
-          user_id: user.id,
-          user_email: user.email,
-          user_nom: user.full_name,
-          role: 'client',
-          type: 'annulation',
-          sens: 'debit',
-          montant: fraisAnnulation,
-          source: 'course',
-          methode: 'interne',
-          reference_id: courseId,
-          statut: 'valide',
-          description: `Annulation course ${courseId} avec frais (50%)`,
-        }),
-        base44.entities.Transaction.create({
-          user_id: c.livreur_email ? `livreur_${c.livreur_email}` : 'unknown',
-          user_email: c.livreur_email,
-          user_nom: c.livreur_name,
-          role: 'livreur',
-          type: 'compensation',
-          sens: 'credit',
-          montant: partLivreur,
-          source: 'course',
-          methode: 'interne',
-          reference_id: courseId,
-          statut: 'valide',
-          description: `Compensation annulation course ${courseId} (80% des frais)`,
-        }),
-      ]);
-
-      // Mettre à jour course
-      await base44.entities.Course.update(c.id, {
-        statut: 'annulee',
-        date_annulation: now,
-        annulee_par: 'client',
-        frais_annulation: fraisAnnulation,
-        montant_livreur: partLivreur,
-        montant_cdl: partCdl,
-        transaction_id: transactionId,
-      });
-
-      // Notifications
-      try {
-        await Promise.all([
-          // Client
-          base44.entities.Notification.create({
-            destinataire_email: user.email,
-            destinataire_role: 'client',
-            titre: '✅ Course annulée',
-            message: `Votre course a été annulée. ${fraisAnnulation}F ont été prélevés sur votre Bedou.`,
-            type: 'warning',
-            course_id: courseId,
-          }),
-          // Livreur
-          base44.entities.Notification.create({
-            destinataire_email: c.livreur_email,
-            destinataire_role: 'livreur',
-            titre: '❌ Course annulée par client',
-            message: `Compensation reçue: ${partLivreur}F crédités automatiquement.`,
-            type: 'info',
-            course_id: courseId,
-          }),
-        ]);
-      } catch (notifErr) {
-        console.warn('[cancelCourseWithFees] Notification error:', notifErr.message);
-      }
-
-      return Response.json({
-        success: true,
-        courseId,
-        statut: 'annulee',
-        fraisAnnulation,
-        partCdl,
-        partLivreur,
-        newClientSolde,
-      });
-    } catch (txErr) {
-      console.error('[cancelCourseWithFees] Transaction failed:', txErr);
-      return Response.json({
-        error: 'transaction_failed',
-        message: txErr.message,
-      }, { status: 500 });
-    }
-  } catch (error) {
-    console.error('[cancelCourseWithFees] Error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
+  if (!user) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const { courseId, adminOverride } = await req.json();
+  if (!courseId) {
+    return Response.json({ error: 'courseId required' }, { status: 400 });
+  }
+
+  // 1. Récupérer la course
+  const courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });
+  if (!courses || courses.length === 0) {
+    return Response.json({ error: 'Course introuvable' }, { status: 404 });
+  }
+  const c = courses[0];
+
+  // 2. Vérifier autorisation
+  const isAdmin = user.role === 'admin';
+  if (!isAdmin && c.client_email !== user.email) {
+    return Response.json({ error: 'Non autorisé' }, { status: 403 });
+  }
+
+  const statut = c.statut;
+  const FREE_CANCEL = ['en_attente', 'assignee_attente', 'aucun_livreur'];
+  const FEE_CANCEL = ['acceptee'];
+  // en_cours : client ne peut pas annuler sauf admin
+  const ADMIN_ONLY = ['en_cours'];
+
+  const canCancel = FREE_CANCEL.includes(statut) || FEE_CANCEL.includes(statut) || (isAdmin && ADMIN_ONLY.includes(statut));
+  if (!canCancel) {
+    return Response.json({ error: `Annulation impossible en statut: ${statut}`, statut }, { status: 400 });
+  }
+
+  const now = new Date().toISOString();
+  const prix = parseFloat(c.prix) || 0;
+  const isFree = FREE_CANCEL.includes(statut);
+
+  // ── Annulation GRATUITE ──────────────────────────────────────────────────
+  if (isFree) {
+    await base44.asServiceRole.entities.Course.update(c.id, {
+      statut: 'annulee',
+      annulee_par: isAdmin ? 'admin' : 'client',
+      frais_annulation: 0,
+      date_annulation: now,
+    });
+
+    // Libérer le livreur si assigné
+    if (c.livreur_email) {
+      const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
+      if (livs?.[0]) {
+        await base44.asServiceRole.entities.User.update(livs[0].id, {
+          nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 1) - 1),
+          disponible: true,
+        }).catch(() => {});
+      }
+    }
+
+    // Notifications
+    await base44.asServiceRole.entities.Notification.create({
+      destinataire_email: c.client_email,
+      destinataire_role: 'client',
+      titre: '✅ Course annulée',
+      message: 'Votre course a été annulée sans frais.',
+      type: 'info',
+      lue: false,
+      course_id: courseId,
+    }).catch(() => {});
+
+    if (c.livreur_email) {
+      await base44.asServiceRole.entities.Notification.create({
+        destinataire_email: c.livreur_email,
+        destinataire_role: 'livreur',
+        titre: '❌ Course annulée',
+        message: 'La course a été annulée par le client avant acceptation.',
+        type: 'warning',
+        lue: false,
+        course_id: courseId,
+      }).catch(() => {});
+    }
+
+    return Response.json({ success: true, courseId, statut: 'annulee', fraisAnnulation: 0, gratuit: true });
+  }
+
+  // ── Annulation AVEC FRAIS (50%) ──────────────────────────────────────────
+  const fraisAnnulation = Math.round(prix * 0.5);
+  const partCdl = Math.round(fraisAnnulation * 0.2);
+  const partLivreur = fraisAnnulation - partCdl; // 80% des frais
+
+  console.log(`[cancelCourseWithFees] Course ${courseId} | Prix: ${prix}F | Frais: ${fraisAnnulation}F | CDL: ${partCdl}F | Livreur: ${partLivreur}F`);
+
+  // Vérifier solde client
+  const clientBedouList = await base44.asServiceRole.entities.Bedou.filter({ user_email: c.client_email });
+  if (!clientBedouList || clientBedouList.length === 0) {
+    return Response.json({ error: 'Bedou client introuvable' }, { status: 400 });
+  }
+  const clientBedou = clientBedouList[0];
+  const soldeDisponible = parseFloat(clientBedou.solde_disponible) || 0;
+
+  if (soldeDisponible < fraisAnnulation) {
+    return Response.json({
+      error: 'insufficient_balance',
+      required: fraisAnnulation,
+      available: soldeDisponible,
+      message: `Solde insuffisant. Il vous manque ${fraisAnnulation - soldeDisponible} F CFA.`,
+    });
+  }
+
+  // Débiter client
+  await base44.asServiceRole.entities.Bedou.update(clientBedou.id, {
+    solde: Math.max(0, (parseFloat(clientBedou.solde) || 0) - fraisAnnulation),
+    solde_disponible: Math.max(0, soldeDisponible - fraisAnnulation),
+    depenses_totales: (parseFloat(clientBedou.depenses_totales) || 0) + fraisAnnulation,
+  });
+
+  await base44.asServiceRole.entities.Transaction.create({
+    user_email: c.client_email,
+    user_nom: c.client_name,
+    role: 'client',
+    type: 'annulation',
+    sens: 'debit',
+    montant: fraisAnnulation,
+    source: 'course',
+    methode: 'interne',
+    reference_id: courseId,
+    statut: 'valide',
+    date_validation: now,
+    description: `Frais annulation course #${courseId?.slice(0, 8)} (50%)`,
+  });
+
+  // Créditer livreur (80% des frais)
+  if (c.livreur_email && partLivreur > 0) {
+    const livreurBedouList = await base44.asServiceRole.entities.Bedou.filter({ user_email: c.livreur_email });
+    if (livreurBedouList?.[0]) {
+      const lb = livreurBedouList[0];
+      await base44.asServiceRole.entities.Bedou.update(lb.id, {
+        solde: (parseFloat(lb.solde) || 0) + partLivreur,
+        solde_disponible: (parseFloat(lb.solde_disponible) || 0) + partLivreur,
+        gains_totaux: (parseFloat(lb.gains_totaux) || 0) + partLivreur,
+      });
+      await base44.asServiceRole.entities.Transaction.create({
+        user_email: c.livreur_email,
+        user_nom: c.livreur_name,
+        role: 'livreur',
+        type: 'compensation',
+        sens: 'credit',
+        montant: partLivreur,
+        source: 'course',
+        methode: 'interne',
+        reference_id: courseId,
+        statut: 'valide',
+        date_validation: now,
+        description: `Compensation annulation course #${courseId?.slice(0, 8)} (80% des frais)`,
+      });
+      // Notifier livreur
+      await base44.asServiceRole.entities.Notification.create({
+        destinataire_email: c.livreur_email,
+        destinataire_role: 'livreur',
+        titre: '❌ Course annulée — compensation reçue',
+        message: `Le client a annulé la course. Compensation : +${partLivreur.toLocaleString()} F CFA crédités sur votre Bedou.`,
+        type: 'info',
+        lue: false,
+        course_id: courseId,
+        target_screen: '/mon-bedou',
+      }).catch(() => {});
+    }
+
+    // Libérer le livreur
+    const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
+    if (livs?.[0]) {
+      await base44.asServiceRole.entities.User.update(livs[0].id, {
+        nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 1) - 1),
+        disponible: true,
+      }).catch(() => {});
+    }
+  }
+
+  // Créditer CDL (20% des frais)
+  if (partCdl > 0) {
+    const cdlBedouList = await base44.asServiceRole.entities.Bedou.filter({ user_email: CDL_EMAIL });
+    if (cdlBedouList?.[0]) {
+      const cb = cdlBedouList[0];
+      await base44.asServiceRole.entities.Bedou.update(cb.id, {
+        solde: (parseFloat(cb.solde) || 0) + partCdl,
+        solde_disponible: (parseFloat(cb.solde_disponible) || 0) + partCdl,
+        gains_totaux: (parseFloat(cb.gains_totaux) || 0) + partCdl,
+      });
+      await base44.asServiceRole.entities.Transaction.create({
+        user_email: CDL_EMAIL,
+        user_nom: 'CDL',
+        role: 'admin',
+        type: 'commission',
+        sens: 'credit',
+        montant: partCdl,
+        source: 'course',
+        methode: 'interne',
+        reference_id: courseId,
+        statut: 'valide',
+        date_validation: now,
+        description: `Commission CDL annulation course #${courseId?.slice(0, 8)} (20%)`,
+      });
+    }
+  }
+
+  // Mettre à jour course
+  await base44.asServiceRole.entities.Course.update(c.id, {
+    statut: 'annulee',
+    date_annulation: now,
+    annulee_par: isAdmin ? 'admin' : 'client',
+    frais_annulation: fraisAnnulation,
+    montant_livreur_annulation: partLivreur,
+    montant_cdl_annulation: partCdl,
+    statut_paiement: 'frais_preleves',
+  });
+
+  // Notifier client
+  await base44.asServiceRole.entities.Notification.create({
+    destinataire_email: c.client_email,
+    destinataire_role: 'client',
+    titre: '✅ Course annulée',
+    message: `Votre course a été annulée. ${fraisAnnulation.toLocaleString()} F CFA prélevés sur votre Bedou (frais d'annulation 50%).`,
+    type: 'warning',
+    lue: false,
+    course_id: courseId,
+    target_screen: '/mon-bedou',
+  }).catch(() => {});
+
+  return Response.json({
+    success: true,
+    courseId,
+    statut: 'annulee',
+    fraisAnnulation,
+    partCdl,
+    partLivreur,
+  });
 });

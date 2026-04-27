@@ -80,7 +80,7 @@ export async function openNativeCamera() {
   try {
     const perms = await Camera.requestPermissions({ permissions: ['camera'] });
     if (perms.camera === 'denied') {
-      throw new Error('Permission caméra refusée. Activez-la dans Paramètres → Applications → CDL.');
+      throw new Error('Permission caméra refusée. Ouvrez Paramètres → Applications → CDL → Autorisations → Caméra → Autoriser.');
     }
 
     const photo = await Camera.getPhoto({
@@ -111,9 +111,10 @@ export async function openNativeGallery() {
   if (!isNativeApp()) return null;
 
   try {
+    // Android 13+ : 'limited' = accès partiel, on l'accepte
     const perms = await Camera.requestPermissions({ permissions: ['photos'] });
     if (perms.photos === 'denied') {
-      throw new Error('Permission photos refusée. Activez-la dans Paramètres → Applications → CDL.');
+      throw new Error('Permission galerie refusée. Ouvrez Paramètres → Applications → CDL → Autorisations → Photos → Autoriser.');
     }
 
     const photo = await Camera.getPhoto({

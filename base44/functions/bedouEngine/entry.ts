@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const COMMISSION_LIVREUR = 0.20; // 20% CDL
 const COMMISSION_PARTENAIRE = 0.05; // 5% CDL
@@ -422,12 +422,17 @@ Deno.serve(async (req) => {
 
   // ── ACTION: finaliser_course (livreur appelle à la livraison) ─────────────
   // Débite le client, crédite le livreur (80%), CDL garde 20%
+  // IMPORTANT : appelé UNIQUEMENT quand le livreur clique "Colis livré"
+  // Aucun débit avant ce moment (pas à la création, pas à l'acceptation)
   if (action === 'finaliser_course') {
     const { course_id, client_email, client_nom, livreur_email, livreur_nom, montant } = body;
     if (!montant || montant <= 0) return Response.json({ error: 'Montant invalide' }, { status: 400 });
-    // Anti double-exécution
+    // Anti double-exécution : vérifier si une transaction de paiement existe déjà
     const existingTx = await base44.asServiceRole.entities.Transaction.filter({ reference_id: course_id, type: 'paiement' });
-    if (existingTx.length > 0) return Response.json({ error: 'Course déjà réglée' }, { status: 400 });
+    if (existingTx.length > 0) {
+      console.warn('[bedouEngine] finaliser_course: déjà réglée, course_id:', course_id);
+      return Response.json({ success: true, alreadyDone: true, gainLivreur: 0, commissionCdl: 0 });
+    }
     // Bedou client
     const bedouClient = await getBedou(client_email);
     if (!bedouClient) return Response.json({ error: 'Bedou client introuvable' }, { status: 404 });

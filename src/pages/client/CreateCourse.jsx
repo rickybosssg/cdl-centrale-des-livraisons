@@ -511,7 +511,7 @@ export default function CreateCourse() {
             </div>
           )}
           <p className="text-[10px] text-muted-foreground text-center">
-            💰 Bedou est l'unique moyen de paiement CDL. Le débit est effectué avant l'attribution du livreur.
+            💰 Bedou est l'unique moyen de paiement CDL. Le débit est effectué uniquement à la confirmation de livraison.
           </p>
         </CardContent>
       </Card>
@@ -552,7 +552,7 @@ export default function CreateCourse() {
           !form.type_colis || !prixBase || soldeInsuffisant
         }
       >
-        {loading ? "⏳ Paiement & recherche livreur..." : "🛵 Payer et commander"}
+        {loading ? "⏳ Création en cours..." : "🛵 Commander"}
       </Button>
     </div>
   );

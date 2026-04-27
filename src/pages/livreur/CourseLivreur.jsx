@@ -128,20 +128,26 @@ export default function CourseLivreur() {
       } catch (err) {
         if (err?.message === 'BEDOU_TIMEOUT') {
           toast.error('Délai dépassé — vérifiez la connexion et réessayez.');
+          setUpdating(false);
           return;
         }
         console.error('[CourseLivreur] bedouEngine error:', err);
         toast.error('Erreur Bedou : ' + (err?.message || 'inconnue') + ' — Réessayez.');
+        setUpdating(false);
         return;
       }
 
       console.log('[CourseLivreur] bedouEngine result:', res?.data);
-      if (!res?.data?.success) {
+      if (res?.data?.alreadyDone) {
+        // Course déjà réglée — mettre à jour le statut UI sans erreur
+        console.log('[CourseLivreur] course déjà réglée, mise à jour statut uniquement');
+      } else if (!res?.data?.success) {
         if (res?.data?.insuffisant) {
           toast.error(`Solde Bedou du client insuffisant (${res.data.solde} FCFA). Contactez l'administration.`);
         } else {
           toast.error(res?.data?.error || 'Erreur lors du règlement Bedou');
         }
+        setUpdating(false);
         return;
       }
 
@@ -179,15 +185,23 @@ export default function CourseLivreur() {
       // 5. Streak (fire & forget)
       base44.functions.invoke('updateLivreurStreak', {}).catch(() => {});
 
-      // 6. Notifier client
+      // 6. Notifier client (in-app + FCM)
       base44.entities.Notification.create({
         destinataire_email: course.client_email,
         destinataire_role: 'client',
         titre: '✅ Colis livré ! Notez votre livreur',
-        message: `Votre colis a été livré. ${montant} FCFA débités de votre Bedou. Notez ${course.livreur_name} !`,
+        message: `Votre colis a été livré par ${course.livreur_name}. ${montant.toLocaleString()} FCFA débités de votre Bedou. Appuyez pour noter !`,
         type: 'success',
         lue: false,
         course_id: course.id,
+        target_screen: `/course/${course.id}/track`,
+      }).catch(() => {});
+      // FCM push au client
+      base44.functions.invoke('sendCdlNotification', {
+        user_email: course.client_email,
+        titre: '✅ Colis livré !',
+        message: `${course.livreur_name} a livré votre colis. Appuyez pour noter.`,
+        data: { notif_route: `/course/${course.id}/track`, course_id: course.id },
       }).catch(() => {});
 
       vibrateSuccess();
