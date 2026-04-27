@@ -15,7 +15,7 @@
  * TRI : par proximité GPS si disponible, sinon par note puis charge.
  * TIMER : 60 secondes par livreur (géré par checkPendingAssignments).
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 function distanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
@@ -235,7 +235,7 @@ Deno.serve(async (req) => {
       derniere_proposition_at: now,
     }).catch(() => {});
 
-    // Notifier le livreur
+    // Notifier le livreur (in-app — la FCM push est gérée par notifyCourseEvents)
     await base44.asServiceRole.entities.Notification.create({
       destinataire_email: choisi.email,
       destinataire_role: 'livreur',
@@ -247,9 +247,10 @@ Deno.serve(async (req) => {
       target_screen: `/course-livreur/${courseId}`,
       target_entity_id: courseId,
       target_entity_type: 'course',
+      notification_key: `${choisi.email}__assignee_attente__${courseId}`,
     }).catch(() => {});
 
-    // Notifier le client
+    // Notifier le client (in-app)
     if (course.client_email) {
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: course.client_email,
@@ -260,6 +261,7 @@ Deno.serve(async (req) => {
         lue: false,
         course_id: courseId,
         target_screen: `/course/${courseId}`,
+        notification_key: `${course.client_email}__livreur_trouve__${courseId}`,
       }).catch(() => {});
     }
 

@@ -33,7 +33,10 @@ Deno.serve(async (req) => {
   }
 
   // 1. Récupérer la course
-  const courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });
+  let courses = [];
+  try {
+    courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });
+  } catch (_) {}
   if (!courses || courses.length === 0) {
     return Response.json({ error: 'Course introuvable' }, { status: 404 });
   }

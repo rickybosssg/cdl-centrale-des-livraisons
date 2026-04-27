@@ -185,7 +185,7 @@ export default function CourseLivreur() {
       // 5. Streak (fire & forget)
       base44.functions.invoke('updateLivreurStreak', {}).catch(() => {});
 
-      // 6. Notifier client (in-app + FCM)
+      // 6. Notif in-app client (la notification FCM est gérée par l'automation notifyCourseEvents)
       base44.entities.Notification.create({
         destinataire_email: course.client_email,
         destinataire_role: 'client',
@@ -195,13 +195,7 @@ export default function CourseLivreur() {
         lue: false,
         course_id: course.id,
         target_screen: `/course/${course.id}/track`,
-      }).catch(() => {});
-      // FCM push au client
-      base44.functions.invoke('sendCdlNotification', {
-        user_email: course.client_email,
-        titre: '✅ Colis livré !',
-        message: `${course.livreur_name} a livré votre colis. Appuyez pour noter.`,
-        data: { notif_route: `/course/${course.id}/track`, course_id: course.id },
+        notification_key: `${course.client_email}__livree__${course.id}__client`,
       }).catch(() => {});
 
       vibrateSuccess();
