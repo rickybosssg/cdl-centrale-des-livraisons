@@ -1,8 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const APP_ID = Deno.env.get("BASE44_APP_ID") || "69c3c74fc4b62396dca61751";
-const AUTH_BASE = `https://cdl.base44.app/api/apps/${APP_ID}/auth`;
-
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -14,52 +11,27 @@ Deno.serve(async (req) => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Tenter l'endpoint natif Base44 reset-password
-    let nativeOk = false;
+    // Vérifier que l'utilisateur existe dans l'app
+    let userExists = false;
     try {
-      const res = await fetch(`${AUTH_BASE}/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail }),
-      });
-      nativeOk = res.ok;
-      console.log('[sendPasswordReset] native reset-password status:', res.status);
+      const users = await base44.asServiceRole.entities.User.filter({ email: cleanEmail });
+      userExists = users.length > 0;
     } catch (e) {
-      console.warn('[sendPasswordReset] native endpoint failed:', e.message);
+      console.warn('[sendPasswordReset] user check failed:', e.message);
     }
 
-    if (nativeOk) {
-      return Response.json({ success: true, method: 'native' });
+    if (!userExists) {
+      // On retourne succès pour ne pas révéler si l'email existe
+      console.log('[sendPasswordReset] user not found, returning fake success');
+      return Response.json({ success: true });
     }
 
-    // 2. Fallback: envoyer email via base44.integrations.Core.SendEmail
-    // Générer un token simple basé sur l'email + timestamp
-    const token = btoa(`${cleanEmail}:${Date.now()}`).replace(/[+/=]/g, '');
-    const resetLink = `https://cdl.base44.app/?reset_token=${token}&email=${encodeURIComponent(cleanEmail)}`;
-
-    // Stocker le token temporairement (24h) dans la BDD
+    // Envoyer l'email de reset via Base44 SendEmail (user inscrit dans l'app)
     try {
-      // Nettoyer les anciens tokens pour cet email
-      const existing = await base44.asServiceRole.entities.PhoneOtpTemp.filter({ email: cleanEmail });
-      for (const old of existing) {
-        await base44.asServiceRole.entities.PhoneOtpTemp.delete(old.id);
-      }
-      // Créer le nouveau token
-      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      await base44.asServiceRole.entities.PhoneOtpTemp.create({
-        email: cleanEmail,
-        otp_code: token,
-        expires_at: expires,
-        used: false,
-      });
-    } catch (e) {
-      console.warn('[sendPasswordReset] token storage failed:', e.message);
-    }
-
-    await base44.asServiceRole.integrations.Core.SendEmail({
-      to: cleanEmail,
-      subject: 'CDL — Réinitialisation de votre mot de passe',
-      body: `
+      await base44.asServiceRole.integrations.Core.SendEmail({
+        to: cleanEmail,
+        subject: 'CDL — Réinitialisation de votre mot de passe',
+        body: `
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -72,16 +44,16 @@ Deno.serve(async (req) => {
     <div style="padding: 32px 28px;">
       <h2 style="margin: 0 0 12px; font-size: 18px; color: #111;">Réinitialisation de mot de passe</h2>
       <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
-        Vous avez demandé la réinitialisation de votre mot de passe pour le compte associé à <strong>${cleanEmail}</strong>.
+        Vous avez demandé la réinitialisation de votre mot de passe pour le compte <strong>${cleanEmail}</strong>.
       </p>
-      <p style="color: #64748b; font-size: 13px; margin: 0 0 8px;">
-        Connectez-vous à l'application CDL et créez un nouveau mot de passe.<br>
-        Si vous n'avez pas fait cette demande, ignorez cet email.
+      <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+        Pour réinitialiser votre mot de passe, ouvrez l'application CDL et utilisez l'option <strong>"Mot de passe oublié"</strong> avec votre adresse email. Contactez le support si besoin.
       </p>
-      <div style="margin: 24px 0; background: #f1f5f9; border-radius: 10px; padding: 16px; text-align: center;">
-        <p style="margin: 0; font-size: 12px; color: #94a3b8;">Ce lien expire dans 24 heures</p>
-        <p style="margin: 8px 0 0; font-size: 11px; color: #cbd5e1;">Si vous avez des difficultés, contactez le support CDL.</p>
+      <div style="margin: 24px 0; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px; text-align: center;">
+        <p style="margin: 0; font-size: 13px; color: #1d4ed8; font-weight: 600;">📱 Application CDL</p>
+        <p style="margin: 6px 0 0; font-size: 12px; color: #3b82f6;">Centrale des Livraisons — Ouagadougou</p>
       </div>
+      <p style="color: #94a3b8; font-size: 12px; margin: 0;">Si vous n'avez pas fait cette demande, ignorez cet email.</p>
     </div>
     <div style="padding: 16px 28px 24px; text-align: center; border-top: 1px solid #f1f5f9;">
       <p style="margin: 0; font-size: 11px; color: #94a3b8;">© 2024 CDL — Centrale des Livraisons, Ouagadougou</p>
@@ -89,11 +61,26 @@ Deno.serve(async (req) => {
   </div>
 </body>
 </html>
-      `.trim(),
-    });
-
-    console.log('[sendPasswordReset] fallback email sent to:', cleanEmail);
-    return Response.json({ success: true, method: 'email_fallback' });
+        `.trim(),
+      });
+      console.log('[sendPasswordReset] email sent to:', cleanEmail);
+      return Response.json({ success: true, method: 'base44_email' });
+    } catch (emailErr) {
+      console.error('[sendPasswordReset] SendEmail failed:', emailErr.message);
+      // Si l'email échoue (ex: utilisateur hors app), on tente l'endpoint auth natif
+      const APP_ID = Deno.env.get("BASE44_APP_ID") || "69c3c74fc4b62396dca61751";
+      const res = await fetch(`https://cdl.base44.app/api/apps/${APP_ID}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      console.log('[sendPasswordReset] native fallback status:', res.status);
+      if (res.ok) {
+        return Response.json({ success: true, method: 'native' });
+      }
+      const errData = await res.json().catch(() => ({}));
+      return Response.json({ error: errData?.error || 'Envoi impossible', method: 'failed' }, { status: 400 });
+    }
 
   } catch (error) {
     console.error('[sendPasswordReset] error:', error.message);
