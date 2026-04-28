@@ -102,8 +102,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'FIREBASE_SERVICE_ACCOUNT_JSON manquant' }, { status: 500 });
     }
 
-    // asServiceRole fonctionne toujours dans les fonctions hébergées Base44
-    // (que ce soit un appel frontend avec token ou un appel inter-fonction SDK)
+    // PAS de base44.auth.me() — cette fonction est appelée depuis des automations
+    // sans token utilisateur. asServiceRole fonctionne toujours dans les fonctions hébergées.
     const base44 = createClientFromRequest(req);
     const sa = JSON.parse(SA_JSON);
     const projectId = sa.project_id;

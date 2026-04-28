@@ -151,13 +151,16 @@ export default function FcmDiagnostic() {
         setChain(c => ({ ...c, permission: 'error' }));
       }
     } else {
-      // Web : l'API Notification n'existe pas sur APK (normal)
+      // Web PWA : vérifier l'API Notification du navigateur
       if ('Notification' in window) {
         const p = Notification.permission;
         addLog(`Permission Web: ${p}`);
         setChain(c => ({ ...c, permission: p === 'granted' ? 'ok' : p === 'default' ? 'warn' : 'error' }));
       } else {
-        addLog('API Notification non disponible — mode web uniquement', 'warn');
+        // Sur APK Capacitor, window.Notification n'existe pas — c'est NORMAL
+        // Les permissions push sont gérées par le plugin Capacitor PushNotifications
+        addLog('Mode Capacitor détecté (window.Notification absent = normal sur APK)', 'warn');
+        addLog('→ Utilisez le bouton "Enregistrer" pour activer les notifications Capacitor');
         setChain(c => ({ ...c, permission: 'warn' }));
       }
     }

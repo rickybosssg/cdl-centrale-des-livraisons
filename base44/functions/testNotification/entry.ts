@@ -85,18 +85,20 @@ Deno.serve(async (req) => {
     }
 
     const base44 = createClientFromRequest(effectiveReq);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
+    // Auth optionnelle — un user peut toujours tester ses propres notifications depuis l'APK
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) {}
 
     const { recipient_email, recipient_role } = parsedBody;
     if (!recipient_email || !recipient_role) {
       return Response.json({ error: 'recipient_email et recipient_role requis' }, { status: 400 });
     }
-    if (user.role !== 'admin' && recipient_email !== user.email) {
+    // Sécurité : si user authentifié, vérifier qu'il teste uniquement ses propres notifs (sauf admin)
+    if (user && user.role !== 'admin' && recipient_email !== user.email) {
       return Response.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    console.log(`[testNotification] Test initié par ${user.email} → ${recipient_email} (${recipient_role})`);
+    console.log(`[testNotification] Test initié par ${user?.email || 'anonyme'} → ${recipient_email} (${recipient_role})`);
 
     // ── 1. Récupérer tokens FCM ──────────────────────────────────────────────
     const tokens = await base44.asServiceRole.entities.FcmToken.filter({
