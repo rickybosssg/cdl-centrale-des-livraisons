@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const PROJECT_ID = "cdl-app-4743c";
-const FCM_URL = `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`;
+// PROJECT_ID est lu depuis le Service Account JSON pour éviter tout mismatch
+// Ne pas hardcoder ici — le SA JSON contient toujours le bon project_id
 
 async function getAccessToken(serviceAccount) {
   const now = Math.floor(Date.now() / 1000);
@@ -55,8 +55,10 @@ async function getAccessToken(serviceAccount) {
   return tokenData.access_token;
 }
 
-async function sendToToken(accessToken, fcmToken, title, body, data = {}) {
-  const res = await fetch(FCM_URL, {
+async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}) {
+  const fcmUrl = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
+  console.log(`[sendFcmNotification] sendToToken → projectId: ${projectId} | token: ${fcmToken.slice(0, 20)}...`);
+  const res = await fetch(fcmUrl, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${accessToken}`,
@@ -90,7 +92,11 @@ async function sendToToken(accessToken, fcmToken, title, body, data = {}) {
     }),
   });
   const result = await res.json();
-  if (!res.ok) console.error('FCM error:', JSON.stringify(result));
+  if (!res.ok) {
+    console.error(`[sendFcmNotification] FCM HTTP ${res.status} error:`, JSON.stringify(result));
+  } else {
+    console.log(`[sendFcmNotification] FCM OK → messageId: ${result?.name}`);
+  }
   return { ok: res.ok, result };
 }
 
@@ -122,7 +128,12 @@ Deno.serve(async (req) => {
     }
 
     const rawJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON") || '';
+    if (!rawJson) {
+      return Response.json({ error: 'FIREBASE_SERVICE_ACCOUNT_JSON manquant' }, { status: 500 });
+    }
     const serviceAccount = JSON.parse(rawJson);
+    const projectId = serviceAccount.project_id;
+    console.log(`[sendFcmNotification] project_id from SA: ${projectId} | client_email: ${serviceAccount.client_email}`);
     const accessToken = await getAccessToken(serviceAccount);
 
     let fcmTokens = directTokens || [];
@@ -145,7 +156,7 @@ Deno.serve(async (req) => {
     }
 
     const results = await Promise.allSettled(
-      fcmTokens.map(token => sendToToken(accessToken, token, title, body, data))
+      fcmTokens.map(token => sendToToken(accessToken, projectId, token, title, body, data))
     );
 
     const sent = results.filter(r => r.status === "fulfilled" && r.value.ok).length;

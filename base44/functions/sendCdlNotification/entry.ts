@@ -1,21 +1,17 @@
 /**
  * sendCdlNotification — Fonction centrale FCM CDL
  *
- * Cas 1 : notifier un utilisateur précis
- *   { user_email, title, body, data }
+ * Appelée depuis les automations via base44.functions.invoke (avec token auto)
+ * ou depuis le frontend (avec token utilisateur).
  *
- * Cas 2 : notifier un rôle entier (admin, livreur, client, etc.)
- *   { role, title, body, data }
- *
- * data doit contenir { screen, type, entity_id, ... }
- * pour la redirection au clic dans l'APK.
+ * Cas 1 : notifier un utilisateur précis → { user_email, title, body, data }
+ * Cas 2 : notifier un rôle entier       → { role, title, body, data }
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const SA_JSON   = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
-const LOG_ENTITY = 'Notification'; // log dans l'entité Notification existante
+const SA_JSON = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
 
-// ── Firebase OAuth2 ───────────────────────────────────────────────────────────
+// ── Firebase OAuth2 JWT → Access Token ───────────────────────────────────────
 async function getAccessToken(sa) {
   const now = Math.floor(Date.now() / 1000);
   const payload = {
@@ -49,16 +45,12 @@ async function getAccessToken(sa) {
 }
 
 // ── Envoi FCM à un token ──────────────────────────────────────────────────────
-async function sendToToken(accessToken, sa, fcmToken, title, body, data = {}) {
-  const projectId = sa.project_id;
+async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}) {
   const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
-
-  // Toutes les valeurs data doivent être des strings (contrainte FCM)
   const stringData = {};
   for (const [k, v] of Object.entries(data)) {
     stringData[k] = v == null ? '' : String(v);
   }
-
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -88,31 +80,17 @@ async function sendToToken(accessToken, sa, fcmToken, title, body, data = {}) {
     }),
   });
   const result = await res.json();
+  if (!res.ok) {
+    console.warn(`[sendCdlNotification] FCM HTTP ${res.status}:`, JSON.stringify(result));
+  }
   return { ok: res.ok, result, token: fcmToken };
-}
-
-// ── Désactiver un token invalide ──────────────────────────────────────────────
-async function deactivateToken(base44, token) {
-  try {
-    const records = await base44.asServiceRole.entities.FcmToken.filter({ token });
-    for (const r of records) {
-      await base44.asServiceRole.entities.FcmToken.update(r.id, { is_active: false });
-      console.log('[sendCdlNotification] Token désactivé (invalide):', token.slice(0, 20) + '...');
-    }
-  } catch (_) {}
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
-    const {
-      user_email,
-      role,
-      title,
-      body: msgBody,
-      data = {},
-    } = body;
+    const { user_email, role, title, body: msgBody, data = {} } = body;
 
     if (!title || !msgBody) {
       return Response.json({ error: 'title et body requis' }, { status: 400 });
@@ -120,76 +98,79 @@ Deno.serve(async (req) => {
     if (!user_email && !role) {
       return Response.json({ error: 'user_email ou role requis' }, { status: 400 });
     }
-
     if (!SA_JSON) {
       return Response.json({ error: 'FIREBASE_SERVICE_ACCOUNT_JSON manquant' }, { status: 500 });
     }
 
+    // asServiceRole fonctionne toujours dans les fonctions hébergées Base44
+    // (que ce soit un appel frontend avec token ou un appel inter-fonction SDK)
     const base44 = createClientFromRequest(req);
     const sa = JSON.parse(SA_JSON);
+    const projectId = sa.project_id;
+    console.log(`[sendCdlNotification] project_id=${projectId} | user=${user_email || ''} | role=${role || ''}`);
+
     const accessToken = await getAccessToken(sa);
 
-    // ── Récupérer les tokens cibles ───────────────────────────────────────────
-    let targetTokenRecords = [];
+    // ── Récupérer les tokens FCM cibles ───────────────────────────────────────
+    let tokenRecords = [];
 
     if (user_email) {
-      // Notifier un utilisateur précis
-      targetTokenRecords = await base44.asServiceRole.entities.FcmToken.filter({
+      tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({
         user_email: user_email.toLowerCase(),
         is_active: true,
       });
-      console.log(`[sendCdlNotification] user=${user_email} → ${targetTokenRecords.length} token(s)`);
-    } else if (role) {
-      // Notifier tous les utilisateurs d'un rôle
-      if (role === 'admin') {
-        // Admins = users avec role=admin dans la plateforme
-        const adminUsers = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
-        const adminEmails = adminUsers.map(u => u.email.toLowerCase());
-        console.log(`[sendCdlNotification] Admins trouvés: ${adminEmails.length}`);
-        for (const email of adminEmails) {
-          const tokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true });
-          targetTokenRecords.push(...tokens);
-        }
-      } else {
-        // Autres rôles : chercher profils actifs
-        const profiles = await base44.asServiceRole.entities.UserProfile.filter({
-          profile_type: role,
-          status: 'actif',
-          deleted: false,
+      console.log(`[sendCdlNotification] user=${user_email} → ${tokenRecords.length} token(s)`);
+
+    } else if (role === 'admin') {
+      const adminUsers = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
+      for (const u of adminUsers) {
+        const tokens = await base44.asServiceRole.entities.FcmToken.filter({
+          user_email: u.email.toLowerCase(),
+          is_active: true,
         });
-        const emails = [...new Set(profiles.map(p => p.user_email.toLowerCase()))];
-        console.log(`[sendCdlNotification] role=${role} → ${emails.length} profil(s) actif(s)`);
-        for (const email of emails) {
-          const tokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true });
-          targetTokenRecords.push(...tokens);
-        }
+        tokenRecords.push(...tokens);
       }
-      console.log(`[sendCdlNotification] Total tokens pour role=${role}: ${targetTokenRecords.length}`);
+      console.log(`[sendCdlNotification] role=admin → ${tokenRecords.length} token(s)`);
+
+    } else if (role) {
+      const profiles = await base44.asServiceRole.entities.UserProfile.filter({
+        profile_type: role,
+        status: 'actif',
+        deleted: false,
+      });
+      const emails = [...new Set(profiles.map(p => p.user_email.toLowerCase()))];
+      for (const email of emails) {
+        const tokens = await base44.asServiceRole.entities.FcmToken.filter({
+          user_email: email,
+          is_active: true,
+        });
+        tokenRecords.push(...tokens);
+      }
+      console.log(`[sendCdlNotification] role=${role} → ${tokenRecords.length} token(s)`);
     }
 
-    if (targetTokenRecords.length === 0) {
+    if (tokenRecords.length === 0) {
       console.warn('[sendCdlNotification] Aucun token FCM actif trouvé');
       return Response.json({ sent: 0, failed: 0, total: 0, note: 'Aucun token FCM actif' });
     }
 
-    // ── Envoi FCM à chaque token ──────────────────────────────────────────────
-    let sent = 0;
-    let failed = 0;
-    const invalidTokens = [];
+    // ── Envoi FCM ─────────────────────────────────────────────────────────────
+    let sent = 0, failed = 0;
+    const invalidRecords = [];
 
-    for (const record of targetTokenRecords) {
+    for (const record of tokenRecords) {
       try {
-        const { ok, result } = await sendToToken(accessToken, sa, record.token, title, msgBody, data);
+        const { ok, result } = await sendToToken(accessToken, projectId, record.token, title, msgBody, data);
         if (ok) {
           sent++;
+          console.log(`[sendCdlNotification] ✅ sent to ${record.user_email}`);
         } else {
           failed++;
-          // Détecter token invalide
           const errCode = result?.error?.details?.[0]?.errorCode || result?.error?.status || '';
+          console.warn(`[sendCdlNotification] ❌ FCM error=${errCode} | user=${record.user_email}`);
           if (['UNREGISTERED', 'INVALID_ARGUMENT'].includes(errCode)) {
-            invalidTokens.push(record.token);
+            invalidRecords.push(record);
           }
-          console.warn('[sendCdlNotification] FCM error:', errCode, '| user:', record.user_email);
         }
       } catch (e) {
         failed++;
@@ -198,16 +179,13 @@ Deno.serve(async (req) => {
     }
 
     // Désactiver les tokens invalides (best-effort)
-    for (const t of invalidTokens) {
-      await deactivateToken(base44, t);
+    for (const r of invalidRecords) {
+      base44.asServiceRole.entities.FcmToken.update(r.id, { is_active: false }).catch(() => {});
+      console.log(`[sendCdlNotification] Token désactivé: ${r.token?.slice(0, 20)}...`);
     }
 
-    // NOTE : pas de création Notification en BDD ici — chaque fonction métier
-    // (autoDispatch, bedouEngine, etc.) crée déjà sa propre notification in-app.
-    // Créer une ici provoquerait des doublons.
-
-    console.log(`[sendCdlNotification] ✅ sent=${sent} failed=${failed} total=${targetTokenRecords.length}`);
-    return Response.json({ sent, failed, total: targetTokenRecords.length });
+    console.log(`[sendCdlNotification] ✅ sent=${sent} failed=${failed} total=${tokenRecords.length}`);
+    return Response.json({ sent, failed, total: tokenRecords.length });
 
   } catch (err) {
     console.error('[sendCdlNotification] ERREUR:', err.message);
