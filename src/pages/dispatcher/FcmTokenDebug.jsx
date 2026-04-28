@@ -29,7 +29,18 @@ export default function FcmTokenDebug() {
         setTargetEmail(me.email);
 
         // Permission status
-        if ('Notification' in window) {
+        const isNativeApp = window.Capacitor?.isNativePlatform?.() === true;
+        if (isNativeApp) {
+          // Sur APK Capacitor, window.Notification n'existe pas — c'est normal
+          // Vérifier via le plugin PushNotifications
+          try {
+            const { PushNotifications } = await import('@capacitor/push-notifications');
+            const perm = await PushNotifications.checkPermissions();
+            setPermStatus(perm.receive === 'granted' ? 'granted' : perm.receive === 'denied' ? 'denied' : 'default');
+          } catch (_) {
+            setPermStatus('native_unknown');
+          }
+        } else if ('Notification' in window) {
           setPermStatus(Notification.permission);
         } else {
           setPermStatus('unavailable');
@@ -100,14 +111,16 @@ export default function FcmTokenDebug() {
     denied: 'text-red-700 bg-red-50 border-red-200',
     default: 'text-amber-700 bg-amber-50 border-amber-200',
     unavailable: 'text-gray-700 bg-gray-50 border-gray-200',
+    native_unknown: 'text-amber-700 bg-amber-50 border-amber-200',
     unknown: 'text-gray-700 bg-gray-50 border-gray-200',
   }[permStatus] || 'text-gray-700 bg-gray-50 border-gray-200';
 
   const permLabel = {
     granted: '✅ Accordée',
     denied: '❌ Refusée (aller dans Paramètres → Notifications)',
-    default: '⚠️ Non demandée encore',
+    default: '⚠️ Non demandée encore — cliquer "Demander"',
     unavailable: '❌ API Notification non disponible',
+    native_unknown: '⚠️ Natif Capacitor — statut inconnu (cliquer "Demander")',
     unknown: '? Inconnu',
   }[permStatus] || permStatus;
 
@@ -183,14 +196,25 @@ export default function FcmTokenDebug() {
             <Bell className="h-4 w-4 inline mr-2" />
             {permLabel}
           </div>
-          {permStatus === 'default' && (
+          {(permStatus === 'default' || permStatus === 'native_unknown') && (
             <Button
               size="sm"
               className="w-full"
               onClick={async () => {
-                const p = await Notification.requestPermission();
-                setPermStatus(p);
-                toast(p === 'granted' ? '✅ Permission accordée!' : '❌ Permission refusée');
+                if (isNative) {
+                  try {
+                    const { PushNotifications } = await import('@capacitor/push-notifications');
+                    const res = await PushNotifications.requestPermissions();
+                    setPermStatus(res.receive === 'granted' ? 'granted' : 'denied');
+                    toast(res.receive === 'granted' ? '✅ Permission accordée!' : '❌ Permission refusée');
+                  } catch (e) {
+                    toast.error('Erreur: ' + e.message);
+                  }
+                } else {
+                  const p = await Notification.requestPermission();
+                  setPermStatus(p);
+                  toast(p === 'granted' ? '✅ Permission accordée!' : '❌ Permission refusée');
+                }
               }}
             >
               Demander la permission maintenant
