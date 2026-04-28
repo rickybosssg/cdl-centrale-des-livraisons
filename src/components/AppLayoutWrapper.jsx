@@ -177,8 +177,9 @@ export default function AppLayoutWrapper({ user }) {
     // Initialiser FCM une fois l'user authentifié
     if (!userEmail) return;
 
-    // Flush FCM token en attente si nécessaire
-    flushPendingFcmToken().catch(() => {});
+    // Flush FCM token en attente — maintenant que l'user est confirmé authentifié
+    // Le Bearer token est dans localStorage, flushPendingFcmToken le trouvera
+    setTimeout(() => flushPendingFcmToken().catch(() => {}), 1000);
 
     const initFcm = async () => {
       try {
