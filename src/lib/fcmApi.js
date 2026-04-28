@@ -1,52 +1,17 @@
 /**
- * fcmApi.js — Sauvegarde robuste des tokens FCM
+ * fcmApi.js — Sauvegarde robuste des tokens FCM via le SDK base44
  *
- * Stratégie multi-couche pour APK Capacitor :
- * 1. Stocker le token FCM en attente dans localStorage
- * 2. Envoyer dès que possible avec le token Bearer
- * 3. Si pas de token auth encore → retry automatique jusqu'à 10x
- *
- * La fonction backend saveFcmTokenPublic utilise asServiceRole,
- * mais Base44 plateforme exige quand même un Bearer token HTTP.
+ * Utilise base44.functions.invoke('saveFcmTokenPublic', ...) qui gère
+ * automatiquement le Bearer token — plus de 403.
  */
 
-const APP_ID = import.meta.env.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
-// saveFcmTokenPublic = endpoint sans auth utilisateur requis (évite le 403 APK natif)
-const SAVE_URL = `https://app.base44.com/api/apps/${APP_ID}/functions/saveFcmTokenPublic`;
-const GET_URL  = `https://app.base44.com/api/apps/${APP_ID}/functions/getFcmTokens`;
+import { base44 } from '@/api/base44Client';
 
-// Clé localStorage pour token en attente
 const PENDING_KEY = 'cdl_fcm_pending_token';
 
-function getAuthToken() {
-  try { return localStorage.getItem('base44_access_token') || ''; } catch (_) { return ''; }
-}
-
-async function postJson(url, payload, withAuth = false) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (withAuth) {
-    const authToken = getAuthToken();
-    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-  }
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw Object.assign(new Error(data?.error || `HTTP ${res.status}`), { status: res.status });
-  }
-  return data;
-}
-
 /**
- * Sauvegarde un token FCM (upsert).
+ * Sauvegarde un token FCM (upsert) via le SDK base44.
  * Ne throw jamais — retourne { success, action, error }.
- *
- * Si pas d'auth disponible → stocke en attente et schedule un retry.
  */
 export async function saveFcmToken({ user_email, token, device_type = 'android_native' }) {
   if (!user_email || !token) {
@@ -59,41 +24,46 @@ export async function saveFcmToken({ user_email, token, device_type = 'android_n
     localStorage.setItem(PENDING_KEY, JSON.stringify({ user_email, token, device_type, ts: Date.now() }));
   } catch (_) {}
 
-  // saveFcmTokenPublic ne nécessite PAS de Bearer token — appel direct
   return _doSave({ user_email, token, device_type });
 }
 
 async function _doSave({ user_email, token, device_type }) {
   try {
-    // Toujours envoyer le Bearer token s'il est disponible (évite le 403 Base44)
-    const result = await postJson(SAVE_URL, { user_email, token, device_type }, true);
-    console.log('[fcmApi] ✅ Token FCM sauvegardé avec succès — action:', result.action, '| user:', user_email);
-    // Supprimer le pending une fois sauvegardé
-    try { localStorage.removeItem(PENDING_KEY); } catch (_) {}
-    return result;
+    // Utiliser le SDK — le proxy auto-synchro le Bearer token depuis localStorage
+    const res = await base44.functions.invoke('saveFcmTokenPublic', {
+      user_email,
+      token,
+      device_type,
+    });
+    const result = res?.data || res;
+    if (result?.success) {
+      console.log('[fcmApi] ✅ Token FCM sauvegardé — action:', result.action, '| user:', user_email);
+      try { localStorage.removeItem(PENDING_KEY); } catch (_) {}
+      return result;
+    } else {
+      const err = result?.error || 'Erreur inconnue';
+      console.error('[fcmApi] ❌ Erreur sauvegarde:', err);
+      return { success: false, error: err };
+    }
   } catch (err) {
-    console.error('[fcmApi] ❌ saveFcmToken error:', err.message, '| status:', err.status);
+    console.error('[fcmApi] ❌ saveFcmToken error:', err.message);
     return { success: false, error: err.message };
   }
 }
 
 /**
- * Retry automatique du token en attente.
- * Appelé au boot si un token FCM est stocké mais pas encore envoyé.
+ * Retry automatique du token en attente au boot.
  */
 export async function flushPendingFcmToken() {
   try {
     const raw = localStorage.getItem(PENDING_KEY);
     if (!raw) return;
-
     const pending = JSON.parse(raw);
     // Ignorer si trop vieux (> 24h)
     if (Date.now() - pending.ts > 86400000) {
       localStorage.removeItem(PENDING_KEY);
       return;
     }
-
-    // Plus de dépendance Bearer token — l'endpoint est public
     console.log('[fcmApi] 🔄 Flush token FCM en attente pour:', pending.user_email);
     await _doSave(pending);
   } catch (_) {}
@@ -104,8 +74,9 @@ export async function flushPendingFcmToken() {
  */
 export async function getFcmTokens(user_email) {
   try {
-    const result = await postJson(GET_URL, { user_email });
-    return result.tokens || [];
+    const res = await base44.functions.invoke('getFcmTokens', { user_email });
+    const data = res?.data || res;
+    return data?.tokens || [];
   } catch (err) {
     console.error('[fcmApi] ❌ getFcmTokens error:', err.message);
     return [];
