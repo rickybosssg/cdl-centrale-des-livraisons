@@ -65,8 +65,8 @@ export async function saveFcmToken({ user_email, token, device_type = 'android_n
 
 async function _doSave({ user_email, token, device_type }) {
   try {
-    // false = pas de Bearer token requis (saveFcmTokenPublic est un endpoint public)
-    const result = await postJson(SAVE_URL, { user_email, token, device_type }, false);
+    // Toujours envoyer le Bearer token s'il est disponible (évite le 403 Base44)
+    const result = await postJson(SAVE_URL, { user_email, token, device_type }, true);
     console.log('[fcmApi] ✅ Token FCM sauvegardé avec succès — action:', result.action, '| user:', user_email);
     // Supprimer le pending une fois sauvegardé
     try { localStorage.removeItem(PENDING_KEY); } catch (_) {}

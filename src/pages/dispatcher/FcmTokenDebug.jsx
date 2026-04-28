@@ -21,6 +21,12 @@ export default function FcmTokenDebug() {
   const [targetEmail, setTargetEmail] = useState('');
   const [allTokenUsers, setAllTokenUsers] = useState([]);
 
+  // Calculé UNE SEULE FOIS au mount — avant tout useEffect
+  const isNative = typeof window !== 'undefined' && (
+    window.location?.protocol === 'capacitor:' ||
+    window.Capacitor?.isNativePlatform?.() === true
+  );
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -130,8 +136,6 @@ export default function FcmTokenDebug() {
     </div>
   );
 
-  const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
-
   return (
     <div className="space-y-4 pb-20">
       <div className="flex items-center gap-3">
@@ -173,8 +177,8 @@ export default function FcmTokenDebug() {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">API Notification</span>
-            <span className={`font-bold ${'Notification' in window ? 'text-green-600' : 'text-red-500'}`}>
-              {'Notification' in window ? '✅ Disponible' : '❌ Non disponible'}
+            <span className={`font-bold ${'Notification' in window ? 'text-green-600' : isNative ? 'text-amber-500' : 'text-red-500'}`}>
+              {'Notification' in window ? '✅ Disponible' : isNative ? '⚠️ Natif (normal)' : '❌ Non disponible'}
             </span>
           </div>
           <div className="flex items-center justify-between">
