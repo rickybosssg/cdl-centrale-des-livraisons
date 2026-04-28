@@ -11,8 +11,8 @@
  */
 
 const APP_ID = import.meta.env.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
-// Utiliser saveFcmToken (avec auth) — upsert strict anti-doublon
-const SAVE_URL = `https://app.base44.com/api/apps/${APP_ID}/functions/saveFcmToken`;
+// saveFcmTokenPublic = endpoint sans auth utilisateur requis (évite le 403 APK natif)
+const SAVE_URL = `https://app.base44.com/api/apps/${APP_ID}/functions/saveFcmTokenPublic`;
 const GET_URL  = `https://app.base44.com/api/apps/${APP_ID}/functions/getFcmTokens`;
 
 // Clé localStorage pour token en attente
@@ -22,10 +22,12 @@ function getAuthToken() {
   try { return localStorage.getItem('base44_access_token') || ''; } catch (_) { return ''; }
 }
 
-async function postJson(url, payload) {
-  const authToken = getAuthToken();
+async function postJson(url, payload, withAuth = false) {
   const headers = { 'Content-Type': 'application/json' };
-  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+  if (withAuth) {
+    const authToken = getAuthToken();
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+  }
 
   const res = await fetch(url, {
     method: 'POST',
@@ -57,19 +59,14 @@ export async function saveFcmToken({ user_email, token, device_type = 'android_n
     localStorage.setItem(PENDING_KEY, JSON.stringify({ user_email, token, device_type, ts: Date.now() }));
   } catch (_) {}
 
-  const authToken = getAuthToken();
-  if (!authToken) {
-    console.warn('[fcmApi] Pas de token auth — FCM token mis en attente, retry dans 3s...');
-    scheduleRetry();
-    return { success: false, error: 'auth_pending' };
-  }
-
+  // saveFcmTokenPublic ne nécessite PAS de Bearer token — appel direct
   return _doSave({ user_email, token, device_type });
 }
 
 async function _doSave({ user_email, token, device_type }) {
   try {
-    const result = await postJson(SAVE_URL, { user_email, token, device_type });
+    // false = pas de Bearer token requis (saveFcmTokenPublic est un endpoint public)
+    const result = await postJson(SAVE_URL, { user_email, token, device_type }, false);
     console.log('[fcmApi] ✅ Token FCM sauvegardé avec succès — action:', result.action, '| user:', user_email);
     // Supprimer le pending une fois sauvegardé
     try { localStorage.removeItem(PENDING_KEY); } catch (_) {}
@@ -96,29 +93,10 @@ export async function flushPendingFcmToken() {
       return;
     }
 
-    const authToken = getAuthToken();
-    if (!authToken) {
-      console.log('[fcmApi] flushPending: pas encore de token auth, skip');
-      return;
-    }
-
+    // Plus de dépendance Bearer token — l'endpoint est public
     console.log('[fcmApi] 🔄 Flush token FCM en attente pour:', pending.user_email);
     await _doSave(pending);
   } catch (_) {}
-}
-
-let _retryCount = 0;
-function scheduleRetry() {
-  if (_retryCount >= 10) return;
-  _retryCount++;
-  setTimeout(async () => {
-    const authToken = getAuthToken();
-    if (!authToken) {
-      scheduleRetry(); // re-schedule
-      return;
-    }
-    await flushPendingFcmToken();
-  }, 3000 * _retryCount); // backoff progressif : 3s, 6s, 9s...
 }
 
 /**
