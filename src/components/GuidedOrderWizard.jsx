@@ -1,18 +1,277 @@
 /**
- * GuidedOrderWizard — Parcours de commande guidé en étapes (mobile-first)
- * 8 étapes : Type → Départ → Arrivée → Contact → Colis → Prix → Urgence → Récap
+ * GuidedOrderWizard — Parcours guidé CDL Premium (style Uber)
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ArrowLeft, MapPin, Package, Phone, Zap, CheckCircle2, Wallet, ChevronRight, Navigation } from "lucide-react";
+import { ArrowLeft, MapPin, Wallet, ChevronRight, Navigation, CheckCircle2 } from "lucide-react";
 import { QUARTIERS_OUAGADOUGOU } from "@/lib/quartiers";
 import { fmt } from "@/lib/formatMoney";
 
-const TOTAL_STEPS = 8;
+// ── Design tokens ────────────────────────────────────────────────────────────
+const PRIMARY = "#0B5ED7";
+const GREEN   = "#22C55E";
+const ORANGE  = "#F59E0B";
+const RED     = "#EF4444";
 
-const TYPES_COLIS_SUGGESTIONS = [
+// ── Variants Framer ──────────────────────────────────────────────────────────
+const slide = {
+  enter: (d) => ({ x: d > 0 ? "100%" : "-100%", opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit:  (d) => ({ x: d > 0 ? "-100%" : "100%", opacity: 0 }),
+};
+const transition = { duration: 0.25, ease: [0.4, 0, 0.2, 1] };
+
+// ── Bouton pression ──────────────────────────────────────────────────────────
+function PressBtn({ onClick, disabled, children, className = "", style = {} }) {
+  const vibrate = () => { try { navigator.vibrate?.(30); } catch (_) {} };
+  return (
+    <motion.button
+      onClick={() => { if (!disabled) { vibrate(); onClick?.(); } }}
+      disabled={disabled}
+      whileTap={disabled ? {} : { scale: 0.97 }}
+      transition={{ duration: 0.1 }}
+      className={className}
+      style={style}
+    >
+      {children}
+    </motion.button>
+  );
+}
+
+// ── Barre de progression ─────────────────────────────────────────────────────
+function ProgressBar({ step, total }) {
+  const pct = Math.round((step / total) * 100);
+  return (
+    <div className="px-5 pb-3 pt-1">
+      <div className="flex justify-between items-center mb-1.5">
+        <span className="text-xs text-gray-400 font-medium">Étape {step}/{total}</span>
+        <span className="text-xs font-bold" style={{ color: PRIMARY }}>{pct}%</span>
+      </div>
+      <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: `linear-gradient(90deg, ${PRIMARY}, #38bdf8)` }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Bouton principal (grand, vert) ───────────────────────────────────────────
+function BigBtn({ onClick, disabled, loading, children, color = PRIMARY }) {
+  return (
+    <PressBtn
+      onClick={onClick}
+      disabled={disabled || loading}
+      className="w-full flex items-center justify-center gap-2 h-14 rounded-2xl text-white text-base font-bold shadow-lg transition-opacity"
+      style={{
+        background: disabled ? "#D1D5DB" : `linear-gradient(135deg, ${color}, ${color}CC)`,
+        boxShadow: disabled ? "none" : `0 4px 20px ${color}40`,
+      }}
+    >
+      {loading ? (
+        <span className="flex items-center gap-2">
+          <motion.span
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
+            className="inline-block text-xl"
+          >⏳</motion.span>
+          Création en cours...
+        </span>
+      ) : children}
+    </PressBtn>
+  );
+}
+
+// ── Autocomplétion quartier ──────────────────────────────────────────────────
+function QuartierInput({ value, onChange, placeholder, onUseGPS }) {
+  const [query, setQuery]   = useState(value || "");
+  const [open, setOpen]     = useState(false);
+  const ref = useRef();
+
+  const results = query.length >= 1
+    ? QUARTIERS_OUAGADOUGOU.filter(q => q.toLowerCase().includes(query.toLowerCase())).slice(0, 7)
+    : QUARTIERS_OUAGADOUGOU.slice(0, 7);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const pick = (q) => { setQuery(q); onChange(q); setOpen(false); ref.current?.blur(); };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: PRIMARY }} />
+        <input
+          ref={ref}
+          type="text"
+          value={query}
+          onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder={placeholder}
+          className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-200 bg-gray-50 text-sm font-medium focus:outline-none focus:border-blue-400 focus:bg-white focus:shadow-sm transition-all"
+        />
+      </div>
+
+      {onUseGPS && (
+        <PressBtn
+          onClick={onUseGPS}
+          className="mt-2.5 flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-xl"
+          style={{ background: `${PRIMARY}15`, color: PRIMARY }}
+        >
+          <Navigation className="h-3.5 w-3.5" />
+          Utiliser ma position actuelle
+        </PressBtn>
+      )}
+
+      <AnimatePresence>
+        {open && results.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-50 mt-2 w-full bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden"
+          >
+            {results.map((q, i) => (
+              <button
+                key={q}
+                type="button"
+                onMouseDown={() => pick(q)}
+                className={`w-full text-left px-4 py-3 text-sm font-medium hover:bg-blue-50 flex items-center gap-3 transition-colors ${i < results.length - 1 ? "border-b border-gray-50" : ""}`}
+              >
+                <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+                {q}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── ÉTAPE 1 : Type de service ────────────────────────────────────────────────
+function StepType({ onSelect }) {
+  const types = [
+    { id: "envoyer",     emoji: "📦", label: "Envoyer un colis",         desc: "Le livreur vient chez vous",             color: PRIMARY,  bg: `${PRIMARY}12` },
+    { id: "recevoir",    emoji: "📥", label: "Recevoir un colis",         desc: "Le livreur récupère et vous livre",       color: ORANGE,   bg: `${ORANGE}18` },
+    { id: "deplacement", emoji: "🏍️", label: "Effectuer un déplacement",  desc: "Transport express ou course rapide",      color: GREEN,    bg: `${GREEN}18` },
+  ];
+  return (
+    <div className="px-5 pt-2 pb-8 space-y-4">
+      <div className="mb-6">
+        <h2 className="text-2xl font-extrabold text-gray-900">Que voulez-vous faire ?</h2>
+        <p className="text-sm text-gray-400 mt-1">Choisissez votre type de service</p>
+      </div>
+      {types.map(t => (
+        <PressBtn
+          key={t.id}
+          onClick={() => onSelect(t.id)}
+          className="w-full flex items-center gap-4 p-5 rounded-2xl border-2 text-left transition-all"
+          style={{ borderColor: t.color, background: t.bg }}
+        >
+          <div className="h-14 w-14 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0" style={{ background: t.color + "22" }}>
+            {t.emoji}
+          </div>
+          <div className="flex-1">
+            <p className="text-base font-bold" style={{ color: t.color }}>{t.label}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{t.desc}</p>
+          </div>
+          <ChevronRight className="h-5 w-5 flex-shrink-0" style={{ color: t.color }} />
+        </PressBtn>
+      ))}
+    </div>
+  );
+}
+
+// ── ÉTAPE 2 & 3 : Quartier ───────────────────────────────────────────────────
+function StepQuartier({ title, subtitle, icon, value, onChange, onNext, onUseGPS }) {
+  return (
+    <div className="px-5 pt-2 pb-8 space-y-5">
+      <div>
+        <div className="text-3xl mb-2">{icon}</div>
+        <h2 className="text-2xl font-extrabold text-gray-900">{title}</h2>
+        <p className="text-sm text-gray-400 mt-1">{subtitle}</p>
+      </div>
+      <QuartierInput value={value} onChange={onChange} placeholder="Ex: Ouaga 2000, Pissy..." onUseGPS={onUseGPS} />
+      <BigBtn onClick={onNext} disabled={!value} color={PRIMARY}>
+        Continuer <ChevronRight className="h-4 w-4" />
+      </BigBtn>
+    </div>
+  );
+}
+
+// ── ÉTAPE 4 : Contact ────────────────────────────────────────────────────────
+function StepContact({ typeService, form, setForm, onNext }) {
+  const isEnvoyer = typeService === "envoyer";
+  const isRecevoir = typeService === "recevoir";
+  const isDepl = typeService === "deplacement";
+  const valid = isDepl ? true : isEnvoyer ? (form.nom_destinataire && form.telephone_destinataire) : form.telephone_expediteur;
+
+  return (
+    <div className="px-5 pt-2 pb-8 space-y-5">
+      <div>
+        <div className="text-3xl mb-2">📞</div>
+        <h2 className="text-2xl font-extrabold text-gray-900">Contact</h2>
+        <p className="text-sm text-gray-400 mt-1">
+          {isDepl ? "Aucun contact supplémentaire requis" : isEnvoyer ? "Informations du destinataire" : "Informations de l'expéditeur"}
+        </p>
+      </div>
+
+      {isDepl && (
+        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          className="p-6 rounded-2xl text-center" style={{ background: `${GREEN}15`, border: `1.5px solid ${GREEN}40` }}>
+          <p className="text-4xl mb-2">✅</p>
+          <p className="font-bold text-gray-700">Déplacement — aucun contact requis</p>
+          <p className="text-sm text-gray-400 mt-1">Le livreur vous contactera directement</p>
+        </motion.div>
+      )}
+
+      {isEnvoyer && (
+        <div className="space-y-4">
+          <FieldInput label="Nom du destinataire *" placeholder="Nom complet" value={form.nom_destinataire}
+            onChange={v => setForm(f => ({ ...f, nom_destinataire: v }))} />
+          <FieldInput label="Numéro du destinataire *" placeholder="+226 XX XX XX XX" type="tel"
+            value={form.telephone_destinataire} onChange={v => setForm(f => ({ ...f, telephone_destinataire: v }))} />
+        </div>
+      )}
+
+      {isRecevoir && (
+        <div className="space-y-4">
+          <FieldInput label="Numéro de l'expéditeur *" placeholder="+226 XX XX XX XX" type="tel"
+            value={form.telephone_expediteur} onChange={v => setForm(f => ({ ...f, telephone_expediteur: v }))} />
+          <FieldInput label="Nom de l'expéditeur (optionnel)" placeholder="Nom complet"
+            value={form.nom_expediteur} onChange={v => setForm(f => ({ ...f, nom_expediteur: v }))} />
+        </div>
+      )}
+
+      <BigBtn onClick={onNext} disabled={!valid} color={PRIMARY}>
+        Continuer <ChevronRight className="h-4 w-4" />
+      </BigBtn>
+    </div>
+  );
+}
+
+function FieldInput({ label, placeholder, value, onChange, type = "text" }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-semibold text-gray-700">{label}</label>
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 text-sm font-medium focus:outline-none focus:border-blue-400 focus:bg-white focus:shadow-sm transition-all"
+      />
+    </div>
+  );
+}
+
+// ── ÉTAPE 5 : Colis ─────────────────────────────────────────────────────────
+const COLIS_CHIPS = [
   { label: "📄 Document", value: "Documents" },
   { label: "🍱 Repas", value: "Nourriture" },
   { label: "📦 Colis", value: "Colis moyen" },
@@ -21,282 +280,65 @@ const TYPES_COLIS_SUGGESTIONS = [
   { label: "✏️ Autre", value: "Autre" },
 ];
 
-const PRIX_SUGGESTIONS = [1000, 1500, 2000, 2500, 3000];
-
-const slideVariants = {
-  enter: (dir) => ({ x: dir > 0 ? "100%" : "-100%", opacity: 0 }),
-  center: { x: 0, opacity: 1 },
-  exit: (dir) => ({ x: dir > 0 ? "-100%" : "100%", opacity: 0 }),
-};
-
-// Barre de progression
-function ProgressBar({ step, total }) {
-  return (
-    <div className="px-4 pt-2 pb-1">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-muted-foreground font-medium">Étape {step} / {total}</span>
-        <span className="text-xs text-primary font-semibold">{Math.round((step / total) * 100)}%</span>
-      </div>
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-        <motion.div
-          className="h-full bg-primary rounded-full"
-          initial={false}
-          animate={{ width: `${(step / total) * 100}%` }}
-          transition={{ duration: 0.3 }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// Champ de recherche quartier avec autocomplétion
-function QuartierAutocomplete({ value, onChange, placeholder, onUseGPS }) {
-  const [query, setQuery] = useState(value || "");
-  const [open, setOpen] = useState(false);
-  const inputRef = useRef();
-
-  const suggestions = query.length >= 1
-    ? QUARTIERS_OUAGADOUGOU.filter(q => q.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
-    : QUARTIERS_OUAGADOUGOU.slice(0, 8);
-
-  useEffect(() => { setQuery(value || ""); }, [value]);
-
-  const select = (q) => {
-    setQuery(q);
-    onChange(q);
-    setOpen(false);
-    inputRef.current?.blur();
-  };
-
-  return (
-    <div className="relative">
-      <div className="relative">
-        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder={placeholder}
-          className="w-full pl-9 pr-4 py-3.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        />
-      </div>
-
-      {onUseGPS && (
-        <button
-          type="button"
-          onClick={onUseGPS}
-          className="mt-2 flex items-center gap-2 text-xs text-primary font-semibold px-3 py-2 rounded-lg bg-primary/10 w-fit"
-        >
-          <Navigation className="h-3.5 w-3.5" />
-          Utiliser ma position actuelle
-        </button>
-      )}
-
-      {open && suggestions.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-border rounded-xl shadow-lg max-h-56 overflow-y-auto">
-          {suggestions.map(q => (
-            <button
-              key={q}
-              type="button"
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-primary/5 flex items-center gap-2 border-b last:border-0"
-              onMouseDown={() => select(q)}
-            >
-              <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              {q}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- ÉTAPES ---
-
-function StepTypeService({ onSelect }) {
-  const types = [
-    { id: "envoyer", emoji: "📦", label: "Envoyer un colis", desc: "Le livreur vient récupérer chez vous", color: "border-primary bg-primary/5 text-primary" },
-    { id: "recevoir", emoji: "📥", label: "Recevoir un colis", desc: "Le livreur va chercher et vous livre", color: "border-orange-400 bg-orange-50 text-orange-600" },
-    { id: "deplacement", emoji: "🏍️", label: "Effectuer un déplacement", desc: "Transport de personne ou course express", color: "border-green-500 bg-green-50 text-green-700" },
-  ];
-  return (
-    <div className="space-y-4 px-4 pt-2 pb-6">
-      <div className="text-center mb-6">
-        <p className="text-xl font-bold">Que souhaitez-vous faire ?</p>
-        <p className="text-sm text-muted-foreground mt-1">Choisissez votre type de service</p>
-      </div>
-      {types.map(t => (
-        <button
-          key={t.id}
-          onClick={() => onSelect(t.id)}
-          className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 ${t.color} active:scale-[0.98] transition-all text-left`}
-        >
-          <span className="text-4xl">{t.emoji}</span>
-          <div>
-            <p className="text-lg font-bold">{t.label}</p>
-            <p className="text-sm opacity-75 mt-0.5">{t.desc}</p>
-          </div>
-          <ChevronRight className="ml-auto h-5 w-5 opacity-50 flex-shrink-0" />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function StepQuartier({ title, subtitle, value, onChange, onNext, onUseGPS }) {
-  return (
-    <div className="space-y-6 px-4 pt-2 pb-6">
-      <div>
-        <p className="text-xl font-bold">{title}</p>
-        <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
-      </div>
-      <QuartierAutocomplete
-        value={value}
-        onChange={onChange}
-        placeholder="Ex: Ouaga 2000, Pissy..."
-        onUseGPS={onUseGPS}
-      />
-      <Button className="w-full h-12 text-base font-semibold" onClick={onNext} disabled={!value}>
-        Continuer <ChevronRight className="ml-1 h-4 w-4" />
-      </Button>
-    </div>
-  );
-}
-
-function StepContact({ typeService, form, setForm, onNext }) {
-  const isEnvoyer = typeService === "envoyer";
-  const isRecevoir = typeService === "recevoir";
-  const isDepl = typeService === "deplacement";
-
-  const isValid = isDepl
-    ? true
-    : isEnvoyer
-      ? form.nom_destinataire && form.telephone_destinataire
-      : form.telephone_expediteur;
-
-  return (
-    <div className="space-y-5 px-4 pt-2 pb-6">
-      <div>
-        <p className="text-xl font-bold">Contact</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          {isDepl ? "Aucun contact supplémentaire requis." : isEnvoyer ? "Informations du destinataire" : "Informations de l'expéditeur"}
-        </p>
-      </div>
-
-      {isDepl && (
-        <div className="p-4 rounded-2xl bg-green-50 border border-green-200 text-green-700 text-center">
-          <p className="text-4xl mb-2">🏍️</p>
-          <p className="font-semibold">Déplacement — pas de contact requis</p>
-          <p className="text-sm opacity-75 mt-1">Le livreur vous contactera directement</p>
-        </div>
-      )}
-
-      {isEnvoyer && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Nom du destinataire *</label>
-            <Input
-              placeholder="Nom complet"
-              value={form.nom_destinataire}
-              onChange={e => setForm(f => ({ ...f, nom_destinataire: e.target.value }))}
-              className="h-12 text-base"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Numéro du destinataire *</label>
-            <Input
-              type="tel"
-              placeholder="+226 XX XX XX XX"
-              value={form.telephone_destinataire}
-              onChange={e => setForm(f => ({ ...f, telephone_destinataire: e.target.value }))}
-              className="h-12 text-base"
-            />
-          </div>
-        </div>
-      )}
-
-      {isRecevoir && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Numéro de l'expéditeur *</label>
-            <Input
-              type="tel"
-              placeholder="+226 XX XX XX XX"
-              value={form.telephone_expediteur}
-              onChange={e => setForm(f => ({ ...f, telephone_expediteur: e.target.value }))}
-              className="h-12 text-base"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Nom de l'expéditeur (optionnel)</label>
-            <Input
-              placeholder="Nom complet"
-              value={form.nom_expediteur}
-              onChange={e => setForm(f => ({ ...f, nom_expediteur: e.target.value }))}
-              className="h-12 text-base"
-            />
-          </div>
-        </div>
-      )}
-
-      <Button className="w-full h-12 text-base font-semibold" onClick={onNext} disabled={!isValid}>
-        Continuer <ChevronRight className="ml-1 h-4 w-4" />
-      </Button>
-    </div>
-  );
-}
-
 function StepColis({ form, setForm, onNext }) {
   return (
-    <div className="space-y-5 px-4 pt-2 pb-6">
+    <div className="px-5 pt-2 pb-8 space-y-5">
       <div>
-        <p className="text-xl font-bold">Nature du colis</p>
-        <p className="text-sm text-muted-foreground mt-1">Sélectionnez ou décrivez votre colis</p>
+        <div className="text-3xl mb-2">📦</div>
+        <h2 className="text-2xl font-extrabold text-gray-900">Nature du colis</h2>
+        <p className="text-sm text-gray-400 mt-1">Sélectionnez ou décrivez votre colis</p>
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        {TYPES_COLIS_SUGGESTIONS.map(s => (
-          <button
-            key={s.value}
-            type="button"
-            onClick={() => setForm(f => ({ ...f, type_colis: s.value, description: s.value === form.type_colis ? f.description : "" }))}
-            className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 text-center transition-all active:scale-95 ${
-              form.type_colis === s.value
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-background text-foreground"
-            }`}
-          >
-            <span className="text-2xl">{s.label.split(" ")[0]}</span>
-            <span className="text-xs font-semibold leading-tight">{s.label.split(" ").slice(1).join(" ")}</span>
-          </button>
-        ))}
+      <div className="grid grid-cols-3 gap-2.5">
+        {COLIS_CHIPS.map(c => {
+          const active = form.type_colis === c.value;
+          return (
+            <PressBtn
+              key={c.value}
+              onClick={() => setForm(f => ({ ...f, type_colis: c.value }))}
+              className="flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-2xl border-2 text-center transition-all"
+              style={{
+                borderColor: active ? PRIMARY : "#E5E7EB",
+                background: active ? `${PRIMARY}12` : "#F9FAFB",
+                color: active ? PRIMARY : "#374151",
+              }}
+            >
+              <span className="text-2xl">{c.label.split(" ")[0]}</span>
+              <span className="text-[11px] font-semibold leading-tight">{c.label.split(" ").slice(1).join(" ")}</span>
+            </PressBtn>
+          );
+        })}
       </div>
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-foreground">Préciser (optionnel)</label>
+      <div className="space-y-1.5">
+        <label className="text-sm font-semibold text-gray-700">Préciser (optionnel)</label>
         <textarea
-          placeholder="Détails supplémentaires sur le colis..."
+          placeholder="Détails supplémentaires..."
           value={form.description}
           onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
           rows={2}
-          className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+          className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-all resize-none"
         />
       </div>
-      <Button className="w-full h-12 text-base font-semibold" onClick={onNext} disabled={!form.type_colis}>
-        Continuer <ChevronRight className="ml-1 h-4 w-4" />
-      </Button>
+      <BigBtn onClick={onNext} disabled={!form.type_colis} color={PRIMARY}>
+        Continuer <ChevronRight className="h-4 w-4" />
+      </BigBtn>
     </div>
   );
 }
+
+// ── ÉTAPE 6 : Prix ───────────────────────────────────────────────────────────
+const PRIX_CHIPS = [1000, 1500, 2000, 2500, 3000];
 
 function StepPrix({ form, setForm, onNext }) {
   const prix = parseInt(form.prix_base, 10) || 0;
   return (
-    <div className="space-y-5 px-4 pt-2 pb-6">
+    <div className="px-5 pt-2 pb-8 space-y-5">
       <div>
-        <p className="text-xl font-bold">Prix proposé</p>
-        <p className="text-sm text-muted-foreground mt-1">Proposez un prix juste pour attirer les livreurs</p>
+        <div className="text-3xl mb-2">💰</div>
+        <h2 className="text-2xl font-extrabold text-gray-900">Prix proposé</h2>
+        <p className="text-sm text-gray-400 mt-1">Proposez un prix attractif pour les livreurs</p>
       </div>
+
+      {/* Champ grand */}
       <div className="relative">
         <input
           type="number"
@@ -304,74 +346,101 @@ function StepPrix({ form, setForm, onNext }) {
           placeholder="0"
           value={form.prix_base}
           onChange={e => setForm(f => ({ ...f, prix_base: e.target.value }))}
-          className="w-full text-3xl font-bold text-center py-5 rounded-2xl border-2 border-primary bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary text-primary"
+          className="w-full text-4xl font-extrabold text-center py-6 rounded-2xl border-2 focus:outline-none transition-all"
+          style={{
+            borderColor: prix > 0 ? PRIMARY : "#E5E7EB",
+            background: prix > 0 ? `${PRIMARY}08` : "#F9FAFB",
+            color: prix > 0 ? PRIMARY : "#9CA3AF",
+          }}
         />
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">FCFA</span>
+        <span className="absolute right-5 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">FCFA</span>
       </div>
+
+      {/* Chips prix rapides */}
       <div className="grid grid-cols-5 gap-2">
-        {PRIX_SUGGESTIONS.map(p => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => setForm(f => ({ ...f, prix_base: String(p) }))}
-            className={`py-2 rounded-xl border-2 text-sm font-bold transition-all active:scale-95 ${
-              form.prix_base === String(p)
-                ? "border-primary bg-primary text-white"
-                : "border-border bg-background text-foreground"
-            }`}
-          >
-            {p >= 1000 ? `${p / 1000}k` : p}
-          </button>
-        ))}
+        {PRIX_CHIPS.map(p => {
+          const active = form.prix_base === String(p);
+          return (
+            <PressBtn
+              key={p}
+              onClick={() => setForm(f => ({ ...f, prix_base: String(p) }))}
+              className="py-2.5 rounded-xl text-sm font-bold border-2 transition-all"
+              style={{
+                borderColor: active ? PRIMARY : "#E5E7EB",
+                background: active ? PRIMARY : "#F9FAFB",
+                color: active ? "#fff" : "#374151",
+              }}
+            >
+              {p >= 1000 ? `${p / 1000}k` : p}
+            </PressBtn>
+          );
+        })}
       </div>
-      <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-        <span>💡</span>
-        <span>Plus votre prix est attractif, plus un livreur accepte rapidement.</span>
+
+      {/* Astuce */}
+      <div className="flex items-start gap-3 p-4 rounded-2xl" style={{ background: `${ORANGE}15`, border: `1.5px solid ${ORANGE}40` }}>
+        <span className="text-xl flex-shrink-0">💡</span>
+        <p className="text-sm font-medium" style={{ color: ORANGE }}>
+          Plus votre prix est attractif, plus un livreur accepte rapidement.
+        </p>
       </div>
-      <Button className="w-full h-12 text-base font-semibold" onClick={onNext} disabled={!prix || prix <= 0}>
-        Continuer <ChevronRight className="ml-1 h-4 w-4" />
-      </Button>
+
+      <BigBtn onClick={onNext} disabled={!prix || prix <= 0} color={PRIMARY}>
+        Continuer <ChevronRight className="h-4 w-4" />
+      </BigBtn>
     </div>
   );
 }
 
+// ── ÉTAPE 7 : Urgence ────────────────────────────────────────────────────────
 function StepUrgence({ urgence, setUrgence, onNext }) {
   const levels = [
-    { id: "normal", emoji: "🟢", label: "Normal", desc: "Livraison standard", supplement: 0, color: "border-green-400 bg-green-50 text-green-700" },
-    { id: "urgent", emoji: "🔔", label: "Urgent", desc: "Moins de 30 min", supplement: 500, color: "border-amber-400 bg-amber-50 text-amber-700" },
-    { id: "tres_urgent", emoji: "🚨", label: "Très urgent", desc: "Moins de 20 min", supplement: 1000, color: "border-red-400 bg-red-50 text-red-700" },
+    { id: "normal",      emoji: "🟢", label: "Normal",      desc: "Livraison standard",   supplement: 0,    color: GREEN,  bg: `${GREEN}15` },
+    { id: "urgent",      emoji: "🔔", label: "Urgent",      desc: "Moins de 30 min",       supplement: 500,  color: ORANGE, bg: `${ORANGE}18` },
+    { id: "tres_urgent", emoji: "🚨", label: "Très urgent", desc: "Moins de 20 min",       supplement: 1000, color: RED,    bg: `${RED}15` },
   ];
   return (
-    <div className="space-y-4 px-4 pt-2 pb-6">
+    <div className="px-5 pt-2 pb-8 space-y-4">
       <div>
-        <p className="text-xl font-bold">Niveau d'urgence</p>
-        <p className="text-sm text-muted-foreground mt-1">Choisissez selon votre besoin</p>
+        <div className="text-3xl mb-2">⚡</div>
+        <h2 className="text-2xl font-extrabold text-gray-900">Niveau d'urgence</h2>
+        <p className="text-sm text-gray-400 mt-1">Choisissez selon votre besoin</p>
       </div>
-      {levels.map(l => (
-        <button
-          key={l.id}
-          onClick={() => { setUrgence(l.id); onNext(); }}
-          className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all active:scale-[0.98] text-left ${
-            urgence === l.id ? l.color + " scale-[0.99]" : "border-border bg-background"
-          }`}
-        >
-          <span className="text-3xl">{l.emoji}</span>
-          <div className="flex-1">
-            <p className="font-bold text-base">{l.label}</p>
-            <p className="text-sm opacity-75">{l.desc}</p>
-          </div>
-          {l.supplement > 0 && (
-            <span className="text-sm font-bold text-current opacity-75 flex-shrink-0">+{fmt(l.supplement)}</span>
-          )}
-        </button>
-      ))}
+      {levels.map(l => {
+        const active = urgence === l.id;
+        return (
+          <PressBtn
+            key={l.id}
+            onClick={() => { setUrgence(l.id); setTimeout(onNext, 180); }}
+            className="w-full flex items-center gap-4 p-5 rounded-2xl border-2 text-left transition-all"
+            style={{
+              borderColor: active ? l.color : "#E5E7EB",
+              background: active ? l.bg : "#FAFAFA",
+              boxShadow: active ? `0 2px 16px ${l.color}25` : "none",
+            }}
+          >
+            <span className="text-3xl">{l.emoji}</span>
+            <div className="flex-1">
+              <p className="font-bold text-gray-800">{l.label}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{l.desc}</p>
+            </div>
+            {l.supplement > 0 && (
+              <span className="text-sm font-extrabold flex-shrink-0" style={{ color: l.color }}>
+                +{fmt(l.supplement)}
+              </span>
+            )}
+            {active && <CheckCircle2 className="h-5 w-5 flex-shrink-0" style={{ color: l.color }} />}
+          </PressBtn>
+        );
+      })}
     </div>
   );
 }
 
-function StepRecap({ typeService, form, urgence, prixTotal, soldeBedou, loading, onConfirm, onBack }) {
+// ── ÉTAPE 8 : Récapitulatif ──────────────────────────────────────────────────
+function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal, soldeBedou, loading, onConfirm }) {
   const typeLabel = { envoyer: "📦 Envoyer un colis", recevoir: "📥 Recevoir un colis", deplacement: "🏍️ Déplacement" }[typeService];
-  const urgenceLabel = { normal: "🟢 Normal", urgent: "🔔 Urgent (+500 F)", tres_urgent: "🚨 Très urgent (+1000 F)" }[urgence];
+  const urgLabel  = { normal: "🟢 Normal", urgent: `🔔 Urgent (+${fmt(500)})`, tres_urgent: `🚨 Très urgent (+${fmt(1000)})` }[urgence];
   const soldeInsuffisant = soldeBedou !== null && prixTotal > 0 && soldeBedou < prixTotal;
 
   const rows = [
@@ -382,235 +451,168 @@ function StepRecap({ typeService, form, urgence, prixTotal, soldeBedou, loading,
     form.telephone_destinataire && { label: "Tél. destinataire", value: form.telephone_destinataire },
     form.telephone_expediteur && { label: "Tél. expéditeur", value: form.telephone_expediteur },
     form.type_colis && { label: "Colis", value: form.type_colis },
-    { label: "Urgence", value: urgenceLabel },
+    { label: "Urgence", value: urgLabel },
   ].filter(Boolean);
 
   return (
-    <div className="space-y-4 px-4 pt-2 pb-6">
+    <div className="px-5 pt-2 pb-8 space-y-5">
       <div>
-        <p className="text-xl font-bold">Récapitulatif</p>
-        <p className="text-sm text-muted-foreground mt-1">Vérifiez avant de confirmer</p>
+        <div className="text-3xl mb-2">📋</div>
+        <h2 className="text-2xl font-extrabold text-gray-900">Récapitulatif</h2>
+        <p className="text-sm text-gray-400 mt-1">Vérifiez avant de confirmer</p>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      {/* Détails */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {rows.map((r, i) => (
-          <div key={i} className={`flex items-center justify-between px-4 py-3 ${i < rows.length - 1 ? "border-b" : ""}`}>
-            <span className="text-sm text-muted-foreground">{r.label}</span>
-            <span className="text-sm font-semibold text-right max-w-[55%]">{r.value}</span>
+          <div key={i} className={`flex items-center justify-between px-4 py-3.5 ${i < rows.length - 1 ? "border-b border-gray-50" : ""}`}>
+            <span className="text-sm text-gray-400">{r.label}</span>
+            <span className="text-sm font-semibold text-gray-800 text-right max-w-[56%]">{r.value}</span>
           </div>
         ))}
       </div>
 
       {/* Total */}
-      <div className="rounded-2xl bg-primary/10 border-2 border-primary/30 p-4 flex items-center justify-between">
+      <div className="p-5 rounded-2xl flex items-center justify-between"
+        style={{ background: `${PRIMARY}10`, border: `2px solid ${PRIMARY}25` }}>
         <div>
-          <p className="text-sm text-muted-foreground">Total à débiter</p>
-          <p className="text-3xl font-extrabold text-primary">{fmt(prixTotal)}</p>
+          <p className="text-xs text-gray-400 font-medium">Total à débiter</p>
+          <p className="text-4xl font-extrabold mt-0.5" style={{ color: PRIMARY }}>{fmt(prixTotal)}</p>
+          {supplement > 0 && (
+            <p className="text-xs mt-0.5" style={{ color: ORANGE }}>dont +{fmt(supplement)} urgence</p>
+          )}
         </div>
         <div className="text-right">
-          <p className="text-xs text-muted-foreground">Mon Bedou</p>
-          <p className={`font-bold text-lg ${soldeInsuffisant ? "text-red-600" : "text-green-600"}`}>
+          <p className="text-xs text-gray-400">Mon Bedou</p>
+          <p className="text-2xl font-extrabold mt-0.5" style={{ color: soldeInsuffisant ? RED : GREEN }}>
             {soldeBedou !== null ? fmt(soldeBedou) : "..."}
+          </p>
+          <p className="text-xs mt-0.5 font-semibold" style={{ color: soldeInsuffisant ? RED : GREEN }}>
+            {soldeInsuffisant ? "❌ Insuffisant" : "✅ Suffisant"}
           </p>
         </div>
       </div>
 
       {soldeInsuffisant && (
-        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold text-center">
-          ❌ Solde insuffisant — il vous manque {fmt(prixTotal - soldeBedou)}
-        </div>
+        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+          className="p-3.5 rounded-xl text-center text-sm font-semibold"
+          style={{ background: `${RED}12`, border: `1.5px solid ${RED}40`, color: RED }}>
+          Il vous manque {fmt(prixTotal - soldeBedou)} — rechargez votre Bedou
+        </motion.div>
       )}
 
-      <Button
-        className="w-full h-14 text-base font-bold rounded-2xl"
-        onClick={onConfirm}
-        disabled={loading || soldeInsuffisant}
-      >
-        {loading ? (
-          <span className="flex items-center gap-2"><span className="animate-spin text-lg">⏳</span> Création...</span>
-        ) : (
-          <span className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5" /> CONFIRMER LA COMMANDE</span>
-        )}
-      </Button>
+      <BigBtn onClick={onConfirm} disabled={soldeInsuffisant} loading={loading} color={GREEN}>
+        <CheckCircle2 className="h-5 w-5" />
+        CONFIRMER LA COMMANDE
+      </BigBtn>
     </div>
   );
 }
 
-// --- WIZARD PRINCIPAL ---
+// ── WIZARD PRINCIPAL ─────────────────────────────────────────────────────────
 export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmit, loading }) {
-  const [step, setStep] = useState(1);
-  const [direction, setDirection] = useState(1);
-  const [typeService, setTypeService] = useState(null);
-  const [urgence, setUrgence] = useState("normal");
-  const [form, setForm] = useState({
-    quartier_depart: "",
-    quartier_arrivee: "",
-    nom_expediteur: user?.full_name || "",
-    telephone_expediteur: user?.telephone || "",
-    nom_destinataire: "",
-    telephone_destinataire: "",
-    type_colis: "",
-    description: "",
-    prix_base: "",
+  const [step, setStep]           = useState(1);
+  const [dir, setDir]             = useState(1);
+  const [typeService, setType]    = useState(null);
+  const [urgence, setUrgence]     = useState("normal");
+  const [form, setForm]           = useState({
+    quartier_depart: "", quartier_arrivee: "",
+    nom_expediteur: user?.full_name || "", telephone_expediteur: user?.telephone || "",
+    nom_destinataire: "", telephone_destinataire: "",
+    type_colis: "", description: "", prix_base: "",
   });
 
+  const isDepl = typeService === "deplacement";
   const supplement = urgence === "tres_urgent" ? 1000 : urgence === "urgent" ? 500 : 0;
   const prixBase = parseInt(form.prix_base, 10) || 0;
   const prixTotal = prixBase + supplement;
 
-  // Étapes actives selon type de service
-  const isDepl = typeService === "deplacement";
-  // Steps : 1=type, 2=départ, 3=arrivée, 4=contact, 5=colis(skip si depl), 6=prix, 7=urgence, 8=recap
-  const STEP_LABELS = isDepl
-    ? [null, "Type", "Départ", "Arrivée", "Contact", "Prix", "Urgence", "Récap"]
-    : [null, "Type", "Départ", "Arrivée", "Contact", "Colis", "Prix", "Urgence", "Récap"];
-  // Pour simplifier, on mappe les steps sur 8 (avec déplacement on saute colis côté logique)
+  // Progression affichée (déplacement = 7 étapes, autres = 8)
+  const totalSteps = isDepl ? 7 : 8;
+  const displayStep = step === 1 ? 1 : isDepl && step >= 5 ? step - 1 : step;
 
-  const go = (dir) => {
-    setDirection(dir);
-    setStep(s => s + dir);
-  };
+  const go = (d) => { setDir(d); setStep(s => s + d); };
+  const next = () => go(1);
+  const back = () => { if (step > 1) go(-1); };
 
-  const goNext = () => go(1);
-  const goBack = () => {
-    if (step === 1) return;
-    // Si déplacement et on est à l'étape colis (5), sauter vers contact (4)
-    go(-1);
-  };
+  const handleSelectType = (t) => { setType(t); setDir(1); setStep(2); };
+  const handleUseGPS = () => { if (gpsDepart?.lat) setForm(f => ({ ...f, quartier_depart: "Ma position GPS" })); };
+  const handleConfirm = () => onSubmit({ form, typeService, urgence, prixBase, supplement, prixTotal });
 
-  const handleSelectType = (type) => {
-    setTypeService(type);
-    setDirection(1);
-    setStep(2);
-  };
-
-  const handleUseGPS = () => {
-    if (gpsDepart?.lat) {
-      setForm(f => ({ ...f, quartier_depart: "Ma position GPS" }));
-    }
-  };
-
-  const handleConfirm = () => {
-    onSubmit({ form, typeService, urgence, prixBase, supplement, prixTotal });
-  };
-
-  // Calcul step réel selon déplacement (skip étape colis = étape 5)
-  const effectiveStep = (isDepl && step >= 5) ? step - 1 : step; // affichage progression
-  const displayTotal = isDepl ? 7 : 8;
-
+  // Mapping step → composant
+  // Steps: 1=type, 2=depart, 3=arrivee, 4=contact, 5=colis(skip si depl), 6=prix(5 si depl), 7=urgence(6 si depl), 8=recap(7 si depl)
   const renderStep = () => {
-    switch (step) {
-      case 1:
-        return <StepTypeService onSelect={handleSelectType} />;
-      case 2:
-        return (
-          <StepQuartier
-            title="Lieu de récupération"
-            subtitle="D'où doit partir la livraison ?"
-            value={form.quartier_depart}
-            onChange={v => setForm(f => ({ ...f, quartier_depart: v }))}
-            onNext={goNext}
-            onUseGPS={handleUseGPS}
-          />
-        );
-      case 3:
-        return (
-          <StepQuartier
-            title="Lieu de livraison"
-            subtitle="Où doit être livré le colis ?"
-            value={form.quartier_arrivee}
-            onChange={v => setForm(f => ({ ...f, quartier_arrivee: v }))}
-            onNext={goNext}
-          />
-        );
-      case 4:
-        return (
-          <StepContact typeService={typeService} form={form} setForm={setForm} onNext={goNext} />
-        );
-      case 5:
-        if (isDepl) {
-          // Sauter directement au prix
-          return (
-            <StepPrix form={form} setForm={setForm} onNext={goNext} />
-          );
-        }
-        return <StepColis form={form} setForm={setForm} onNext={goNext} />;
-      case 6:
-        if (isDepl) {
-          return <StepUrgence urgence={urgence} setUrgence={setUrgence} onNext={goNext} />;
-        }
-        return <StepPrix form={form} setForm={setForm} onNext={goNext} />;
-      case 7:
-        if (isDepl) {
-          return (
-            <StepRecap
-              typeService={typeService}
-              form={form}
-              urgence={urgence}
-              prixTotal={prixTotal}
-              soldeBedou={soldeBedou}
-              loading={loading}
-              onConfirm={handleConfirm}
-            />
-          );
-        }
-        return <StepUrgence urgence={urgence} setUrgence={setUrgence} onNext={goNext} />;
-      case 8:
-        return (
-          <StepRecap
-            typeService={typeService}
-            form={form}
-            urgence={urgence}
-            prixTotal={prixTotal}
-            soldeBedou={soldeBedou}
-            loading={loading}
-            onConfirm={handleConfirm}
-          />
-        );
-      default:
-        return null;
-    }
+    if (step === 1) return <StepType onSelect={handleSelectType} />;
+    if (step === 2) return (
+      <StepQuartier title="Lieu de récupération" subtitle="D'où doit partir la livraison ?" icon="📍"
+        value={form.quartier_depart} onChange={v => setForm(f => ({ ...f, quartier_depart: v }))}
+        onNext={next} onUseGPS={handleUseGPS} />
+    );
+    if (step === 3) return (
+      <StepQuartier title="Lieu de livraison" subtitle="Où doit être livré le colis ?" icon="🏁"
+        value={form.quartier_arrivee} onChange={v => setForm(f => ({ ...f, quartier_arrivee: v }))}
+        onNext={next} />
+    );
+    if (step === 4) return <StepContact typeService={typeService} form={form} setForm={setForm} onNext={next} />;
+    if (step === 5) return isDepl
+      ? <StepPrix form={form} setForm={setForm} onNext={next} />
+      : <StepColis form={form} setForm={setForm} onNext={next} />;
+    if (step === 6) return isDepl
+      ? <StepUrgence urgence={urgence} setUrgence={setUrgence} onNext={next} />
+      : <StepPrix form={form} setForm={setForm} onNext={next} />;
+    if (step === 7) return isDepl
+      ? <StepRecap typeService={typeService} form={form} urgence={urgence} prixBase={prixBase}
+          supplement={supplement} prixTotal={prixTotal} soldeBedou={soldeBedou} loading={loading} onConfirm={handleConfirm} />
+      : <StepUrgence urgence={urgence} setUrgence={setUrgence} onNext={next} />;
+    if (step === 8) return (
+      <StepRecap typeService={typeService} form={form} urgence={urgence} prixBase={prixBase}
+        supplement={supplement} prixTotal={prixTotal} soldeBedou={soldeBedou} loading={loading} onConfirm={handleConfirm} />
+    );
+    return null;
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 bg-background/95 backdrop-blur z-20 border-b">
-        <div className="flex items-center gap-3 px-4 py-3">
+    <div className="flex flex-col min-h-screen bg-white">
+      {/* Header sticky */}
+      <div className="sticky top-0 bg-white z-20 border-b border-gray-100 shadow-sm">
+        <div className="flex items-center gap-3 px-4 py-3.5">
           {step > 1 && (
-            <button onClick={goBack} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+            <PressBtn onClick={back}
+              className="p-2 rounded-xl transition-colors"
+              style={{ background: "#F3F4F6" }}>
+              <ArrowLeft className="h-5 w-5 text-gray-600" />
+            </PressBtn>
           )}
           <div className="flex-1">
-            <h1 className="text-base font-bold leading-tight">Commander une course</h1>
+            <h1 className="text-base font-extrabold text-gray-900">Commander une course</h1>
             {typeService && step > 1 && (
-              <p className="text-xs text-muted-foreground">
-                {{ envoyer: "📦 Envoyer", recevoir: "📥 Recevoir", deplacement: "🏍️ Déplacement" }[typeService]}
+              <p className="text-xs text-gray-400">
+                {{ envoyer: "📦 Envoyer un colis", recevoir: "📥 Recevoir un colis", deplacement: "🏍️ Déplacement" }[typeService]}
               </p>
             )}
           </div>
           {soldeBedou !== null && step > 1 && (
-            <div className="flex items-center gap-1 text-xs font-semibold bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold"
+              style={{ background: `${PRIMARY}12`, color: PRIMARY }}>
               <Wallet className="h-3.5 w-3.5" />
               {fmt(soldeBedou)}
             </div>
           )}
         </div>
-        {step > 1 && <ProgressBar step={effectiveStep - 1} total={displayTotal - 1} />}
+        {step > 1 && <ProgressBar step={displayStep - 1} total={totalSteps - 1} />}
       </div>
 
       {/* Contenu animé */}
-      <div className="flex-1 overflow-hidden">
-        <AnimatePresence mode="wait" custom={direction}>
+      <div className="flex-1 overflow-x-hidden">
+        <AnimatePresence mode="wait" custom={dir}>
           <motion.div
             key={step}
-            custom={direction}
-            variants={slideVariants}
+            custom={dir}
+            variants={slide}
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.25, ease: "easeInOut" }}
+            transition={transition}
             className="pt-4"
           >
             {renderStep()}
