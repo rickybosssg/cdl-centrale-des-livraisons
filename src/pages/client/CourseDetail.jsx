@@ -13,6 +13,7 @@ import PaiementMobile from "../../components/PaiementMobile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
+import DestinataireShareBlock from "@/components/DestinataireShareBlock";
 import moment from "moment";
 
 // Statuts où le livreur est RÉELLEMENT confirmé (a cliqué "Accepter")
@@ -337,6 +338,9 @@ export default function CourseDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* Partage lien destinataire */}
+      {driverConfirmed && <DestinataireShareBlock course={course} />}
 
       {/* Mini Chat — uniquement après acceptation réelle */}
       {driverConfirmed && course.livreur_email && (
