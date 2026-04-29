@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CDL</string>
+    <string name="title_activity_main">CDL</string>
+    <string name="package_name">com.cdl.app</string>
+    <string name="custom_url_scheme">com.cdl.app</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "appId": "com.cdl.app",
+  "appName": "CDL",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

@@ -26,7 +26,7 @@
     <string msgid="7208076849092622260" name="abc_search_hint">"Pretražite..."</string>
     <string msgid="3741173234950517107" name="abc_searchview_description_clear">"Obriši upit"</string>
     <string msgid="693312494995508443" name="abc_searchview_description_query">"Pretraži upit"</string>
-    <string msgid="3417662926640357176" name="abc_searchview_description_search">"Pretraživanje"</string>
+    <string msgid="3417662926640357176" name="abc_searchview_description_search">"Pretraži"</string>
     <string msgid="1486535517437947103" name="abc_searchview_description_submit">"Pošalji upit"</string>
     <string msgid="2293578557972875415" name="abc_searchview_description_voice">"Glasovno pretraživanje"</string>
     <string msgid="8875138169939072951" name="abc_shareactionprovider_share_with">"Dijeli sa"</string>
@@ -65,8 +65,12 @@
     <string name="common_open_on_phone">Otvori na telefonu</string>
     <string name="common_signin_button_text">Prijava</string>
     <string name="common_signin_button_text_long">Prijavi se pomoću Googlea</string>
+    <string msgid="3260749812566568062" name="copy_toast_msg">"Link je kopiran u međumemoriju"</string>
     <string name="error_icon_content_description">Greška</string>
     <string name="exposed_dropdown_menu_content_description">Prikaži padajući meni</string>
+    <string msgid="4566929209979330987" name="fallback_menu_item_copy_link">"Kopiraj link"</string>
+    <string msgid="3413186855122069269" name="fallback_menu_item_open_in_browser">"Otvori u pregledniku"</string>
+    <string msgid="7145444925855055364" name="fallback_menu_item_share_link">"Dijeli link"</string>
     <string name="icon_content_description">ikona dijaloškog okvira</string>
     <string name="item_view_role_description">Kartica</string>
     <string name="material_clock_toggle_content_description">Odaberite prijepodne ili poslijepodne</string>
