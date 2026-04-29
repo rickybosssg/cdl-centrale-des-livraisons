@@ -6,9 +6,10 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { CheckCircle2, Download, Package } from "lucide-react";
+import { CheckCircle2, Package } from "lucide-react";
 import UserLocationShare from "@/components/UserLocationShare";
 import LivreurHumanCard from "@/components/LivreurHumanCard";
+import CdlAppDownloadBanner from "@/components/CdlAppDownloadBanner";
 
 const STATUT_CFG = {
   en_attente:       { label: "Recherche d'un livreur…",     emoji: "🔍", color: "bg-amber-500",  pulse: true  },
@@ -273,6 +274,9 @@ export default function TrackingPublic() {
           </div>
         )}
 
+        {/* Bannière téléchargement app — adaptative Android/iOS */}
+        <CdlAppDownloadBanner courseId={courseId} />
+
         {/* Upsell CDL — Transformer le destinataire en client */}
         <div className="rounded-2xl bg-gradient-to-br from-primary to-blue-700 text-white p-5 space-y-4">
           <div className="space-y-1">
@@ -294,12 +298,10 @@ export default function TrackingPublic() {
               🛵 Commander une course
             </a>
             <a
-              href="https://play.google.com/store/apps/details?id=com.cdl.app"
-              target="_blank"
-              rel="noreferrer"
+              href="https://cdl.base44.app/telecharger-app"
               className="flex items-center justify-center gap-2 w-full py-2.5 bg-white/20 rounded-xl text-white text-sm font-semibold active:scale-95"
             >
-              <Download className="h-4 w-4" /> Télécharger l'app CDL
+              📲 Télécharger l'app CDL
             </a>
           </div>
         </div>

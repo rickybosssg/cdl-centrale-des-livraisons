@@ -119,6 +119,7 @@ import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
 import EmailLogin from './pages/EmailLogin';
 import AppPublicLink from './pages/AppPublicLink';
 import TrackingPublic from './pages/TrackingPublic';
+import DownloadApp from './pages/DownloadApp';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -278,6 +279,7 @@ const AuthenticatedApp = () => {
         <Route path="/connexion" element={<EmailLogin />} />
         <Route path="/app-public-link" element={<AppPublicLink />} />
         <Route path="/track/:courseId" element={<TrackingPublic />} />
+        <Route path="/telecharger-app" element={<DownloadApp />} />
       <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />
