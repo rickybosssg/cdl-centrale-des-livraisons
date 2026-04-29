@@ -84,16 +84,65 @@ export default function MonBedou() {
     if (!montant || montant < 100) return toast.error("Montant minimum 100 F CFA");
     if (!form.methode) return toast.error("Veuillez sélectionner une méthode");
     if (!form.preuve) return toast.error("Veuillez ajouter une preuve de paiement");
+
     setSubmitting(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file: form.preuve });
-    const res = await base44.functions.invoke("bedouEngine", { action: "demande_recharge", montant, methode: form.methode, preuve_paiement: file_url });
-    setSubmitting(false);
-    if (res.data.success) {
-      setSubmitted({ bonus: res.data.bonus_applique || 0, bonus_restants: res.data.bonus_restants ?? null });
-      triggerWhatsAppNotification({ eventType: "bedou_topup_requested", recipientRole: "client", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouTopupRequested(), entityId: user?.id, entityType: "bedou", priority: "high" });
-      setForm({ montant: "", methode: "orange_money", preuve: null });
-    } else {
-      toast.error(res.data.error || "Erreur");
+
+    // Timeout de sécurité : débloquer le bouton après 15s quoi qu'il arrive
+    const safetyTimer = setTimeout(() => {
+      setSubmitting(false);
+      toast.error("La requête prend trop de temps. Vérifiez votre connexion et réessayez.");
+    }, 15000);
+
+    try {
+      // 1. Upload de la preuve
+      let file_url = "";
+      try {
+        const uploadRes = await base44.integrations.Core.UploadFile({ file: form.preuve });
+        file_url = uploadRes.file_url;
+      } catch (uploadErr) {
+        clearTimeout(safetyTimer);
+        setSubmitting(false);
+        toast.error("Échec de l'envoi de la photo. Vérifiez votre connexion et réessayez.");
+        return;
+      }
+
+      // 2. Créer la demande de recharge
+      const res = await base44.functions.invoke("bedouEngine", {
+        action: "demande_recharge",
+        montant,
+        methode: form.methode,
+        preuve_paiement: file_url,
+      });
+
+      clearTimeout(safetyTimer);
+      setSubmitting(false);
+
+      if (res?.data?.success) {
+        setSubmitted({
+          bonus: res.data.bonus_applique || 0,
+          bonus_restants: res.data.bonus_restants ?? null,
+        });
+        setForm({ montant: "", methode: "orange_money", preuve: null });
+        try {
+          triggerWhatsAppNotification({
+            eventType: "bedou_topup_requested",
+            recipientRole: "client",
+            recipientName: user?.full_name || "",
+            recipientPhone: user?.telephone || null,
+            messageText: waMsgBedouTopupRequested(),
+            entityId: user?.id,
+            entityType: "bedou",
+            priority: "high",
+          });
+        } catch (_) {}
+      } else {
+        toast.error(res?.data?.error || "La demande a échoué. Réessayez.");
+      }
+    } catch (err) {
+      clearTimeout(safetyTimer);
+      setSubmitting(false);
+      console.error("[MonBedou] handleRecharge error:", err);
+      toast.error("Erreur inattendue : " + (err?.message || "réessayez."));
     }
   };
 
