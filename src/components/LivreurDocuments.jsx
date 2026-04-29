@@ -21,9 +21,14 @@ function PhotoUpload({ label, desc, emoji, docKey, file, preview, onFile, onRemo
     setLoading(mode);
     try {
       const f = mode === 'camera' ? await openNativeCamera() : await openNativeGallery();
-      if (f) onFile(docKey, f);
+      if (f) {
+        onFile(docKey, f);
+      }
+      // Si f === null : l'utilisateur a annulé → pas d'erreur
     } catch (err) {
-      setPermError(err.message || "Erreur");
+      const msg = err?.message || "Erreur lors de l'accès à la caméra/galerie";
+      setPermError(msg);
+      console.error('[LivreurDocuments] native upload error:', msg);
     } finally {
       setLoading(null);
     }
@@ -32,11 +37,16 @@ function PhotoUpload({ label, desc, emoji, docKey, file, preview, onFile, onRemo
   const handleWeb = async (e, mode) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (!f.type.startsWith('image/')) { toast.error("Choisissez une image"); return; }
+    if (!f.type.startsWith('image/') && f.type !== 'application/pdf') {
+      toast.error("Choisissez une image (JPG, PNG) ou un PDF");
+      e.target.value = '';
+      return;
+    }
     setLoading(mode);
     try {
-      const compressed = await compressImage(f);
-      onFile(docKey, compressed);
+      // Compression uniquement pour les images
+      const toUpload = f.type.startsWith('image/') ? await compressImage(f) : f;
+      onFile(docKey, toUpload);
     } catch (_) {
       onFile(docKey, f);
     } finally {
@@ -171,9 +181,24 @@ export default function LivreurDocuments({ onComplete }) {
     setUploading(true);
     try {
       const DOCS_KEYS = ['photo_profil', 'photo_identite_recto', 'photo_identite_verso', 'photo_moyen_deplacement'];
-      const uploads = await Promise.all(DOCS_KEYS.map(k => base44.integrations.Core.UploadFile({ file: files[k] })));
+
+      // Upload séquentiel pour éviter les timeouts sur connexion lente (APK)
       const docUrls = {};
-      DOCS_KEYS.forEach((k, i) => { docUrls[k] = uploads[i].file_url; });
+      for (const k of DOCS_KEYS) {
+        if (!files[k]) continue;
+        try {
+          const result = await base44.integrations.Core.UploadFile({ file: files[k] });
+          docUrls[k] = result.file_url;
+        } catch (uploadErr) {
+          throw new Error(`Échec envoi "${k.replace(/_/g, ' ')}" : ${uploadErr.message}. Vérifiez votre connexion internet.`);
+        }
+      }
+
+      // Vérifier que tous les docs obligatoires ont été uploadés
+      const manquants = DOCS_KEYS.filter(k => !docUrls[k]);
+      if (manquants.length > 0) {
+        throw new Error(`Documents manquants : ${manquants.map(k => k.replace(/_/g, ' ')).join(', ')}`);
+      }
 
       const me = await base44.auth.me();
       const livreurProfiles = await base44.entities.UserProfile.filter({ user_email: me.email, profile_type: 'livreur', deleted: false });
@@ -204,7 +229,8 @@ export default function LivreurDocuments({ onComplete }) {
       toast.success("🎉 Dossier envoyé ! Vous serez notifié après validation.");
       onComplete();
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      console.error('[LivreurDocuments] submit error:', err.message);
+      toast.error(err.message || "Erreur lors de l'envoi — vérifiez votre connexion et réessayez");
     } finally {
       setUploading(false);
     }
