@@ -76,27 +76,15 @@ export default function EmailLogin() {
     if (!email) { setMessage("Entrez votre adresse email"); return; }
     setLoading(true); setMessage("");
     try {
-      // Essayer d'abord la fonction backend CDL
-      let sent = false;
-      try {
-        const res = await base44.functions.invoke("sendPasswordResetEmail", { email: email.trim().toLowerCase() });
-        if (res?.data?.success) sent = true;
-      } catch (_) {}
-      // Fallback : endpoint natif Base44
-      if (!sent) {
-        const res = await fetch(`${AUTH_BASE}/send-reset-password`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim().toLowerCase() }),
-        });
-        if (res.ok) sent = true;
-      }
-      if (sent) {
-        setSuccessMsg("✅ Email de réinitialisation envoyé ! Vérifiez votre boîte mail (et les spams).");
-        setMode("login");
-      } else {
-        setMessage("Impossible d'envoyer l'email — vérifiez l'adresse saisie");
-      }
+      // Appel direct à l'endpoint natif Base44 — génère un vrai lien de reset par email
+      await fetch(`${AUTH_BASE}/send-reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      // Toujours afficher le message de succès (sécurité : ne pas révéler si l'email existe)
+      setSuccessMsg("✅ Si cet email existe dans notre système, un lien de réinitialisation a été envoyé. Vérifiez votre boîte mail et les spams.");
+      setMode("login");
     } catch (err) {
       setMessage("Erreur réseau — vérifiez votre connexion et réessayez");
     } finally {
