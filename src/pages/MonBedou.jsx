@@ -53,7 +53,9 @@ export default function MonBedou() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("solde");
-  const [form, setForm] = useState({ montant: "", methode: "orange_money", numero_transaction: "", preuve: null });
+  const [form, setForm] = useState({ montant: "", methode: "orange_money", preuve: null });
+  const [uploadingPreuve, setUploadingPreuve] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [retraitForm, setRetraitForm] = useState({ montant: "", methode: "orange_money", numero_reception: "", nom_compte: "" });
   const [submitting, setSubmitting] = useState(false);
   const [filterStatut, setFilterStatut] = useState("tous");
@@ -84,16 +86,14 @@ export default function MonBedou() {
     if (!montant || montant < 100) return toast.error("Montant minimum 100 F CFA");
     if (!form.methode) return toast.error("Veuillez sélectionner une méthode");
     if (!form.preuve) return toast.error("Veuillez ajouter une preuve de paiement");
-    if (form.preuve.size > 5 * 1024 * 1024) return toast.error("Image trop grande (max 5 MB)");
     setSubmitting(true);
     const { file_url } = await base44.integrations.Core.UploadFile({ file: form.preuve });
-    const res = await base44.functions.invoke("bedouEngine", { action: "demande_recharge", montant, methode: form.methode, numero_transaction: form.numero_transaction, preuve_paiement: file_url });
+    const res = await base44.functions.invoke("bedouEngine", { action: "demande_recharge", montant, methode: form.methode, preuve_paiement: file_url });
     setSubmitting(false);
     if (res.data.success) {
-      toast.success(`Demande envoyée !${res.data.bonus_applique > 0 ? ` 🎁 Bonus : +${res.data.bonus_applique} F` : ""}`);
+      setSubmitted(true);
       triggerWhatsAppNotification({ eventType: "bedou_topup_requested", recipientRole: "client", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouTopupRequested(), entityId: user?.id, entityType: "bedou", priority: "high" });
-      setForm({ montant: "", methode: "orange_money", numero_transaction: "", preuve: null });
-      setTab("historique");
+      setForm({ montant: "", methode: "orange_money", preuve: null });
     } else {
       toast.error(res.data.error || "Erreur");
     }
@@ -231,57 +231,99 @@ export default function MonBedou() {
       {/* ── Recharge ── */}
       {tab === "recharge" && (
         <div className="px-4 mt-4 space-y-4">
-          <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-sm text-blue-800">
-            💡 Effectuez votre paiement puis envoyez la preuve. L'admin validera sous 24h.
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground">Montant (F CFA) *</label>
-            <input type="number" placeholder="Ex: 2000" value={form.montant} onChange={e => setForm({ ...form, montant: e.target.value })}
-              className="w-full mt-1.5 h-12 rounded-xl border border-input px-4 text-base font-semibold text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
-            {bonus > 0 && <p className="text-xs text-emerald-700 mt-1.5 font-semibold">🎁 Bonus automatique : +{fmt(bonus)} F !</p>}
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground">Méthode de paiement *</label>
-            <div className="grid grid-cols-2 gap-2 mt-1.5">
-              {METHODES.map(m => (
-                <button key={m.value} onClick={() => setForm({ ...form, methode: m.value })}
-                  className={`p-3 rounded-xl border-2 text-sm font-semibold flex items-center gap-2 transition-all ${form.methode === m.value ? "border-primary bg-primary/10 text-primary" : "border-border bg-white"}`}>
-                  <span>{m.icon}</span> {m.label}
-                </button>
-              ))}
+
+          {/* Succès */}
+          {submitted ? (
+            <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-6 text-center space-y-3">
+              <div className="text-5xl">✅</div>
+              <p className="text-base font-extrabold text-emerald-800">Demande envoyée avec succès !</p>
+              <p className="text-sm text-emerald-700">Votre demande de recharge a été envoyée avec succès. Validation sous 24h.</p>
+              <button
+                onClick={() => { setSubmitted(false); setTab("historique"); }}
+                className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm active:scale-95 transition-all"
+              >
+                Voir l'historique
+              </button>
             </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground">Numéro de transaction (optionnel)</label>
-            <input type="text" placeholder="Ex: TXN12345" value={form.numero_transaction} onChange={e => setForm({ ...form, numero_transaction: e.target.value })}
-              className="w-full mt-1.5 h-11 rounded-xl border border-input px-4 text-sm text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground">Preuve de paiement * <span className="text-red-500">(obligatoire)</span></label>
-            {!form.preuve ? (
-              <div className="mt-1.5 grid grid-cols-2 gap-2">
-                <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors">
-                  <span className="text-2xl">📷</span>
-                  <span className="text-xs font-semibold text-primary">Prendre une photo</span>
-                  <input type="file" accept="image/jpg,image/jpeg,image/png" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setForm(prev => ({ ...prev, preuve: f })); }} />
-                </label>
-                <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-border hover:bg-muted/50 transition-colors">
-                  <span className="text-2xl">🖼️</span>
-                  <span className="text-xs font-semibold text-muted-foreground">Galerie</span>
-                  <input type="file" accept="image/jpg,image/jpeg,image/png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setForm(prev => ({ ...prev, preuve: f })); }} />
-                </label>
+          ) : (
+            <>
+              {/* Infos dépôt */}
+              <div className="rounded-2xl bg-orange-50 border-2 border-orange-300 p-4 space-y-2">
+                <p className="text-sm font-extrabold text-orange-800">📲 Effectuez le dépôt via Orange Money puis ajoutez la preuve de paiement.</p>
+                <div className="flex items-center gap-3 mt-2">
+                  <div className="h-10 w-10 rounded-xl bg-orange-100 flex items-center justify-center text-xl flex-shrink-0">🟠</div>
+                  <div>
+                    <p className="text-xs text-orange-600 font-semibold uppercase tracking-wide">Orange Money</p>
+                    <p className="text-lg font-extrabold text-orange-900">66 92 51 90</p>
+                    <p className="text-xs text-orange-700">Nom : <strong>CDL</strong></p>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="mt-1.5 relative rounded-xl overflow-hidden border-2 border-emerald-300">
-                <img src={URL.createObjectURL(form.preuve)} alt="Preuve" className="w-full h-40 object-cover" />
-                <button onClick={() => setForm(prev => ({ ...prev, preuve: null }))} className="absolute top-2 right-2 bg-red-600 text-white rounded-full h-7 w-7 flex items-center justify-center font-bold shadow">×</button>
-                <div className="absolute bottom-0 left-0 right-0 bg-emerald-600/90 text-white text-xs py-1 text-center font-medium">✅ {form.preuve.name}</div>
+
+              {/* Montant */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground">Montant (F CFA) *</label>
+                <input type="number" placeholder="Ex: 2000" value={form.montant} onChange={e => setForm({ ...form, montant: e.target.value })}
+                  className="w-full mt-1.5 h-12 rounded-xl border border-input px-4 text-base font-semibold text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                {bonus > 0 && <p className="text-xs text-emerald-700 mt-1.5 font-semibold">🎁 Bonus automatique : +{fmt(bonus)} F !</p>}
               </div>
-            )}
-          </div>
-          <Button className="w-full h-13 font-bold rounded-2xl" size="lg" onClick={handleRecharge} disabled={submitting || !form.montant || !form.preuve}>
-            {submitting ? "Upload en cours…" : `Envoyer la demande${bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ""}`}
-          </Button>
+
+              {/* Méthode */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground">Méthode de paiement *</label>
+                <div className="grid grid-cols-2 gap-2 mt-1.5">
+                  {METHODES.map(m => (
+                    <button key={m.value} onClick={() => setForm({ ...form, methode: m.value })}
+                      className={`p-3 rounded-xl border-2 text-sm font-semibold flex items-center gap-2 transition-all ${form.methode === m.value ? "border-primary bg-primary/10 text-primary" : "border-border bg-white"}`}>
+                      <span>{m.icon}</span> {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preuve */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground">Preuve de paiement <span className="text-red-500">*</span></label>
+                {!form.preuve ? (
+                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                    <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors">
+                      <span className="text-2xl">📷</span>
+                      <span className="text-xs font-semibold text-primary">Prendre une photo</span>
+                      <input type="file" accept="image/jpg,image/jpeg,image/png" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setForm(prev => ({ ...prev, preuve: f })); }} />
+                    </label>
+                    <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-border hover:bg-muted/50 transition-colors">
+                      <span className="text-2xl">🖼️</span>
+                      <span className="text-xs font-semibold text-muted-foreground">Galerie</span>
+                      <input type="file" accept="image/jpg,image/jpeg,image/png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setForm(prev => ({ ...prev, preuve: f })); }} />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 space-y-2">
+                    <div className="relative rounded-xl overflow-hidden border-2 border-emerald-300">
+                      <img src={URL.createObjectURL(form.preuve)} alt="Preuve" className="w-full h-40 object-cover" />
+                      <button onClick={() => setForm(prev => ({ ...prev, preuve: null }))} className="absolute top-2 right-2 bg-red-600 text-white rounded-full h-7 w-7 flex items-center justify-center font-bold shadow">×</button>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                      <span className="text-sm font-semibold text-emerald-700">Preuve ajoutée ✅</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bouton soumettre */}
+              <Button
+                className="w-full h-14 text-base font-extrabold rounded-2xl shadow-md"
+                size="lg"
+                onClick={handleRecharge}
+                disabled={submitting || !form.montant || !form.methode || !form.preuve}
+              >
+                {submitting
+                  ? <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Envoi en cours…</span>
+                  : `Soumettre la demande de recharge${bonus > 0 ? ` 🎁 +${fmt(bonus)}` : ""}`}
+              </Button>
+            </>
+          )}
         </div>
       )}
 
