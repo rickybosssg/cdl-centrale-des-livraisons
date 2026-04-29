@@ -99,17 +99,119 @@ Deno.serve(async (req) => {
       statut: 'en_attente',
       bonus_applique,
     });
-    // Notif admin
+    const ADMIN_EMAIL = 'weezyh2@gmail.com';
+    const notifTitle = '💰 Nouvelle demande de recharge Bedou';
+    const notifMsg = `${user.full_name} demande une recharge de ${montant.toLocaleString()} F CFA via ${methode}.`;
+
+    // 1. Notification interne admin
     await base44.asServiceRole.entities.Notification.create({
-      destinataire_email: 'weezyh2@gmail.com',
+      destinataire_email: ADMIN_EMAIL,
       destinataire_role: 'admin',
-      titre: '💰 Demande de recharge Bedou',
-      message: `${user.full_name} demande une recharge de ${montant.toLocaleString()} F CFA via ${methode}.`,
+      titre: notifTitle,
+      message: notifMsg,
       type: 'info',
       lue: false,
       target_screen: '/gestion-transactions',
       target_section: 'recharges',
     });
+
+    // 2. Push FCM admin (app ouverte / arrière-plan / fermée)
+    try {
+      const adminTokens = await base44.asServiceRole.entities.FcmToken.filter(
+        { user_email: ADMIN_EMAIL, is_active: true }
+      );
+      if (adminTokens.length > 0) {
+        const rawJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
+        if (rawJson) {
+          const serviceAccount = JSON.parse(rawJson);
+          const projectId = serviceAccount.project_id;
+
+          // JWT → OAuth access token
+          const now = Math.floor(Date.now() / 1000);
+          const jwtPayload = {
+            iss: serviceAccount.client_email,
+            sub: serviceAccount.client_email,
+            aud: 'https://oauth2.googleapis.com/token',
+            iat: now,
+            exp: now + 3600,
+            scope: 'https://www.googleapis.com/auth/firebase.messaging',
+          };
+          const enc = (obj) => btoa(JSON.stringify(obj)).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+          const signingInput = `${enc({ alg:'RS256', typ:'JWT' })}.${enc(jwtPayload)}`;
+          const pemContents = serviceAccount.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g,'');
+          const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+          const cryptoKey = await crypto.subtle.importKey('pkcs8', binaryKey, { name:'RSASSA-PKCS1-v1_5', hash:'SHA-256' }, false, ['sign']);
+          const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signingInput));
+          const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+          const jwt = `${signingInput}.${sigB64}`;
+
+          const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+          });
+          const tokenData = await tokenRes.json();
+          const accessToken = tokenData.access_token;
+
+          if (accessToken) {
+            const fcmUrl = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
+            const fcmData = {
+              type: 'bedou_recharge_request',
+              notif_route: '/gestion-transactions',
+              demande_id: demande.id,
+              user_nom: user.full_name,
+              montant: String(montant),
+            };
+
+            let sent = 0, failed = 0;
+            for (const t of adminTokens) {
+              const fcmRes = await fetch(fcmUrl, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  message: {
+                    token: t.token,
+                    notification: { title: notifTitle, body: notifMsg },
+                    data: fcmData,
+                    android: {
+                      priority: 'high',
+                      notification: { channel_id: 'default', sound: 'default', visibility: 'PUBLIC', default_vibrate_timings: true, notification_priority: 'PRIORITY_MAX' },
+                    },
+                  },
+                }),
+              });
+              const fcmResult = await fcmRes.json();
+              if (fcmRes.ok) {
+                sent++;
+                console.log(`[bedouEngine] FCM admin sent → ${t.token.slice(0,20)}...`);
+              } else {
+                failed++;
+                console.error(`[bedouEngine] FCM admin failed → ${JSON.stringify(fcmResult)}`);
+              }
+            }
+
+            // Log FCM
+            await base44.asServiceRole.entities.NotificationTestLog.create({
+              admin_email: ADMIN_EMAIL,
+              recipient_email: ADMIN_EMAIL,
+              recipient_role: 'admin',
+              tokens_count: adminTokens.length,
+              sent_count: sent,
+              failed_count: failed,
+              status: sent > 0 ? 'sent' : 'failed',
+              timestamp: new Date().toISOString(),
+              details: JSON.stringify({ type: 'bedou_recharge_request', demande_id: demande.id, sent, failed }),
+            }).catch(() => {});
+          }
+        }
+      } else {
+        console.warn('[bedouEngine] Aucun token FCM actif pour admin');
+      }
+    } catch (fcmErr) {
+      console.error('[bedouEngine] Erreur push FCM admin:', fcmErr.message);
+      // Ne pas bloquer la réponse si le push échoue
+    }
+
     return Response.json({ success: true, demande, bonus_applique, bonus_restants });
   }
 
