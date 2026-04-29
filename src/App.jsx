@@ -221,6 +221,9 @@ const AuthenticatedApp = () => {
   if (window.location.pathname === LOGIN_PATH) {
     return <EmailLogin />;
   }
+  if (window.location.pathname === '/telecharger-app') {
+    return <DownloadApp />;
+  }
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -280,7 +283,7 @@ const AuthenticatedApp = () => {
         <Route path="/app-public-link" element={<AppPublicLink />} />
         <Route path="/track/:courseId" element={<TrackingPublic />} />
         <Route path="/telecharger-app" element={<DownloadApp />} />
-      <Route path="/reset-admin" element={<ResetAdmin />} />
+        <Route path="/reset-admin" element={<ResetAdmin />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />
 
