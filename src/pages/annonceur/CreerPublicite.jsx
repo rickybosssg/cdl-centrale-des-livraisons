@@ -18,8 +18,6 @@ export default function CreerPublicite({ user }) {
   const [bedou, setBedou] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [uploadingImg, setUploadingImg] = useState(false);
-  const [uploadingVid, setUploadingVid] = useState(false);
   const [error, setError] = useState(null);
 
   const [form, setForm] = useState({
@@ -53,9 +51,6 @@ export default function CreerPublicite({ user }) {
     };
     load();
   }, [user?.email]);
-
-  const [uploadingImg, setUploadingImg] = useState(false);
-  const [uploadingVid, setUploadingVid] = useState(false);
 
   const MAX_IMAGES = 5;
   const MAX_IMG_MB = 8;
