@@ -165,19 +165,19 @@ Deno.serve(async (req) => {
         }).catch(() => {});
       }
 
-      const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
-      for (const admin of admins.slice(0, 3)) {
-        await base44.asServiceRole.entities.Notification.create({
-          destinataire_email: admin.email,
-          destinataire_role: 'admin',
-          titre: '🚨 Course sans livreur',
-          message: `${course.quartier_depart}→${course.quartier_arrivee} (${course.prix} FCFA) — ${failReason}`,
-          type: 'danger',
-          lue: false,
-          course_id: courseId,
-          target_screen: `/dispatch-monitor`,
-        }).catch(() => {});
-      }
+      // Notification in-app + FCM push vers les admins
+      await base44.asServiceRole.functions.invoke('sendCdlNotification', {
+        role: 'admin',
+        title: '🚨 Course sans livreur disponible',
+        body: `${course.quartier_depart}→${course.quartier_arrivee} (${course.prix} F) — ${failReason}`,
+        urgence: 'urgent',
+        data: {
+          type: 'no_driver_available',
+          entity_id: courseId,
+          role: 'admin',
+          notif_route: '/dispatch-monitor',
+        },
+      }).catch(() => {});
 
       return Response.json({ success: false, reason: failReason, online: onlineCount, valides: validCount });
     }

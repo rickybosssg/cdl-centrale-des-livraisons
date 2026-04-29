@@ -23,12 +23,15 @@ export default function AdminDashboard() {
     totalClients: 0,
     clientsNewToday: 0,
     coursesEnAttente: 0,
+    coursesEnCours: 0,
+    coursesUrgentes: 0,
     newUsers: 0,
     pendingRequests: 0,
     totalCourses: 0,
     totalRevenuCDL: 0,
     totalPartenairesActifs: 0,
     revenuAbonnements: 0,
+    transactionsBedouAttente: 0,
   });
   const [counts, setCounts] = useState({
     livreurs: { pending: 0, count: 0 },
@@ -73,6 +76,8 @@ export default function AdminDashboard() {
       const totalClients = (allClients || []).length;
       const clientsNewToday = (allClients || []).filter(c => new Date(c.created_date).toDateString() === today).length;
       const coursesEnAttente = (courses || []).filter(c => c.statut === 'en_attente').length;
+      const coursesEnCours = (courses || []).filter(c => ['acceptee', 'en_cours', 'assignee_attente'].includes(c.statut)).length;
+      const coursesUrgentes = (courses || []).filter(c => ['urgent', 'tres_urgent'].includes(c.urgence) && !['livree', 'annulee'].includes(c.statut)).length;
 
       // Calcul zones
       const zoneClientsMap = {};
@@ -107,6 +112,13 @@ export default function AdminDashboard() {
         return sum + (moisDepuis <= 1 ? 10000 : 30000);
       }, 0);
 
+      // Transactions Bedou en attente
+      const [rechargesKpi, retraitsKpi] = await Promise.allSettled([
+        base44.entities.DemandeRecharge.filter({ statut: 'en_attente' }),
+        base44.entities.DemandeRetrait.filter({ statut: 'en_attente' }),
+      ]).then(r => r.map(x => x.status === 'fulfilled' ? x.value : []));
+      const transactionsBedouAttente = (rechargesKpi || []).length + (retraitsKpi || []).length;
+
       setKpis({
         coursesToday,
         revenueToday: Math.round(revenueToday),
@@ -114,6 +126,8 @@ export default function AdminDashboard() {
         livreursDisponibles,
         clientsOnline,
         coursesEnAttente,
+        coursesEnCours,
+        coursesUrgentes,
         newUsers: newUsersData.length,
         pendingRequests: pendingCount,
         totalCourses,
@@ -122,6 +136,7 @@ export default function AdminDashboard() {
         totalRevenuCDL: Math.round(totalRevenuCDL),
         totalPartenairesActifs: partenairesActifs.length,
         revenuAbonnements,
+        transactionsBedouAttente,
       });
 
       // Charger les compteurs admin
@@ -139,12 +154,8 @@ export default function AdminDashboard() {
       const enAttenteCount = (courses || []).filter(c => ['en_attente', 'aucun_livreur'].includes(c.statut)).length;
       setCoursesAAffecter(enAttenteCount);
 
-      // Charger les demandes Bedou en attente
-      const [recharges, retraits] = await Promise.allSettled([
-        base44.entities.DemandeRecharge.filter({ statut: 'en_attente' }),
-        base44.entities.DemandeRetrait.filter({ statut: 'en_attente' }),
-      ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
-      setDemandeBedouCount((recharges || []).length + (retraits || []).length);
+      // Synchroniser le compteur badge Bedou
+      setDemandeBedouCount(transactionsBedouAttente);
 
       const alertList = [];
       if (countsRes.data?.livreurs?.pending > 0) alertList.push({ type: 'livreurs', count: countsRes.data.livreurs.pending });
@@ -330,6 +341,54 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground mt-1">Courses en attente</p>
           </CardContent>
         </Card>
+        <Card className="border-l-4 border-l-sky-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+              <p className="text-3xl font-bold text-sky-600">{kpis.coursesEnCours}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Courses en cours</p>
+          </CardContent>
+        </Card>
+        {kpis.coursesUrgentes > 0 && (
+          <Card className="border-l-4 border-l-red-700 bg-red-50 col-span-2">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-red-700">{kpis.coursesUrgentes}</p>
+                <p className="text-xs text-red-600 font-semibold mt-1">🔥 Courses urgentes actives</p>
+              </div>
+              <Link to="/gerer-courses">
+                <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white text-xs">Voir →</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+        {kpis.transactionsBedouAttente > 0 && (
+          <Card className="border-l-4 border-l-purple-600 bg-purple-50 col-span-2">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-purple-700">{kpis.transactionsBedouAttente}</p>
+                <p className="text-xs text-purple-600 font-semibold mt-1">💰 Transactions Bedou à valider</p>
+              </div>
+              <Link to="/gestion-bedou">
+                <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white text-xs">Valider →</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+        {kpis.pendingRequests > 0 && (
+          <Card className="border-l-4 border-l-amber-500 bg-amber-50 col-span-2">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-amber-700">{kpis.pendingRequests}</p>
+                <p className="text-xs text-amber-600 font-semibold mt-1">📋 Demandes de profils en attente</p>
+              </div>
+              <Link to="/gestion-profils">
+                <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white text-xs">Voir →</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        )}
         {/* Bloc Ratio Offre / Demande */}
         {(() => {
           const ratio = kpis.livreursDisponibles >= kpis.coursesEnAttente && kpis.clientsOnline <= 3

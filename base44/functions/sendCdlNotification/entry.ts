@@ -44,13 +44,27 @@ async function getAccessToken(sa) {
   return d.access_token;
 }
 
-// ── Envoi FCM à un token ──────────────────────────────────────────────────────
-async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}) {
+// ── Envoi FCM à un token (avec priorité urgence) ─────────────────────────────
+async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}, urgence = 'normal') {
   const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
   const stringData = {};
   for (const [k, v] of Object.entries(data)) {
     stringData[k] = v == null ? '' : String(v);
   }
+
+  // Adapter la priorité selon l'urgence
+  const isUrgent = urgence === 'urgent' || urgence === 'tres_urgent';
+  const isTresUrgent = urgence === 'tres_urgent';
+
+  const androidNotif = {
+    channel_id: isTresUrgent ? 'urgent' : 'default',
+    sound: 'default',
+    visibility: 'PUBLIC',
+    default_vibrate_timings: !isTresUrgent,
+    notification_priority: isTresUrgent ? 'PRIORITY_MAX' : isUrgent ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
+    ...(isTresUrgent ? { vibrate_timings_millis: ['0s', '0.200s', '0.100s', '0.200s', '0.100s', '0.400s'] } : {}),
+  };
+
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -61,19 +75,14 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
         data: stringData,
         android: {
           priority: 'high',
-          notification: {
-            channel_id: 'default',
-            sound: 'default',
-            visibility: 'PUBLIC',
-            default_vibrate_timings: true,
-            notification_priority: 'PRIORITY_MAX',
-          },
+          notification: androidNotif,
         },
         webpush: {
           notification: {
             icon: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
             badge: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
-            vibrate: [200, 100, 200],
+            vibrate: isTresUrgent ? [200, 100, 200, 100, 400] : [200, 100, 200],
+            requireInteraction: isUrgent,
           },
         },
       },
@@ -90,7 +99,7 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
 Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
-    const { user_email, role, title, body: msgBody, data = {} } = body;
+    const { user_email, role, title, body: msgBody, data = {}, urgence = 'normal' } = body;
 
     if (!title || !msgBody) {
       return Response.json({ error: 'title et body requis' }, { status: 400 });
@@ -157,17 +166,20 @@ Deno.serve(async (req) => {
     // ── Envoi FCM ─────────────────────────────────────────────────────────────
     let sent = 0, failed = 0;
     const invalidRecords = [];
+    const logDetails = [];
 
     for (const record of tokenRecords) {
       try {
-        const { ok, result } = await sendToToken(accessToken, projectId, record.token, title, msgBody, data);
+        const { ok, result } = await sendToToken(accessToken, projectId, record.token, title, msgBody, data, urgence);
+        const errCode = !ok ? (result?.error?.details?.[0]?.errorCode || result?.error?.status || 'FCM_ERROR') : null;
         if (ok) {
           sent++;
           console.log(`[sendCdlNotification] ✅ sent to ${record.user_email}`);
+          logDetails.push({ user_email: record.user_email, status: 'success', device_type: record.device_type });
         } else {
           failed++;
-          const errCode = result?.error?.details?.[0]?.errorCode || result?.error?.status || '';
           console.warn(`[sendCdlNotification] ❌ FCM error=${errCode} | user=${record.user_email}`);
+          logDetails.push({ user_email: record.user_email, status: 'failed', error: errCode, device_type: record.device_type });
           if (['UNREGISTERED', 'INVALID_ARGUMENT'].includes(errCode)) {
             invalidRecords.push(record);
           }
@@ -175,6 +187,7 @@ Deno.serve(async (req) => {
       } catch (e) {
         failed++;
         console.error('[sendCdlNotification] send error:', e.message);
+        logDetails.push({ user_email: record.user_email, status: 'error', error: e.message });
       }
     }
 
@@ -184,8 +197,24 @@ Deno.serve(async (req) => {
       console.log(`[sendCdlNotification] Token désactivé: ${r.token?.slice(0, 20)}...`);
     }
 
-    console.log(`[sendCdlNotification] ✅ sent=${sent} failed=${failed} total=${tokenRecords.length}`);
-    return Response.json({ sent, failed, total: tokenRecords.length });
+    // Logger en BDD (best-effort — ne bloque pas la réponse)
+    const notifType = data?.type || 'generic';
+    const entityId = data?.entity_id || '';
+    base44.asServiceRole.entities.Notification.create({
+      destinataire_email: user_email || `role:${role}`,
+      destinataire_role: role || (data?.role) || 'user',
+      titre: `[FCM LOG] ${title}`,
+      message: `sent=${sent} failed=${failed} | type=${notifType} | urgence=${urgence} | tokens=${tokenRecords.length}`,
+      type: failed > 0 && sent === 0 ? 'danger' : failed > 0 ? 'warning' : 'info',
+      lue: true,
+      course_id: entityId,
+      target_entity_id: entityId,
+      target_entity_type: 'fcm_log',
+      notification_key: `fcm_log__${notifType}__${entityId}__${Date.now()}`,
+    }).catch(() => {}); // jamais bloquant
+
+    console.log(`[sendCdlNotification] ✅ sent=${sent} failed=${failed} total=${tokenRecords.length} urgence=${urgence}`);
+    return Response.json({ sent, failed, total: tokenRecords.length, details: logDetails });
 
   } catch (err) {
     console.error('[sendCdlNotification] ERREUR:', err.message);

@@ -83,17 +83,21 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Assignée/proposée au livreur → notifier livreur (priorité HIGH)
+    // Assignée/proposée au livreur → notifier livreur avec priorité selon urgence
     if (statut === 'assignee_attente' && course.livreur_email) {
+      const urgence = course.urgence || 'normal';
+      const urgenceEmoji = urgence === 'tres_urgent' ? '🔥🔥' : urgence === 'urgent' ? '🔥' : '🛵';
+      const prixDisplay = course.prix ? `${course.prix.toLocaleString()} F` : '';
       await notify({
         user_email: course.livreur_email,
-        title: '🛵 Nouvelle course disponible !',
-        body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${course.prix || 0} F. Répondez en 60s !`,
+        title: `${urgenceEmoji} Nouvelle course${urgence !== 'normal' ? ' URGENTE' : ''} !`,
+        body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${prixDisplay}. Répondez en 60s !`,
+        urgence,
         data: {
           type: 'course_assigned',
-          screen: 'CourseLivreur',
           entity_id: courseId,
           role: 'livreur',
+          urgence,
           notif_route: `/course-livreur/${courseId}`,
         },
       });
