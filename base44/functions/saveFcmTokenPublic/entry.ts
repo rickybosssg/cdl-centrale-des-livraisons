@@ -1,26 +1,27 @@
 /**
- * saveFcmTokenPublic — Endpoint PUBLIC pour sauvegarder un token FCM depuis APK natif
+ * saveFcmTokenPublic — UPSERT token FCM (endpoint PUBLIC, sans auth)
  *
- * POURQUOI PUBLIC :
- * - Sur APK Capacitor Android, le Bearer token n'est pas toujours disponible
- *   au moment où le callback FCM génère le token (race condition au démarrage)
- * - La plateforme Base44 bloque le fetch HTTP avec 403 si pas de Bearer token
- * - Solution : endpoint sans auth utilisateur, utilise asServiceRole directement
+ * LOGIQUE DÉFINITIVE (NE PAS MODIFIER) :
+ * 1. Ignorer les tokens de test (blacklist)
+ * 2. Si token existe → UPDATE is_active=true (jamais recréer)
+ * 3. Désactiver les AUTRES tokens android_native actifs du même user (1 seul actif)
+ * 4. Si token inconnu → CREATE is_active=true
  *
- * SÉCURITÉ :
- * - Requiert user_email ET token FCM valide (non devinable)
- * - Le token FCM est généré par Firebase SDK, il est impossible à forger
- * - Rate limiting implicite : on ne crée/modifie qu'un seul record par token
- * - Pas de données sensibles exposées — seul le token FCM est stocké
+ * SÉCURITÉ : requiert user_email + token FCM Firebase (non forgeables)
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+const BLACKLISTED_TOKENS = ['test_diagnostic_token', 'test_public_endpoint'];
+function isTestToken(token) {
+  if (!token) return true;
+  const t = String(token).toLowerCase();
+  return BLACKLISTED_TOKENS.some(b => t.includes(b)) || t.includes('_test_');
+}
 
 Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const { user_email, token, device_type = 'android_native' } = body;
-
-    console.log('[saveFcmTokenPublic] user_email:', user_email, '| token:', token?.substring(0, 25) + '...');
 
     if (!user_email || !token) {
       return Response.json({ error: 'user_email et token requis' }, { status: 400 });
@@ -29,26 +30,49 @@ Deno.serve(async (req) => {
     const cleanToken = String(token).trim();
     const cleanEmail = String(user_email).toLowerCase().trim();
 
-    // asServiceRole fonctionne sans Bearer token dans les fonctions Base44 hébergées
+    // ── Bloquer les tokens de test ───────────────────────────────────────────
+    if (isTestToken(cleanToken)) {
+      console.warn('[saveFcmTokenPublic] Token de test ignoré:', cleanToken.substring(0, 30));
+      return Response.json({ success: true, action: 'ignored_test_token' });
+    }
+
+    console.log('[saveFcmTokenPublic] user_email:', cleanEmail, '| token:', cleanToken.substring(0, 25) + '...');
+
     const base44 = createClientFromRequest(req);
 
-    // Vérifier si ce token exact existe déjà
+    // ── UPSERT : vérifier si ce token exact existe déjà ─────────────────────
     const existing = await base44.asServiceRole.entities.FcmToken.filter({ token: cleanToken });
 
     if (existing.length > 0) {
       const record = existing[0];
-      // Mettre à jour (même user ou réassignation)
+      // Token connu → réactiver immédiatement (jamais recréer)
       await base44.asServiceRole.entities.FcmToken.update(record.id, {
         user_email: cleanEmail,
         is_active: true,
         last_used: new Date().toISOString(),
         device_type,
       });
-      console.log('[saveFcmTokenPublic] ✅ Token mis à jour pour', cleanEmail);
-      return Response.json({ success: true, action: 'updated', user_email: cleanEmail });
+      console.log('[saveFcmTokenPublic] ✅ UPSERT (update) token existant pour', cleanEmail, '— id:', record.id);
+
+      // Désactiver les AUTRES tokens du même user/device
+      try {
+        const others = await base44.asServiceRole.entities.FcmToken.filter({
+          user_email: cleanEmail,
+          device_type,
+          is_active: true,
+        });
+        for (const old of others) {
+          if (old.id !== record.id && old.token !== cleanToken) {
+            await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
+            console.log('[saveFcmTokenPublic] Ancien token désactivé:', old.token.substring(0, 20) + '...');
+          }
+        }
+      } catch (_) {}
+
+      return Response.json({ success: true, action: 'updated', token_id: record.id, user_email: cleanEmail });
     }
 
-    // Désactiver les anciens tokens actifs du même user/device pour éviter l'accumulation
+    // ── Token inconnu → désactiver les anciens, créer le nouveau ────────────
     try {
       const oldTokens = await base44.asServiceRole.entities.FcmToken.filter({
         user_email: cleanEmail,
@@ -57,13 +81,10 @@ Deno.serve(async (req) => {
       });
       for (const old of oldTokens) {
         await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
-      }
-      if (oldTokens.length > 0) {
-        console.log('[saveFcmTokenPublic] Anciens tokens désactivés:', oldTokens.length);
+        console.log('[saveFcmTokenPublic] Ancien token désactivé avant création:', old.token.substring(0, 20) + '...');
       }
     } catch (_) {}
 
-    // Créer le nouveau token
     const result = await base44.asServiceRole.entities.FcmToken.create({
       user_email: cleanEmail,
       token: cleanToken,
