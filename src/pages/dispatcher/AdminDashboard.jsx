@@ -162,7 +162,7 @@ export default function AdminDashboard() {
       if (countsRes.data?.partenaires?.pending > 0) alertList.push({ type: 'partenaires', count: countsRes.data.partenaires.pending });
       if (countsRes.data?.commerciaux?.pending > 0) alertList.push({ type: 'commerciaux', count: countsRes.data.commerciaux.pending });
       if ((livreurs || []).filter(l => l.livreur_bloque).length > 0) alertList.push({ type: 'blocked' });
-      if ((recharges || []).length + (retraits || []).length > 0) alertList.push({ type: 'bedou', count: (recharges || []).length + (retraits || []).length });
+      if (transactionsBedouAttente > 0) alertList.push({ type: 'bedou', count: transactionsBedouAttente });
       
       setAlerts(alertList);
     } finally {
