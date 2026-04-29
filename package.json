@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@base44/sdk": "^0.8.26",
-    "@base44/vite-plugin": "^1.0.10",
+    "@base44/vite-plugin": "^1.0.11",
     "@capacitor/app": "^6.0.3",
     "@capacitor/browser": "^6.0.6",
     "@capacitor/camera": "^6.1.3",
