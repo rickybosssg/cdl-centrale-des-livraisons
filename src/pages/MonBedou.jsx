@@ -17,9 +17,8 @@ const METHODES = [
 ];
 
 const BONUS_RECHARGE = [
-  { seuil: 5000, bonus: 500 },
-  { seuil: 3000, bonus: 200 },
-  { seuil: 1000, bonus: 50 },
+  { seuil: 10000, bonus: 1500 },
+  { seuil: 5000,  bonus: 500  },
 ];
 
 function getBonus(montant) {
@@ -54,8 +53,7 @@ export default function MonBedou() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("solde");
   const [form, setForm] = useState({ montant: "", methode: "orange_money", preuve: null });
-  const [uploadingPreuve, setUploadingPreuve] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(null); // null | { bonus, bonus_restants }
   const [retraitForm, setRetraitForm] = useState({ montant: "", methode: "orange_money", numero_reception: "", nom_compte: "" });
   const [submitting, setSubmitting] = useState(false);
   const [filterStatut, setFilterStatut] = useState("tous");
@@ -91,7 +89,7 @@ export default function MonBedou() {
     const res = await base44.functions.invoke("bedouEngine", { action: "demande_recharge", montant, methode: form.methode, preuve_paiement: file_url });
     setSubmitting(false);
     if (res.data.success) {
-      setSubmitted(true);
+      setSubmitted({ bonus: res.data.bonus_applique || 0, bonus_restants: res.data.bonus_restants ?? null });
       triggerWhatsAppNotification({ eventType: "bedou_topup_requested", recipientRole: "client", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouTopupRequested(), entityId: user?.id, entityType: "bedou", priority: "high" });
       setForm({ montant: "", methode: "orange_money", preuve: null });
     } else {
@@ -166,7 +164,7 @@ export default function MonBedou() {
               <span className="text-amber-300 text-xs">🎁</span>
               <p className="text-[10px] text-white/60">Bonus</p>
             </div>
-            <p className="font-extrabold text-sm">{fmt(bedou?.bonus || 0)}</p>
+            <p className="font-extrabold text-sm">{fmt(bedou?.solde_bonus || 0)}</p>
           </div>
         </div>
 
@@ -237,9 +235,18 @@ export default function MonBedou() {
             <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-6 text-center space-y-3">
               <div className="text-5xl">✅</div>
               <p className="text-base font-extrabold text-emerald-800">Demande envoyée avec succès !</p>
-              <p className="text-sm text-emerald-700">Votre demande de recharge a été envoyée avec succès. Validation sous 24h.</p>
+              <p className="text-sm text-emerald-700">Votre demande de recharge a été envoyée. Validation sous 24h.</p>
+              {submitted.bonus > 0 ? (
+                <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm font-semibold text-amber-800">
+                  🔥 Bonus +{fmt(submitted.bonus)} F ajouté !{submitted.bonus_restants > 0 ? ` Il vous reste ${submitted.bonus_restants} bonus disponible(s).` : " Vous avez utilisé tous vos bonus de bienvenue."}
+                </div>
+              ) : (
+                <div className="px-4 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-500">
+                  Vous avez utilisé tous vos bonus de bienvenue.
+                </div>
+              )}
               <button
-                onClick={() => { setSubmitted(false); setTab("historique"); }}
+                onClick={() => { setSubmitted(null); setTab("historique"); }}
                 className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm active:scale-95 transition-all"
               >
                 Voir l'historique
@@ -312,16 +319,18 @@ export default function MonBedou() {
               </div>
 
               {/* Bouton soumettre */}
-              <Button
-                className="w-full h-14 text-base font-extrabold rounded-2xl shadow-md"
-                size="lg"
-                onClick={handleRecharge}
-                disabled={submitting || !form.montant || !form.methode || !form.preuve}
-              >
-                {submitting
-                  ? <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Envoi en cours…</span>
-                  : `Soumettre la demande de recharge${bonus > 0 ? ` 🎁 +${fmt(bonus)}` : ""}`}
-              </Button>
+              <div className="mt-5 mb-20 mx-auto w-[90%]">
+                <Button
+                  className="w-full h-14 text-base font-extrabold rounded-2xl shadow-md"
+                  size="lg"
+                  onClick={handleRecharge}
+                  disabled={submitting || !form.montant || !form.methode || !form.preuve}
+                >
+                  {submitting
+                    ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Envoi en cours…</span>
+                    : <span className="flex items-center justify-center gap-1 flex-wrap">🎁 Soumettre la demande de recharge{bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ""}</span>}
+                </Button>
+              </div>
             </>
           )}
         </div>

@@ -39,9 +39,19 @@
       "title": "Solde bloqu\u00e9 (F CFA)",
       "default": 0
     },
+    "solde_bonus": {
+      "type": "number",
+      "title": "Solde bonus (non retirable, courses uniquement)",
+      "default": 0
+    },
     "bonus": {
       "type": "number",
       "title": "Bonus cumul\u00e9 (F CFA)",
+      "default": 0
+    },
+    "bonus_recharge_count": {
+      "type": "number",
+      "title": "Nombre de recharges avec bonus re\u00e7u",
       "default": 0
     },
     "gains_totaux": {

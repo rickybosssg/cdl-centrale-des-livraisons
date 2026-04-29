@@ -5,11 +5,12 @@ const COMMISSION_PARTENAIRE = 0.05; // 5% CDL
 const BONUS_COMMERCIAL = 50; // 50 F CFA fixe
 const CDL_EMAIL = 'weezyh2@gmail.com'; // Compte Bedou CDL
 
+// Bonus sur les 3 premières recharges uniquement
 const BONUS_RECHARGE = [
-  { seuil: 5000, bonus: 500 },
-  { seuil: 3000, bonus: 200 },
-  { seuil: 1000, bonus: 50 },
+  { seuil: 10000, bonus: 1500 },
+  { seuil: 5000,  bonus: 500  },
 ];
+const MAX_BONUS_RECHARGES = 3; // Limite à 3 recharges avec bonus
 
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
@@ -35,7 +36,9 @@ Deno.serve(async (req) => {
         solde: 0,
         solde_disponible: 0,
         solde_bloque: 0,
+        solde_bonus: 0,
         bonus: 0,
+        bonus_recharge_count: 0,
         gains_totaux: 0,
         depenses_totales: 0,
         statut_bedou: 'actif',
@@ -75,19 +78,23 @@ Deno.serve(async (req) => {
 
   // ── ACTION: demande_recharge ──────────────────────────────────
   if (action === 'demande_recharge') {
-    const { montant, methode, numero_transaction, preuve_paiement } = body;
+    const { montant, methode, preuve_paiement } = body;
     if (!montant || montant < 100) return Response.json({ error: 'Montant minimum 100 F CFA' }, { status: 400 });
     const bedou = await ensureBedou(user.email, user.user_type, user.full_name);
     if (bedou.statut_bedou === 'suspendu') return Response.json({ error: 'Bedou suspendu' }, { status: 403 });
-    const bonusObj = BONUS_RECHARGE.find(b => montant >= b.seuil);
+    // Bonus uniquement sur les 3 premières recharges
+    const bonusCount = bedou.bonus_recharge_count || 0;
+    const bonusEligible = bonusCount < MAX_BONUS_RECHARGES;
+    const bonusObj = bonusEligible ? BONUS_RECHARGE.find(b => montant >= b.seuil) : null;
     const bonus_applique = bonusObj ? bonusObj.bonus : 0;
+    const bonus_restants = Math.max(0, MAX_BONUS_RECHARGES - bonusCount - (bonus_applique > 0 ? 1 : 0));
     const demande = await base44.asServiceRole.entities.DemandeRecharge.create({
       user_email: user.email,
       user_nom: user.full_name,
       role: user.user_type,
       montant,
       methode,
-      numero_transaction: numero_transaction || '',
+      numero_transaction: '',
       preuve_paiement: preuve_paiement || '',
       statut: 'en_attente',
       bonus_applique,
@@ -103,7 +110,7 @@ Deno.serve(async (req) => {
       target_screen: '/gestion-transactions',
       target_section: 'recharges',
     });
-    return Response.json({ success: true, demande, bonus_applique });
+    return Response.json({ success: true, demande, bonus_applique, bonus_restants });
   }
 
   // ── ACTION: valider_recharge (admin) ──────────────────────────
@@ -115,12 +122,18 @@ Deno.serve(async (req) => {
     if (demande.statut !== 'en_attente') return Response.json({ error: 'Déjà traitée' }, { status: 400 });
 
     const bedou = await ensureBedou(demande.user_email, demande.role, demande.user_nom);
-    const total = demande.montant + (demande.bonus_applique || 0);
-    await updateBedou(bedou.id, {
-      solde: (bedou.solde || 0) + total,
-      solde_disponible: (bedou.solde_disponible || 0) + total,
-      bonus: (bedou.bonus || 0) + (demande.bonus_applique || 0),
-    });
+    const bonusApplique = demande.bonus_applique || 0;
+    const bedouUpdates = {
+      solde: (bedou.solde || 0) + demande.montant + bonusApplique,
+      solde_disponible: (bedou.solde_disponible || 0) + demande.montant,
+      solde_bonus: (bedou.solde_bonus || 0) + bonusApplique,
+      bonus: (bedou.bonus || 0) + bonusApplique,
+    };
+    // Incrémenter le compteur si un bonus a été appliqué
+    if (bonusApplique > 0) {
+      bedouUpdates.bonus_recharge_count = (bedou.bonus_recharge_count || 0) + 1;
+    }
+    await updateBedou(bedou.id, bedouUpdates);
     await base44.asServiceRole.entities.DemandeRecharge.update(demande_id, {
       statut: 'valide',
       date_validation: new Date().toISOString(),
@@ -436,13 +449,19 @@ Deno.serve(async (req) => {
     // Bedou client
     const bedouClient = await getBedou(client_email);
     if (!bedouClient) return Response.json({ error: 'Bedou client introuvable' }, { status: 404 });
-    if ((bedouClient.solde_disponible || 0) < montant) {
-      return Response.json({ success: false, insuffisant: true, solde: bedouClient.solde_disponible || 0 }, { status: 200 });
+    const soldeBonus = bedouClient.solde_bonus || 0;
+    const soldeDispo = bedouClient.solde_disponible || 0;
+    const totalSolde = soldeBonus + soldeDispo;
+    if (totalSolde < montant) {
+      return Response.json({ success: false, insuffisant: true, solde: totalSolde }, { status: 200 });
     }
-    // Débiter client
+    // Ordre : d'abord solde_bonus, puis solde_disponible
+    const fromBonus = Math.min(soldeBonus, montant);
+    const fromDispo = montant - fromBonus;
     await updateBedou(bedouClient.id, {
       solde: Math.max(0, (bedouClient.solde || 0) - montant),
-      solde_disponible: Math.max(0, (bedouClient.solde_disponible || 0) - montant),
+      solde_bonus: Math.max(0, soldeBonus - fromBonus),
+      solde_disponible: Math.max(0, soldeDispo - fromDispo),
       depenses_totales: (bedouClient.depenses_totales || 0) + montant,
     });
     await createTransaction({
