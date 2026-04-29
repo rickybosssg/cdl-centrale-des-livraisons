@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import NotificationPermissionBanner from "../../components/NotificationPermissionBanner";
 import usePullToRefresh from "../../hooks/usePullToRefresh";
 import CourseCardSimple from "@/components/CourseCardSimple";
+import LivreurValidationGate from "@/components/LivreurValidationGate";
 import { toast } from "sonner";
 import { vibrateSuccess } from "@/lib/vibration";
 import { triggerWhatsAppNotification, waMsgCourseAcceptedByDriver, waMsgCourseAcceptedDriver } from "@/lib/whatsappNotifications";
@@ -14,6 +15,7 @@ export default function CoursesDisponibles() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [livreurProfile, setLivreurProfile] = useState(null);
   const [gainsJour, setGainsJour] = useState(0);
   const [coursesJour, setCoursesJour] = useState(0);
   const [accepting, setAccepting] = useState(null);
@@ -23,6 +25,12 @@ export default function CoursesDisponibles() {
     setLoading(true);
     const me = await base44.auth.me();
     setUser(me);
+
+    // Charger le profil livreur pour vérifier le statut de validation
+    try {
+      const profs = await base44.entities.UserProfile.filter({ user_email: me.email, profile_type: 'livreur', deleted: false });
+      setLivreurProfile(profs?.[0] || null);
+    } catch (_) {}
 
     const data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 20);
     setCourses(data);
@@ -97,6 +105,20 @@ export default function CoursesDisponibles() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
+    );
+  }
+
+  // ── GATE : livreur non validé → mur de statut ─────────────────────────────
+  const statutValidation = livreurProfile?.status || user?.statut_validation_livreur;
+  const isValidated = statutValidation === 'actif' || statutValidation === 'valide' || user?.profil_valide === true;
+
+  if (!isValidated) {
+    return (
+      <LivreurValidationGate
+        user={user}
+        profile={livreurProfile}
+        onRefresh={loadData}
+      />
     );
   }
 
