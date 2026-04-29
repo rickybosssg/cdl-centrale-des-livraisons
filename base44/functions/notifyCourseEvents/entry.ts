@@ -31,8 +31,23 @@ Deno.serve(async (req) => {
         console.warn('[notifyCourseEvents] notify error (non-fatal):', e.message)
       );
 
-    // ── CRÉATION : nouvelle course → notifier les admins via FCM ────────────
+    // ── CRÉATION : nouvelle course → notifier client (confirmation) + admins ──
     if (event?.type === 'create') {
+      // 1. Confirmation immédiate au client
+      if (course.client_email) {
+        await notify({
+          user_email: course.client_email,
+          title: '✅ Course créée avec succès !',
+          body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${course.prix || 0} F. Recherche d'un livreur en cours...`,
+          data: {
+            type: 'course_created',
+            entity_id: courseId,
+            role: 'client',
+            notif_route: `/course/${courseId}/track`,
+          },
+        });
+      }
+      // 2. Notification admin
       await notify({
         role: 'admin',
         title: '🛵 Nouvelle course créée',
@@ -53,7 +68,22 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true });
     }
 
-    // Assignée/proposée au livreur → notifier livreur
+    // En recherche → notifier le client
+    if (statut === 'en_recherche' && course.client_email) {
+      await notify({
+        user_email: course.client_email,
+        title: '🔍 Recherche d\'un livreur...',
+        body: `Nous cherchons le meilleur livreur disponible pour votre course ${course.quartier_depart} → ${course.quartier_arrivee}.`,
+        data: {
+          type: 'course_searching',
+          entity_id: courseId,
+          role: 'client',
+          notif_route: `/course/${courseId}/track`,
+        },
+      });
+    }
+
+    // Assignée/proposée au livreur → notifier livreur (priorité HIGH)
     if (statut === 'assignee_attente' && course.livreur_email) {
       await notify({
         user_email: course.livreur_email,
@@ -127,6 +157,21 @@ Deno.serve(async (req) => {
           },
         });
       }
+    }
+
+    // Paiement validé (livrée + paiement confirmé) → notifier livreur
+    if (statut === 'paiement_valide' && course.livreur_email) {
+      await notify({
+        user_email: course.livreur_email,
+        title: '💸 Paiement reçu !',
+        body: `Le paiement de ${course.gain_livreur || course.prix || 0} F a été validé pour la course ${course.quartier_depart} → ${course.quartier_arrivee}.`,
+        data: {
+          type: 'payment_validated',
+          entity_id: courseId,
+          role: 'livreur',
+          notif_route: '/mes-gains',
+        },
+      });
     }
 
     // Annulée → notifier client + livreur

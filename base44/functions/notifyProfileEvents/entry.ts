@@ -2,25 +2,13 @@
  * notifyProfileEvents — Handler automation entity UserProfile
  *
  * Déclenché sur create + update de UserProfile.
- * - Nouvelle demande → admins
- * - Profil validé/refusé → utilisateur concerné
+ * - Nouvelle demande → admins (nouvelle inscription livreur/partenaire)
+ * - Profil validé/refusé/suspendu → utilisateur concerné
+ *
+ * Utilise asServiceRole.functions.invoke pour être sûr d'appeler sendCdlNotification
+ * avec les bonnes permissions, sans dépendre d'un Bearer token utilisateur.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-
-const APP_ID = Deno.env.get('BASE44_APP_ID') || '';
-const FCM_URL = `https://api.base44.app/api/apps/${APP_ID}/functions/sendCdlNotification`;
-
-async function notifyCdl(payload) {
-  try {
-    await fetch(FCM_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  } catch (e) {
-    console.warn('[notifyProfileEvents] notifyCdl error:', e.message);
-  }
-}
 
 const ROLE_LABELS = {
   livreur: 'Livreur',
@@ -45,92 +33,105 @@ Deno.serve(async (req) => {
 
     console.log(`[notifyProfileEvents] event=${event?.type} | statut=${statut} | oldStatut=${oldStatut} | role=${profile.profile_type}`);
 
-    // Nouvelle demande de profil → notifier les admins
-    if (event?.type === 'create' && ['en_attente', 'draft', 'incomplet'].includes(statut)) {
-      await notifyCdl({
+    const base44 = createClientFromRequest(req);
+
+    const notify = (payload) =>
+      base44.asServiceRole.functions.invoke('sendCdlNotification', payload).catch(e =>
+        console.warn('[notifyProfileEvents] notify error (non-fatal):', e.message)
+      );
+
+    // ── CRÉATION : nouvelle demande de profil → notifier les admins ──────────
+    if (event?.type === 'create') {
+      // Notifier les admins pour toute nouvelle inscription livreur ou partenaire
+      const rolesImportants = ['livreur', 'partenaire', 'commercial', 'annonceur'];
+      if (rolesImportants.includes(profile.profile_type)) {
+        await notify({
+          role: 'admin',
+          title: `📝 Nouvelle inscription ${roleLabel}`,
+          body: `${profile.nom || profile.prenom || profile.user_email} a soumis une demande de profil ${roleLabel}.`,
+          data: {
+            type: 'new_profile_request',
+            entity_id: profileId,
+            role: 'admin',
+            profile_type: profile.profile_type,
+            notif_route: '/gestion-profils',
+          },
+        });
+      }
+      return Response.json({ ok: true });
+    }
+
+    // ── UPDATE : seulement si le statut a vraiment changé ────────────────────
+    if (event?.type !== 'update' || statut === oldStatut) {
+      return Response.json({ ok: true });
+    }
+
+    // Documents soumis → notifier admins
+    if (statut === 'en_attente' && oldStatut !== 'en_attente') {
+      await notify({
         role: 'admin',
-        title: `📝 Nouvelle demande ${roleLabel}`,
-        body: `${profile.user_email} a soumis une demande de profil ${roleLabel}.`,
+        title: `📋 Documents soumis — ${roleLabel}`,
+        body: `${profile.nom || profile.user_email} a soumis ses documents pour validation ${roleLabel}.`,
         data: {
-          type: 'new_profile_request',
-          screen: 'GestionProfils',
+          type: 'profile_pending_review',
           entity_id: profileId,
           role: 'admin',
           profile_type: profile.profile_type,
+          notif_route: '/gestion-profils',
         },
       });
     }
 
-    // Changement de statut
-    if (event?.type === 'update' && statut !== oldStatut) {
+    // Profil validé → notifier l'utilisateur
+    if (statut === 'actif' && oldStatut !== 'actif') {
+      await notify({
+        user_email: profile.user_email,
+        title: `✅ Profil ${roleLabel} validé !`,
+        body: `Félicitations ! Votre profil ${roleLabel} a été validé. Vous pouvez commencer dès maintenant.`,
+        data: {
+          type: 'profile_validated',
+          entity_id: profileId,
+          role: profile.profile_type,
+          notif_route: '/',
+        },
+      });
+    }
 
-      // Passage en_attente (documents soumis) → notifier admins
-      if (statut === 'en_attente' && oldStatut !== 'en_attente') {
-        await notifyCdl({
-          role: 'admin',
-          title: `📋 Documents soumis — ${roleLabel}`,
-          body: `${profile.user_email} a soumis ses documents pour validation ${roleLabel}.`,
-          data: {
-            type: 'profile_pending_review',
-            screen: 'GestionProfils',
-            entity_id: profileId,
-            role: 'admin',
-            profile_type: profile.profile_type,
-          },
-        });
-      }
+    // Profil refusé → notifier l'utilisateur
+    if (statut === 'refuse' && oldStatut !== 'refuse') {
+      await notify({
+        user_email: profile.user_email,
+        title: `❌ Profil ${roleLabel} refusé`,
+        body: profile.refusal_reason
+          ? `Motif : ${profile.refusal_reason}`
+          : `Votre demande de profil ${roleLabel} n'a pas été acceptée. Contactez le support CDL.`,
+        data: {
+          type: 'profile_refused',
+          entity_id: profileId,
+          role: profile.profile_type,
+          notif_route: '/settings',
+        },
+      });
+    }
 
-      // Profil validé → notifier l'utilisateur
-      if (statut === 'actif' && oldStatut !== 'actif') {
-        await notifyCdl({
-          user_email: profile.user_email,
-          title: `✅ Profil ${roleLabel} validé !`,
-          body: `Félicitations ! Votre profil ${roleLabel} a été validé. Vous pouvez commencer.`,
-          data: {
-            type: 'profile_validated',
-            screen: 'Home',
-            entity_id: profileId,
-            role: profile.profile_type,
-          },
-        });
-      }
-
-      // Profil refusé → notifier l'utilisateur
-      if (statut === 'refuse' && oldStatut !== 'refuse') {
-        await notifyCdl({
-          user_email: profile.user_email,
-          title: `❌ Profil ${roleLabel} refusé`,
-          body: profile.refusal_reason
-            ? `Motif : ${profile.refusal_reason}`
-            : `Votre demande de profil ${roleLabel} n'a pas été acceptée. Contactez le support.`,
-          data: {
-            type: 'profile_refused',
-            screen: 'Settings',
-            entity_id: profileId,
-            role: profile.profile_type,
-          },
-        });
-      }
-
-      // Profil suspendu → notifier l'utilisateur
-      if (statut === 'suspendu' && oldStatut !== 'suspendu') {
-        await notifyCdl({
-          user_email: profile.user_email,
-          title: `⚠️ Profil ${roleLabel} suspendu`,
-          body: `Votre profil ${roleLabel} a été suspendu. Contactez le support CDL.`,
-          data: {
-            type: 'profile_suspended',
-            screen: 'Settings',
-            entity_id: profileId,
-            role: profile.profile_type,
-          },
-        });
-      }
+    // Profil suspendu → notifier l'utilisateur
+    if (statut === 'suspendu' && oldStatut !== 'suspendu') {
+      await notify({
+        user_email: profile.user_email,
+        title: `⚠️ Profil ${roleLabel} suspendu`,
+        body: `Votre profil ${roleLabel} a été suspendu. Contactez le support CDL pour plus d'informations.`,
+        data: {
+          type: 'profile_suspended',
+          entity_id: profileId,
+          role: profile.profile_type,
+          notif_route: '/settings',
+        },
+      });
     }
 
     return Response.json({ ok: true });
   } catch (err) {
     console.error('[notifyProfileEvents] ERROR:', err.message);
-    return Response.json({ ok: true });
+    return Response.json({ ok: true }); // Ne jamais bloquer l'automation
   }
 });
