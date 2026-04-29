@@ -93,12 +93,14 @@ Deno.serve(async (req) => {
     if (!recipient_email || !recipient_role) {
       return Response.json({ error: 'recipient_email et recipient_role requis' }, { status: 400 });
     }
-    // Sécurité : si user authentifié, vérifier qu'il teste uniquement ses propres notifs (sauf admin)
+    // Sécurité : si user authentifié et non-admin, vérifier qu'il teste uniquement ses propres notifs
+    // Si pas d'user (appel public depuis APK) → on laisse passer (token FCM valide suffit comme preuve)
     if (user && user.role !== 'admin' && recipient_email !== user.email) {
       return Response.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    console.log(`[testNotification] Test initié par ${user?.email || 'anonyme'} → ${recipient_email} (${recipient_role})`);
+    const initiator = user?.email || 'public_endpoint';
+    console.log(`[testNotification] Test initié par ${initiator} → ${recipient_email} (${recipient_role})`);
 
     // ── 1. Récupérer tokens FCM ──────────────────────────────────────────────
     const tokens = await base44.asServiceRole.entities.FcmToken.filter({
@@ -139,7 +141,7 @@ Deno.serve(async (req) => {
     // ── 4. Log + notification feedback ──────────────────────────────────────
     try {
       await base44.asServiceRole.entities.NotificationTestLog.create({
-        admin_email: user.email,
+        admin_email: user?.email || recipient_email,
         recipient_email,
         recipient_role,
         tokens_count: tokens.length,
@@ -153,7 +155,7 @@ Deno.serve(async (req) => {
 
     try {
       await base44.asServiceRole.entities.Notification.create({
-        destinataire_email: user.email,
+        destinataire_email: user?.email || recipient_email,
         destinataire_role: 'admin',
         titre: `🧪 Test notification ${sent > 0 ? 'ENVOYÉ' : 'ÉCHOUÉ'}`,
         message: sent > 0
