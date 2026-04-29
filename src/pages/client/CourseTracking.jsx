@@ -18,6 +18,7 @@ import ReportIssueModal from "@/components/ReportIssueModal";
 import RatingModal from "@/components/RatingModal";
 import ContactCard from "@/components/ContactCard";
 import UserLocationShare from "@/components/UserLocationShare";
+import LivreurHumanCard from "@/components/LivreurHumanCard";
 
 const STATUT_CFG = {
   en_attente:       { label: "Recherche d'un livreur…",    color: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50",  emoji: "🔍" },
@@ -307,23 +308,26 @@ export default function CourseTracking() {
             />
           )}
 
-          {/* Carte contact livreur + bouton notation si livré */}
-          {isAssigned && panelOpen && (
+          {/* Carte humaine livreur */}
+          {isAssigned && panelOpen && course.statut !== "livree" && (
+            <LivreurHumanCard course={course} context="client" />
+          )}
+
+          {/* Notation si livré */}
+          {isAssigned && panelOpen && course.statut === "livree" && (
             <>
               <ContactCard
                 name={livreurNom}
                 phone={livreurPhone}
-                status={course.statut === "livree" ? `Livré le ${moment(course.date_livraison).format("DD/MM à HH:mm")}` : "En route"}
+                status={`Livré le ${moment(course.date_livraison).format("DD/MM à HH:mm")}`}
                 rating={livreurRating}
               />
-              {course.statut === "livree" && (
-                <Button
-                  className="w-full gap-2 bg-amber-600 hover:bg-amber-700"
-                  onClick={() => setRatingOpen(true)}
-                >
-                  ⭐ Noter cette livraison
-                </Button>
-              )}
+              <Button
+                className="w-full gap-2 bg-amber-600 hover:bg-amber-700"
+                onClick={() => setRatingOpen(true)}
+              >
+                ⭐ Noter cette livraison
+              </Button>
             </>
           )}
 

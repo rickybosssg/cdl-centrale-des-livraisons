@@ -6,8 +6,9 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Phone, CheckCircle2, Download, MapPin, Package } from "lucide-react";
+import { CheckCircle2, Download, Package } from "lucide-react";
 import UserLocationShare from "@/components/UserLocationShare";
+import LivreurHumanCard from "@/components/LivreurHumanCard";
 
 const STATUT_CFG = {
   en_attente:       { label: "Recherche d'un livreur…",     emoji: "🔍", color: "bg-amber-500",  pulse: true  },
@@ -99,10 +100,6 @@ export default function TrackingPublic() {
     } catch (_) {}
   };
 
-  const ouvrirWhatsAppLivreur = () => {
-    const num = (course?.telephone_livreur || "").replace(/[^0-9]/g, "");
-    if (num) window.open(`https://wa.me/${num}?text=Bonjour, je suis le destinataire de votre livraison CDL.`);
-  };
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -130,7 +127,6 @@ export default function TrackingPublic() {
   const etapeActive = getEtapeActive(course.statut);
   const isLivre = course.statut === "livree";
   const isAssigned = ["acceptee", "en_cours", "livree"].includes(course.statut);
-  const livreurPhone = course.telephone_livreur || "";
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -211,30 +207,9 @@ export default function TrackingPublic() {
           )}
         </div>
 
-        {/* Livreur — uniquement si assigné */}
+        {/* Carte humaine livreur */}
         {isAssigned && course.livreur_name && (
-          <div className="bg-white rounded-2xl border border-primary/20 p-4 space-y-3">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Votre livreur</p>
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-xl flex-shrink-0">🛵</div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-900">{course.livreur_name}</p>
-                <p className="text-xs text-gray-400">En route vers vous</p>
-              </div>
-            </div>
-            {livreurPhone && (
-              <div className="grid grid-cols-2 gap-2">
-                <a href={`tel:${livreurPhone}`}
-                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-primary/30 text-primary text-sm font-semibold active:scale-95">
-                  <Phone className="h-4 w-4" /> Appeler
-                </a>
-                <button onClick={ouvrirWhatsAppLivreur}
-                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-green-300 text-green-700 text-sm font-semibold active:scale-95">
-                  💬 WhatsApp
-                </button>
-              </div>
-            )}
-          </div>
+          <LivreurHumanCard course={course} context="destinataire" />
         )}
 
         {/* Partage position destinataire — opt-in */}
