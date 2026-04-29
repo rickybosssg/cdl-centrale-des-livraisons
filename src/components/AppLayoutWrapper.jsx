@@ -69,46 +69,32 @@ export default function AppLayoutWrapper({ user }) {
         if (me.email === 'weezyh2@gmail.com' || me.role === 'admin') {
           setUserRole('admin');
         } else {
-          // ── SOURCE DE VÉRITÉ : current_role en BDD ─────────────────────
-          // Ne jamais utiliser le localStorage seul pour déterminer le rôle affiché.
-          // current_role BDD est la vérité absolue.
-          const trueRole = me.current_role || me.active_profile_type;
-
+          // ── SOURCE DE VÉRITÉ UNIQUE : activeProfileId localStorage → UserProfile ──
+          // Home.jsx gère le switch et écrit activeProfileId dans localStorage.
+          // AppLayoutWrapper lit simplement cette valeur pour initialiser le menu.
+          // On NE corrige JAMAIS current_role ici pour éviter les race conditions.
           try {
             const profs = await base44.entities.UserProfile.filter({ user_email: me.email, deleted: false });
             if (!isMounted) return;
 
-            if (trueRole) {
-              // Trouver le profil UserProfile correspondant au current_role BDD
-              const matchingProf = profs.find(p => p.profile_type === trueRole && !p.deleted);
-              if (matchingProf) {
-                setUserRole(trueRole);
-                localStorage.setItem('activeProfileId', matchingProf.id);
-              } else {
-                // current_role pointe vers un profil inexistant → corriger
-                const fallback = profs.find(p => p.status === 'actif') || profs[0];
-                if (fallback) {
-                  setUserRole(fallback.profile_type);
-                  localStorage.setItem('activeProfileId', fallback.id);
-                  base44.functions.invoke('switchActiveProfile', { profile_type: fallback.profile_type }).catch(() => {});
-                } else {
-                  setUserRole(trueRole);
-                }
-              }
-            } else {
-              // Pas de current_role → fallback localStorage puis premier profil actif
-              const storedId = localStorage.getItem('activeProfileId');
-              const fallback = profs.find(p => p.id === storedId) || profs.find(p => p.status === 'actif') || profs[0];
-              if (fallback) {
-                setUserRole(fallback.profile_type);
-                localStorage.setItem('activeProfileId', fallback.id);
-                base44.functions.invoke('switchActiveProfile', { profile_type: fallback.profile_type }).catch(() => {});
-              } else {
-                setUserRole('client');
-              }
+            const storedId = localStorage.getItem('activeProfileId');
+            // P1 : profil mémorisé dans localStorage (mis à jour par Home au switch)
+            let resolved = storedId ? profs.find(p => p.id === storedId && !p.deleted) : null;
+            // P2 : current_role en BDD
+            if (!resolved && (me.current_role || me.active_profile_type)) {
+              const trueRole = me.current_role || me.active_profile_type;
+              resolved = profs.find(p => p.profile_type === trueRole && !p.deleted);
+              if (resolved) localStorage.setItem('activeProfileId', resolved.id);
             }
+            // P3 : premier profil actif
+            if (!resolved) {
+              resolved = profs.find(p => p.status === 'actif' && !p.deleted) || profs.find(p => !p.deleted);
+              if (resolved) localStorage.setItem('activeProfileId', resolved.id);
+            }
+
+            setUserRole(resolved?.profile_type || me.current_role || 'client');
           } catch (_) {
-            setUserRole(trueRole || 'client');
+            setUserRole(me.current_role || me.active_profile_type || 'client');
           }
         }
 
@@ -159,19 +145,18 @@ export default function AppLayoutWrapper({ user }) {
   }, []);
 
   // ── Changement de profil instantané ─────────────────────────────────────────
+  // Home.jsx dispatch cet event après avoir mis à jour localStorage + state local
   useEffect(() => {
     const onProfileSwitch = (e) => {
       const newRole = e.detail?.role;
-      if (newRole && newRole !== userRole) {
+      if (newRole) {
         console.log('[AppLayoutWrapper] Profile switch →', newRole);
         setUserRole(newRole);
-        // Forcer la re-lecture du user pour avoir current_role à jour
-        base44.auth.me().catch(() => {});
       }
     };
     window.addEventListener('cdl_profile_switch', onProfileSwitch);
     return () => window.removeEventListener('cdl_profile_switch', onProfileSwitch);
-  }, [userRole]);
+  }, []);
 
   useEffect(() => {
     // Initialiser FCM une fois l'user authentifié
