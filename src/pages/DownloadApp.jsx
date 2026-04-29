@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { Download, Bell, MapPin, Zap, Shield, ChevronDown } from "lucide-react";
 
 // URL directe vers l'APK CDL (à mettre à jour quand disponible)
-const APK_URL = "https://drive.google.com/uc?export=download&id=VOTRE_ID_GOOGLE_DRIVE";
+const APK_URL = "https://drive.google.com/uc?export=download&id=1MZa0ck1igwUGfzlu1sCpMYj3vrqmVo5G";
 
 function detectPlatform() {
   const ua = navigator.userAgent || "";
