@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { vibrateSuccess, vibrateMedium, vibrateNotif, playNotificationSound } from "@/lib/vibration";
 import { triggerWhatsAppNotification, waMsgCourseCompletedClient, waMsgCourseCompletedDriver } from "@/lib/whatsappNotifications";
 import ContactCard from "@/components/ContactCard";
+import { MapPin } from "lucide-react";
 
 export default function CourseLivreur() {
   const { id } = useParams();
@@ -426,6 +427,49 @@ export default function CourseLivreur() {
           </div>
         )}
       </div>
+
+      {/* Position client en temps réel — si partagée */}
+      {["acceptee", "en_cours"].includes(course.statut) && course.client_sharing_location && (
+        course.client_lat_live ? (
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-green-50 border-2 border-green-300">
+            <div className="flex items-center gap-2">
+              <div className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-green-800">📍 Position client en direct</p>
+                <p className="text-xs text-green-600">Le client partage sa position GPS</p>
+              </div>
+            </div>
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${course.client_lat_live},${course.client_lng_live}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 px-3 py-2 bg-green-600 text-white text-xs font-bold rounded-xl active:scale-95"
+            >
+              <MapPin className="h-3.5 w-3.5" /> Y aller
+            </a>
+          </div>
+        ) : (
+          course.destinataire_lat_live ? (
+            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-blue-50 border-2 border-blue-300">
+              <div className="flex items-center gap-2">
+                <div className="h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-blue-800">📍 Position destinataire en direct</p>
+                  <p className="text-xs text-blue-600">Le destinataire partage sa position GPS</p>
+                </div>
+              </div>
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${course.destinataire_lat_live},${course.destinataire_lng_live}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl active:scale-95"
+              >
+                <MapPin className="h-3.5 w-3.5" /> Y aller
+              </a>
+            </div>
+          ) : null
+        )
+      )}
 
       {/* Mini-carte */}
       {["acceptee", "en_cours"].includes(course.statut) && course.livreur_lat && (

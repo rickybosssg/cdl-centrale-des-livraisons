@@ -6,7 +6,8 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Phone, CheckCircle2, Clock, Package, Star, Download, MapPin } from "lucide-react";
+import { Phone, CheckCircle2, Download, MapPin, Package } from "lucide-react";
+import UserLocationShare from "@/components/UserLocationShare";
 
 const STATUT_CFG = {
   en_attente:       { label: "Recherche d'un livreur…",     emoji: "🔍", color: "bg-amber-500",  pulse: true  },
@@ -54,6 +55,7 @@ export default function TrackingPublic() {
   const [noteEnvoyee, setNoteEnvoyee] = useState(false);
   const [confirmRecuOpen, setConfirmRecuOpen] = useState(false);
   const [receptionConfirmee, setReceptionConfirmee] = useState(false);
+  const [locationSharing, setLocationSharing] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -233,6 +235,16 @@ export default function TrackingPublic() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Partage position destinataire — opt-in */}
+        {isAssigned && !isLivre && (
+          <UserLocationShare
+            courseId={courseId}
+            role="destinataire"
+            active={locationSharing}
+            onToggle={setLocationSharing}
+          />
         )}
 
         {/* Confirmer réception */}

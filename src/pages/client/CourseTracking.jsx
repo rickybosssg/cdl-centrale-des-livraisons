@@ -17,6 +17,7 @@ import moment from "moment";
 import ReportIssueModal from "@/components/ReportIssueModal";
 import RatingModal from "@/components/RatingModal";
 import ContactCard from "@/components/ContactCard";
+import UserLocationShare from "@/components/UserLocationShare";
 
 const STATUT_CFG = {
   en_attente:       { label: "Recherche d'un livreur…",    color: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50",  emoji: "🔍" },
@@ -53,6 +54,7 @@ export default function CourseTracking() {
   const [cancelFees, setCancelFees] = useState(0);
   const [panelOpen, setPanelOpen]   = useState(true);
   const [ratingOpen, setRatingOpen] = useState(false);
+  const [locationSharing, setLocationSharing] = useState(false);
 
   useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
 
@@ -63,6 +65,7 @@ export default function CourseTracking() {
       if (!list?.length) { if (!silent) { toast.error("Course introuvable"); navigate("/mes-courses"); } return; }
       const c = list[0];
       setCourse(c);
+      setLocationSharing(!!c.client_sharing_location);
       setLastUpdate(new Date());
       if (c.livreur_email) {
         const livs = await base44.entities.User.filter({ email: c.livreur_email });
@@ -293,6 +296,16 @@ export default function CourseTracking() {
               <span className="ml-auto text-xs font-bold text-red-600">−{(course.frais_annulation).toLocaleString()} F</span>
             )}
           </div>
+
+          {/* Partage position — option facultative */}
+          {isActive && panelOpen && (
+            <UserLocationShare
+              courseId={id}
+              role="expediteur"
+              active={locationSharing}
+              onToggle={setLocationSharing}
+            />
+          )}
 
           {/* Carte contact livreur + bouton notation si livré */}
           {isAssigned && panelOpen && (
