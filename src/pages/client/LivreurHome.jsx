@@ -7,9 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { isDriverDispatchable } from "@/lib/dispatch";
 import {
-  MapPin, Package, Truck, CheckCircle2,
-  MessageCircle, Zap, TrendingUp, Wallet,
-  ChevronRight, Star, Shield
+  MapPin, Package, MessageCircle, Zap, TrendingUp, Wallet, ChevronRight
 } from "lucide-react";
 import { fmt } from "@/lib/formatMoney";
 import { Card, CardContent } from "@/components/ui/card";
@@ -160,20 +158,17 @@ export default function LivreurHome({ user }) {
         <div className="rounded-xl p-3 bg-amber-50 border border-amber-200 flex items-center gap-2">
           <MapPin className="h-4 w-4 text-amber-500 flex-shrink-0" />
           <p className="text-xs text-amber-800 flex-1">{gpsMsg}</p>
-          <button
-            onClick={requestGPS}
-            disabled={gpsLoading}
-            className="text-xs font-bold text-amber-700 border border-amber-300 px-2 py-1 rounded-lg bg-white disabled:opacity-50"
-          >
+          <button onClick={requestGPS} disabled={gpsLoading}
+            className="text-xs font-bold text-amber-700 border border-amber-300 px-2 py-1 rounded-lg bg-white disabled:opacity-50">
             {gpsLoading ? "…" : "Réessayer"}
           </button>
         </div>
       )}
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-center justify-between pt-1">
         <div>
-          <p className="text-xs text-muted-foreground">Bienvenue,</p>
+          <p className="text-xs text-gray-400">Bienvenue,</p>
           <h1 className="text-2xl font-extrabold leading-tight">{user.full_name?.split(" ")[0]} 👋</h1>
         </div>
         <Link to="/settings">
@@ -183,7 +178,7 @@ export default function LivreurHome({ user }) {
         </Link>
       </div>
 
-      {/* ── Bouton ON/OFF ── */}
+      {/* Bouton EN LIGNE / HORS LIGNE */}
       <button
         onClick={toggleOnline}
         disabled={toggling}
@@ -202,36 +197,40 @@ export default function LivreurHome({ user }) {
           </div>
           <div className="text-left">
             <p className="text-2xl font-extrabold tracking-tight">{disponible ? "EN LIGNE" : "HORS LIGNE"}</p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              {disponible && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  activeCourse ? "bg-white/30 text-white" :
-                  dispatchable ? "bg-white/30 text-white" :
-                  "bg-black/10 text-white/70"
-                }`}>
-                  {activeCourse ? "🚀 En livraison" : dispatchable ? "⚡ Prêt à dispatcher" : "⏳ Indisponible"}
-                </span>
-              )}
-              {!disponible && <p className="text-xs text-gray-500">Appuyez pour recevoir des courses</p>}
-            </div>
+            <p className={`text-xs mt-0.5 ${disponible ? "text-white/80" : "text-gray-500"}`}>
+              {disponible
+                ? (activeCourse ? "🚀 Course en cours" : "⚡ Prêt à recevoir des courses")
+                : "Appuyez pour recevoir des courses"}
+            </p>
           </div>
         </div>
-        {/* Switch visuel */}
         <div className={`h-8 w-14 rounded-full relative transition-all ${disponible ? "bg-white/30" : "bg-gray-200"}`}>
           <div className={`absolute top-1 h-6 w-6 rounded-full shadow transition-all ${disponible ? "right-1 bg-white" : "left-1 bg-gray-400"}`} />
         </div>
       </button>
 
-      {/* ── Course en cours ── */}
+      {/* Stats du jour — gains + nombre de courses */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-green-50 border border-green-100 p-4 text-center">
+          <p className="text-xs text-gray-400 mb-1">Gains aujourd'hui</p>
+          <p className="text-2xl font-extrabold text-green-700">{fmt(gainsJour)}</p>
+        </div>
+        <div className="rounded-2xl bg-white border p-4 text-center">
+          <p className="text-xs text-gray-400 mb-1">Courses du jour</p>
+          <p className="text-2xl font-extrabold text-gray-900">{completedToday.length}</p>
+        </div>
+      </div>
+
+      {/* Course en cours ou en attente */}
       {activeCourse && (
         <Link to={`/course-livreur/${activeCourse.id}`}>
-          <div className="rounded-2xl border-2 border-primary bg-primary/5 p-4 space-y-3">
+          <div className="rounded-2xl border-2 border-primary bg-primary/5 p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                 <span className="text-xs font-bold text-primary">Course active</span>
               </div>
-              <span className="text-xs font-bold text-primary">{(activeCourse.prix || 0).toLocaleString()} F</span>
+              <span className="text-sm font-bold text-primary">{(activeCourse.prix || 0).toLocaleString()} F</span>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center gap-2 text-sm font-semibold">
@@ -243,101 +242,55 @@ export default function LivreurHome({ user }) {
                 <span>{activeCourse.quartier_arrivee}</span>
               </div>
             </div>
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">{activeCourse.client_name || "Client"}</p>
-              <div className="flex items-center gap-1 text-xs font-bold text-primary">
-                Gérer <ChevronRight className="h-3 w-3" />
-              </div>
-            </div>
+            <p className="text-xs text-primary font-bold text-right">Gérer →</p>
           </div>
         </Link>
       )}
 
-      {/* ── Course pendante (assignée, pas encore acceptée) ── */}
       {!activeCourse && pendingCourse && (
         <Link to={`/course-livreur/${pendingCourse.id}`}>
-          <div className="rounded-2xl border-2 border-orange-400 bg-orange-50 p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="rounded-2xl border-2 border-orange-400 bg-orange-50 p-4 space-y-1">
+            <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-orange-600 animate-bounce" />
-              <p className="text-sm font-bold text-orange-800">Course en attente de votre réponse !</p>
+              <p className="text-sm font-bold text-orange-800">Nouvelle course — répondez !</p>
             </div>
-            <p className="text-xs text-orange-700">{pendingCourse.quartier_depart} → {pendingCourse.quartier_arrivee}</p>
-            <p className="text-lg font-extrabold text-orange-800 mt-1">
-              {(pendingCourse.gain_livreur || Math.round((pendingCourse.prix || 0) * 0.8)).toLocaleString()} F CFA
-            </p>
+            <p className="text-sm text-orange-700">{pendingCourse.quartier_depart} → {pendingCourse.quartier_arrivee}</p>
+            <p className="text-xl font-extrabold text-orange-900">{(pendingCourse.prix || 0).toLocaleString()} F CFA</p>
           </div>
         </Link>
       )}
 
-      {/* ── Bedou ── */}
+      {/* Bedou */}
       {loadingBedou ? (
-        <div className="rounded-2xl bg-primary/10 animate-pulse h-28" />
+        <div className="rounded-2xl bg-gray-100 animate-pulse h-24" />
       ) : bedou ? (
         <Link to="/mon-bedou">
           <div className="rounded-2xl bg-gradient-to-br from-primary to-blue-700 p-4 text-white shadow-lg">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center">
-                  <Wallet className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-white/70">Mon Bedou</p>
-                  <p className="text-xs font-bold">Portefeuille CDL</p>
-                </div>
+                <Wallet className="h-4 w-4" />
+                <p className="text-xs font-bold text-white/90">Mon Bedou</p>
               </div>
               <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">Voir tout →</span>
             </div>
             <p className="text-3xl font-extrabold">{fmt(bedou.solde_disponible || 0)}</p>
-            <div className="flex gap-4 mt-2">
-              <div className="flex items-center gap-1">
-                <TrendingUp className="h-3 w-3 text-green-300" />
-                <span className="text-[11px] text-white/80">Gains auj. : <strong className="text-white">{fmt(gainsJour)}</strong></span>
-              </div>
-              {(bedou.solde_bloque || 0) > 0 && (
-                <span className="text-[11px] text-amber-300">Bloqué : {fmt(bedou.solde_bloque)}</span>
-              )}
-            </div>
-            <div className="flex gap-2 mt-3">
-              <div className="flex-1 text-center bg-white/20 hover:bg-white/30 rounded-xl py-2 text-xs font-semibold transition-colors">Recharger</div>
-              <div className="flex-1 text-center bg-white/20 hover:bg-white/30 rounded-xl py-2 text-xs font-semibold transition-colors">Retirer</div>
-            </div>
           </div>
         </Link>
       ) : null}
 
-      {/* ── Stats du jour ── */}
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-white border p-3 text-center shadow-sm">
-          <p className="text-2xl font-extrabold text-primary">{completedToday.length}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Auj.</p>
-        </div>
-        <div className="rounded-2xl bg-green-50 border border-green-100 p-3 text-center shadow-sm">
-          <p className="text-lg font-extrabold text-green-700">{fmt(gainsJour)}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Gains auj.</p>
-        </div>
-        <div className="rounded-2xl bg-white border p-3 text-center shadow-sm">
-          <p className="text-2xl font-extrabold text-foreground">{totalLivrees}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Total</p>
-        </div>
-      </div>
-
-      {/* ── Publicité CDL ── */}
-      <PubCDLBanner placement="dashboard_livreur" userRole="livreur" />
-
-      {/* ── Message motivant si hors ligne ── */}
+      {/* Message si hors ligne */}
       {!disponible && (
-        <div className="rounded-2xl p-4 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-center shadow">
-          <p className="text-base font-extrabold">💰 Passez en ligne !</p>
-          <p className="text-xs text-white/80 mt-0.5">Des courses vous attendent</p>
+        <div className="rounded-2xl p-4 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-center">
+          <p className="font-extrabold">💰 Passez en ligne pour recevoir des courses !</p>
         </div>
       )}
 
-      {/* ── Navigation rapide ── */}
+      {/* Navigation rapide */}
       <div className="grid grid-cols-2 gap-3">
         {[
-          { to: "/courses-disponibles", icon: Package, label: "Disponibles", sub: "Courses à accepter", color: "text-accent", border: "border-l-accent" },
+          { to: "/courses-disponibles", icon: Package, label: "Courses dispo.", sub: "Voir & accepter", color: "text-accent", border: "border-l-accent" },
           { to: "/mes-livraisons", icon: MapPin, label: "Mes livraisons", sub: "Historique", color: "text-primary", border: "border-l-primary" },
-          { to: "/mes-gains", icon: TrendingUp, label: "Mes gains", sub: "Commissions & stats", color: "text-green-600", border: "border-l-green-500" },
+          { to: "/mes-gains", icon: TrendingUp, label: "Mes gains", sub: "Commissions", color: "text-green-600", border: "border-l-green-500" },
           { to: "/mon-bedou", icon: Wallet, label: "Mon Bedou", sub: "Portefeuille", color: "text-blue-600", border: "border-l-blue-500" },
         ].map(({ to, icon: Icon, label, sub, color, border }) => (
           <Link to={to} key={to}>
@@ -354,13 +307,11 @@ export default function LivreurHome({ user }) {
         ))}
       </div>
 
-      {/* ── Messages CDL ── */}
+      {/* Messages CDL */}
       <div>
         <button
           onClick={() => setShowMessages(v => !v)}
-          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
-            showMessages ? "border-primary bg-primary/5" : "border-border bg-card"
-          }`}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-colors ${showMessages ? "border-primary bg-primary/5" : "border-border bg-card"}`}
         >
           <MessageCircle className={`h-5 w-5 ${showMessages ? "text-primary" : "text-muted-foreground"}`} />
           <div className="text-left flex-1">

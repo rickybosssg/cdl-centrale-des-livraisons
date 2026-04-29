@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Phone, Package, MapPin, CheckCircle2, Navigation, TrendingUp, Zap } from "lucide-react";
+import { ArrowLeft, Phone, Package, CheckCircle2, Navigation, Zap } from "lucide-react";
 import MiniChat from "../../components/MiniChat";
 import DispatchTimer from "../../components/DispatchTimer";
 import MapSuivi from "../../components/MapSuivi";
@@ -297,105 +297,137 @@ export default function CourseLivreur() {
     );
   }
 
+  // Numéros utiles
+  const phoneClient = course.telephone_expediteur || course.telephone_destinataire || "";
+  const phoneDestinataire = course.telephone_destinataire || "";
+
+  const callNumber = (num) => { if (num) window.open(`tel:${num}`); };
+  const whatsappNumber = (num) => { if (num) window.open(`https://wa.me/${num.replace(/\D/g, "")}`); };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-lg font-bold">Course #{course.id?.slice(0, 8)}</h1>
+          <h1 className="text-lg font-bold">Course en cours</h1>
+          <p className="text-xs text-gray-400">#{course.id?.slice(0, 8)}</p>
         </div>
         <StatusBadge statut={course.statut} />
       </div>
 
-      {/* Itinerary */}
+      {/* Urgence */}
+      {course.urgence && course.urgence !== 'normal' && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm ${
+          course.urgence === 'tres_urgent' ? 'bg-red-500 text-white' : 'bg-orange-400 text-white'
+        }`}>
+          <Zap className="h-4 w-4" />
+          {course.urgence === 'tres_urgent' ? '🚨 Très urgent — livraison prioritaire' : '🔔 Urgent — livraison rapide demandée'}
+        </div>
+      )}
+
+      {/* Itinéraire */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className="flex flex-col items-center mt-1">
               <div className="h-3 w-3 rounded-full bg-green-500" />
-              <div className="h-10 w-0.5 bg-muted" />
+              <div className="h-10 w-0.5 bg-gray-200 my-1" />
               <div className="h-3 w-3 rounded-full bg-red-500" />
             </div>
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 space-y-3">
               <div>
-                <p className="text-xs text-muted-foreground">Récupération</p>
-                <p className="font-medium">{course.quartier_depart}</p>
+                <p className="text-xs text-gray-400 uppercase font-semibold">Récupération</p>
+                <p className="text-base font-bold">{course.quartier_depart}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Livraison</p>
-                <p className="font-medium">{course.quartier_arrivee}</p>
+                <p className="text-xs text-gray-400 uppercase font-semibold">Livraison</p>
+                <p className="text-base font-bold">{course.quartier_arrivee}</p>
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Contacts */}
-      <div className="space-y-3">
-        <ContactCard
-          name={`${course.nom_expediteur || "Expéditeur"}`}
-          phone={course.telephone_expediteur}
-          status="Récupération du colis"
-        />
-        <ContactCard
-          name={`${course.nom_destinataire || "Destinataire"}`}
-          phone={course.telephone_destinataire}
-          status="Livraison du colis"
-        />
-      </div>
-
-      {/* Urgence badge */}
-      {course.urgence && course.urgence !== 'normal' && (
-        <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border font-semibold text-sm ${
-          course.urgence === 'tres_urgent'
-            ? 'bg-red-50 border-red-300 text-red-700'
-            : 'bg-orange-50 border-orange-300 text-orange-700'
-        }`}>
-          <Zap className="h-4 w-4" />
-          {course.urgence === 'tres_urgent' ? '🚨 Livraison très urgente (- 20 min)' : '🔔 Livraison urgente (- 30 min)'}
-        </div>
-      )}
-
-      {/* Colis info */}
-      <Card>
-        <CardContent className="p-4 space-y-2">
-          <div className="flex items-center gap-3">
-            <Package className="h-5 w-5 text-accent" />
-            <div className="flex-1">
-              <p className="font-medium">{course.type_colis}</p>
-              {course.description && (
-                <p className="text-xs text-muted-foreground">{course.description}</p>
-              )}
-            </div>
+          {/* Prix */}
+          <div className="mt-4 flex items-center justify-between pt-3 border-t">
+            <span className="text-sm text-gray-500">Prix de la course</span>
+            <span className="text-xl font-extrabold text-gray-900">{(course.prix || 0).toLocaleString()} FCFA</span>
           </div>
-          {course.supplement_urgence > 0 ? (
-            <div className="bg-muted/50 rounded-lg p-2 text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Montant de base</span>
-                <span>{(course.prix - (course.supplement_urgence || 0)).toLocaleString()} FCFA</span>
-              </div>
-              <div className={`flex justify-between font-medium ${
-                course.urgence === 'tres_urgent' ? 'text-red-600' : 'text-orange-600'
-              }`}>
-                <span>Supplément urgence</span>
-                <span>+{course.supplement_urgence} FCFA</span>
-              </div>
-              <div className="flex justify-between font-bold border-t pt-1">
-                <span>Total</span>
-                <span className="text-primary">{course.prix?.toLocaleString()} FCFA</span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex justify-end">
-              <span className="font-bold text-primary">{course.prix} FCFA</span>
+          {course.type_colis && (
+            <div className="flex items-center gap-2 mt-2">
+              <Package className="h-4 w-4 text-gray-400" />
+              <span className="text-sm text-gray-600">{course.type_colis}</span>
+              {course.description && <span className="text-xs text-gray-400">— {course.description}</span>}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Mini-carte scooter — livreur en route */}
+      {/* Boutons d'action principaux : Appeler / WhatsApp / Maps */}
+      <div className="grid grid-cols-3 gap-2">
+        <button
+          onClick={() => callNumber(phoneClient)}
+          disabled={!phoneClient}
+          className="flex flex-col items-center gap-1.5 py-4 rounded-xl border-2 border-gray-200 bg-white active:scale-95 transition-all disabled:opacity-30"
+        >
+          <Phone className="h-6 w-6 text-blue-600" />
+          <span className="text-xs font-semibold text-gray-700">Appeler</span>
+        </button>
+        <button
+          onClick={() => whatsappNumber(phoneClient)}
+          disabled={!phoneClient}
+          className="flex flex-col items-center gap-1.5 py-4 rounded-xl border-2 border-green-200 bg-green-50 active:scale-95 transition-all disabled:opacity-30"
+        >
+          <span className="text-2xl">💬</span>
+          <span className="text-xs font-semibold text-green-700">WhatsApp</span>
+        </button>
+        <button
+          onClick={openMaps}
+          className="flex flex-col items-center gap-1.5 py-4 rounded-xl border-2 border-blue-200 bg-blue-50 active:scale-95 transition-all"
+        >
+          <Navigation className="h-6 w-6 text-blue-600" />
+          <span className="text-xs font-semibold text-blue-700">Maps départ</span>
+        </button>
+      </div>
+
+      {/* Bouton Maps arrivée si colis récupéré */}
+      {course.statut === "en_cours" && (
+        <button
+          onClick={openMapsArrivee}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-blue-300 bg-blue-50 text-blue-700 font-semibold active:scale-95 transition-all"
+        >
+          <Navigation className="h-5 w-5" />
+          Naviguer vers la livraison
+        </button>
+      )}
+
+      {/* Contacts détaillés */}
+      <div className="space-y-2">
+        {course.telephone_expediteur && (
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 border">
+            <div>
+              <p className="text-xs text-gray-400">Expéditeur / Récupération</p>
+              <p className="text-sm font-semibold">{course.nom_expediteur || "—"} · {course.telephone_expediteur}</p>
+            </div>
+            <button onClick={() => callNumber(course.telephone_expediteur)} className="p-2 rounded-lg bg-blue-100 active:scale-95">
+              <Phone className="h-4 w-4 text-blue-600" />
+            </button>
+          </div>
+        )}
+        {course.telephone_destinataire && (
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 border">
+            <div>
+              <p className="text-xs text-gray-400">Destinataire / Livraison</p>
+              <p className="text-sm font-semibold">{course.nom_destinataire || "—"} · {course.telephone_destinataire}</p>
+            </div>
+            <button onClick={() => callNumber(course.telephone_destinataire)} className="p-2 rounded-lg bg-blue-100 active:scale-95">
+              <Phone className="h-4 w-4 text-blue-600" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Mini-carte */}
       {["acceptee", "en_cours"].includes(course.statut) && course.livreur_lat && (
         <MapSuivi
           livreurLat={course.livreur_lat}
@@ -404,30 +436,18 @@ export default function CourseLivreur() {
         />
       )}
 
-      {/* Google Maps */}
-      <div className="grid grid-cols-2 gap-2">
-        <Button variant="outline" className="w-full" onClick={openMaps}>
-          <Navigation className="h-4 w-4 mr-2" />
-          Aller au départ
-        </Button>
-        <Button variant="outline" className="w-full" onClick={openMapsArrivee}>
-          <Navigation className="h-4 w-4 mr-2" />
-          Aller à l'arrivée
-        </Button>
-      </div>
+      {/* === SECTION SUIVI — boutons d'étapes === */}
 
-      {/* Timer + Refus pour assignee_attente */}
+      {/* assignee_attente : timer + accepter/refuser */}
       {course.statut === 'assignee_attente' && (
-        <>
+        <div className="space-y-3">
           <DispatchTimer
             heureAssignation={course.heure_assignation}
             dureeSecondes={60}
             onExpire={onDispatchTimerExpire}
           />
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+          <div className="flex gap-3">
+            <button
               disabled={updating}
               onClick={async () => {
                 setUpdating(true);
@@ -440,11 +460,8 @@ export default function CourseLivreur() {
                     : h
                 );
                 await base44.entities.Course.update(id, {
-                  statut: 'en_attente',
-                  livreur_email: null,
-                  livreur_name: null,
-                  telephone_livreur: null,
-                  heure_assignation: null,
+                  statut: 'en_attente', livreur_email: null, livreur_name: null,
+                  telephone_livreur: null, heure_assignation: null,
                   historique_assignation: JSON.stringify(historique),
                 });
                 await base44.auth.updateMe({
@@ -453,79 +470,97 @@ export default function CourseLivreur() {
                   courses_refusees_consecutives: (me.courses_refusees_consecutives || 0) + 1,
                 }).catch(() => {});
                 base44.functions.invoke('autoDispatch', { course_id: id, exclude_emails: [me.email], force: true }).catch(() => {});
-                toast.info("Course refusée — dispatch vers le prochain livreur");
+                toast.info("Course refusée");
                 navigate(-1);
                 setUpdating(false);
               }}
+              className="flex-1 py-4 rounded-xl border-2 border-gray-200 text-gray-500 text-sm font-medium active:scale-95 transition-all"
             >
-              ❌ Refuser cette course
-            </Button>
+              Refuser
+            </button>
+            <button
+              disabled={updating}
+              onClick={async () => {
+                setUpdating(true);
+                const me = await base44.auth.me();
+                await base44.entities.Course.update(id, {
+                  statut: "acceptee",
+                  livreur_email: me.email,
+                  livreur_name: me.full_name,
+                  date_acceptation: new Date().toISOString(),
+                });
+                await base44.auth.updateMe({
+                  nombre_courses_actives: (me.nombre_courses_actives || 0) + 1,
+                  courses_acceptees: (me.courses_acceptees || 0) + 1,
+                  courses_refusees_consecutives: 0,
+                });
+                toast.success("✅ Course acceptée !");
+                setUpdating(false);
+              }}
+              className="flex-[2] py-4 rounded-xl bg-green-500 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-green-200"
+            >
+              ✅ ACCEPTER
+            </button>
           </div>
-        </>
+        </div>
       )}
 
-      {/* Mini Chat */}
+      {/* acceptee : je suis arrivé + récupéré */}
+      {course.statut === "acceptee" && (
+        <div className="space-y-3">
+          <p className="text-xs text-center text-gray-400 font-medium">Étape 1 — Allez récupérer le colis</p>
+          <button
+            onClick={recupererColis}
+            disabled={updating}
+            className="w-full py-5 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-blue-200"
+          >
+            {updating ? "Mise à jour..." : "📦 J'ai récupéré le colis"}
+          </button>
+        </div>
+      )}
+
+      {/* en_cours : livré */}
+      {course.statut === "en_cours" && (
+        <div className="space-y-3">
+          <p className="text-xs text-center text-gray-400 font-medium">Étape 2 — Livrez le colis au destinataire</p>
+          <button
+            onClick={livrerColis}
+            disabled={updating}
+            className="w-full py-5 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-green-200"
+          >
+            {updating ? "Mise à jour..." : "✅ Colis livré"}
+          </button>
+        </div>
+      )}
+
+      {/* livree */}
+      {course.statut === "livree" && (
+        <div className="rounded-2xl border-2 border-green-300 bg-green-50 p-6 text-center space-y-4">
+          <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="h-9 w-9 text-green-600" />
+          </div>
+          <div>
+            <p className="text-green-800 font-extrabold text-lg">🎉 Livraison réussie !</p>
+            {course.gain_livreur > 0 && (
+              <p className="text-green-600 font-bold text-base mt-1">+{course.gain_livreur?.toLocaleString()} FCFA sur votre Bedou</p>
+            )}
+          </div>
+          <button
+            onClick={() => marquerCourseEffectuee()}
+            disabled={updating}
+            className="w-full py-4 rounded-xl bg-green-600 text-white font-bold text-base active:scale-95 transition-all"
+          >
+            {updating ? "..." : "Terminer et reprendre des courses"}
+          </button>
+          <button onClick={() => navigate('/mes-livraisons')} className="text-xs text-green-700 underline">
+            Voir mon historique
+          </button>
+        </div>
+      )}
+
+      {/* Chat */}
       {["acceptee", "en_cours"].includes(course.statut) && (
         <MiniChat course={course} user={{ email: course.livreur_email, full_name: course.livreur_name, user_type: "livreur" }} />
-      )}
-
-      {/* Action buttons */}
-      {course.statut === "acceptee" && (
-        <Button
-          className="w-full h-12 text-base font-semibold bg-accent hover:bg-accent/90"
-          onClick={recupererColis}
-          disabled={updating}
-        >
-          <Package className="h-5 w-5 mr-2" />
-          {updating ? "Mise à jour..." : "J'ai récupéré le colis"}
-        </Button>
-      )}
-
-      {course.statut === "en_cours" && (
-        <Button
-          className="w-full h-12 text-base font-semibold bg-green-600 hover:bg-green-700"
-          onClick={livrerColis}
-          disabled={updating}
-        >
-          <CheckCircle2 className="h-5 w-5 mr-2" />
-          {updating ? "Mise à jour..." : "Colis livré"}
-        </Button>
-      )}
-
-      {course.statut === "livree" && (
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-4 space-y-4 text-center">
-            <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="h-9 w-9 text-green-600" />
-            </div>
-            <div>
-              <p className="text-green-700 font-bold text-base">🎉 Course livrée avec succès !</p>
-              {course.gain_livreur > 0 && (
-                <p className="text-green-600 font-semibold text-sm mt-1">+{course.gain_livreur?.toLocaleString()} FCFA crédités sur votre Bedou</p>
-              )}
-              <p className="text-xs text-green-600 mt-2">Appuyez sur le bouton ci-dessous pour vous remettre disponible et accepter de nouvelles courses.</p>
-            </div>
-            <Button
-              className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 active:scale-[0.98] transition-all"
-              onClick={() => marquerCourseEffectuee()}
-              disabled={updating}
-            >
-              {updating ? (
-                <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Validation...</>
-              ) : (
-                <><CheckCircle2 className="h-5 w-5 mr-2" />Course terminée</>
-              )}
-            </Button>
-            {!updating && (
-              <button
-                onClick={() => navigate('/mes-livraisons')}
-                className="text-xs text-green-700 underline"
-              >
-                Voir mon historique de livraisons
-              </button>
-            )}
-          </CardContent>
-        </Card>
       )}
     </div>
   );
