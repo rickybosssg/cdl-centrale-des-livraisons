@@ -296,3 +296,25 @@ export async function getPermissionStatus() {
     return 'unknown';
   }
 }
+
+/**
+ * openAppSettings — ouvre les paramètres de l'application Android
+ * pour que l'utilisateur puisse activer les notifications manuellement.
+ */
+export async function openAppSettings() {
+  try {
+    const { App } = await import('@capacitor/app');
+    // Capacitor App plugin ne fournit pas openSettings directement,
+    // on utilise le lien Intent Android via NativeSettings si disponible,
+    // sinon on redirige via le schéma natif.
+    if (window.cordova?.plugins?.settings) {
+      window.cordova.plugins.settings.open('notification_id', () => {}, () => {});
+      return;
+    }
+    // Fallback : ouvrir les paramètres système via URI Android
+    window.open('app-settings:', '_system');
+  } catch (_) {
+    // Dernier recours : toast avec instruction
+    window.open('app-settings:', '_system');
+  }
+}
