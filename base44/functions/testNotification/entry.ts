@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const PROJECT_ID = "cdl-app-4743c";
-const FCM_URL = `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`;
+// PROJECT_ID lu depuis le Service Account JSON pour éviter tout mismatch de projet
+// Ne jamais hardcoder ici
 
 async function getAccessToken(serviceAccount) {
   const now = Math.floor(Date.now() / 1000);
@@ -43,7 +43,9 @@ async function getAccessToken(serviceAccount) {
   return tokenData.access_token;
 }
 
-async function sendToToken(accessToken, fcmToken, title, body, data = {}) {
+async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}) {
+  const FCM_URL = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
+  console.log(`[testNotification] sendToToken → projectId: ${projectId} | token: ${fcmToken.slice(0, 20)}...`);
   const res = await fetch(FCM_URL, {
     method: "POST",
     headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -123,15 +125,17 @@ Deno.serve(async (req) => {
     const rawJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
     if (!rawJson) return Response.json({ error: 'FIREBASE_SERVICE_ACCOUNT_JSON manquant' }, { status: 500 });
     const serviceAccount = JSON.parse(rawJson);
+    const projectId = serviceAccount.project_id;
+    console.log(`[testNotification] project_id from SA: ${projectId} | client_email: ${serviceAccount.client_email}`);
     const accessToken = await getAccessToken(serviceAccount);
 
     // ── 3. Envoyer via FCM ───────────────────────────────────────────────────
     const title = '🧪 Test Notification CDL';
     const body = `Reçue à ${new Date().toLocaleTimeString()}`;
-    const data = { test_mode: 'true', sender_email: user.email, notif_route: '/mes-notifications' };
+    const data = { test_mode: 'true', sender_email: user?.email || recipient_email, notif_route: '/mes-notifications' };
 
     const results = await Promise.allSettled(
-      tokens.map(t => sendToToken(accessToken, t.token, title, body, data))
+      tokens.map(t => sendToToken(accessToken, projectId, t.token, title, body, data))
     );
 
     const sent = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
