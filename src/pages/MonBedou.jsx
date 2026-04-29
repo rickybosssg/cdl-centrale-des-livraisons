@@ -66,8 +66,9 @@ export default function MonBedou() {
       const me = await base44.auth.me();
       setUser(me);
       const res = await base44.functions.invoke("bedouEngine", { action: "get_bedou" });
-      setBedou(res.data.bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
-      setTransactions(res.data.transactions || []);
+      const d = res?.data ?? res;
+      setBedou(d.bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
+      setTransactions(d.transactions || []);
     } catch (err) {
       console.error('[MonBedou] Erreur chargement:', err);
       setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
@@ -117,10 +118,13 @@ export default function MonBedou() {
       clearTimeout(safetyTimer);
       setSubmitting(false);
 
-      if (res?.data?.success) {
+      // Le SDK base44 retourne directement les données (pas enveloppées dans .data)
+      const data = res?.data ?? res;
+
+      if (data?.success) {
         setSubmitted({
-          bonus: res.data.bonus_applique || 0,
-          bonus_restants: res.data.bonus_restants ?? null,
+          bonus: data.bonus_applique || 0,
+          bonus_restants: data.bonus_restants ?? null,
         });
         setForm({ montant: "", methode: "orange_money", preuve: null });
         try {
@@ -136,7 +140,7 @@ export default function MonBedou() {
           });
         } catch (_) {}
       } else {
-        toast.error(res?.data?.error || "La demande a échoué. Réessayez.");
+        toast.error(data?.error || "La demande a échoué. Réessayez.");
       }
     } catch (err) {
       clearTimeout(safetyTimer);
@@ -153,14 +157,15 @@ export default function MonBedou() {
     setSubmitting(true);
     const res = await base44.functions.invoke("bedouEngine", { action: "demande_retrait", ...retraitForm, montant });
     setSubmitting(false);
-    if (res.data.success) {
+    const rd = res?.data ?? res;
+    if (rd?.success) {
       toast.success("Demande de retrait envoyée ! L'admin va la traiter.");
-      triggerWhatsAppNotification({ eventType: "bedou_withdraw_requested", recipientRole: "driver", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouWithdrawRequested(), entityId: user?.id, entityType: "bedou", priority: "high" });
+      try { triggerWhatsAppNotification({ eventType: "bedou_withdraw_requested", recipientRole: "driver", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouWithdrawRequested(), entityId: user?.id, entityType: "bedou", priority: "high" }); } catch (_) {}
       setRetraitForm({ montant: "", methode: "orange_money", numero_reception: "", nom_compte: "" });
       load();
       setTab("historique");
     } else {
-      toast.error(res.data.error || "Erreur");
+      toast.error(rd?.error || "Erreur");
     }
   };
 
