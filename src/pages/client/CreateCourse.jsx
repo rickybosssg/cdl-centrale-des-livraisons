@@ -5,6 +5,7 @@ import { vibrateSuccess } from "@/lib/vibration";
 import { lancerDispatch } from "@/lib/dispatch";
 import { triggerWhatsAppNotification, waMsgCourseCreatedClient } from "@/lib/whatsappNotifications";
 import { toast } from "sonner";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import AdBanner from "../../components/AdBanner";
 import GuidedOrderWizard from "@/components/GuidedOrderWizard";
@@ -180,23 +181,46 @@ export default function CreateCourse() {
           </>
         ) : (
           <>
-            <div className="relative h-24 w-24">
-              <div className="absolute inset-0 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-              <div className="absolute inset-3 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-3xl">🛵</span>
+            {/* Moto animée */}
+            <div className="relative flex items-center justify-center w-36 h-36">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-100 border-t-blue-500 animate-spin" />
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-b-blue-200 animate-spin" style={{ animationDirection: "reverse", animationDuration: "1.5s" }} />
+              <div className="absolute inset-4 rounded-full bg-blue-50 flex items-center justify-center">
+                <motion.span
+                  className="text-4xl"
+                  animate={{ x: [0, 6, 0, -6, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut" }}
+                >
+                  🛵
+                </motion.span>
               </div>
             </div>
-            <div className="space-y-2">
-              <p className="text-xl font-extrabold">Recherche du livreur...</p>
-              <p className="text-sm text-muted-foreground">CDL cherche le meilleur livreur disponible près de vous.</p>
+
+            <div className="space-y-2 text-center">
+              <p className="text-2xl font-extrabold text-gray-900">Recherche d'un livreur...</p>
+              <p className="text-sm text-gray-400">CDL cherche le meilleur livreur disponible près de vous.</p>
             </div>
-            <div className="flex flex-col gap-2 w-full max-w-xs text-xs text-muted-foreground">
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                <span className="text-green-500">✓</span> Course créée avec succès
+
+            {/* Message rassurant */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="w-full max-w-xs p-4 rounded-2xl text-center"
+              style={{ background: "#EFF6FF", border: "1.5px solid #BFDBFE" }}
+            >
+              <p className="text-sm font-semibold text-blue-700">⚡ Un livreur va accepter sous quelques secondes.</p>
+              <p className="text-xs text-blue-400 mt-1">Restez sur cette page — vous serez notifié immédiatement.</p>
+            </motion.div>
+
+            <div className="flex flex-col gap-2 w-full max-w-xs text-xs text-gray-500">
+              <div className="flex items-center gap-2 p-2.5 rounded-xl" style={{ background: "#F0FDF4" }}>
+                <span className="text-green-500 font-bold">✓</span>
+                <span className="text-green-700 font-medium">Course créée avec succès</span>
               </div>
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20">
-                <div className="h-3 w-3 rounded-full bg-primary animate-pulse" />
-                Analyse GPS en cours...
+              <div className="flex items-center gap-2 p-2.5 rounded-xl" style={{ background: "#EFF6FF" }}>
+                <div className="h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
+                <span className="text-blue-600 font-medium">Analyse GPS en cours...</span>
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={() => navigate('/mes-courses')}>Voir mes courses</Button>

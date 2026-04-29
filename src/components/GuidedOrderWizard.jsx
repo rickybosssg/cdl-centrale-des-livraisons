@@ -42,12 +42,12 @@ function PressBtn({ onClick, disabled, children, className = "", style = {} }) {
 function ProgressBar({ step, total }) {
   const pct = Math.round((step / total) * 100);
   return (
-    <div className="px-5 pb-3 pt-1">
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="text-xs text-gray-400 font-medium">Étape {step}/{total}</span>
+    <div className="px-5 pb-3 pt-2">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-xs text-gray-500 font-semibold">Étape {step} / {total}</span>
         <span className="text-xs font-bold" style={{ color: PRIMARY }}>{pct}%</span>
       </div>
-      <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
         <motion.div
           className="h-full rounded-full"
           style={{ background: `linear-gradient(90deg, ${PRIMARY}, #38bdf8)` }}
@@ -55,17 +55,27 @@ function ProgressBar({ step, total }) {
           transition={{ duration: 0.4, ease: "easeOut" }}
         />
       </div>
+      {/* Pastilles étapes */}
+      <div className="flex justify-between mt-2 px-0.5">
+        {Array.from({ length: total }).map((_, i) => (
+          <div
+            key={i}
+            className="h-1.5 w-1.5 rounded-full transition-all duration-300"
+            style={{ background: i < step ? PRIMARY : "#E5E7EB", transform: i === step - 1 ? "scale(1.4)" : "scale(1)" }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-// ── Bouton principal (grand, vert) ───────────────────────────────────────────
-function BigBtn({ onClick, disabled, loading, children, color = PRIMARY }) {
-  return (
+// ── Bouton principal fixe en bas ─────────────────────────────────────────────
+function BigBtn({ onClick, disabled, loading, children, color = PRIMARY, fixed = false }) {
+  const btn = (
     <PressBtn
       onClick={onClick}
       disabled={disabled || loading}
-      className="w-full flex items-center justify-center gap-2 h-14 rounded-2xl text-white text-base font-bold shadow-lg transition-opacity"
+      className="w-full flex items-center justify-center gap-2 h-14 rounded-2xl text-white text-base font-bold transition-all"
       style={{
         background: disabled ? "#D1D5DB" : `linear-gradient(135deg, ${color}, ${color}CC)`,
         boxShadow: disabled ? "none" : `0 4px 20px ${color}40`,
@@ -73,20 +83,24 @@ function BigBtn({ onClick, disabled, loading, children, color = PRIMARY }) {
     >
       {loading ? (
         <span className="flex items-center gap-2">
-          <motion.span
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
-            className="inline-block text-xl"
-          >⏳</motion.span>
+          <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }} className="inline-block text-xl">⏳</motion.span>
           Création en cours...
         </span>
       ) : children}
     </PressBtn>
   );
+  if (fixed) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 z-30 px-5 pb-6 pt-3 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        {btn}
+      </div>
+    );
+  }
+  return btn;
 }
 
 // ── Autocomplétion quartier ──────────────────────────────────────────────────
-function QuartierInput({ value, onChange, placeholder, onUseGPS }) {
+function QuartierInput({ value, onChange, placeholder, onUseGPS, autoFocus = false }) {
   const [query, setQuery]   = useState(value || "");
   const [open, setOpen]     = useState(false);
   const ref = useRef();
@@ -96,6 +110,9 @@ function QuartierInput({ value, onChange, placeholder, onUseGPS }) {
     : QUARTIERS_OUAGADOUGOU.slice(0, 7);
 
   useEffect(() => { setQuery(value || ""); }, [value]);
+  useEffect(() => {
+    if (autoFocus) { setTimeout(() => ref.current?.focus(), 350); }
+  }, [autoFocus]);
 
   const pick = (q) => { setQuery(q); onChange(q); setOpen(false); ref.current?.blur(); };
 
@@ -190,14 +207,14 @@ function StepType({ onSelect }) {
 // ── ÉTAPE 2 & 3 : Quartier ───────────────────────────────────────────────────
 function StepQuartier({ title, subtitle, icon, value, onChange, onNext, onUseGPS }) {
   return (
-    <div className="px-5 pt-2 pb-8 space-y-5">
+    <div className="px-5 pt-2 pb-32 space-y-5">
       <div>
         <div className="text-3xl mb-2">{icon}</div>
         <h2 className="text-2xl font-extrabold text-gray-900">{title}</h2>
         <p className="text-sm text-gray-400 mt-1">{subtitle}</p>
       </div>
-      <QuartierInput value={value} onChange={onChange} placeholder="Ex: Ouaga 2000, Pissy..." onUseGPS={onUseGPS} />
-      <BigBtn onClick={onNext} disabled={!value} color={PRIMARY}>
+      <QuartierInput value={value} onChange={onChange} placeholder="Ex: Ouaga 2000, Pissy..." onUseGPS={onUseGPS} autoFocus />
+      <BigBtn onClick={onNext} disabled={!value} color={PRIMARY} fixed>
         Continuer <ChevronRight className="h-4 w-4" />
       </BigBtn>
     </div>
@@ -212,7 +229,7 @@ function StepContact({ typeService, form, setForm, onNext }) {
   const valid = isDepl ? true : isEnvoyer ? (form.nom_destinataire && form.telephone_destinataire) : form.telephone_expediteur;
 
   return (
-    <div className="px-5 pt-2 pb-8 space-y-5">
+    <div className="px-5 pt-2 pb-32 space-y-5">
       <div>
         <div className="text-3xl mb-2">📞</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Contact</h2>
@@ -233,7 +250,7 @@ function StepContact({ typeService, form, setForm, onNext }) {
       {isEnvoyer && (
         <div className="space-y-4">
           <FieldInput label="Nom du destinataire *" placeholder="Nom complet" value={form.nom_destinataire}
-            onChange={v => setForm(f => ({ ...f, nom_destinataire: v }))} />
+            onChange={v => setForm(f => ({ ...f, nom_destinataire: v }))} autoFocus />
           <FieldInput label="Numéro du destinataire *" placeholder="+226 XX XX XX XX" type="tel"
             value={form.telephone_destinataire} onChange={v => setForm(f => ({ ...f, telephone_destinataire: v }))} />
         </div>
@@ -242,24 +259,27 @@ function StepContact({ typeService, form, setForm, onNext }) {
       {isRecevoir && (
         <div className="space-y-4">
           <FieldInput label="Numéro de l'expéditeur *" placeholder="+226 XX XX XX XX" type="tel"
-            value={form.telephone_expediteur} onChange={v => setForm(f => ({ ...f, telephone_expediteur: v }))} />
+            value={form.telephone_expediteur} onChange={v => setForm(f => ({ ...f, telephone_expediteur: v }))} autoFocus />
           <FieldInput label="Nom de l'expéditeur (optionnel)" placeholder="Nom complet"
             value={form.nom_expediteur} onChange={v => setForm(f => ({ ...f, nom_expediteur: v }))} />
         </div>
       )}
 
-      <BigBtn onClick={onNext} disabled={!valid} color={PRIMARY}>
+      <BigBtn onClick={onNext} disabled={!valid} color={PRIMARY} fixed>
         Continuer <ChevronRight className="h-4 w-4" />
       </BigBtn>
     </div>
   );
 }
 
-function FieldInput({ label, placeholder, value, onChange, type = "text" }) {
+function FieldInput({ label, placeholder, value, onChange, type = "text", autoFocus = false }) {
+  const ref = useRef();
+  useEffect(() => { if (autoFocus) setTimeout(() => ref.current?.focus(), 350); }, [autoFocus]);
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-semibold text-gray-700">{label}</label>
       <input
+        ref={ref}
         type={type}
         placeholder={placeholder}
         value={value}
@@ -282,7 +302,7 @@ const COLIS_CHIPS = [
 
 function StepColis({ form, setForm, onNext }) {
   return (
-    <div className="px-5 pt-2 pb-8 space-y-5">
+    <div className="px-5 pt-2 pb-32 space-y-5">
       <div>
         <div className="text-3xl mb-2">📦</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Nature du colis</h2>
@@ -318,7 +338,7 @@ function StepColis({ form, setForm, onNext }) {
           className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-all resize-none"
         />
       </div>
-      <BigBtn onClick={onNext} disabled={!form.type_colis} color={PRIMARY}>
+      <BigBtn onClick={onNext} disabled={!form.type_colis} color={PRIMARY} fixed>
         Continuer <ChevronRight className="h-4 w-4" />
       </BigBtn>
     </div>
@@ -330,8 +350,10 @@ const PRIX_CHIPS = [1000, 1500, 2000, 2500, 3000];
 
 function StepPrix({ form, setForm, onNext }) {
   const prix = parseInt(form.prix_base, 10) || 0;
+  const inputRef = useRef();
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 350); }, []);
   return (
-    <div className="px-5 pt-2 pb-8 space-y-5">
+    <div className="px-5 pt-2 pb-32 space-y-5">
       <div>
         <div className="text-3xl mb-2">💰</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Prix proposé</h2>
@@ -341,6 +363,7 @@ function StepPrix({ form, setForm, onNext }) {
       {/* Champ grand */}
       <div className="relative">
         <input
+          ref={inputRef}
           type="number"
           min="0"
           placeholder="0"
@@ -385,7 +408,7 @@ function StepPrix({ form, setForm, onNext }) {
         </p>
       </div>
 
-      <BigBtn onClick={onNext} disabled={!prix || prix <= 0} color={PRIMARY}>
+      <BigBtn onClick={onNext} disabled={!prix || prix <= 0} color={PRIMARY} fixed>
         Continuer <ChevronRight className="h-4 w-4" />
       </BigBtn>
     </div>
@@ -439,6 +462,7 @@ function StepUrgence({ urgence, setUrgence, onNext }) {
 
 // ── ÉTAPE 8 : Récapitulatif ──────────────────────────────────────────────────
 function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal, soldeBedou, loading, onConfirm }) {
+
   const typeLabel = { envoyer: "📦 Envoyer un colis", recevoir: "📥 Recevoir un colis", deplacement: "🏍️ Déplacement" }[typeService];
   const urgLabel  = { normal: "🟢 Normal", urgent: `🔔 Urgent (+${fmt(500)})`, tres_urgent: `🚨 Très urgent (+${fmt(1000)})` }[urgence];
   const soldeInsuffisant = soldeBedou !== null && prixTotal > 0 && soldeBedou < prixTotal;
@@ -455,7 +479,7 @@ function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal
   ].filter(Boolean);
 
   return (
-    <div className="px-5 pt-2 pb-8 space-y-5">
+    <div className="px-5 pt-2 pb-32 space-y-5">
       <div>
         <div className="text-3xl mb-2">📋</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Récapitulatif</h2>
@@ -501,7 +525,7 @@ function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal
         </motion.div>
       )}
 
-      <BigBtn onClick={onConfirm} disabled={soldeInsuffisant} loading={loading} color={GREEN}>
+      <BigBtn onClick={onConfirm} disabled={soldeInsuffisant} loading={loading} color={GREEN} fixed>
         <CheckCircle2 className="h-5 w-5" />
         CONFIRMER LA COMMANDE
       </BigBtn>
