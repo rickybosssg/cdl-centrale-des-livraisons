@@ -33,6 +33,8 @@ export default function RoleSetup({ onComplete }) {
   const [moyenDeplacement, setMoyenDeplacement] = useState([]);
   const [loading, setLoading] = useState(false);
   const [telError, setTelError] = useState("");
+  const [nomLivreur, setNomLivreur] = useState("");
+  const [prenomLivreur, setPrenomLivreur] = useState("");
 
   const validateTelephone = (tel) => {
     if (!tel || !tel.trim()) return "Le numéro de téléphone est obligatoire";
@@ -381,11 +383,87 @@ export default function RoleSetup({ onComplete }) {
   }
 
   // ─── ÉTAPE 2 : Formulaire ───
+  // Pour le livreur : inscription ultra-rapide (Nom / Prénom / WhatsApp / Quartier)
+  if (selectedRole === "livreur") {
+    const nom = nomLivreur;
+    const prenom = prenomLivreur;
+    return (
+      <div className="min-h-screen bg-white flex flex-col">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-primary to-blue-600 px-5 pt-8 pb-6 text-white text-center space-y-2">
+          <p className="text-3xl">🛵</p>
+          <h1 className="text-2xl font-extrabold">Devenir livreur CDL</h1>
+          <p className="text-sm text-white/80">Inscription rapide — 1 minute</p>
+          <div className="flex justify-center gap-2 flex-wrap mt-2">
+            {["✅ Courses automatiques", "💰 Paiement rapide", "🕐 Horaires libres"].map(v => (
+              <span key={v} className="text-[10px] bg-white/20 px-2 py-1 rounded-full font-medium">{v}</span>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 px-5 py-6 space-y-4 max-w-sm w-full mx-auto">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Prénom *</label>
+            <Input placeholder="Votre prénom" value={prenom} onChange={e => setPrenomLivreur(e.target.value)} className="h-12 text-base" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Nom de famille *</label>
+            <Input placeholder="Votre nom" value={nom} onChange={e => setNomLivreur(e.target.value)} className="h-12 text-base" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Numéro WhatsApp *</label>
+            <Input
+              placeholder="+226 70 00 00 00"
+              type="tel"
+              value={form.telephone}
+              onChange={e => { setForm({ ...form, telephone: e.target.value }); if (telError) setTelError(""); }}
+              className={`h-12 text-base ${telError ? "border-red-400" : ""}`}
+            />
+            {telError && <p className="text-xs text-red-600 font-semibold">❌ {telError}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Quartier de résidence *</label>
+            <QuartierSelect
+              value={form.quartier}
+              onValueChange={v => setForm({ ...form, quartier: v })}
+              placeholder="Choisissez votre quartier"
+            />
+          </div>
+
+          <div className="pt-2 rounded-xl bg-amber-50 border border-amber-200 p-3">
+            <p className="text-xs text-amber-700">
+              📋 <strong>Étape suivante :</strong> vous enverrez vos documents (selfie, CNIB, photo véhicule) pour activer votre compte.
+            </p>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-5 py-4">
+          <div className="flex gap-3 max-w-sm mx-auto">
+            <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Retour</Button>
+            <Button
+              className="flex-[2] h-12 text-base font-extrabold"
+              disabled={!prenom.trim() || !nom.trim() || !form.telephone || !form.quartier || loading}
+              onClick={async () => {
+                const err = validateTelephone(form.telephone);
+                if (err) { setTelError(err); return; }
+                // Mettre à jour le nom complet temporairement
+                try { await base44.auth.updateMe({ full_name: `${prenom.trim()} ${nom.trim()}` }); } catch (_) {}
+                handleSubmit();
+              }}
+            >
+              {loading ? "Enregistrement..." : "🛵 Créer mon compte livreur"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── ÉTAPE 2 : Formulaire — autres rôles ───
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <div className="w-full max-w-sm space-y-5 py-6">
 
-        {/* Header motivation */}
         {autoAppliedCode && selectedRole === 'client' && (
           <div className="rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white p-4 text-center space-y-1">
             <p className="text-base font-bold">🎁 Code parrainage appliqué !</p>
@@ -394,24 +472,14 @@ export default function RoleSetup({ onComplete }) {
           </div>
         )}
 
-        {selectedRole === "livreur" && (
-          <div className="rounded-2xl bg-gradient-to-br from-primary to-blue-600 text-white p-4 text-center space-y-1">
-            <p className="text-sm font-bold">🚀 Inscription rapide</p>
-            <p className="text-xs opacity-90">Tu es à une étape de recevoir tes premières courses sur CDL</p>
-            <p className="text-xs font-semibold bg-white/20 rounded-lg py-1 mt-2">🎁 0% commission pendant 7 jours</p>
-          </div>
-        )}
-
         <div className="text-center space-y-1">
           <h2 className="text-xl font-bold">Complétez votre profil</h2>
-          <p className="text-sm text-muted-foreground">
-            {selectedRole === "livreur" ? "Quelques infos rapides" : "Informations client"}
-          </p>
+          <p className="text-sm text-muted-foreground">Informations {selectedRole}</p>
         </div>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>📱 Numéro de téléphone * (obligatoire pour tous)</Label>
+            <Label>📱 Numéro de téléphone *</Label>
             <Input
               placeholder="+226 70000000"
               value={form.telephone}
@@ -420,60 +488,24 @@ export default function RoleSetup({ onComplete }) {
               disabled={loading}
             />
             {telError && <p className="text-xs text-red-600 font-bold">❌ {telError}</p>}
-            {!telError && form.telephone && (
-              <p className="text-xs text-green-600 font-medium">✅ Numéro valide</p>
-            )}
           </div>
 
-          {selectedRole !== "livreur" && selectedRole !== "commercial" && (
+          {selectedRole !== "commercial" && (
             <div className="space-y-2">
               <Label>Numéro WhatsApp</Label>
-              <Input
-                placeholder="Même numéro si identique"
-                value={form.whatsapp}
-                onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-              />
+              <Input placeholder="Même numéro si identique" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} />
             </div>
           )}
 
           <div className="space-y-2">
-            <Label>{selectedRole === "livreur" ? "Zone habituelle de travail *" : "Quartier *"}</Label>
-            <QuartierSelect
-              value={form.quartier}
-              onValueChange={(v) => setForm({ ...form, quartier: v })}
-              placeholder={selectedRole === "livreur" ? "Où travaillez-vous le plus ?" : "Votre quartier"}
-            />
+            <Label>Quartier *</Label>
+            <QuartierSelect value={form.quartier} onValueChange={(v) => setForm({ ...form, quartier: v })} placeholder="Votre quartier" />
           </div>
-
-          {selectedRole === "livreur" && (
-            <div className="space-y-3">
-              <p className="text-sm font-semibold">🚗 Mode(s) de déplacement *</p>
-              <div className="space-y-2">
-                {[{val: "moto", label: "🛵 Motocyclette"}, {val: "vehicule", label: "🚗 Véhicule"}].map(mode => (
-                  <button
-                    key={mode.val}
-                    onClick={() => setMoyenDeplacement(prev =>
-                      prev.includes(mode.val)
-                        ? prev.filter(m => m !== mode.val)
-                        : [...prev, mode.val]
-                    )}
-                    className={`w-full p-3 rounded-lg border-2 transition-all font-medium ${
-                      moyenDeplacement.includes(mode.val)
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card hover:border-primary/50"
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {selectedRole === "commercial" && (
             <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm space-y-2">
               <p className="font-semibold text-blue-700">🎯 Profil Commercial</p>
-              <p className="text-xs text-blue-600">Vous recevrez un code promo unique après validation. Utilisez-le pour parrainer et gagnez 50 F par client ayant effectué sa première course.</p>
+              <p className="text-xs text-blue-600">Vous recevrez un code promo unique après validation. Gagnez 50 F par client ayant effectué sa première course.</p>
             </div>
           )}
 
@@ -483,7 +515,7 @@ export default function RoleSetup({ onComplete }) {
               {autoAppliedCode && !codePromoApplique && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800 font-medium">
                   <span>🎁</span>
-                  <span>Code parrainage détecté : <strong>{autoAppliedCode}</strong> — cliquez "OK" pour l'appliquer</span>
+                  <span>Code détecté : <strong>{autoAppliedCode}</strong> — cliquez "OK" pour l'appliquer</span>
                 </div>
               )}
               {codePromoApplique ? (
@@ -493,55 +525,34 @@ export default function RoleSetup({ onComplete }) {
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="Entrez un code promo..."
-                    value={form.code_promo}
-                    onChange={e => setForm({ ...form, code_promo: e.target.value.toUpperCase() })}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={checkingCode || !form.code_promo.trim()}
+                  <Input placeholder="Entrez un code promo..." value={form.code_promo} onChange={e => setForm({ ...form, code_promo: e.target.value.toUpperCase() })} className="flex-1" />
+                  <Button type="button" variant="outline" disabled={checkingCode || !form.code_promo.trim()}
                     onClick={async () => {
                       setCheckingCode(true);
                       const codes = await base44.entities.CodePromo.filter({ code: form.code_promo, statut: "valide", actif: true });
                       if (codes.length === 0) { toast.error("Code promo invalide ou non activé"); }
-                      else { setCodePromoApplique(codes[0]); toast.success(`Code ${form.code_promo} appliqué ! -15% sur votre 1ère course 🎉`); }
+                      else { setCodePromoApplique(codes[0]); toast.success(`Code ${form.code_promo} appliqué ! 🎉`); }
                       setCheckingCode(false);
                     }}
-                  >
-                    {checkingCode ? "..." : "OK"}
-                  </Button>
+                  >{checkingCode ? "..." : "OK"}</Button>
                 </div>
               )}
             </div>
           )}
-
         </div>
 
-        {selectedRole === "livreur" && (
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-            <p className="text-sm font-semibold text-amber-800">📋 Étape suivante</p>
-            <p className="text-xs text-amber-700 mt-1">Après inscription, vous devrez envoyer vos documents (selfie, CNI, photo du véhicule) pour activer votre compte.</p>
-          </div>
-        )}
-
-
-            <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
-            Retour
-          </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Retour</Button>
           <Button
             onClick={() => {
               const err = validateTelephone(form.telephone);
               if (err) { setTelError(err); toast.error(err); return; }
               handleSubmit();
             }}
-            disabled={!form.telephone || !form.quartier || loading || (selectedRole === "livreur" && moyenDeplacement.length === 0)}
+            disabled={!form.telephone || !form.quartier || loading}
             className="flex-1 h-11 font-semibold"
           >
-            {loading ? "Enregistrement..." : selectedRole === "livreur" ? "🛵 Créer mon compte →" : "Commencer"}
+            {loading ? "Enregistrement..." : "Commencer"}
           </Button>
         </div>
       </div>
