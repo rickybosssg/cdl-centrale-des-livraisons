@@ -18,6 +18,8 @@ export default function CreerPublicite({ user }) {
   const [bedou, setBedou] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const [uploadingVid, setUploadingVid] = useState(false);
   const [error, setError] = useState(null);
 
   const [form, setForm] = useState({
