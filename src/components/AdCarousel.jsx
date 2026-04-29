@@ -28,19 +28,30 @@ export default function AdCarousel({ placement = "accueil", userRole = "client" 
         });
 
         const targeted = active.filter(ad => {
-          const matchPlace = !placement || ad.placement === placement || ad.placement === 'toutes_pages' || ad.placement === 'tous';
-          const dest = ad.destinataires || 'tous';
-          const matchDest = !dest || dest === 'tous' || dest === '' || 
-            (() => {
-              const cible = dest.split(',').map(c => c.trim());
-              if (cible.includes('tous')) return true;
-              if (userRole === 'client' && cible.includes('clients')) return true;
-              if (userRole === 'livreur' && cible.includes('livreurs')) return true;
-              if (userRole === 'partenaire' && cible.includes('partenaires')) return true;
-              if (userRole === 'commercial' && cible.includes('commerciaux')) return true;
-              if (userRole === 'admin' && cible.includes('admin')) return true;
-              return cible.length === 0;
-            })();
+          // Filtre placement
+          const matchPlace = !placement
+            || ad.placement === placement
+            || ad.placement === 'toutes_pages'
+            || ad.placement === 'tous';
+
+          // Filtre cibles — supporte targets (array) et destinataires (string legacy)
+          const targets = Array.isArray(ad.targets) ? ad.targets : [];
+          const destStr = ad.destinataires || '';
+          // Si aucune cible définie → visible par tous
+          if (targets.length === 0 && !destStr) return matchPlace;
+          // Targets array (nouveau format)
+          if (targets.length > 0) {
+            const matchTarget = targets.includes('all')
+              || targets.includes('tous')
+              || targets.includes(userRole);
+            return matchPlace && matchTarget;
+          }
+          // Fallback legacy destinataires string
+          const cibles = destStr.split(',').map(c => c.trim().toLowerCase());
+          const matchDest = cibles.includes('tous')
+            || cibles.includes('all')
+            || cibles.includes(userRole)
+            || cibles.includes(userRole + 's'); // "clients", "livreurs"...
           return matchPlace && matchDest;
         });
 

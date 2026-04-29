@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Upload, AlertCircle, X } from "lucide-react";
+import { ArrowLeft, Upload, AlertCircle, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +18,8 @@ export default function CreerPublicite({ user }) {
   const [bedou, setBedou] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const [uploadingVid, setUploadingVid] = useState(false);
   const [error, setError] = useState(null);
 
   const [form, setForm] = useState({
@@ -52,40 +54,60 @@ export default function CreerPublicite({ user }) {
     load();
   }, [user?.email]);
 
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const [uploadingVid, setUploadingVid] = useState(false);
+
+  const MAX_IMAGES = 5;
+  const MAX_IMG_MB = 8;
+  const MAX_VID_MB = 15;
+
   const handleImageUpload = async (file, isMulti = false) => {
+    if (!file.type.match(/^image\/(jpeg|png|webp|gif)$/)) {
+      toast.error('Format accepté : JPG, PNG, WEBP');
+      return;
+    }
+    if (file.size > MAX_IMG_MB * 1024 * 1024) {
+      toast.error(`Image trop lourde (max ${MAX_IMG_MB} MB)`);
+      return;
+    }
+    if (isMulti && (form.images || []).length >= MAX_IMAGES) {
+      toast.error(`Maximum ${MAX_IMAGES} images autorisées`);
+      return;
+    }
+    setUploadingImg(true);
     try {
       const res = await base44.integrations.Core.UploadFile({ file });
       if (isMulti) {
-        setForm(prev => ({
-          ...prev,
-          images: [...(prev.images || []), res.file_url]
-        }));
+        setForm(prev => ({ ...prev, images: [...(prev.images || []), res.file_url] }));
       } else {
         setForm(prev => ({ ...prev, image_url: res.file_url }));
       }
-      toast.success("Média uploadé");
+      toast.success('Photo ajoutée ✓');
     } catch (e) {
-      console.error("[CreerPublicite] Upload error:", e);
-      toast.error("Erreur upload");
+      toast.error('Erreur upload — vérifiez votre connexion');
+    } finally {
+      setUploadingImg(false);
     }
   };
 
   const handleVideoUpload = async (file) => {
-    if (!file.type.startsWith('video/')) {
-      toast.error('Seules les vidéos sont acceptées');
+    if (!file.type.match(/^video\/(mp4|quicktime|x-m4v)$/)) {
+      toast.error('Format vidéo accepté : MP4, MOV');
       return;
     }
-    if (file.size > 100 * 1024 * 1024) {
-      toast.error('Vidéo trop volumineuse (max 100MB)');
+    if (file.size > MAX_VID_MB * 1024 * 1024) {
+      toast.error(`Vidéo trop volumineuse (max ${MAX_VID_MB} MB)`);
       return;
     }
+    setUploadingVid(true);
     try {
       const res = await base44.integrations.Core.UploadFile({ file });
       setForm(prev => ({ ...prev, video_url: res.file_url }));
-      toast.success('Vidéo uploadée');
+      toast.success('Vidéo uploadée ✓');
     } catch (e) {
-      console.error('[CreerPublicite] Video upload error:', e);
-      toast.error('Erreur upload vidéo');
+      toast.error('Erreur upload vidéo — vérifiez votre connexion');
+    } finally {
+      setUploadingVid(false);
     }
   };
 
@@ -222,53 +244,58 @@ export default function CreerPublicite({ user }) {
             <p className="text-[10px] text-muted-foreground mt-1">{form.description.length}/500</p>
           </div>
 
-          {/* Image */}
+          {/* Image principale */}
           <div>
-            <label className="block text-sm font-semibold mb-1.5">Image publicitaire</label>
+            <label className="block text-sm font-semibold mb-1.5">
+              Image principale <span className="text-red-500">*</span>
+            </label>
             {form.image_url ? (
               <div className="space-y-2">
-                <img src={form.image_url} alt="Aperçu" className="w-full h-32 rounded-lg object-cover" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => setForm(prev => ({ ...prev, image_url: "" }))}
-                >
-                  Changer l'image
-                </Button>
+                <div className="relative rounded-xl overflow-hidden bg-gray-100">
+                  <img src={form.image_url} alt="Aperçu" className="w-full aspect-video object-cover" />
+                  <button
+                    onClick={() => setForm(prev => ({ ...prev, image_url: "" }))}
+                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center active:scale-90"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             ) : (
-              <label className="block p-4 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/30 transition-colors">
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="h-6 w-6 text-muted-foreground" />
-                  <span className="text-sm font-medium">Cliquez pour upload</span>
-                  <span className="text-[10px] text-muted-foreground">PNG, JPG jusqu'à 5MB</span>
+              <label className={`block p-5 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploadingImg ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted/30'}`}>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  {uploadingImg
+                    ? <Loader2 className="h-7 w-7 text-primary animate-spin" />
+                    : <Upload className="h-7 w-7 text-muted-foreground" />}
+                  <span className="text-sm font-semibold">{uploadingImg ? 'Envoi en cours…' : 'Ajouter une photo'}</span>
+                  <span className="text-[11px] text-muted-foreground">JPG, PNG, WEBP · max 8 MB</span>
                 </div>
                 <input
                   type="file"
-                  accept="image/*"
-                  onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (file) handleImageUpload(file);
-                  }}
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); e.target.value = ''; }}
                   className="hidden"
+                  disabled={uploadingImg}
                 />
               </label>
             )}
           </div>
 
-          {/* Galerie multi-images */}
+          {/* Galerie multi-images (max 5) */}
           <div>
-            <label className="block text-sm font-semibold mb-1.5">Galerie d'images (optionnel)</label>
+            <label className="block text-sm font-semibold mb-1.5">
+              Galerie d'images supplémentaires
+              <span className="ml-1 text-xs font-normal text-muted-foreground">({(form.images || []).length}/{5} max)</span>
+            </label>
             <div className="space-y-2">
-              {form.images.length > 0 && (
+              {(form.images || []).length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {form.images.map((img, idx) => (
-                    <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
+                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 border">
                       <img src={img} alt={`Image ${idx + 1}`} className="w-full h-full object-cover" />
                       <button
                         onClick={() => setForm(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== idx) }))}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center active:scale-90"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -276,23 +303,24 @@ export default function CreerPublicite({ user }) {
                   ))}
                 </div>
               )}
-              <label className="block p-3 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/30 transition-colors">
-                <div className="flex flex-col items-center gap-1">
-                  <Upload className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-xs font-medium">Ajouter photos</span>
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={e => {
-                    Array.from(e.target.files || []).forEach(file => {
-                      handleImageUpload(file, true);
-                    });
-                  }}
-                  className="hidden"
-                />
-              </label>
+              {(form.images || []).length < 5 && (
+                <label className={`block p-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploadingImg ? 'opacity-50 pointer-events-none' : 'hover:bg-muted/30'}`}>
+                  <div className="flex items-center justify-center gap-2">
+                    {uploadingImg
+                      ? <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                      : <Upload className="h-4 w-4 text-muted-foreground" />}
+                    <span className="text-xs font-medium">{uploadingImg ? 'Envoi…' : 'Ajouter des photos'}</span>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    onChange={e => { Array.from(e.target.files || []).forEach(f => handleImageUpload(f, true)); e.target.value = ''; }}
+                    className="hidden"
+                    disabled={uploadingImg}
+                  />
+                </label>
+              )}
             </div>
           </div>
 
@@ -301,38 +329,36 @@ export default function CreerPublicite({ user }) {
             <label className="block text-sm font-semibold mb-1.5">Vidéo (optionnel)</label>
             {form.video_url ? (
               <div className="space-y-2">
-                <div className="aspect-video rounded-lg overflow-hidden bg-gray-900">
-                  <video src={form.video_url} className="w-full h-full object-cover" controls />
+                <div className="aspect-video rounded-xl overflow-hidden bg-gray-900">
+                  <video src={form.video_url} className="w-full h-full object-cover" controls muted playsInline />
                 </div>
-                <div>
-                  <Input
-                    placeholder="Titre vidéo (optionnel)"
-                    value={form.video_title}
-                    onChange={e => setForm(prev => ({ ...prev, video_title: e.target.value }))}
-                  />
-                </div>
+                <Input
+                  placeholder="Titre de la vidéo (optionnel)"
+                  value={form.video_title}
+                  onChange={e => setForm(prev => ({ ...prev, video_title: e.target.value }))}
+                />
                 <button
                   onClick={() => setForm(prev => ({ ...prev, video_url: '', video_title: '' }))}
-                  className="w-full px-3 py-2 text-sm rounded-md border text-red-600 hover:bg-red-50 transition-colors"
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
                 >
-                  Supprimer vidéo
+                  Supprimer la vidéo
                 </button>
               </div>
             ) : (
-              <label className="block p-3 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/30 transition-colors">
-                <div className="flex flex-col items-center gap-1">
-                  <Upload className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-xs font-medium">Upload vidéo (mp4)</span>
-                  <span className="text-[10px] text-muted-foreground">Max 100MB</span>
+              <label className={`block p-5 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploadingVid ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted/30'}`}>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  {uploadingVid
+                    ? <Loader2 className="h-7 w-7 text-primary animate-spin" />
+                    : <Upload className="h-7 w-7 text-muted-foreground" />}
+                  <span className="text-sm font-semibold">{uploadingVid ? 'Envoi en cours…' : 'Ajouter une vidéo'}</span>
+                  <span className="text-[11px] text-muted-foreground">MP4, MOV · max 15 MB</span>
                 </div>
                 <input
                   type="file"
-                  accept="video/mp4,video/quicktime"
-                  onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (file) handleVideoUpload(file);
-                  }}
+                  accept="video/mp4,video/quicktime,video/x-m4v"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f); e.target.value = ''; }}
                   className="hidden"
+                  disabled={uploadingVid}
                 />
               </label>
             )}
