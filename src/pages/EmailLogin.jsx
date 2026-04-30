@@ -67,10 +67,8 @@ export default function EmailLogin() {
 
   const clear = () => { setMessage(""); setSuccessMsg(""); };
 
-  const navigateHome = async () => {
-    // Utiliser checkAppState() pour mettre à jour le contexte Auth AVANT navigation
-    // Puis navigate React Router (sans rechargement WebView) → pas de reset du SDK
-    try { await checkAppState(); } catch (_) {}
+  const navigateHome = () => {
+    // Navigation immédiate — AuthContext se rechargera tout seul au mount de Home
     navigate("/", { replace: true });
   };
 
