@@ -46,7 +46,7 @@ function Field({ icon: Icon, type = "text", placeholder, value, onChange, onKeyD
 }
 
 export default function EmailLogin() {
-  const { checkAppState } = useAuth();
+  const { setLoggedIn } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState("login"); // login | register | forgot
 
@@ -87,9 +87,14 @@ export default function EmailLogin() {
       if (ok && token) {
         console.log("[LOGIN] SUCCESS — token:", token?.slice(0, 20));
         saveToken(token);
-        // Mettre à jour AuthContext avec le nouveau token avant navigation
-        console.log("[LOGIN] CHECK APP STATE");
-        await checkAppState();
+        // Récupérer le user depuis le token et forcer l'état auth immédiatement
+        console.log("[LOGIN] FETCH USER");
+        let userData = null;
+        try {
+          userData = await base44.auth.me();
+        } catch (_) {}
+        console.log("[LOGIN] SET LOGGED IN");
+        setLoggedIn(userData);
         console.log("[LOGIN] NAVIGATE");
         navigate("/", { replace: true });
       } else {

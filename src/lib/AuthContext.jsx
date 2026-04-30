@@ -79,6 +79,13 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // Forcer l'état connecté immédiatement après login (sans appel réseau)
+  const setLoggedIn = useCallback((userData) => {
+    setUser(userData);
+    setIsAuthenticated(true);
+    setIsLoadingAuth(false);
+  }, []);
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -90,6 +97,7 @@ export const AuthProvider = ({ children }) => {
       logout,
       navigateToLogin,
       checkAppState,
+      setLoggedIn,
     }}>
       {children}
     </AuthContext.Provider>
