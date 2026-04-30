@@ -85,17 +85,11 @@ export default function EmailLogin() {
       const { ok, status, data } = await authFetch("/login", { email: email.trim().toLowerCase(), password });
       const token = data?.access_token || data?.token;
       if (ok && token) {
-        console.log("[LOGIN] SUCCESS — token:", token?.slice(0, 20));
+        console.log("[LOGIN] SUCCESS");
         saveToken(token);
-        // Récupérer le user depuis le token et forcer l'état auth immédiatement
-        console.log("[LOGIN] FETCH USER");
-        let userData = null;
-        try {
-          userData = await base44.auth.me();
-        } catch (_) {}
         console.log("[LOGIN] SET LOGGED IN");
-        setLoggedIn(userData);
-        console.log("[LOGIN] NAVIGATE");
+        setLoggedIn({ email: email.trim().toLowerCase() });
+        console.log("[LOGIN] NAVIGATE TRIGGERED");
         navigate("/", { replace: true });
       } else {
         setMessage(status === 401 || status === 400 ? "Email ou mot de passe incorrect" : (data?.error || data?.detail || "Erreur de connexion — réessayez"));
