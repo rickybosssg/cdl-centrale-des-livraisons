@@ -77,16 +77,38 @@ export default function EmailLogin() {
   // ── Connexion ──────────────────────────────────────────────────────────────
   const handleLogin = async () => {
     if (!email || !password) { setMessage("Email et mot de passe requis"); return; }
+    console.log("[LOGIN] START | email:", email.trim());
     setLoading(true); clear();
+
+    // Timeout de sécurité : jamais bloquer plus de 15s
+    const safetyTimer = setTimeout(() => {
+      console.warn("[LOGIN] TIMEOUT — reset loading");
+      setLoading(false);
+      setMessage("La connexion prend trop de temps. Vérifiez votre connexion et réessayez.");
+    }, 15000);
+
     try {
+      console.log("[LOGIN] AUTH CALL");
       const { ok, status, data } = await authFetch("/login", { email: email.trim().toLowerCase(), password });
+      clearTimeout(safetyTimer);
       const token = data?.access_token || data?.token;
-      if (ok && token) { saveToken(token); await navigateHome(); }
-      else {
+      if (ok && token) {
+        console.log("[LOGIN] SUCCESS — token reçu");
+        saveToken(token);
+        setLoading(false);
+        console.log("[LOGIN] REDIRECT DASHBOARD");
+        navigateHome();
+      } else {
+        console.warn("[LOGIN] ERROR | status:", status, "| data:", JSON.stringify(data));
         setMessage(status === 401 || status === 400 ? "Email ou mot de passe incorrect" : (data?.error || data?.detail || "Erreur de connexion — réessayez"));
         setLoading(false);
       }
-    } catch { setMessage("Erreur réseau — vérifiez votre connexion"); setLoading(false); }
+    } catch (err) {
+      clearTimeout(safetyTimer);
+      console.error("[LOGIN] ERROR CATCH:", err?.message);
+      setMessage("Erreur réseau — vérifiez votre connexion");
+      setLoading(false);
+    }
   };
 
   // ── Inscription ────────────────────────────────────────────────────────────
@@ -118,7 +140,8 @@ export default function EmailLogin() {
         try {
           await base44.auth.updateMe({ full_name: fullName, telephone: telephone.trim() });
         } catch (_) {}
-        await navigateHome();
+        setLoading(false);
+        navigateHome();
       } else if (ok) {
         setSuccessMsg("Compte créé ! Connectez-vous avec votre email et mot de passe.");
         goTo("login");
