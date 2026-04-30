@@ -11,6 +11,8 @@ function syncTokenToSDK() {
   } catch (_) {}
 }
 
+const AUTH_TIMEOUT_MS = 8000;
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -19,22 +21,48 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
 
   const checkAppState = useCallback(async () => {
+    console.log('[AUTH] INIT START');
     setIsLoadingAuth(true);
     setAuthError(null);
+
+    let settled = false;
+
+    // Timeout de sécurité : jamais bloquer l'APK indéfiniment
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      console.warn('[AUTH] TIMEOUT — forcing app unblock after', AUTH_TIMEOUT_MS, 'ms');
+      setIsAuthenticated(false);
+      setUser(null);
+      setIsLoadingAuth(false);
+    }, AUTH_TIMEOUT_MS);
+
     try {
-      // CRITIQUE : toujours synchroniser le token localStorage → SDK avant me()
       syncTokenToSDK();
       const currentUser = await base44.auth.me();
+      if (settled) return; // Timeout déjà déclenché
+      settled = true;
+      clearTimeout(timeoutId);
       setUser(currentUser);
       setIsAuthenticated(true);
+      console.log('[AUTH] INIT SUCCESS | user:', currentUser?.email);
     } catch (error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
       setIsAuthenticated(false);
       setUser(null);
       if (error?.data?.extra_data?.reason === 'user_not_registered') {
         setAuthError({ type: 'user_not_registered', message: 'User not registered for this app' });
       }
+      console.warn('[AUTH] INIT ERROR:', error?.message || 'unknown');
     } finally {
-      setIsLoadingAuth(false);
+      if (!settled) {
+        clearTimeout(timeoutId);
+        setIsLoadingAuth(false);
+      } else {
+        setIsLoadingAuth(false);
+      }
     }
   }, []);
 

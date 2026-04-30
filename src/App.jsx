@@ -207,10 +207,15 @@ const AuthenticatedApp = () => {
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
 
-  // Timeout de sécurité : affiche bouton réessayer après 3s
+  // Log démarrage
+  useEffect(() => {
+    console.log('[APP] START');
+  }, []);
+
+  // Timeout de sécurité : affiche bouton réessayer après 4s
   useEffect(() => {
     if (!isLoadingAuth && !isLoadingPublicSettings) return;
-    const t1 = setTimeout(() => setLoadingTimeout(true), 3000);
+    const t1 = setTimeout(() => setLoadingTimeout(true), 4000);
     return () => { clearTimeout(t1); };
   }, [isLoadingAuth, isLoadingPublicSettings]);
 
@@ -272,6 +277,9 @@ const AuthenticatedApp = () => {
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
     return <EmailLogin />;
   }
+
+  // Log rendu principal
+  console.log('[APP] RENDER MAIN UI | user:', user?.email || 'none');
 
   return (
     <>
