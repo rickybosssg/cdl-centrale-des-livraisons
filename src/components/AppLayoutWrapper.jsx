@@ -6,7 +6,7 @@ import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 import PromoCodeStep from "../pages/PromoCodeStep";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
-import { saveFcmToken as saveFcmTokenDirect, flushPendingFcmToken } from "@/lib/fcmApi";
+import { saveFcmToken as saveFcmTokenDirect, getFcmTokens } from "@/lib/fcmApi";
 import PermissionsOnboarding, { needsPermissionsOnboarding, markPermissionsConfigured } from "./PermissionsOnboarding";
 
 // Récupère le token d'auth depuis localStorage pour le fallback APK natif
@@ -159,12 +159,7 @@ export default function AppLayoutWrapper({ user }) {
   }, []);
 
   useEffect(() => {
-    // Initialiser FCM une fois l'user authentifié
     if (!userEmail) return;
-
-    // Flush FCM token en attente — maintenant que l'user est confirmé authentifié
-    // Le Bearer token est dans localStorage, flushPendingFcmToken le trouvera
-    setTimeout(() => flushPendingFcmToken().catch(() => {}), 1000);
 
     const initFcm = async () => {
       try {
@@ -172,31 +167,41 @@ export default function AppLayoutWrapper({ user }) {
           window.location?.protocol === 'capacitor:' ||
           window.Capacitor?.isNativePlatform?.() === true;
 
-        console.log('[FCM] Init | isNative:', isNative, '| user:', userEmail);
+        console.log('[FCM] ═══ INIT START ═══ | isNative:', isNative, '| user:', userEmail);
 
         if (isNative) {
-          const { initCapacitorPush } = await import('@/lib/nativePush');
+          const { initCapacitorPush, getPermissionStatus } = await import('@/lib/nativePush');
+          const { getFcmTokens } = await import('@/lib/fcmApi');
 
-          await initCapacitorPush({
-            onToken: async (token) => {
-              console.log('[FCM] ✅ TOKEN GENERATED (android_native):', token.substring(0, 30) + '...');
-              // Résoudre l'email au moment du callback (closure peut être stale)
-              let resolvedEmail = userEmail;
-              if (!resolvedEmail) {
-                try { const me = await base44.auth.me(); resolvedEmail = me?.email; } catch (_) {}
-              }
-              if (!resolvedEmail) {
-                console.error('[FCM] ❌ Impossible de résoudre user.email pour sauvegarder le token');
-                return;
-              }
-              // Appel direct via fetch + Bearer token (contourne le 403 SDK dans APK)
-              const result = await saveFcmTokenDirect({ user_email: resolvedEmail, token, device_type: 'android_native' });
-              if (result.success) {
-                console.log('[FCM] ✅ TOKEN SAVED:', result.action, '| user:', resolvedEmail);
-              }
-            },
+          // Callback token — email capturé via closure + fallback auth.me()
+          // IMPORTANT : userEmail peut être stale dans une closure → on le capture ici
+          const capturedEmail = userEmail;
+
+          const handleToken = async (token) => {
+            console.log('[FCM] ✅ TOKEN REÇU (callback):', token.substring(0, 30) + '...');
+            let resolvedEmail = capturedEmail;
+            if (!resolvedEmail) {
+              try { const me = await base44.auth.me(); resolvedEmail = me?.email; } catch (_) {}
+            }
+            if (!resolvedEmail) {
+              console.error('[FCM] ❌ Email introuvable — token non sauvegardé !');
+              return;
+            }
+            console.log('[FCM] saveFcmTokenPublic → user:', resolvedEmail, '| token:', token.substring(0, 25) + '...');
+            const result = await saveFcmTokenDirect({ user_email: resolvedEmail, token, device_type: 'android_native' });
+            console.log('[FCM] ← Réponse saveFcmTokenPublic:', JSON.stringify(result).slice(0, 200));
+            if (result.success) {
+              console.log('[FCM] ✅ TOKEN SAUVEGARDÉ en BDD — action:', result.action, '| id:', result.token_id);
+            } else {
+              console.error('[FCM] ❌ Échec sauvegarde token:', result.error);
+            }
+          };
+
+          // Lancer la séquence complète (listeners → register → callback → save)
+          const { permissionStatus } = await initCapacitorPush({
+            onToken: handleToken,
             onForegroundNotif: (notification) => {
-              console.log('[FCM] 📬 NOTIFICATION RECEIVED (foreground):', notification.title);
+              console.log('[FCM] 📬 Notification foreground:', notification.title);
               const route = notification.data?.notif_route || notification.data?.route || null;
               import('sonner').then(({ toast }) => {
                 toast(notification.title || 'CDL', {
@@ -211,13 +216,38 @@ export default function AppLayoutWrapper({ user }) {
               if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
             },
             onNotificationTap: ({ route }) => {
-              console.log('[FCM] 👆 NOTIFICATION TAP → route:', route);
+              console.log('[FCM] 👆 Tap → route:', route);
               if (route) window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
             },
             onPermissionDenied: (reason) => {
-              console.warn('[FCM] ⚠️ Permission refusée:', reason);
+              console.warn('[FCM] ⚠️ Permission refusée:', reason, '— FCM désactivé pour cet utilisateur');
             },
           });
+
+          console.log('[FCM] initCapacitorPush terminé — permissionStatus:', permissionStatus);
+
+          // Anti-silence : si permission OK mais aucun token en BDD après 8s → retry
+          if (permissionStatus === 'granted') {
+            setTimeout(async () => {
+              try {
+                const tokens = await getFcmTokens(capturedEmail);
+                const activeTokens = tokens.filter(t => t.is_active);
+                if (activeTokens.length === 0) {
+                  console.warn('[FCM] ⚠️ ANTI-SILENCE: permission OK mais 0 token actif en BDD — retry register()');
+                  const { requestNativePushToken } = await import('@/lib/nativePush');
+                  const token = await requestNativePushToken();
+                  if (token) {
+                    await handleToken(token);
+                    console.log('[FCM] ✅ Retry réussi — token obtenu et sauvegardé');
+                  } else {
+                    console.error('[FCM] ❌ Retry échoué — token toujours indisponible après 8s');
+                  }
+                } else {
+                  console.log('[FCM] ✅ Vérification BDD OK —', activeTokens.length, 'token(s) actif(s)');
+                }
+              } catch (_) {}
+            }, 8000);
+          }
 
         } else {
           // Web Push (PWA / navigateur)
@@ -233,11 +263,10 @@ export default function AppLayoutWrapper({ user }) {
             return;
           }
 
-          await saveFcmTokenDirect({ user_email: userEmail, token, device_type: 'web' });
-          console.log('[FCM] ✅ TOKEN SAVED (web)');
+          const result = await saveFcmTokenDirect({ user_email: userEmail, token, device_type: 'web' });
+          console.log('[FCM] ✅ TOKEN SAVED (web) — action:', result.action);
 
           onForegroundMessage((payload) => {
-            console.log('[FCM] 📬 NOTIFICATION RECEIVED (web foreground):', payload.notification?.title);
             const notif = payload.notification || {};
             const data = payload.data || {};
             const route = data.notif_route || data.route || data.target_screen || null;
@@ -259,7 +288,7 @@ export default function AppLayoutWrapper({ user }) {
     };
 
     initFcm();
-  }, [userEmail]); // ← se relance uniquement quand le user est prêt
+  }, [userEmail]);
 
   if (loading) {
     return (

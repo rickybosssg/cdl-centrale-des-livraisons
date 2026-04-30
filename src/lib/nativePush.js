@@ -1,50 +1,32 @@
 /**
- * nativePush.js — Capacitor Firebase Push Notifications (APK Android natif)
+ * nativePush.js — Capacitor Firebase Push Notifications (APK Android)
  *
- * Architecture v4 :
- * - UN SEUL register() dans toute la vie de l'app (guard _registered)
- * - UN SEUL jeu de listeners actifs à la fois
- * - requestNativePushToken() réutilise les listeners existants si déjà init
- * - Aucun crash possible : chaque opération native est dans try/catch
+ * ARCHITECTURE DÉFINITIVE v5 (NE PAS MODIFIER SANS RAISON) :
+ *
+ * Règle fondamentale Capacitor Push :
+ *   - addListener() doit être appelé AVANT register()
+ *   - register() déclenche le callback 'registration' avec le token
+ *   - Si les listeners sont perdus (module rechargé), le token ne revient plus
+ *
+ * Solution :
+ *   - TOUJOURS re-attacher les listeners avant register()
+ *   - register() est TOUJOURS forcé au démarrage (pas de guard _registered)
+ *     car Firebase renvoie le même token → idempotent côté BDD
+ *   - Timeout de sécurité 20s → log d'erreur visible si token jamais reçu
  */
 
-// ── État global singleton ─────────────────────────────────────────────────────
-let _PN = null;           // instance PushNotifications (chargée une fois)
-let _registered = false;  // register() déjà appelé
-let _listeners = [];      // handles des listeners actifs
-
-// Expose pour reset externe (FcmDiagnostic peut forcer un nouveau register)
-export function resetNativePushState() {
-  _registered = false;
-  console.log('[NativePush] State reset — register() sera rappelé au prochain initCapacitorPush');
-}
-
-// Callbacks installés par initCapacitorPush (remplacés à chaque init)
+let _PN = null;
+let _listeners = [];
 let _onToken = null;
 let _onForegroundNotif = null;
 let _onNotificationTap = null;
-let _onPermissionDenied = null;
 
 // ── Détection contexte natif ──────────────────────────────────────────────────
 export function isNativeApp() {
   if (typeof window === 'undefined') return false;
   if (window.location?.protocol === 'capacitor:') return true;
-  // Seule vérification fiable : isNativePlatform() doit retourner true explicitement
   if (window.Capacitor?.isNativePlatform?.() === true) return true;
   return false;
-}
-
-export function waitForCapacitor(timeoutMs = 3000) {
-  return new Promise((resolve) => {
-    if (isNativeApp()) return resolve(true);
-    const start = Date.now();
-    const check = () => {
-      if (isNativeApp()) return resolve(true);
-      if (Date.now() - start > timeoutMs) return resolve(false);
-      setTimeout(check, 100);
-    };
-    check();
-  });
 }
 
 // ── Charger le plugin une seule fois ─────────────────────────────────────────
@@ -53,10 +35,10 @@ async function getPN() {
   try {
     const mod = await import('@capacitor/push-notifications');
     _PN = mod.PushNotifications;
-    console.log('[NativePush] Plugin chargé');
+    console.log('[NativePush] ✅ Plugin PushNotifications chargé');
     return _PN;
   } catch (err) {
-    console.warn('[NativePush] Plugin indisponible:', err?.message);
+    console.error('[NativePush] ❌ Plugin indisponible:', err?.message);
     return null;
   }
 }
@@ -74,31 +56,34 @@ async function ensureChannel(PN) {
       lights: true,
       lightColor: '#1a73e8',
     });
-  } catch (_) {
-    // Canal existe déjà ou non supporté — pas bloquant
-  }
+    console.log('[NativePush] Canal "default" créé/vérifié');
+  } catch (_) {}
 }
 
-// ── Demander / vérifier la permission ────────────────────────────────────────
+// ── Vérifier / demander la permission ────────────────────────────────────────
 async function ensurePermission(PN) {
   try {
     const check = await PN.checkPermissions();
+    console.log('[NativePush] checkPermissions():', check.receive);
     if (check.receive === 'granted') return 'granted';
-    if (check.receive === 'denied') return 'denied';
-  } catch (_) {}
-
-  try {
+    if (check.receive === 'denied') {
+      console.warn('[NativePush] Permission DENIED définitivement (POST_NOTIFICATIONS bloquée)');
+      return 'denied';
+    }
+    // 'prompt' ou autre → demander
+    console.log('[NativePush] requestPermissions()...');
     const req = await PN.requestPermissions();
-    return req.receive; // 'granted' | 'denied' | 'prompt'
+    console.log('[NativePush] requestPermissions() résultat:', req.receive);
+    return req.receive;
   } catch (e) {
-    console.error('[NativePush] requestPermissions crash:', e?.message);
+    console.error('[NativePush] ensurePermission crash:', e?.message);
     return 'error';
   }
 }
 
-// ── Enregistrer les listeners permanents (appelé une seule fois) ──────────────
+// ── Attacher les listeners (TOUJOURS avant register) ─────────────────────────
 async function attachListeners(PN) {
-  // Supprimer les anciens listeners proprement
+  // Nettoyer les anciens listeners
   for (const l of _listeners) {
     try { await l.remove(); } catch (_) {}
   }
@@ -107,8 +92,13 @@ async function attachListeners(PN) {
   try {
     _listeners.push(await PN.addListener('registration', (token) => {
       const val = token?.value;
-      console.log('[NativePush] ✅ Token FCM:', val ? val.slice(0, 20) + '…' : 'VIDE');
-      if (_onToken && val) _onToken(val);
+      if (val) {
+        console.log('[NativePush] ✅ TOKEN REÇU (registration event):', val.slice(0, 25) + '…');
+        if (_onToken) _onToken(val);
+        else console.warn('[NativePush] ⚠️ Token reçu mais _onToken est null — callback non installé !');
+      } else {
+        console.error('[NativePush] ❌ registration event reçu mais token.value est VIDE');
+      }
     }));
 
     _listeners.push(await PN.addListener('registrationError', (err) => {
@@ -116,100 +106,118 @@ async function attachListeners(PN) {
     }));
 
     _listeners.push(await PN.addListener('pushNotificationReceived', (notif) => {
-      console.log('[NativePush] 📬 Foreground:', notif?.title);
+      console.log('[NativePush] 📬 Notification foreground:', notif?.title);
       if (_onForegroundNotif) _onForegroundNotif(notif);
     }));
 
     _listeners.push(await PN.addListener('pushNotificationActionPerformed', (action) => {
       const data = action.notification?.data || {};
       const route = data.notif_route || data.route || data.target_screen || null;
-      console.log('[NativePush] 👆 Tap → route:', route);
+      console.log('[NativePush] 👆 Tap notification → route:', route);
       if (_onNotificationTap) _onNotificationTap({ route, data });
       if (route?.startsWith('/')) {
         try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
       }
     }));
 
-    console.log('[NativePush] ✅ Listeners attachés');
+    console.log('[NativePush] ✅', _listeners.length, 'listeners attachés');
   } catch (e) {
-    console.error('[NativePush] addListener error:', e?.message);
+    console.error('[NativePush] ❌ attachListeners error:', e?.message);
   }
 }
 
-// ── register() ───────────────────────────────────────────────────────────────
-async function doRegister(PN, force = false) {
-  if (_registered && !force) {
-    console.log('[NativePush] register() déjà effectué, skip');
-    return true;
-  }
+// ── register() — TOUJOURS appelé (idempotent Firebase) ───────────────────────
+async function doRegister(PN) {
   try {
+    console.log('[NativePush] register() → déclenchement...');
     await PN.register();
-    _registered = true;
-    console.log('[NativePush] ✅ register() OK — token en attente via listener');
+    console.log('[NativePush] ✅ register() OK — en attente du callback registration');
     return true;
   } catch (e) {
-    console.error('[NativePush] ❌ register() error:', e?.message);
+    console.error('[NativePush] ❌ register() ERREUR:', e?.message);
     return false;
   }
 }
 
 /**
- * initCapacitorPush — appelé au démarrage par AppLayoutWrapper.
- * Installe les callbacks et appelle register() si pas encore fait.
+ * initCapacitorPush — Séquence complète garantie :
+ * 1. Charger le plugin
+ * 2. Créer le canal Android
+ * 3. Vérifier/demander la permission
+ * 4. Installer les callbacks
+ * 5. Attacher les listeners (AVANT register)
+ * 6. Appeler register() — TOUJOURS, même si déjà appelé avant
+ * 7. Timeout de sécurité 20s si token jamais reçu
  */
 export async function initCapacitorPush({ onToken, onForegroundNotif, onNotificationTap, onPermissionDenied }) {
-  if (!isNativeApp()) return { cleanup: () => {}, permissionStatus: 'not_native' };
+  if (!isNativeApp()) {
+    console.log('[NativePush] Non-native → skip initCapacitorPush');
+    return { permissionStatus: 'not_native' };
+  }
+
+  console.log('[NativePush] ═══ initCapacitorPush START ═══');
 
   const PN = await getPN();
-  if (!PN) return { cleanup: () => {}, permissionStatus: 'unavailable' };
+  if (!PN) {
+    console.error('[NativePush] Plugin non disponible — FCM impossible');
+    return { permissionStatus: 'unavailable' };
+  }
 
-  console.log('[NativePush] initCapacitorPush START');
-
+  // Étape 1 : Canal Android
   await ensureChannel(PN);
 
+  // Étape 2 : Permission
   const perm = await ensurePermission(PN);
-  console.log('[NativePush] Permission:', perm);
-
   if (perm === 'denied' || perm === 'error') {
+    console.warn('[NativePush] Permission bloquée:', perm, '→ FCM impossible');
     if (onPermissionDenied) onPermissionDenied(perm);
-    return { cleanup: () => {}, permissionStatus: perm };
+    return { permissionStatus: perm };
   }
   if (perm !== 'granted') {
+    console.warn('[NativePush] Permission non accordée:', perm);
     if (onPermissionDenied) onPermissionDenied('user_denied');
-    return { cleanup: () => {}, permissionStatus: 'user_denied' };
+    return { permissionStatus: 'user_denied' };
   }
 
-  // Installer les callbacks globaux
+  // Étape 3 : Installer les callbacks globaux
   _onToken = onToken;
   _onForegroundNotif = onForegroundNotif;
   _onNotificationTap = onNotificationTap;
-  _onPermissionDenied = onPermissionDenied;
 
-  // Attacher les listeners (ou les ré-attacher)
+  // Étape 4 : Attacher les listeners AVANT register()
   await attachListeners(PN);
 
-  // register() une seule fois
+  // Étape 5 : register() — TOUJOURS forcé (Firebase renvoie le même token si déjà enregistré)
   const ok = await doRegister(PN);
+  if (!ok) {
+    console.error('[NativePush] ❌ register() a échoué — token IMPOSSIBLE à obtenir');
+    return { permissionStatus: 'register_error' };
+  }
 
-  return {
-    cleanup: () => {
-      _onToken = null;
-      _onForegroundNotif = null;
-      _onNotificationTap = null;
-      _onPermissionDenied = null;
-    },
-    permissionStatus: ok ? 'granted' : 'register_error',
+  // Étape 6 : Timeout de sécurité — si le token n'arrive pas en 20s → log d'erreur visible
+  const tokenGuardTimer = setTimeout(() => {
+    console.error(
+      '[NativePush] ⛔ TOKEN GUARD: register() appelé il y a 20s mais aucun token reçu.',
+      'Vérifier : google-services.json, firebase_app_id, internet permission APK.'
+    );
+  }, 20000);
+
+  // Le timer est annulé par le callback onToken via clearTokenGuard
+  const originalOnToken = _onToken;
+  _onToken = (val) => {
+    clearTimeout(tokenGuardTimer);
+    console.log('[NativePush] ✅ Token reçu — guard timer annulé');
+    _onToken = originalOnToken; // Restaurer le callback
+    if (originalOnToken) originalOnToken(val);
   };
+
+  console.log('[NativePush] ═══ initCapacitorPush DONE — en attente du token ═══');
+  return { permissionStatus: 'granted' };
 }
 
 /**
- * requestNativePushToken — appelé par FcmDiagnostic "Enregistrer".
- *
- * Stratégie :
- * - Réutilise les listeners déjà en place si init faite
- * - Si pas encore init : fait toute la séquence (canaux, permission, listeners, register)
- * - Retourne le token via Promise (timeout 25s)
- * - Ne crashe jamais
+ * requestNativePushToken — Force un nouveau token (utilisé par FcmDiagnostic / retry).
+ * Effectue la séquence complète et retourne le token via Promise (timeout 25s).
  */
 export async function requestNativePushToken() {
   if (!isNativeApp()) return null;
@@ -223,44 +231,38 @@ export async function requestNativePushToken() {
   await ensureChannel(PN);
 
   const perm = await ensurePermission(PN);
-  console.log('[NativePush] requestNativePushToken permission:', perm);
+  console.log('[NativePush] requestNativePushToken — permission:', perm);
   if (perm !== 'granted') return null;
 
   return new Promise(async (resolve) => {
     let settled = false;
+    const savedOnToken = _onToken;
 
     const finish = (token) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      // Restaurer les callbacks d'origine après la récupération du token
-      _onToken = _savedOnToken;
+      _onToken = savedOnToken; // Restaurer
       resolve(token ?? null);
     };
 
     const timer = setTimeout(() => {
-      console.warn('[NativePush] requestNativePushToken: timeout 25s');
+      console.warn('[NativePush] requestNativePushToken: timeout 25s — token non reçu');
       finish(null);
     }, 25000);
 
-    // Sauvegarder le callback token existant
-    const _savedOnToken = _onToken;
-
-    // Intercepter le prochain token reçu
+    // Intercepter le token
     _onToken = (val) => {
-      console.log('[NativePush] ✅ requestNativePushToken: token intercepté');
-      // Appeler aussi le callback original (AppLayoutWrapper)
-      if (_savedOnToken) _savedOnToken(val);
+      console.log('[NativePush] ✅ requestNativePushToken: token intercepté:', val.slice(0, 25) + '…');
+      if (savedOnToken) savedOnToken(val);
       finish(val);
     };
 
-    // Re-attacher les listeners avec le nouveau _onToken
     await attachListeners(PN);
-
-    // Toujours forcer un nouveau register() depuis le diagnostic pour générer un token frais
-    const ok = await doRegister(PN, true);
+    console.log('[NativePush] requestNativePushToken → register() forcé...');
+    const ok = await doRegister(PN);
     if (!ok) {
-      console.error('[NativePush] register() a échoué — token non disponible');
+      console.error('[NativePush] register() échoué dans requestNativePushToken');
       finish(null);
     }
   });
@@ -298,23 +300,26 @@ export async function getPermissionStatus() {
 }
 
 /**
- * openAppSettings — ouvre les paramètres de l'application Android
- * pour que l'utilisateur puisse activer les notifications manuellement.
+ * openAppSettings — ouvre les paramètres Android de l'app
  */
 export async function openAppSettings() {
   try {
-    const { App } = await import('@capacitor/app');
-    // Capacitor App plugin ne fournit pas openSettings directement,
-    // on utilise le lien Intent Android via NativeSettings si disponible,
-    // sinon on redirige via le schéma natif.
     if (window.cordova?.plugins?.settings) {
       window.cordova.plugins.settings.open('notification_id', () => {}, () => {});
       return;
     }
-    // Fallback : ouvrir les paramètres système via URI Android
     window.open('app-settings:', '_system');
   } catch (_) {
-    // Dernier recours : toast avec instruction
     window.open('app-settings:', '_system');
   }
+}
+
+/**
+ * resetNativePushState — reset pour le diagnostic (force re-init complète)
+ */
+export function resetNativePushState() {
+  _PN = null;
+  _listeners = [];
+  _onToken = null;
+  console.log('[NativePush] State reset complet — prêt pour une nouvelle init');
 }
