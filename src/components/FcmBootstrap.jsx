@@ -14,7 +14,6 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
 import { saveFcmToken } from '@/lib/fcmApi';
 
 function isNativePlatform() {
@@ -24,61 +23,46 @@ function isNativePlatform() {
   return false;
 }
 
-export default function FcmBootstrap() {
+/**
+ * FcmBootstrap — Initialisation FCM totalement non-bloquante.
+ * Reçoit userEmail depuis App.jsx (déjà authentifié) → pas de base44.auth.me() ici.
+ * Si FCM échoue pour N'IMPORTE QUELLE raison → log et continue. Jamais de crash.
+ */
+export default function FcmBootstrap({ userEmail }) {
   const didRun = useRef(false);
 
   useEffect(() => {
-    // Une seule exécution par montage (StrictMode double-appel safe)
+    // Attendre que l'email soit disponible
+    if (!userEmail) return;
+    // Une seule exécution par email
     if (didRun.current) return;
     didRun.current = true;
 
-    const run = async () => {
-      // ── 1. Résoudre l'email (obligatoire avant toute sauvegarde) ──────────
-      let userEmail = '';
-      let attempts = 0;
-      while (!userEmail && attempts < 5) {
-        try {
-          const me = await base44.auth.me();
-          userEmail = me?.email || '';
-        } catch (_) {}
-        if (!userEmail) {
-          await new Promise(r => setTimeout(r, 1000));
-          attempts++;
-        }
-      }
+    console.log('[FcmBootstrap] ▶ START | user:', userEmail, '| isNative:', isNativePlatform());
 
-      if (!userEmail) {
-        console.warn('[FcmBootstrap] ❌ Email introuvable après 5 tentatives — abandon');
-        return;
-      }
-
-      console.log('[FcmBootstrap] ✅ Email résolu:', userEmail);
-
+    // Délai 2s pour laisser l'app s'afficher AVANT d'initialiser FCM
+    const timer = setTimeout(() => {
       const native = isNativePlatform();
-      console.log('[FcmBootstrap] ═══ FCM INIT ═══ | isNative:', native, '| user:', userEmail);
+      const run = native ? initNative(userEmail) : initWeb(userEmail);
+      run.catch(err => console.warn('[FcmBootstrap] Erreur non-bloquante:', err?.message));
+    }, 2000);
 
-      if (native) {
-        await initNative(userEmail);
-      } else {
-        await initWeb(userEmail);
-      }
-    };
+    return () => clearTimeout(timer);
+  }, [userEmail]);
 
-    run().catch(err => console.error('[FcmBootstrap] Erreur fatale:', err?.message));
-  }, []);
-
-  return null; // Pas de rendu
+  return null;
 }
 
 // ── Init natif Capacitor ──────────────────────────────────────────────────────
 async function initNative(userEmail) {
+  console.log('[FcmBootstrap] initNative() start');
   let PushNotifications;
   try {
     const mod = await import('@capacitor/push-notifications');
     PushNotifications = mod.PushNotifications;
     console.log('[FcmBootstrap] Plugin PushNotifications chargé ✅');
   } catch (e) {
-    console.error('[FcmBootstrap] ❌ Plugin Capacitor NON DISPONIBLE:', e?.message);
+    console.warn('[FcmBootstrap] Plugin Capacitor non disponible (normal sur web):', e?.message);
     return;
   }
 

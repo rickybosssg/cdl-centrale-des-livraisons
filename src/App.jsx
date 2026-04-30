@@ -203,7 +203,7 @@ function FcmDeepLinkHandler() {
 }
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated, checkAppState } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated, checkAppState, user } = useAuth();
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
 
@@ -275,7 +275,7 @@ const AuthenticatedApp = () => {
 
   return (
     <>
-      <FcmBootstrap />
+      <FcmBootstrap userEmail={user?.email || ''} />
       <TopNotificationBanner notification={notification} onClose={closeNotification} />
       <FcmDeepLinkHandler />
       <Routes>
