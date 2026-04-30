@@ -158,51 +158,49 @@ export default function AppLayoutWrapper({ user }) {
     return () => window.removeEventListener('cdl_profile_switch', onProfileSwitch);
   }, []);
 
-  // ── FCM Init — déclenché à chaque montage du composant (pas seulement au changement d'email)
-  // RÈGLE CRITIQUE : register() doit être appelé à CHAQUE ouverture de l'app
-  // userEmailRef permet d'accéder à l'email courant même dans les closures async
+  // ── FCM Init ─────────────────────────────────────────────────────────────────
+  // RÈGLE CRITIQUE (NE PAS MODIFIER) :
+  // - Se déclenche quand userEmail devient disponible (après auth)
+  // - register() appelé à CHAQUE fois (pas de guard — Firebase est idempotent)
+  // - listeners attachés AVANT register() — règle Capacitor
+  // - anti-silence 8s : retry si 0 token actif en BDD
   const userEmailRef = useRef('');
   useEffect(() => {
     if (userEmail) userEmailRef.current = userEmail;
   }, [userEmail]);
 
   useEffect(() => {
-    // Attendre que l'email soit disponible (peut arriver légèrement après le montage)
+    if (!userEmail) return; // Attendre que l'email soit défini par le useEffect de chargement
+
     let cancelled = false;
     let retryTimer = null;
+    const capturedEmail = userEmail;
 
-    const tryInitFcm = async () => {
-      // Attendre jusqu'à 5s que l'email soit disponible
-      let email = userEmailRef.current;
-      if (!email) {
-        try { const me = await base44.auth.me(); email = me?.email || ''; userEmailRef.current = email; } catch (_) {}
+    const handleToken = async (token) => {
+      if (cancelled) return;
+      const resolvedEmail = userEmailRef.current || capturedEmail;
+      console.log('[FCM] ✅ TOKEN REÇU → save pour:', resolvedEmail, '| token:', token.substring(0, 25) + '...');
+      if (!resolvedEmail) { console.error('[FCM] ❌ Email introuvable — token non sauvegardé !'); return; }
+      const result = await saveFcmTokenDirect({ user_email: resolvedEmail, token, device_type: 'android_native' });
+      console.log('[FCM] ← saveFcmTokenPublic:', JSON.stringify(result).slice(0, 200));
+      if (result.success) {
+        console.log('[FCM] ✅ TOKEN SAUVEGARDÉ — action:', result.action, '| id:', result.token_id);
+      } else {
+        console.error('[FCM] ❌ Échec sauvegarde token:', result.error);
       }
-      if (!email || cancelled) return;
+    };
 
+    const initFcm = async () => {
       try {
         const isNative =
           window.location?.protocol === 'capacitor:' ||
           window.Capacitor?.isNativePlatform?.() === true;
 
-        console.log('[FCM] ═══ INIT START ═══ | isNative:', isNative, '| user:', email);
+        console.log('[FCM] ═══ INIT START ═══ | isNative:', isNative, '| user:', capturedEmail);
 
         if (isNative) {
           const { initCapacitorPush } = await import('@/lib/nativePush');
           const { getFcmTokens } = await import('@/lib/fcmApi');
-
-          const handleToken = async (token) => {
-            if (cancelled) return;
-            const resolvedEmail = userEmailRef.current || email;
-            console.log('[FCM] ✅ TOKEN REÇU → save pour:', resolvedEmail, '| token:', token.substring(0, 25) + '...');
-            if (!resolvedEmail) { console.error('[FCM] ❌ Email introuvable — token non sauvegardé !'); return; }
-            const result = await saveFcmTokenDirect({ user_email: resolvedEmail, token, device_type: 'android_native' });
-            console.log('[FCM] ← saveFcmTokenPublic:', JSON.stringify(result).slice(0, 200));
-            if (result.success) {
-              console.log('[FCM] ✅ TOKEN SAUVEGARDÉ — action:', result.action, '| id:', result.token_id);
-            } else {
-              console.error('[FCM] ❌ Échec sauvegarde token:', result.error);
-            }
-          };
 
           // Séquence garantie : listeners AVANT register()
           const { permissionStatus } = await initCapacitorPush({
@@ -236,8 +234,7 @@ export default function AppLayoutWrapper({ user }) {
             retryTimer = setTimeout(async () => {
               if (cancelled) return;
               try {
-                const resolvedEmail = userEmailRef.current || email;
-                const tokens = await getFcmTokens(resolvedEmail);
+                const tokens = await getFcmTokens(userEmailRef.current || capturedEmail);
                 const activeTokens = (tokens || []).filter(t => t.is_active);
                 if (activeTokens.length === 0) {
                   console.warn('[FCM] ⚠️ ANTI-SILENCE: 0 token actif après 8s — retry register()');
@@ -264,7 +261,7 @@ export default function AppLayoutWrapper({ user }) {
           const { requestWebPushToken, onForegroundMessage } = await import('@/lib/webPush');
           const { token, permission, error } = await requestWebPushToken();
           if (!token) { console.warn('[FCM] Pas de token web — permission:', permission, error); return; }
-          const result = await saveFcmTokenDirect({ user_email: email, token, device_type: 'web' });
+          const result = await saveFcmTokenDirect({ user_email: capturedEmail, token, device_type: 'web' });
           console.log('[FCM] ✅ TOKEN SAVED (web) — action:', result.action);
           onForegroundMessage((payload) => {
             if (cancelled) return;
@@ -285,14 +282,13 @@ export default function AppLayoutWrapper({ user }) {
       }
     };
 
-    tryInitFcm();
+    initFcm();
 
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // ← Intentionnellement vide : s'exécute à CHAQUE montage du composant
+  }, [userEmail]); // ← déclenché dès que userEmail est connu — garanti après auth
 
   if (loading) {
     return (
