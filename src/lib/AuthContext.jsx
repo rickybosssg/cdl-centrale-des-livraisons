@@ -57,12 +57,8 @@ export const AuthProvider = ({ children }) => {
       }
       console.warn('[AUTH] INIT ERROR:', error?.message || 'unknown');
     } finally {
-      if (!settled) {
-        clearTimeout(timeoutId);
-        setIsLoadingAuth(false);
-      } else {
-        setIsLoadingAuth(false);
-      }
+      // TOUJOURS débloquer le loading — jamais laisser l'app bloquée
+      setIsLoadingAuth(false);
     }
   }, []);
 

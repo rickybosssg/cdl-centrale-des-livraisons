@@ -206,6 +206,7 @@ const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated, checkAppState, user } = useAuth();
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+  const [hardUnblock, setHardUnblock] = useState(false);
 
   // Log démarrage
   useEffect(() => {
@@ -219,6 +220,17 @@ const AuthenticatedApp = () => {
     return () => { clearTimeout(t1); };
   }, [isLoadingAuth, isLoadingPublicSettings]);
 
+  // ANTI-ÉCRAN BLANC : si toujours bloqué après 12s → forcer login
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (isLoadingAuth || isLoadingPublicSettings) {
+        console.warn('[APP] HARD UNBLOCK après 12s — forcer affichage login');
+        setHardUnblock(true);
+      }
+    }, 12000);
+    return () => clearTimeout(t);
+  }, []);
+
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
   // Ces routes sont accessibles sans authentification (important pour APK natif)
   if (window.location.pathname === '/admin-login-secure') {
@@ -231,7 +243,7 @@ const AuthenticatedApp = () => {
     return <DownloadApp />;
   }
 
-  if (isLoadingPublicSettings || isLoadingAuth) {
+  if ((isLoadingPublicSettings || isLoadingAuth) && !hardUnblock) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
         <div className="text-center space-y-4 text-white">
@@ -259,15 +271,15 @@ const AuthenticatedApp = () => {
     );
   }
 
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
+  // ANTI-ÉCRAN BLANC : hardUnblock ou authError → toujours afficher quelque chose
+  if (hardUnblock || authError) {
+    if (authError?.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else {
-      const _p = new URLSearchParams(window.location.search);
-      const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
-      if (_ref) localStorage.setItem('cdl_promo_code', _ref);
-      return <EmailLogin />;
     }
+    const _p = new URLSearchParams(window.location.search);
+    const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
+    if (_ref) localStorage.setItem('cdl_promo_code', _ref);
+    return <EmailLogin />;
   }
 
   // Non authentifié → écran de connexion email/password
