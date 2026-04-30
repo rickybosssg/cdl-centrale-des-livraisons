@@ -15,8 +15,15 @@ import { base44 } from '@/api/base44Client';
 function isNativePlatform() {
   try {
     if (typeof window === 'undefined') return false;
+    // Protocole Capacitor — vérification la plus fiable
     if (window.location?.protocol === 'capacitor:') return true;
+    // Capacitor global — peut ne pas être encore initialisé au premier tick
     if (window.Capacitor?.isNativePlatform?.() === true) return true;
+    // Fallback : User-Agent Android + pas de window.Notification = APK Capacitor
+    const ua = navigator.userAgent || '';
+    const isAndroid = /Android/i.test(ua);
+    const noWebNotif = !('Notification' in window);
+    if (isAndroid && noWebNotif) return true;
   } catch (_) {}
   return false;
 }
@@ -72,10 +79,14 @@ export default function FcmBootstrap({ userEmail }) {
     if (didRun.current) return;
     didRun.current = true;
 
-    console.log('[FCM] INIT SCHEDULED (delay 3s) | native:', isNativePlatform(), '| email prop:', userEmail || 'none');
+    console.log('[FCM] INIT SCHEDULED (delay 3s)');
 
     const timer = setTimeout(() => {
-      if (isNativePlatform()) {
+      // Re-évaluer isNativePlatform() après 3s — Capacitor est forcément initialisé
+      const native = isNativePlatform();
+      console.log('[FCM] PLATFORM CHECK (after 3s) | native:', native, '| protocol:', window.location?.protocol, '| Capacitor:', !!window.Capacitor, '| email:', userEmail || 'none');
+
+      if (native) {
         runNativeFcm(userEmail, pendingTokenRef).catch(err => {
           console.log('[FCM] ERROR NON BLOCKING (top-level):', err?.message);
         });
