@@ -85,11 +85,13 @@ export default function EmailLogin() {
       const { ok, status, data } = await authFetch("/login", { email: email.trim().toLowerCase(), password });
       const token = data?.access_token || data?.token;
       if (ok && token) {
-        console.log("[LOGIN] SUCCESS");
+        console.log("[LOGIN] SUCCESS — token:", token?.slice(0, 20));
         saveToken(token);
+        // Mettre à jour AuthContext avec le nouveau token avant navigation
+        console.log("[LOGIN] CHECK APP STATE");
+        await checkAppState();
         console.log("[LOGIN] NAVIGATE");
         navigate("/", { replace: true });
-        console.log("[LOGIN] END");
       } else {
         setMessage(status === 401 || status === 400 ? "Email ou mot de passe incorrect" : (data?.error || data?.detail || "Erreur de connexion — réessayez"));
       }
