@@ -207,10 +207,14 @@ const AuthenticatedApp = () => {
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   const [hardUnblock, setHardUnblock] = useState(false);
-  // Réinitialiser hardUnblock si l'auth réussit après le timeout
+
+  // Réinitialiser hardUnblock si l'auth réussit (évite faux positif login)
   useEffect(() => {
-    if (isAuthenticated && hardUnblock) setHardUnblock(false);
-  }, [isAuthenticated]);
+    if (isAuthenticated && hardUnblock) {
+      console.log('[APP] Auth OK après timeout — reset hardUnblock');
+      setHardUnblock(false);
+    }
+  }, [isAuthenticated, hardUnblock]);
 
   // Log démarrage + capture erreurs globales
   useEffect(() => {

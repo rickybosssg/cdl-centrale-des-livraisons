@@ -164,6 +164,27 @@ Deno.serve(async (req) => {
     const sent = results.filter(r => r.status === "fulfilled" && r.value.ok).length;
     const failed = results.length - sent;
 
+    // Nettoyer les tokens invalides (UNREGISTERED / NOT_FOUND) côté Firebase
+    const tokensToDisable = [];
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.status === 'fulfilled' && !r.value.ok) {
+        const errCode = r.value.result?.error?.details?.[0]?.errorCode || '';
+        if (errCode === 'UNREGISTERED' || errCode === 'INVALID_ARGUMENT') {
+          tokensToDisable.push(fcmTokens[i]);
+        }
+      }
+    }
+    if (tokensToDisable.length > 0) {
+      console.log(`[sendFcmNotification] Désactivation de ${tokensToDisable.length} token(s) invalide(s)`);
+      for (const t of tokensToDisable) {
+        const records = await base44.asServiceRole.entities.FcmToken.filter({ token: t });
+        if (records?.[0]) {
+          await base44.asServiceRole.entities.FcmToken.update(records[0].id, { is_active: false });
+        }
+      }
+    }
+
     return Response.json({ sent, failed, total: fcmTokens.length });
   } catch (error) {
     console.error('sendFcmNotification error:', error.message);
