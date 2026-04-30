@@ -444,6 +444,11 @@ export default function FcmDiagnostic() {
   return (
     <div className="space-y-4 pb-20 max-w-lg mx-auto px-2">
 
+      {/* Version indicator — NE PAS SUPPRIMER — permet de vérifier que l'APK contient la dernière correction */}
+      <div className="bg-emerald-600 text-white text-center py-2 px-3 rounded-xl font-bold text-sm tracking-wide">
+        ✅ FCM FIX V6 — 30/04 — 21h10
+      </div>
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
