@@ -251,10 +251,12 @@ const AuthenticatedApp = () => {
 
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
   // Ces routes sont accessibles sans authentification (important pour APK natif)
+  // IMPORTANT: ne pas court-circuiter /connexion ici si isAuthenticated est true
+  // sinon la navigation post-login est bloquée
   if (window.location.pathname === '/admin-login-secure') {
     return <AdminLoginSecure />;
   }
-  if (window.location.pathname === LOGIN_PATH) {
+  if (window.location.pathname === LOGIN_PATH && !isAuthenticated) {
     return <EmailLogin />;
   }
   if (window.location.pathname === '/telecharger-app') {
@@ -301,7 +303,8 @@ const AuthenticatedApp = () => {
   }
 
   // Non authentifié → écran de connexion email/password
-  if (!isAuthenticated) {
+  // IMPORTANT: si on est déjà sur /connexion, laisser le router gérer (évite boucle post-login)
+  if (!isAuthenticated && window.location.pathname !== LOGIN_PATH) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
