@@ -29,3 +29,17 @@ dist-ssr
 
 .env
 .vite
+# ANDROID (IMPORTANT CDL)
+android/.gradle/
+android/build/
+android/app/build/
+
+# Capacitor
+android/capacitor-cordova-android-plugins/
+
+# APK / build
+*.apk
+*.aab
+
+# Node lock (évite conflits)
+package-lock.json
