@@ -120,6 +120,7 @@ import EmailLogin from './pages/EmailLogin';
 import AppPublicLink from './pages/AppPublicLink';
 import TrackingPublic from './pages/TrackingPublic';
 import DownloadApp from './pages/DownloadApp';
+import FcmBootstrap from './components/FcmBootstrap';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -274,6 +275,7 @@ const AuthenticatedApp = () => {
 
   return (
     <>
+      <FcmBootstrap />
       <TopNotificationBanner notification={notification} onClose={closeNotification} />
       <FcmDeepLinkHandler />
       <Routes>

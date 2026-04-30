@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import AppLayout from "./AppLayout";
@@ -6,7 +6,7 @@ import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 import PromoCodeStep from "../pages/PromoCodeStep";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
-import { saveFcmToken as saveFcmTokenDirect, getFcmTokens } from "@/lib/fcmApi";
+
 import PermissionsOnboarding, { needsPermissionsOnboarding, markPermissionsConfigured } from "./PermissionsOnboarding";
 
 // Récupère le token d'auth depuis localStorage pour le fallback APK natif
@@ -158,137 +158,7 @@ export default function AppLayoutWrapper({ user }) {
     return () => window.removeEventListener('cdl_profile_switch', onProfileSwitch);
   }, []);
 
-  // ── FCM Init ─────────────────────────────────────────────────────────────────
-  // RÈGLE CRITIQUE (NE PAS MODIFIER) :
-  // - Se déclenche quand userEmail devient disponible (après auth)
-  // - register() appelé à CHAQUE fois (pas de guard — Firebase est idempotent)
-  // - listeners attachés AVANT register() — règle Capacitor
-  // - anti-silence 8s : retry si 0 token actif en BDD
-  const userEmailRef = useRef('');
-  useEffect(() => {
-    if (userEmail) userEmailRef.current = userEmail;
-  }, [userEmail]);
-
-  useEffect(() => {
-    if (!userEmail) return; // Attendre que l'email soit défini par le useEffect de chargement
-
-    let cancelled = false;
-    let retryTimer = null;
-    const capturedEmail = userEmail;
-
-    const handleToken = async (token) => {
-      if (cancelled) return;
-      const resolvedEmail = userEmailRef.current || capturedEmail;
-      console.log('[FCM] ✅ TOKEN REÇU → save pour:', resolvedEmail, '| token:', token.substring(0, 25) + '...');
-      if (!resolvedEmail) { console.error('[FCM] ❌ Email introuvable — token non sauvegardé !'); return; }
-      const result = await saveFcmTokenDirect({ user_email: resolvedEmail, token, device_type: 'android_native' });
-      console.log('[FCM] ← saveFcmTokenPublic:', JSON.stringify(result).slice(0, 200));
-      if (result.success) {
-        console.log('[FCM] ✅ TOKEN SAUVEGARDÉ — action:', result.action, '| id:', result.token_id);
-      } else {
-        console.error('[FCM] ❌ Échec sauvegarde token:', result.error);
-      }
-    };
-
-    const initFcm = async () => {
-      try {
-        const isNative =
-          window.location?.protocol === 'capacitor:' ||
-          window.Capacitor?.isNativePlatform?.() === true;
-
-        console.log('[FCM] ═══ INIT START ═══ | isNative:', isNative, '| user:', capturedEmail);
-
-        if (isNative) {
-          const { initCapacitorPush } = await import('@/lib/nativePush');
-          const { getFcmTokens } = await import('@/lib/fcmApi');
-
-          // Séquence garantie : listeners AVANT register()
-          const { permissionStatus } = await initCapacitorPush({
-            onToken: handleToken,
-            onForegroundNotif: (notification) => {
-              if (cancelled) return;
-              console.log('[FCM] 📬 Notification foreground:', notification.title);
-              const route = notification.data?.notif_route || notification.data?.route || null;
-              import('sonner').then(({ toast }) => {
-                toast(notification.title || 'CDL', {
-                  description: notification.body || '',
-                  duration: 8000,
-                  action: route ? { label: 'Voir', onClick: () => window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } })) } : undefined,
-                });
-              });
-              if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-            },
-            onNotificationTap: ({ route }) => {
-              console.log('[FCM] 👆 Tap → route:', route);
-              if (route) window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
-            },
-            onPermissionDenied: (reason) => {
-              console.warn('[FCM] ⚠️ Permission refusée:', reason);
-            },
-          });
-
-          console.log('[FCM] initCapacitorPush done — permissionStatus:', permissionStatus);
-
-          // Anti-silence : si permission OK mais 0 token actif en BDD après 8s → retry automatique
-          if (permissionStatus === 'granted' && !cancelled) {
-            retryTimer = setTimeout(async () => {
-              if (cancelled) return;
-              try {
-                const tokens = await getFcmTokens(userEmailRef.current || capturedEmail);
-                const activeTokens = (tokens || []).filter(t => t.is_active);
-                if (activeTokens.length === 0) {
-                  console.warn('[FCM] ⚠️ ANTI-SILENCE: 0 token actif après 8s — retry register()');
-                  const { requestNativePushToken } = await import('@/lib/nativePush');
-                  const token = await requestNativePushToken();
-                  if (token) {
-                    await handleToken(token);
-                    console.log('[FCM] ✅ Retry anti-silence réussi');
-                  } else {
-                    console.error('[FCM] ❌ Retry anti-silence échoué');
-                  }
-                } else {
-                  console.log('[FCM] ✅ Anti-silence OK —', activeTokens.length, 'token(s) actif(s) en BDD');
-                }
-              } catch (_) {}
-            }, 8000);
-          }
-
-        } else {
-          // Web Push
-          console.log('[FCM] Mode Web Push');
-          const { registerSW } = await import('@/lib/swRegister');
-          await registerSW();
-          const { requestWebPushToken, onForegroundMessage } = await import('@/lib/webPush');
-          const { token, permission, error } = await requestWebPushToken();
-          if (!token) { console.warn('[FCM] Pas de token web — permission:', permission, error); return; }
-          const result = await saveFcmTokenDirect({ user_email: capturedEmail, token, device_type: 'web' });
-          console.log('[FCM] ✅ TOKEN SAVED (web) — action:', result.action);
-          onForegroundMessage((payload) => {
-            if (cancelled) return;
-            const notif = payload.notification || {};
-            const data = payload.data || {};
-            const route = data.notif_route || data.route || data.target_screen || null;
-            import('sonner').then(({ toast }) => {
-              toast(notif.title || 'CDL', {
-                description: notif.body || '',
-                duration: 8000,
-                action: route ? { label: 'Voir', onClick: () => window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } })) } : undefined,
-              });
-            });
-          });
-        }
-      } catch (err) {
-        console.error('[FCM] Init error (non-fatal):', err?.message);
-      }
-    };
-
-    initFcm();
-
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-    };
-  }, [userEmail]); // ← déclenché dès que userEmail est connu — garanti après auth
+  // FCM géré par FcmBootstrap (monté dans App.jsx) — indépendant du flux layout
 
   if (loading) {
     return (
