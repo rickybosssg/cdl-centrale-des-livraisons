@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loader2, Eye, EyeOff, Mail, Lock, ArrowRight, User, Phone } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
@@ -45,7 +46,8 @@ function Field({ icon: Icon, type = "text", placeholder, value, onChange, onKeyD
 }
 
 export default function EmailLogin() {
-  const { checkAppState } = useAuth();
+  const { setLoggedIn } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState("login"); // login | register | forgot
 
   // Champs communs
@@ -65,9 +67,9 @@ export default function EmailLogin() {
 
   const clear = () => { setMessage(""); setSuccessMsg(""); };
 
-  const navigateHome = async () => {
-    try { await checkAppState(); } catch (_) {}
-    window.location.replace("/");
+  const navigateHome = () => {
+    // Navigation immédiate — AuthContext se rechargera tout seul au mount de Home
+    navigate("/", { replace: true });
   };
 
   const goTo = (m) => { setMode(m); clear(); setPassword(""); setConfirmPassword(""); };
@@ -75,16 +77,28 @@ export default function EmailLogin() {
   // ── Connexion ──────────────────────────────────────────────────────────────
   const handleLogin = async () => {
     if (!email || !password) { setMessage("Email et mot de passe requis"); return; }
-    setLoading(true); clear();
+    console.log("[LOGIN] CLICK");
+    setLoading(true);
+    setMessage("");
     try {
+      console.log("[LOGIN] START");
       const { ok, status, data } = await authFetch("/login", { email: email.trim().toLowerCase(), password });
       const token = data?.access_token || data?.token;
-      if (ok && token) { saveToken(token); await navigateHome(); }
-      else {
+      if (ok && token) {
+        console.log("[LOGIN] SUCCESS");
+        saveToken(token);
+        console.log("[LOGIN] SET LOGGED IN");
+        setLoggedIn({ email: email.trim().toLowerCase() });
+        console.log("[LOGIN] NAVIGATE TRIGGERED");
+      } else {
         setMessage(status === 401 || status === 400 ? "Email ou mot de passe incorrect" : (data?.error || data?.detail || "Erreur de connexion — réessayez"));
-        setLoading(false);
       }
-    } catch { setMessage("Erreur réseau — vérifiez votre connexion"); setLoading(false); }
+    } catch (err) {
+      console.error("[LOGIN] ERROR:", err?.message);
+      setMessage("Erreur réseau — vérifiez votre connexion");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Inscription ────────────────────────────────────────────────────────────
@@ -116,7 +130,8 @@ export default function EmailLogin() {
         try {
           await base44.auth.updateMe({ full_name: fullName, telephone: telephone.trim() });
         } catch (_) {}
-        await navigateHome();
+        setLoading(false);
+        navigateHome();
       } else if (ok) {
         setSuccessMsg("Compte créé ! Connectez-vous avec votre email et mot de passe.");
         goTo("login");

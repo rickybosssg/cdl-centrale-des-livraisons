@@ -206,10 +206,33 @@ const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated, checkAppState, user } = useAuth();
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+  const [hardUnblock, setHardUnblock] = useState(false);
+  // Réinitialiser hardUnblock si l'auth réussit après le timeout
+  useEffect(() => {
+    if (isAuthenticated && hardUnblock) setHardUnblock(false);
+  }, [isAuthenticated]);
 
-  // Log démarrage
+  // Log démarrage + capture erreurs globales
   useEffect(() => {
     console.log('[APP] START');
+
+    // Capture erreurs JS globales non catchées
+    const onError = (event) => {
+      console.error('[ERROR] GLOBAL JS ERROR:', event?.message, '|', event?.filename, ':', event?.lineno);
+    };
+    const onUnhandled = (event) => {
+      console.error('[ERROR] PROMISE REJECTION:', event?.reason?.message || event?.reason);
+    };
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onUnhandled);
+
+    // Log WebView active
+    console.log('[WEBVIEW] LOADED | url:', window.location.href, '| protocol:', window.location.protocol);
+
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onUnhandled);
+    };
   }, []);
 
   // Timeout de sécurité : affiche bouton réessayer après 4s
@@ -219,19 +242,33 @@ const AuthenticatedApp = () => {
     return () => { clearTimeout(t1); };
   }, [isLoadingAuth, isLoadingPublicSettings]);
 
+  // ANTI-ÉCRAN BLANC : si toujours bloqué après 20s → forcer login
+  // (délai allongé pour éviter faux positifs sur réseau lent)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (isLoadingAuth || isLoadingPublicSettings) {
+        console.warn('[APP] HARD UNBLOCK après 20s — forcer affichage login');
+        setHardUnblock(true);
+      }
+    }, 20000);
+    return () => clearTimeout(t);
+  }, []);
+
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
   // Ces routes sont accessibles sans authentification (important pour APK natif)
+  // IMPORTANT: ne pas court-circuiter /connexion ici si isAuthenticated est true
+  // sinon la navigation post-login est bloquée
   if (window.location.pathname === '/admin-login-secure') {
     return <AdminLoginSecure />;
   }
-  if (window.location.pathname === LOGIN_PATH) {
+  if (window.location.pathname === LOGIN_PATH && !isAuthenticated) {
     return <EmailLogin />;
   }
   if (window.location.pathname === '/telecharger-app') {
     return <DownloadApp />;
   }
 
-  if (isLoadingPublicSettings || isLoadingAuth) {
+  if ((isLoadingPublicSettings || isLoadingAuth) && !hardUnblock) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700">
         <div className="text-center space-y-4 text-white">
@@ -259,19 +296,20 @@ const AuthenticatedApp = () => {
     );
   }
 
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
+  // ANTI-ÉCRAN BLANC : hardUnblock ou authError → toujours afficher quelque chose
+  if (hardUnblock || authError) {
+    if (authError?.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else {
-      const _p = new URLSearchParams(window.location.search);
-      const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
-      if (_ref) localStorage.setItem('cdl_promo_code', _ref);
-      return <EmailLogin />;
     }
+    const _p = new URLSearchParams(window.location.search);
+    const _ref = (_p.get('ref') || _p.get('promo') || '').toUpperCase().trim();
+    if (_ref) localStorage.setItem('cdl_promo_code', _ref);
+    return <EmailLogin />;
   }
 
   // Non authentifié → écran de connexion email/password
-  if (!isAuthenticated) {
+  // IMPORTANT: si on est déjà sur /connexion, laisser le router gérer (évite boucle post-login)
+  if (!isAuthenticated && window.location.pathname !== LOGIN_PATH) {
     const _p2 = new URLSearchParams(window.location.search);
     const _ref2 = (_p2.get('ref') || _p2.get('promo') || '').toUpperCase().trim();
     if (_ref2) localStorage.setItem('cdl_promo_code', _ref2);
@@ -280,6 +318,7 @@ const AuthenticatedApp = () => {
 
   // Log rendu principal
   console.log('[APP] RENDER MAIN UI | user:', user?.email || 'none');
+  console.log('[ROUTE] CURRENT ROUTE:', window.location.pathname);
 
   return (
     <>
@@ -428,17 +467,39 @@ const AuthenticatedApp = () => {
 };
 
 class ErrorBoundary extends Component {
-  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
-  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    console.error('[ERROR] REACT ERROR BOUNDARY:', error?.message);
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('[ERROR] COMPONENT STACK:', info?.componentStack);
+  }
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-background">
-          <div className="text-center space-y-4 max-w-sm">
-            <div className="text-4xl">⚠️</div>
-            <h2 className="text-lg font-bold">Une erreur est survenue</h2>
-            <p className="text-sm text-muted-foreground">{this.state.error?.message || "Erreur inconnue"}</p>
-            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Recharger l'application</button>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: '#f8fafc' }}>
+          <div style={{ textAlign: 'center', maxWidth: '320px' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px', color: '#111' }}>Une erreur est survenue</h2>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '24px' }}>
+              {this.state.error?.message || 'Erreur inattendue'}
+            </p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); }}
+              style={{ display: 'block', width: '100%', padding: '12px', background: '#1E6BFF', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '600', marginBottom: '10px', cursor: 'pointer' }}
+            >
+              🔄 Réessayer
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              style={{ display: 'block', width: '100%', padding: '12px', background: 'transparent', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px', cursor: 'pointer' }}
+            >
+              Relancer l'application
+            </button>
           </div>
         </div>
       );

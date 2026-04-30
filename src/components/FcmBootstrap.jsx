@@ -193,10 +193,14 @@ async function runNativeFcm(propEmail, pendingTokenRef) {
 
     listeners.push(await PushNotifications.addListener('pushNotificationReceived', (notif) => {
       try {
+        // Data-Only message : title/body sont dans notif.data (pas notif.title/body)
+        const title = notif?.title || notif?.data?.title || 'CDL';
+        const body = notif?.body || notif?.data?.body || '';
         const route = notif?.data?.notif_route || notif?.data?.route || null;
+        console.log('[FCM] Foreground notif — title:', title, '| route:', route);
         import('sonner').then(({ toast }) => {
-          toast(notif?.title || 'CDL', {
-            description: notif?.body || '',
+          toast(title, {
+            description: body,
             duration: 8000,
             action: route ? {
               label: 'Voir',
@@ -211,7 +215,9 @@ async function runNativeFcm(propEmail, pendingTokenRef) {
     listeners.push(await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       try {
         const data = action.notification?.data || {};
+        // Data-Only : title/body/notif_route sont tous dans data
         const route = data.notif_route || data.route || data.target_screen || null;
+        console.log('[FCM] Tap notif — route:', route, '| data:', JSON.stringify(data));
         if (route?.startsWith('/')) {
           try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
           window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));

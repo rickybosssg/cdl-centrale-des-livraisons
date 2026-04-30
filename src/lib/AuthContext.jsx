@@ -57,12 +57,8 @@ export const AuthProvider = ({ children }) => {
       }
       console.warn('[AUTH] INIT ERROR:', error?.message || 'unknown');
     } finally {
-      if (!settled) {
-        clearTimeout(timeoutId);
-        setIsLoadingAuth(false);
-      } else {
-        setIsLoadingAuth(false);
-      }
+      // TOUJOURS débloquer le loading — jamais laisser l'app bloquée
+      setIsLoadingAuth(false);
     }
   }, []);
 
@@ -83,6 +79,16 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // Forcer l'état connecté immédiatement après login (sans appel réseau)
+  const setLoggedIn = useCallback((userData) => {
+    setUser(userData);
+    setIsAuthenticated(true);
+    setIsLoadingAuth(false);
+    setAuthError(null);
+    // Hard reload vers / pour bypasser tout état bloqué (hardUnblock, etc.)
+    window.location.replace('/');
+  }, []);
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -94,6 +100,7 @@ export const AuthProvider = ({ children }) => {
       logout,
       navigateToLogin,
       checkAppState,
+      setLoggedIn,
     }}>
       {children}
     </AuthContext.Provider>

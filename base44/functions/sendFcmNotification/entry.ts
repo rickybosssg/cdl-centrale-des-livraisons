@@ -58,6 +58,19 @@ async function getAccessToken(serviceAccount) {
 async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}) {
   const fcmUrl = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
   console.log(`[sendFcmNotification] sendToToken → projectId: ${projectId} | token: ${fcmToken.slice(0, 20)}...`);
+
+  // ── ARCHITECTURE DATA-ONLY (meilleure formule pour APK fermé) ────────────────
+  // On n'envoie PAS de bloc "notification" → c'est un Data Message pur.
+  // Android FCM le délivre même app fermée avec priority HIGH.
+  // Le plugin Capacitor PushNotifications construit et affiche la notif système
+  // via le handler natif (FCMMessagingService) en lisant les champs du data.
+  // Avantage : notif_route est préservé dans le data même à froid.
+  const dataPayload = {
+    title,
+    body,
+    ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+  };
+
   const res = await fetch(fcmUrl, {
     method: "POST",
     headers: {
@@ -67,25 +80,14 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
     body: JSON.stringify({
       message: {
         token: fcmToken,
-        notification: { title, body },
-        data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
-        // Android — priorité haute + canal "default" (créé côté app nativePush.js)
-        // Pas de click_action Flutter : incompatible avec Capacitor / MainActivity
+        // PAS de bloc "notification" → Data-Only message
+        data: dataPayload,
         android: {
           priority: "high",
-          notification: {
+          ttl: "86400s", // 24h de TTL si le téléphone est éteint
+          direct_boot_ok: true, // livraison même avant déverrouillage
+          data: {
             channel_id: "default",
-            sound: "default",
-            visibility: "PUBLIC",
-            default_vibrate_timings: true,
-            notification_priority: "PRIORITY_MAX",
-          },
-        },
-        webpush: {
-          notification: {
-            icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-            badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-            vibrate: [200, 100, 200],
           },
         },
       },
