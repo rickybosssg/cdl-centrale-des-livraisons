@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loader2, Eye, EyeOff, Mail, Lock, ArrowRight, User, Phone } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
@@ -46,6 +47,7 @@ function Field({ icon: Icon, type = "text", placeholder, value, onChange, onKeyD
 
 export default function EmailLogin() {
   const { checkAppState } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState("login"); // login | register | forgot
 
   // Champs communs
@@ -66,8 +68,10 @@ export default function EmailLogin() {
   const clear = () => { setMessage(""); setSuccessMsg(""); };
 
   const navigateHome = async () => {
+    // Utiliser checkAppState() pour mettre à jour le contexte Auth AVANT navigation
+    // Puis navigate React Router (sans rechargement WebView) → pas de reset du SDK
     try { await checkAppState(); } catch (_) {}
-    window.location.replace("/");
+    navigate("/", { replace: true });
   };
 
   const goTo = (m) => { setMode(m); clear(); setPassword(""); setConfirmPassword(""); };
