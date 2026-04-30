@@ -140,14 +140,18 @@ async function doRegister(PN) {
 }
 
 /**
- * initCapacitorPush — Séquence complète garantie :
+ * initCapacitorPush — Séquence complète garantie (NE PAS MODIFIER) :
  * 1. Charger le plugin
  * 2. Créer le canal Android
  * 3. Vérifier/demander la permission
  * 4. Installer les callbacks
- * 5. Attacher les listeners (AVANT register)
- * 6. Appeler register() — TOUJOURS, même si déjà appelé avant
+ * 5. Attacher les listeners (AVANT register — règle Capacitor obligatoire)
+ * 6. Appeler register() — TOUJOURS FORCÉ à chaque appel (Firebase renvoie le même token → idempotent)
  * 7. Timeout de sécurité 20s si token jamais reçu
+ *
+ * RÈGLE CRITIQUE : Ne jamais mettre de guard "_registered" ici.
+ * register() doit être appelé à chaque ouverture de l'app pour garantir
+ * que le callback 'registration' se déclenche et que le token est sauvegardé.
  */
 export async function initCapacitorPush({ onToken, onForegroundNotif, onNotificationTap, onPermissionDenied }) {
   if (!isNativeApp()) {
