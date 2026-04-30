@@ -208,9 +208,27 @@ const AuthenticatedApp = () => {
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   const [hardUnblock, setHardUnblock] = useState(false);
 
-  // Log démarrage
+  // Log démarrage + capture erreurs globales
   useEffect(() => {
     console.log('[APP] START');
+
+    // Capture erreurs JS globales non catchées
+    const onError = (event) => {
+      console.error('[ERROR] GLOBAL JS ERROR:', event?.message, '|', event?.filename, ':', event?.lineno);
+    };
+    const onUnhandled = (event) => {
+      console.error('[ERROR] PROMISE REJECTION:', event?.reason?.message || event?.reason);
+    };
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onUnhandled);
+
+    // Log WebView active
+    console.log('[WEBVIEW] LOADED | url:', window.location.href, '| protocol:', window.location.protocol);
+
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onUnhandled);
+    };
   }, []);
 
   // Timeout de sécurité : affiche bouton réessayer après 4s
@@ -292,6 +310,7 @@ const AuthenticatedApp = () => {
 
   // Log rendu principal
   console.log('[APP] RENDER MAIN UI | user:', user?.email || 'none');
+  console.log('[ROUTE] CURRENT ROUTE:', window.location.pathname);
 
   return (
     <>
@@ -440,17 +459,39 @@ const AuthenticatedApp = () => {
 };
 
 class ErrorBoundary extends Component {
-  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
-  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    console.error('[ERROR] REACT ERROR BOUNDARY:', error?.message);
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('[ERROR] COMPONENT STACK:', info?.componentStack);
+  }
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-background">
-          <div className="text-center space-y-4 max-w-sm">
-            <div className="text-4xl">⚠️</div>
-            <h2 className="text-lg font-bold">Une erreur est survenue</h2>
-            <p className="text-sm text-muted-foreground">{this.state.error?.message || "Erreur inconnue"}</p>
-            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Recharger l'application</button>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: '#f8fafc' }}>
+          <div style={{ textAlign: 'center', maxWidth: '320px' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px', color: '#111' }}>Une erreur est survenue</h2>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '24px' }}>
+              {this.state.error?.message || 'Erreur inattendue'}
+            </p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); }}
+              style={{ display: 'block', width: '100%', padding: '12px', background: '#1E6BFF', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '600', marginBottom: '10px', cursor: 'pointer' }}
+            >
+              🔄 Réessayer
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              style={{ display: 'block', width: '100%', padding: '12px', background: 'transparent', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px', cursor: 'pointer' }}
+            >
+              Relancer l'application
+            </button>
           </div>
         </div>
       );
