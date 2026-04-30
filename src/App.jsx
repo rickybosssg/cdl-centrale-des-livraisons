@@ -207,10 +207,10 @@ const AuthenticatedApp = () => {
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
 
-  // Timeout de sécurité : affiche bouton réessayer après 5s
+  // Timeout de sécurité : affiche bouton réessayer après 3s
   useEffect(() => {
     if (!isLoadingAuth && !isLoadingPublicSettings) return;
-    const t1 = setTimeout(() => setLoadingTimeout(true), 5000);
+    const t1 = setTimeout(() => setLoadingTimeout(true), 3000);
     return () => { clearTimeout(t1); };
   }, [isLoadingAuth, isLoadingPublicSettings]);
 
