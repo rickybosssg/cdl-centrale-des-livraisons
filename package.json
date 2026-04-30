@@ -11,15 +11,10 @@
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },
-  "dependencies": {
-<<<<<<< HEAD
-    "@base44/sdk": "^0.8.26",
-    "@base44/vite-plugin": "^1.0.12",
-    "@capacitor/android": "^6.2.1",
-=======
-    "@base44/sdk": "^0.8.27",
-    "@base44/vite-plugin": "^1.0.13",
->>>>>>> f1a8ccd58853f937f3806241679843c903d09337
+"dependencies": {
+"@base44/sdk": "^0.8.27",
+"@base44/vite-plugin": "^1.0.13",
+"@capacitor/android": "^6.2.1",
     "@capacitor/app": "^6.0.3",
     "@capacitor/browser": "^6.0.6",
     "@capacitor/camera": "^6.1.3",
