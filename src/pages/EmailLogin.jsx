@@ -90,7 +90,6 @@ export default function EmailLogin() {
         console.log("[LOGIN] SET LOGGED IN");
         setLoggedIn({ email: email.trim().toLowerCase() });
         console.log("[LOGIN] NAVIGATE TRIGGERED");
-        navigate("/", { replace: true });
       } else {
         setMessage(status === 401 || status === 400 ? "Email ou mot de passe incorrect" : (data?.error || data?.detail || "Erreur de connexion — réessayez"));
       }

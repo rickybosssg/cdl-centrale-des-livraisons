@@ -84,6 +84,9 @@ export const AuthProvider = ({ children }) => {
     setUser(userData);
     setIsAuthenticated(true);
     setIsLoadingAuth(false);
+    setAuthError(null);
+    // Hard reload vers / pour bypasser tout état bloqué (hardUnblock, etc.)
+    window.location.replace('/');
   }, []);
 
   return (
