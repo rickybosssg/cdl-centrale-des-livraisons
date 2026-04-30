@@ -207,6 +207,10 @@ const AuthenticatedApp = () => {
   const { notification, closeNotification } = useTopNotification();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   const [hardUnblock, setHardUnblock] = useState(false);
+  // Réinitialiser hardUnblock si l'auth réussit après le timeout
+  useEffect(() => {
+    if (isAuthenticated && hardUnblock) setHardUnblock(false);
+  }, [isAuthenticated]);
 
   // Log démarrage + capture erreurs globales
   useEffect(() => {
@@ -238,14 +242,15 @@ const AuthenticatedApp = () => {
     return () => { clearTimeout(t1); };
   }, [isLoadingAuth, isLoadingPublicSettings]);
 
-  // ANTI-ÉCRAN BLANC : si toujours bloqué après 12s → forcer login
+  // ANTI-ÉCRAN BLANC : si toujours bloqué après 20s → forcer login
+  // (délai allongé pour éviter faux positifs sur réseau lent)
   useEffect(() => {
     const t = setTimeout(() => {
       if (isLoadingAuth || isLoadingPublicSettings) {
-        console.warn('[APP] HARD UNBLOCK après 12s — forcer affichage login');
+        console.warn('[APP] HARD UNBLOCK après 20s — forcer affichage login');
         setHardUnblock(true);
       }
-    }, 12000);
+    }, 20000);
     return () => clearTimeout(t);
   }, []);
 
