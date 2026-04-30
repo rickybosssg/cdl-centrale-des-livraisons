@@ -77,36 +77,26 @@ export default function EmailLogin() {
   // ── Connexion ──────────────────────────────────────────────────────────────
   const handleLogin = async () => {
     if (!email || !password) { setMessage("Email et mot de passe requis"); return; }
-    console.log("[LOGIN] START | email:", email.trim());
-    setLoading(true); clear();
-
-    // Timeout de sécurité : jamais bloquer plus de 15s
-    const safetyTimer = setTimeout(() => {
-      console.warn("[LOGIN] TIMEOUT — reset loading");
-      setLoading(false);
-      setMessage("La connexion prend trop de temps. Vérifiez votre connexion et réessayez.");
-    }, 15000);
-
+    console.log("[LOGIN] CLICK");
+    setLoading(true);
+    setMessage("");
     try {
-      console.log("[LOGIN] AUTH CALL");
+      console.log("[LOGIN] START");
       const { ok, status, data } = await authFetch("/login", { email: email.trim().toLowerCase(), password });
-      clearTimeout(safetyTimer);
       const token = data?.access_token || data?.token;
       if (ok && token) {
-        console.log("[LOGIN] SUCCESS — token reçu");
+        console.log("[LOGIN] SUCCESS");
         saveToken(token);
-        setLoading(false);
-        console.log("[LOGIN] REDIRECT DASHBOARD");
-        navigateHome();
+        console.log("[LOGIN] NAVIGATE");
+        navigate("/", { replace: true });
+        console.log("[LOGIN] END");
       } else {
-        console.warn("[LOGIN] ERROR | status:", status, "| data:", JSON.stringify(data));
         setMessage(status === 401 || status === 400 ? "Email ou mot de passe incorrect" : (data?.error || data?.detail || "Erreur de connexion — réessayez"));
-        setLoading(false);
       }
     } catch (err) {
-      clearTimeout(safetyTimer);
-      console.error("[LOGIN] ERROR CATCH:", err?.message);
+      console.error("[LOGIN] ERROR:", err?.message);
       setMessage("Erreur réseau — vérifiez votre connexion");
+    } finally {
       setLoading(false);
     }
   };
