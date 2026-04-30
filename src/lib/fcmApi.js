@@ -1,16 +1,16 @@
 /**
  * fcmApi.js — Sauvegarde des tokens FCM via endpoint public
  *
- * Les fonctions backend Base44 sont accessibles SANS authentification à :
- * https://<app-domain>/functions/<function-name>
- *
- * saveFcmTokenPublic utilise asServiceRole en interne → pas besoin de Bearer token côté client.
+ * Utilisé par FcmDiagnostic et d'autres pages.
+ * FcmBootstrap a sa propre fonction saveFcmTokenRemote inline pour éviter
+ * toute dépendance circulaire et garantir la non-dépendance à user_email.
  */
 
 const APP_BASE_URL = 'https://cdl.base44.app';
 
 /**
  * Sauvegarde un token FCM via l'endpoint public (pas besoin d'auth).
+ * user_email est OBLIGATOIRE pour l'endpoint saveFcmTokenPublic.
  */
 export async function saveFcmToken({ user_email, token, device_type = 'android_native' }) {
   if (!user_email || !token) {
@@ -19,7 +19,7 @@ export async function saveFcmToken({ user_email, token, device_type = 'android_n
   }
 
   const url = `${APP_BASE_URL}/functions/saveFcmTokenPublic`;
-  console.log(`[fcmApi] POST ${url} | user: ${user_email} | device: ${device_type}`);
+  console.log(`[fcmApi] POST → saveFcmTokenPublic | user: ${user_email} | device: ${device_type}`);
 
   try {
     const res = await fetch(url, {
@@ -37,6 +37,7 @@ export async function saveFcmToken({ user_email, token, device_type = 'android_n
     if (!res.ok) {
       return { success: false, error: `HTTP ${res.status}: ${data?.error || data?.raw}` };
     }
+
     if (data?.success) {
       console.log(`[fcmApi] ✅ Token sauvegardé! action=${data.action} id=${data.token_id}`);
     }
@@ -67,8 +68,8 @@ export async function getFcmTokens(user_email) {
 }
 
 /**
- * Flush le token FCM en attente (no-op — plus nécessaire avec l'endpoint public).
+ * Flush le token FCM en attente (no-op — plus nécessaire).
  */
 export async function flushPendingFcmToken() {
-  // L'endpoint public ne nécessite plus de token auth → pas de flush nécessaire
+  // L'endpoint public ne nécessite plus de token auth
 }
