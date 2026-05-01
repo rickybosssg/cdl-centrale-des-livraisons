@@ -5,7 +5,9 @@ const { appId, token, functionsVersion } = appParams;
 
 function getServerUrl() {
   if (typeof window === 'undefined') return '';
+  // APK natif Capacitor (protocole file: ou capacitor:) → pointer vers le vrai serveur
   if (window.location?.protocol === 'file:') return 'https://cdl.base44.app';
+  if (window.location?.protocol === 'capacitor:') return 'https://cdl.base44.app';
   return '';
 }
 

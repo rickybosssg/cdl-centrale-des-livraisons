@@ -17,13 +17,9 @@ function isNativePlatform() {
     if (typeof window === 'undefined') return false;
     // Protocole Capacitor — vérification la plus fiable
     if (window.location?.protocol === 'capacitor:') return true;
-    // Capacitor global — peut ne pas être encore initialisé au premier tick
-    if (window.Capacitor?.isNativePlatform?.() === true) return true;
-    // Fallback : User-Agent Android + pas de window.Notification = APK Capacitor
-    const ua = navigator.userAgent || '';
-    const isAndroid = /Android/i.test(ua);
-    const noWebNotif = !('Notification' in window);
-    if (isAndroid && noWebNotif) return true;
+    // Capacitor global — UNIQUEMENT si isNativePlatform() retourne true
+    // Ne pas se fier à window.Capacitor seul (présent même en WebView HTTPS)
+    if (window.Capacitor?.isNativePlatform?.() === true && window.Capacitor?.getPlatform?.() === 'android') return true;
   } catch (_) {}
   return false;
 }
