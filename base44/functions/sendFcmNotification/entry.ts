@@ -93,13 +93,29 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
       },
     }),
   });
-  const result = await res.json();
-  if (!res.ok) {
-    console.error(`[sendFcmNotification] FCM HTTP ${res.status} error:`, JSON.stringify(result));
-  } else {
-    console.log(`[sendFcmNotification] FCM OK → messageId: ${result?.name}`);
+
+  let result;
+  try {
+    result = await res.json();
+  } catch (e) {
+    console.error(`[sendFcmNotification] JSON parse error:`, e.message);
+    return { ok: false, result: { error: `Invalid response: ${res.statusText}` } };
   }
-  return { ok: res.ok, result };
+
+  if (!res.ok) {
+    // FULL error response logging
+    console.error(`[sendFcmNotification] FCM HTTP ${res.status} ERROR:`, {
+      status: res.status,
+      statusText: res.statusText,
+      full_response: result,
+      error_code: result?.error?.code,
+      error_message: result?.error?.message,
+      error_details: result?.error?.details,
+    });
+  } else {
+    console.log(`[sendFcmNotification] FCM OK (200) → messageId: ${result?.name}`);
+  }
+  return { ok: res.ok, status: res.status, result };
 }
 
 Deno.serve(async (req) => {
