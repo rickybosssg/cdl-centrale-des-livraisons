@@ -36,20 +36,35 @@ function isNativeAndroid() {
 async function requestAndroidNotifPermission() {
   console.log('[PERMISSIONS] notification request start (Android native)');
   try {
-    const { PushNotifications } = await import('@capacitor/push-notifications');
+    let PushNotifications;
+    try {
+      const mod = await import('@capacitor/push-notifications');
+      PushNotifications = mod.PushNotifications;
+    } catch (e) {
+      console.error('[PERMISSIONS] Failed to import PushNotifications:', e?.message);
+      return 'unavailable';
+    }
+
+    if (!PushNotifications) {
+      console.error('[PERMISSIONS] PushNotifications is null after import');
+      return 'unavailable';
+    }
     
     // ── Étape 1 : Vérifier permission actuelle ────────────────────────────
     let check;
     try {
       check = await PushNotifications.checkPermissions();
-      console.log('[PERMISSIONS] checkPermissions result:', check.receive);
+      console.log('[PERMISSIONS] checkPermissions result:', check?.receive);
     } catch (e) {
       console.warn('[PERMISSIONS] checkPermissions crash (non-fatal):', e?.message);
       return 'unavailable';
     }
     
-    if (check.receive === 'granted') return 'granted';
-    if (check.receive === 'denied') {
+    if (check?.receive === 'granted') {
+      console.log('[PERMISSIONS] Permission already granted');
+      return 'granted';
+    }
+    if (check?.receive === 'denied') {
       console.log('[PERMISSIONS] Permission permanently denied by user');
       return 'denied';
     }
@@ -62,24 +77,28 @@ async function requestAndroidNotifPermission() {
       // Timeout 8s : si le dialog ne répond pas, on abandonne et on continue l'app
       req = await Promise.race([
         PushNotifications.requestPermissions(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('[PERMISSIONS] requestPermissions timeout')), 8000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('[PERMISSIONS] requestPermissions timeout after 8s')), 8000))
       ]);
-      console.log('[PERMISSIONS] requestPermissions completed:', req.receive);
-      return req.receive === 'granted' ? 'granted' : 'denied';
+      console.log('[PERMISSIONS] requestPermissions completed:', req?.receive);
+      return req?.receive === 'granted' ? 'granted' : 'denied';
     } catch (e) {
       // Dialog crashé, timeout, ou refusé → considérer comme "prompt" pour relancer après
       console.warn('[PERMISSIONS] requestPermissions failed/timeout (non-bloquant):', e?.message);
       // Re-check la permission pour voir si elle a changé
       try {
-        const recheck = await PushNotifications.checkPermissions();
-        console.log('[PERMISSIONS] recheck after timeout:', recheck.receive);
-        return recheck.receive === 'granted' ? 'granted' : 'denied';
+        const recheck = await Promise.race([
+          PushNotifications.checkPermissions(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('recheck timeout')), 5000))
+        ]);
+        console.log('[PERMISSIONS] recheck after error:', recheck?.receive);
+        return recheck?.receive === 'granted' ? 'granted' : 'denied';
       } catch (_) {
+        console.warn('[PERMISSIONS] recheck also failed');
         return 'unavailable';
       }
     }
   } catch (e) {
-    console.log('[PERMISSIONS] Android notif outer error (non-bloquant):', e?.message);
+    console.error('[PERMISSIONS] Android notif outer error (non-bloquant):', e?.message);
     return 'unavailable';
   }
 }

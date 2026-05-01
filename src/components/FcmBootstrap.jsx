@@ -106,80 +106,99 @@ async function runNativeFcm(propEmail) {
   try {
     const mod = await import('@capacitor/push-notifications');
     PushNotifications = mod.PushNotifications;
-    console.log('[FCM] plugin loaded');
+    if (!PushNotifications) throw new Error('PushNotifications is null');
+    console.log('[FCM] ✅ plugin loaded successfully');
   } catch (e) {
-    console.log('[FCM] plugin unavailable (non-fatal):', e?.message);
+    console.error('[FCM] ❌ plugin UNAVAILABLE:', e?.message);
     return;
   }
 
   try {
-    await PushNotifications.createChannel({
-      id: 'default',
-      name: 'CDL Notifications',
-      importance: 5,
-      sound: 'default',
-      vibration: true,
-      lights: true,
-    });
-  } catch (_) {}
+    await Promise.race([
+      PushNotifications.createChannel({
+        id: 'default',
+        name: 'CDL Notifications',
+        importance: 5,
+        sound: 'default',
+        vibration: true,
+        lights: true,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('createChannel timeout')), 5000))
+    ]);
+    console.log('[FCM] ✅ channel created');
+  } catch (e) {
+    console.warn('[FCM] ⚠️ createChannel error (non-fatal):', e?.message);
+  }
 
   let perm = 'unknown';
   try {
-    const check = await PushNotifications.checkPermissions();
+    const check = await Promise.race([
+      PushNotifications.checkPermissions(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('checkPermissions timeout')), 5000))
+    ]);
     perm = check?.receive || 'unknown';
     console.log('[FCM] permission status:', perm);
   } catch (e) {
-    console.log('[FCM] checkPermissions error (non-fatal):', e?.message);
+    console.error('[FCM] ❌ checkPermissions error:', e?.message);
+    return;
   }
 
   // CRITIQUE : Ne jamais appeler register() si permission pas déjà granted.
-  // Afficher un dialog Android pendant que l'UI est active peut crasher la WebView.
-  // La demande de permission est UNIQUEMENT le rôle de PermissionsOnboarding.
   if (perm !== 'granted') {
-    console.log('[FCM] permission not granted:', perm, '— register() SKIPPED (no dialog from background)');
+    console.log('[FCM] ⚠️ permission not granted (' + perm + ') — register() SKIPPED');
     return;
   }
 
   const listeners = [];
 
   try {
+    console.log('[FCM] attaching listeners...');
     const regListener = await PushNotifications.addListener('registration', (tokenData) => {
-      handleTokenReceived(tokenData, propEmail, listeners).catch((err) => {
-        console.log('[FCM] registration handler error (non-fatal):', err?.message);
-      });
+      try { handleTokenReceived(tokenData, propEmail, listeners).catch((err) => {
+        console.error('[FCM] registration handler error:', err?.message);
+      }); } catch (e) { console.error('[FCM] registration callback crash:', e?.message); }
     });
     listeners.push(regListener);
 
     const errListener = await PushNotifications.addListener('registrationError', (err) => {
-      try { console.log('[FCM] registrationError (non-fatal):', JSON.stringify(err)); } catch (_) {}
+      try { console.error('[FCM] ❌ registrationError:', JSON.stringify(err)); } catch (_) {}
     });
     listeners.push(errListener);
 
     const fgListener = await PushNotifications.addListener('pushNotificationReceived', (notif) => {
-      try { handleForegroundNotif(notif); } catch (_) {}
+      try { handleForegroundNotif(notif); } catch (e) { console.warn('[FCM] foreground notif handler error:', e?.message); }
     });
     listeners.push(fgListener);
 
     const tapListener = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-      try { handleNotifTap(action); } catch (_) {}
+      try { handleNotifTap(action); } catch (e) { console.warn('[FCM] tap handler error:', e?.message); }
     });
     listeners.push(tapListener);
 
-    console.log('[FCM] listeners attached:', listeners.length);
+    console.log('[FCM] ✅ listeners attached:', listeners.length);
   } catch (e) {
-    console.log('[FCM] addListener error (non-fatal):', e?.message);
+    console.error('[FCM] ❌ addListener crash:', e?.message);
+    for (const l of listeners) { try { l.remove(); } catch (_) {} }
     return;
   }
 
   try {
-    console.log('[FCM] register() call');
-    await PushNotifications.register();
-    console.log('[FCM] register() OK — waiting for token callback...');
+    console.log('[FCM] 📢 calling register()...');
+    await Promise.race([
+      PushNotifications.register(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('register timeout after 10s')), 10000))
+    ]);
+    console.log('[FCM] ✅ register() OK — waiting for token callback...');
   } catch (e) {
-    console.log('[FCM] register() error (non-fatal):', e?.message);
+    console.error('[FCM] ❌ register() error:', e?.message);
   }
 
-  console.log('[FCM] native init done');
+  console.log('[FCM] native init done — cleanup listeners after 25s');
+  setTimeout(() => {
+    for (const l of listeners) {
+      try { l.remove(); } catch (_) {}
+    }
+  }, 25000);
 }
 
 async function handleTokenReceived(tokenData, propEmail, listeners) {
