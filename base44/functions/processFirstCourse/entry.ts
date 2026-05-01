@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * LOGIQUE PREMIÈRE/DEUXIÈME COURSE AVEC CODE PROMO
@@ -21,20 +21,20 @@ Deno.serve(async (req) => {
     console.log(`[FirstCourse] Action: ${action}, Course: ${course_id}`);
 
     // ========== VÉRIFIER LA COURSE ==========
-    const coursesData = await base44.entities.Course.filter({ id: course_id });
+    const coursesData = await base44.asServiceRole.entities.Course.filter({ id: course_id });
     if (coursesData.length === 0) {
       return Response.json({ error: 'Course not found' }, { status: 404 });
     }
     const course = coursesData[0];
 
     // ========== VÉRIFIER LE CLIENT ==========
-    const clientsData = await base44.entities.Client.filter({ email: course.client_email });
+    const clientsData = await base44.asServiceRole.entities.Client.filter({ email: course.client_email });
     const client = clientsData.length > 0 ? clientsData[0] : null;
 
     // ========== CRÉER CLIENT SI ABSENT ==========
     let clientId = client?.id;
     if (!client) {
-      const newClient = await base44.entities.Client.create({
+      const newClient = await base44.asServiceRole.entities.Client.create({
         email: course.client_email,
         nom_complet: course.client_name,
         numero_telephone: course.telephone_expediteur,
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     }
 
     // ========== COMPTER COURSES TERMINÉES ==========
-    const completedCourses = await base44.entities.Course.filter({
+    const completedCourses = await base44.asServiceRole.entities.Course.filter({
       client_email: course.client_email,
       statut: 'livree',
     });
@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
       }
 
       const codePromo = course.code_promo_utilise || client?.code_promo_utilise;
-      const hasValidPromo = codePromo ? (await base44.entities.CodePromo.filter({ code: codePromo, actif: true }))[0] : null;
+      const hasValidPromo = codePromo ? (await base44.asServiceRole.entities.CodePromo.filter({ code: codePromo, actif: true }))[0] : null;
 
       let reduction = 0;
       let prixPaye = course.prix || 0;
@@ -87,17 +87,17 @@ Deno.serve(async (req) => {
       // === TRANSACTION ATOMIQUE ===
       try {
         // 1. Débiter Bedou client
-        const bedouClient = await base44.entities.Bedou.filter({ user_email: course.client_email, role: 'client' });
+        const bedouClient = await base44.asServiceRole.entities.Bedou.filter({ user_email: course.client_email, role: 'client' });
         if (bedouClient.length > 0) {
           const newSolde = Math.max(0, (bedouClient[0].solde_disponible || 0) - prixPaye);
-          await base44.entities.Bedou.update(bedouClient[0].id, {
+          await base44.asServiceRole.entities.Bedou.update(bedouClient[0].id, {
             solde: newSolde,
             solde_disponible: newSolde,
             depenses_totales: (bedouClient[0].depenses_totales || 0) + prixPaye,
           });
 
           // Historique Bedou client
-          await base44.entities.Transaction.create({
+          await base44.asServiceRole.entities.Transaction.create({
             user_email: course.client_email,
             user_nom: course.client_name,
             role: 'client',
@@ -113,17 +113,17 @@ Deno.serve(async (req) => {
         }
 
         // 2. Créditer Bedou livreur
-        const bedouLivreur = await base44.entities.Bedou.filter({ user_email: course.livreur_email, role: 'livreur' });
+        const bedouLivreur = await base44.asServiceRole.entities.Bedou.filter({ user_email: course.livreur_email, role: 'livreur' });
         if (bedouLivreur.length > 0) {
           const newSolde = (bedouLivreur[0].solde || 0) + gainLivreur;
-          await base44.entities.Bedou.update(bedouLivreur[0].id, {
+          await base44.asServiceRole.entities.Bedou.update(bedouLivreur[0].id, {
             solde: newSolde,
             solde_disponible: newSolde,
             gains_totaux: (bedouLivreur[0].gains_totaux || 0) + gainLivreur,
           });
 
           // Historique Bedou livreur
-          await base44.entities.Transaction.create({
+          await base44.asServiceRole.entities.Transaction.create({
             user_email: course.livreur_email,
             user_nom: course.livreur_name,
             role: 'livreur',
@@ -140,17 +140,17 @@ Deno.serve(async (req) => {
 
         // 3. Créditer Bedou commercial si code promo valide
         if (hasValidPromo) {
-          const bedouCommercial = await base44.entities.Bedou.filter({ user_email: hasValidPromo.commercial_email, role: 'commercial' });
+          const bedouCommercial = await base44.asServiceRole.entities.Bedou.filter({ user_email: hasValidPromo.commercial_email, role: 'commercial' });
           if (bedouCommercial.length > 0) {
             const newSolde = (bedouCommercial[0].solde || 0) + gainCommercial;
-            await base44.entities.Bedou.update(bedouCommercial[0].id, {
+            await base44.asServiceRole.entities.Bedou.update(bedouCommercial[0].id, {
               solde: newSolde,
               solde_disponible: newSolde,
               gains_totaux: (bedouCommercial[0].gains_totaux || 0) + gainCommercial,
             });
 
             // Historique Bedou commercial
-            await base44.entities.Transaction.create({
+            await base44.asServiceRole.entities.Transaction.create({
               user_email: hasValidPromo.commercial_email,
               user_nom: hasValidPromo.commercial_name,
               role: 'commercial',
@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
             });
 
             // Mettre à jour CodePromo
-            await base44.entities.CodePromo.update(hasValidPromo.id, {
+            await base44.asServiceRole.entities.CodePromo.update(hasValidPromo.id, {
               nombre_utilisations: (hasValidPromo.nombre_utilisations || 0) + 1,
               commission_due: (hasValidPromo.commission_due || 0) + gainCommercial,
             });
@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
         }
 
         // 4. Créditer Bedou CDL (0 pour première course spéciale)
-        const bedouCDL = await base44.entities.Bedou.filter({ user_email: 'admin@cdl.local', role: 'admin' });
+        const bedouCDL = await base44.asServiceRole.entities.Bedou.filter({ user_email: 'admin@cdl.local', role: 'admin' });
         if (bedouCDL.length > 0 && commissionCDL > 0) {
           const newSolde = (bedouCDL[0].solde || 0) + commissionCDL;
           await base44.entities.Bedou.update(bedouCDL[0].id, {
@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
         }
 
         // 5. Mettre à jour client
-        await base44.entities.Client.update(clientId, {
+        await base44.asServiceRole.entities.Client.update(clientId, {
           nombre_total_courses: (client?.nombre_total_courses || 0) + 1,
           nombre_courses_terminees: (client?.nombre_courses_terminees || 0) + 1,
           total_depense: (client?.total_depense || 0) + prixPaye,
@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
         });
 
         // 6. Mettre à jour course
-        await base44.entities.Course.update(course_id, {
+        await base44.asServiceRole.entities.Course.update(course_id, {
           prix_initial: prixInitial,
           reduction_appliquee: reduction,
           prix_final: prixPaye,
@@ -257,16 +257,16 @@ Deno.serve(async (req) => {
 
       try {
         // 1. Débiter Bedou client
-        const bedouClient = await base44.entities.Bedou.filter({ user_email: course.client_email, role: 'client' });
+        const bedouClient = await base44.asServiceRole.entities.Bedou.filter({ user_email: course.client_email, role: 'client' });
         if (bedouClient.length > 0) {
           const newSolde = Math.max(0, (bedouClient[0].solde_disponible || 0) - prixPaye);
-          await base44.entities.Bedou.update(bedouClient[0].id, {
+          await base44.asServiceRole.entities.Bedou.update(bedouClient[0].id, {
             solde: newSolde,
             solde_disponible: newSolde,
             depenses_totales: (bedouClient[0].depenses_totales || 0) + prixPaye,
           });
 
-          await base44.entities.Transaction.create({
+          await base44.asServiceRole.entities.Transaction.create({
             user_email: course.client_email,
             user_nom: course.client_name,
             role: 'client',
@@ -282,16 +282,16 @@ Deno.serve(async (req) => {
         }
 
         // 2. Créditer Bedou livreur
-        const bedouLivreur = await base44.entities.Bedou.filter({ user_email: course.livreur_email, role: 'livreur' });
+        const bedouLivreur = await base44.asServiceRole.entities.Bedou.filter({ user_email: course.livreur_email, role: 'livreur' });
         if (bedouLivreur.length > 0) {
           const newSolde = (bedouLivreur[0].solde || 0) + gainLivreur;
-          await base44.entities.Bedou.update(bedouLivreur[0].id, {
+          await base44.asServiceRole.entities.Bedou.update(bedouLivreur[0].id, {
             solde: newSolde,
             solde_disponible: newSolde,
             gains_totaux: (bedouLivreur[0].gains_totaux || 0) + gainLivreur,
           });
 
-          await base44.entities.Transaction.create({
+          await base44.asServiceRole.entities.Transaction.create({
             user_email: course.livreur_email,
             user_nom: course.livreur_name,
             role: 'livreur',
@@ -307,15 +307,15 @@ Deno.serve(async (req) => {
         }
 
         // 3. Créditer Bedou CDL (commission normale)
-        const bedouCDL = await base44.entities.Bedou.filter({ user_email: 'admin@cdl.local', role: 'admin' });
+        const bedouCDL = await base44.asServiceRole.entities.Bedou.filter({ user_email: 'admin@cdl.local', role: 'admin' });
         if (bedouCDL.length > 0 && commissionCDL > 0) {
           const newSolde = (bedouCDL[0].solde || 0) + commissionCDL;
-          await base44.entities.Bedou.update(bedouCDL[0].id, {
+          await base44.asServiceRole.entities.Bedou.update(bedouCDL[0].id, {
             solde: newSolde,
             gains_totaux: (bedouCDL[0].gains_totaux || 0) + commissionCDL,
           });
 
-          await base44.entities.Transaction.create({
+          await base44.asServiceRole.entities.Transaction.create({
             user_email: 'admin@cdl.local',
             role: 'admin',
             type: 'commission',
@@ -330,7 +330,7 @@ Deno.serve(async (req) => {
         }
 
         // 4. Mettre à jour client (compteurs normaux, sans avantages spéciaux)
-        await base44.entities.Client.update(clientId, {
+        await base44.asServiceRole.entities.Client.update(clientId, {
           nombre_total_courses: (client?.nombre_total_courses || 0) + 1,
           nombre_courses_terminees: (client?.nombre_courses_terminees || 0) + 1,
           total_depense: (client?.total_depense || 0) + prixPaye,
@@ -339,7 +339,7 @@ Deno.serve(async (req) => {
         });
 
         // 5. Mettre à jour course
-        await base44.entities.Course.update(course_id, {
+        await base44.asServiceRole.entities.Course.update(course_id, {
           commission_cdl: commissionCDL,
           gain_livreur: gainLivreur,
           statut_paiement: 'paye',

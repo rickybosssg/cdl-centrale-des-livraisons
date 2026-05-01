@@ -9,7 +9,7 @@
  * Aligné sur l'architecture multi-profils CDL :
  *   - driver_online + current_role + profil_valide (jamais disponible/user_type)
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const PROJECT_ID = "cdl-app-4743c";
 const FCM_URL = `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`;
@@ -127,7 +127,7 @@ async function notifyAndPush(base44, accessToken, { email, role, titre, message,
 
   // 2. FCM push
   if (!accessToken) return;
-  const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email });
+  const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true });
   // Dédupliquer les tokens
   const seenTokens = new Set();
   const uniqueTokenRecords = tokenRecords.filter(r => {
