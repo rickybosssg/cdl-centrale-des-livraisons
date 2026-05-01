@@ -20,7 +20,7 @@ function isDriverStillValid(driver) {
     !driver.livreur_bloque &&
     !driver.livreur_suspendu &&
     driver.disponible !== false &&
-    (driver.nombre_courses_actives || 0) < 3
+    (driver.nombre_courses_actives || 0) < 2
   );
 }
 

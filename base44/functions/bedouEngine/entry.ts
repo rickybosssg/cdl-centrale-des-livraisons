@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
 
   // ── ACTION: get_bedou ──────────────────────────────────────
   if (action === 'get_bedou') {
-    const bedou = await ensureBedou(user.email, user.user_type, user.full_name);
+    const bedou = await ensureBedou(user.email, user.user_type || user.current_role || 'client', user.full_name);
     const transactions = await base44.asServiceRole.entities.Transaction.filter(
       { user_email: user.email }, '-created_date', 50
     );
@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
   if (action === 'demande_recharge') {
     const { montant, methode, preuve_paiement } = body;
     if (!montant || montant < 100) return Response.json({ error: 'Montant minimum 100 F CFA' }, { status: 400 });
-    const bedou = await ensureBedou(user.email, user.user_type, user.full_name);
+    const bedou = await ensureBedou(user.email, user.user_type || user.current_role || 'client', user.full_name);
     if (bedou.statut_bedou === 'suspendu') return Response.json({ error: 'Bedou suspendu' }, { status: 403 });
     // Bonus uniquement sur les 3 premières recharges
     const bonusCount = bedou.bonus_recharge_count || 0;
@@ -301,7 +301,9 @@ Deno.serve(async (req) => {
   // ── ACTION: demande_retrait ──────────────────────────────────
   if (action === 'demande_retrait') {
     const { montant, methode, numero_reception, nom_compte } = body;
-    if (!['livreur', 'partenaire', 'commercial'].includes(user.user_type)) {
+    // Vérifier le rôle via user_type OU current_role (multi-profils)
+    const userRole = user.user_type || user.current_role || '';
+    if (!['livreur', 'partenaire', 'commercial'].includes(userRole)) {
       return Response.json({ error: 'Retrait non autorisé pour votre rôle' }, { status: 403 });
     }
     const bedou = await getBedou(user.email);

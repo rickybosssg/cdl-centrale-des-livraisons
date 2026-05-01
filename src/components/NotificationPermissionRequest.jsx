@@ -39,8 +39,10 @@ export default function NotificationPermissionRequest({ onSuccess, onDismiss, va
         return;
       }
 
-      // Bloqué définitivement (denied sur Android = refus permanent)
-      if (perm === 'denied') {
+      // Bloqué définitivement : uniquement si explicitement denied ET déjà demandé
+      // Sur APK natif "denied" au premier check = pas encore demandé → ne pas bloquer
+      const alreadyAskedBefore = localStorage.getItem(LS_ASKED);
+      if (perm === 'denied' && alreadyAskedBefore) {
         setStep('blocked');
         return;
       }
