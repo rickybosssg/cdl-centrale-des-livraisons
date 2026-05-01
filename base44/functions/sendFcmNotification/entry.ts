@@ -4,6 +4,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // Ne pas hardcoder ici — le SA JSON contient toujours le bon project_id
 
 async function getAccessToken(serviceAccount) {
+  console.log('[getAccessToken] START — Generating JWT for:', serviceAccount.client_email);
+  
+  // Validate service account
+  if (!serviceAccount.private_key || !serviceAccount.client_email || !serviceAccount.project_id) {
+    throw new Error('Service Account JSON invalid: missing private_key, client_email, or project_id');
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: serviceAccount.client_email,
@@ -21,6 +28,8 @@ async function getAccessToken(serviceAccount) {
   const headerB64 = encodeB64Url(header);
   const payloadB64 = encodeB64Url(payload);
   const signingInput = `${headerB64}.${payloadB64}`;
+
+  console.log('[getAccessToken] JWT payload:', JSON.stringify(payload));
 
   const pemContents = serviceAccount.private_key
     .replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, "");
@@ -41,6 +50,7 @@ async function getAccessToken(serviceAccount) {
     .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 
   const jwt = `${signingInput}.${sigB64}`;
+  console.log('[getAccessToken] JWT generated (length:', jwt.length, ')');
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -49,9 +59,23 @@ async function getAccessToken(serviceAccount) {
   });
 
   const tokenData = await tokenRes.json();
+  
+  if (!tokenRes.ok) {
+    console.error('[getAccessToken] OAuth ERROR:', {
+      status: tokenRes.status,
+      statusText: tokenRes.statusText,
+      full_response: tokenData,
+      error_code: tokenData?.error,
+      error_description: tokenData?.error_description
+    });
+    throw new Error(`OAuth 403 Error: ${tokenData?.error || tokenRes.statusText} — ${tokenData?.error_description || 'Check Service Account JSON permissions in Google Cloud Console'}`);
+  }
+
   if (!tokenData.access_token) {
     throw new Error("Impossible d'obtenir l'access token: " + JSON.stringify(tokenData));
   }
+  
+  console.log('[getAccessToken] ✅ Access token obtained');
   return tokenData.access_token;
 }
 
