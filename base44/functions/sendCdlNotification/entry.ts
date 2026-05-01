@@ -15,11 +15,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const SA_JSON = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
 
 // Tokens de test à ignorer
-const BLACKLISTED_TOKENS = ['test_diagnostic_token', 'test_public_endpoint'];
+const BLACKLISTED_TOKENS = ['test_diagnostic_token', 'test_public_endpoint', 'test_e2e_audit'];
 function isTestToken(token) {
   if (!token) return true;
   const t = String(token).toLowerCase();
-  return BLACKLISTED_TOKENS.some(b => t.includes(b)) || t.includes('_test_');
+  return BLACKLISTED_TOKENS.some(b => t.includes(b)) || t.includes('_test_') || t.startsWith('test_');
 }
 
 // ── Firebase OAuth2 JWT → Access Token ───────────────────────────────────────
