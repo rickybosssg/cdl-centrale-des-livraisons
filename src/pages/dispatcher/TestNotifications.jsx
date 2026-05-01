@@ -99,65 +99,57 @@ export default function TestNotifications() {
       return;
     }
 
-    // Réinitialiser l'état avant nouvel envoi
+    // Réinitialiser l'état AVANT nouvel envoi
     setLastResult(null);
     setSending(true);
     
     try {
-      console.log('[TestNotifications] Calling testFcmSend for:', selectedEmail, '| Function: testFcmSend');
+      console.log('[TestNotifications] Calling testFcmSend for:', selectedEmail);
       const res = await base44.functions.invoke('testFcmSend', {
         user_email: selectedEmail,
         title: '🧪 Test CDL Notification',
         body: 'Test depuis l\'admin panel',
       });
 
-      console.log('[TestNotifications] Response from testFcmSend:', res.data);
-      console.log('[TestNotifications] HTTP Status:', res.status);
+      console.log('[TestNotifications] Response:', res.data);
 
-      // Succès HTTP + success flag
-      if (res.status === 200 && res.data?.success) {
+      // Succès : status 200 + success: true
+      if (res.data?.success) {
         const sent = res.data.sent || 0;
         const total = res.data.total || 0;
-        console.log('[TestNotifications] ✅ SUCCESS — sent:', sent, '| total:', total);
+        console.log('[TestNotifications] ✅ SUCCESS');
         toast.success(`✅ Notification envoyée avec succès!\n${sent}/${total} tokens reçus`);
         setLastResult({
-          status: 'success',
+          ok: true,
+          msg: `✅ Envoyée ! ${sent}/${total} token(s)`,
           sent,
           tokens_found: total,
           recipient_email: selectedEmail,
           timestamp: new Date().toISOString(),
-          httpStatus: 200,
         });
       } else {
         // Erreur métier (success: false)
-        const errMsg = res.data?.message || res.data?.error || 'Raison inconnue';
-        console.log('[TestNotifications] ❌ FAILED —', errMsg);
-        toast.error(`❌ Notification non envoyée\n${errMsg}`);
+        const errMsg = res.data?.message || res.data?.error || 'Utilisateur doit se connecter + autoriser les notifications';
+        console.log('[TestNotifications] ❌ FAILED:', errMsg);
+        toast.error(`❌ ${errMsg}`);
         setLastResult({
-          status: 'failed',
-          message: errMsg,
-          httpStatus: res.status || 'unknown',
+          ok: false,
+          msg: errMsg,
         });
       }
 
-      // Recharger les logs
+      // Rafraîchir les logs après 1s
       setTimeout(async () => {
-        const logs = await base44.entities.NotificationTestLog.filter(
-          {},
-          '-created_date',
-          10
-        );
+        const logs = await base44.entities.NotificationTestLog.filter({}, '-created_date', 10);
         setTestLogs(logs);
       }, 1000);
     } catch (err) {
-      // Exception HTTP ou réseau
-      const errorMsg = err.response?.data?.error || err.message || 'Erreur inconnue';
-      console.error('[TestNotifications] ❌ EXCEPTION —', errorMsg, '| Status:', err.response?.status);
-      toast.error(`❌ Erreur d'envoi\n${errorMsg}`);
+      const errorMsg = err.message || 'Erreur réseau';
+      console.error('[TestNotifications] Exception:', errorMsg);
+      toast.error(`❌ Erreur: ${errorMsg}`);
       setLastResult({
-        status: 'error',
-        message: errorMsg,
-        httpStatus: err.response?.status || 'network',
+        ok: false,
+        msg: errorMsg,
       });
     } finally {
       setSending(false);
@@ -294,14 +286,14 @@ export default function TestNotifications() {
       {lastResult && (
         <Card
           className={
-            lastResult.status === 'success'
+            lastResult.ok
               ? 'border-green-200 bg-green-50'
               : 'border-red-200 bg-red-50'
           }
         >
           <CardContent className="p-4 space-y-2">
             <div className="flex items-start gap-3">
-              {lastResult.status === 'success' ? (
+              {lastResult.ok ? (
                 <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
               ) : (
                 <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -309,20 +301,18 @@ export default function TestNotifications() {
               <div className="flex-1">
                 <p
                   className={`font-semibold text-sm ${
-                    lastResult.status === 'success' ? 'text-green-900' : 'text-red-900'
+                    lastResult.ok ? 'text-green-900' : 'text-red-900'
                   }`}
                 >
-                  {lastResult.status === 'success'
-                    ? `✅ Notification envoyée à ${lastResult.sent}/${lastResult.tokens_found} tokens`
-                    : `❌ Erreur: ${lastResult.message}`}
+                  {lastResult.msg}
                 </p>
-                {lastResult.status === 'success' && (
+                {lastResult.ok && (
                   <>
                     <p className="text-xs text-muted-foreground mt-1">
                       Email: {lastResult.recipient_email}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Timestamp: {new Date(lastResult.timestamp).toLocaleString()}
+                      {new Date(lastResult.timestamp).toLocaleString()}
                     </p>
                   </>
                 )}
