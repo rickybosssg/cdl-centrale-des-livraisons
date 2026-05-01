@@ -35,24 +35,22 @@ export default function EditPersonalInfoModal({ open, onClose, user, onSaved }) 
     setSaving(true);
 
     const newFullName = `${prenom.trim()} ${nom.trim()}`.trim();
-    const oldFullName = user?.full_name || "";
-    const oldTel = user?.telephone || "";
 
-    const res = await base44.functions.invoke("updatePersonalInfo", {
-      new_full_name: newFullName,
-      new_telephone: telephone.trim(),
-      old_full_name: oldFullName,
-      old_telephone: oldTel,
-    });
+    try {
+      // Utiliser base44.auth.updateMe directement (plus simple et plus fiable)
+      await base44.auth.updateMe({
+        full_name: newFullName,
+        telephone: telephone.trim(),
+      });
 
-    setSaving(false);
-
-    if (res?.data?.success) {
       toast.success("✅ Vos informations ont été mises à jour avec succès.");
       onSaved({ full_name: newFullName, telephone: telephone.trim() });
       onClose();
-    } else {
-      toast.error(res?.data?.error || "Erreur lors de la mise à jour");
+    } catch (err) {
+      console.error('[EditPersonalInfoModal] Erreur:', err);
+      toast.error(err?.data?.message || err?.message || "Erreur lors de la mise à jour");
+    } finally {
+      setSaving(false);
     }
   };
 
