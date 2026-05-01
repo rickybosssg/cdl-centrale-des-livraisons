@@ -4,25 +4,32 @@
   "properties": {
     "user_id": {
       "type": "string",
-      "title": "ID utilisateur"
+      "title": "ID utilisateur",
+      "index": true
     },
     "user_email": {
       "type": "string",
-      "title": "Email utilisateur"
+      "title": "Email utilisateur",
+      "index": true
     },
-    "user_nom": {
+    "user_name": {
       "type": "string",
       "title": "Nom utilisateur"
-    },
-    "role": {
-      "type": "string",
-      "title": "R\u00f4le"
     },
     "montant": {
       "type": "number",
       "title": "Montant demand\u00e9 (F CFA)"
     },
-    "methode": {
+    "bonus": {
+      "type": "number",
+      "title": "Bonus appliqu\u00e9 (F CFA)",
+      "default": 0
+    },
+    "montant_total": {
+      "type": "number",
+      "title": "Montant total avec bonus (F CFA)"
+    },
+    "methode_paiement": {
       "type": "string",
       "enum": [
         "orange_money",
@@ -32,13 +39,9 @@
       ],
       "title": "M\u00e9thode de paiement"
     },
-    "numero_transaction": {
+    "preuve_paiement_url": {
       "type": "string",
-      "title": "Num\u00e9ro de transaction"
-    },
-    "preuve_paiement": {
-      "type": "string",
-      "title": "Preuve de paiement (URL)"
+      "title": "URL preuve de paiement"
     },
     "statut": {
       "type": "string",
@@ -48,7 +51,13 @@
         "refuse"
       ],
       "title": "Statut",
-      "default": "en_attente"
+      "default": "en_attente",
+      "index": true
+    },
+    "type": {
+      "type": "string",
+      "title": "Type de transaction",
+      "default": "recharge_bedou"
     },
     "date_validation": {
       "type": "string",
@@ -61,16 +70,11 @@
     "motif_refus": {
       "type": "string",
       "title": "Motif de refus"
-    },
-    "bonus_applique": {
-      "type": "number",
-      "title": "Bonus appliqu\u00e9 (F CFA)",
-      "default": 0
     }
   },
   "required": [
     "user_email",
     "montant",
-    "methode"
+    "methode_paiement"
   ]
 }

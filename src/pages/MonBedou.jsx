@@ -88,45 +88,57 @@ export default function MonBedou() {
 
     setSubmitting(true);
 
-    // Timeout de sécurité : débloquer le bouton après 15s quoi qu'il arrive
+    // Safety timeout : débloquer le bouton après 20s max
     const safetyTimer = setTimeout(() => {
       setSubmitting(false);
       toast.error("La requête prend trop de temps. Vérifiez votre connexion et réessayez.");
-    }, 15000);
+    }, 20000);
 
     try {
-      // 1. Upload de la preuve
+      console.log('[MonBedou] [BEDOU_RECHARGE] submit start');
+
+      // ── 1. Upload de la preuve ──────────────────────────────────────────────
+      console.log('[MonBedou] [BEDOU_RECHARGE] proof upload start');
       let file_url = "";
+      
       try {
         const uploadRes = await base44.integrations.Core.UploadFile({ file: form.preuve });
         file_url = uploadRes.file_url;
+        console.log('[MonBedou] [BEDOU_RECHARGE] proof upload success:', file_url.slice(0, 50));
       } catch (uploadErr) {
+        console.error('[MonBedou] [BEDOU_RECHARGE] proof upload error:', uploadErr?.message);
         clearTimeout(safetyTimer);
         setSubmitting(false);
-        toast.error("Échec de l'envoi de la photo. Vérifiez votre connexion et réessayez.");
+        toast.error("❌ Impossible d'ajouter la preuve. Réessayez.");
         return;
       }
 
-      // 2. Créer la demande de recharge
-      const res = await base44.functions.invoke("bedouEngine", {
-        action: "demande_recharge",
+      // ── 2. Créer la demande de recharge (nouvelle fonction) ──────────────────
+      console.log('[MonBedou] [BEDOU_RECHARGE] db create start');
+      
+      const res = await base44.functions.invoke("submitBedouRecharge", {
         montant,
-        methode: form.methode,
-        preuve_paiement: file_url,
+        methode_paiement: form.methode,
+        preuve_paiement_url: file_url,
+        bonus: getBonus(montant),
       });
+
+      const data = res?.data ?? res;
+      console.log('[MonBedou] [BEDOU_RECHARGE] response:', data);
 
       clearTimeout(safetyTimer);
       setSubmitting(false);
 
-      // Le SDK base44 retourne directement les données (pas enveloppées dans .data)
-      const data = res?.data ?? res;
-
       if (data?.success) {
+        console.log('[MonBedou] [BEDOU_RECHARGE] submit end - SUCCESS');
+        
         setSubmitted({
-          bonus: data.bonus_applique || 0,
+          bonus: data.bonus || 0,
           bonus_restants: data.bonus_restants ?? null,
         });
         setForm({ montant: "", methode: "orange_money", preuve: null });
+        
+        // Notification client WhatsApp
         try {
           triggerWhatsAppNotification({
             eventType: "bedou_topup_requested",
@@ -138,15 +150,22 @@ export default function MonBedou() {
             entityType: "bedou",
             priority: "high",
           });
-        } catch (_) {}
+        } catch (waErr) {
+          console.warn('[MonBedou] WhatsApp notification error (non-fatal):', waErr?.message);
+        }
       } else {
-        toast.error(data?.error || "La demande a échoué. Réessayez.");
+        console.error('[MonBedou] [BEDOU_RECHARGE] submit failed:', data?.error);
+        toast.error(data?.error || "❌ La demande a échoué. Réessayez.");
       }
     } catch (err) {
       clearTimeout(safetyTimer);
       setSubmitting(false);
-      console.error("[MonBedou] handleRecharge error:", err);
-      toast.error("Erreur inattendue : " + (err?.message || "réessayez."));
+      console.error("[MonBedou] [BEDOU_RECHARGE] FATAL error:", err);
+      console.error('[MonBedou] [BEDOU_RECHARGE] error details:', {
+        message: err?.message,
+        stack: err?.stack,
+      });
+      toast.error("❌ Erreur : " + (err?.message || "Vérifiez votre connexion et réessayez."));
     }
   };
 
