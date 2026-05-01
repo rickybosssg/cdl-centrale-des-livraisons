@@ -529,18 +529,32 @@ export default function FcmDiagnostic() {
         </CardContent>
       </Card>
 
-      {/* Bouton enregistrer */}
-      {chain.db !== 'ok' && (
+      {/* Bouton enregistrer — Android natif uniquement */}
+      {isNative && chain.db !== 'ok' && (
         <Card className="border-amber-300 bg-amber-50">
           <CardContent className="p-4 space-y-3">
             <p className="text-sm font-semibold text-amber-900">
-              {isNative ? '📱 Enregistrer ce téléphone Android' : '🌐 Enregistrer ce navigateur'}
+              📱 Enregistrer ce téléphone Android
             </p>
-            <Button onClick={isNative ? registerNative : registerWeb} disabled={registering} className="w-full">
+            <Button onClick={registerNative} disabled={registering} className="w-full">
               {registering
                 ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enregistrement...</>
                 : '🔑 Demander permission + Enregistrer FCM'}
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Message info pour Web */}
+      {!isNative && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold text-blue-900">
+              🌐 Mode web détecté — notifications FCM non disponibles ici
+            </p>
+            <p className="text-xs text-blue-700 mt-2">
+              Les notifications push nécessitent l'application mobile native Android. Téléchargez l'APK pour activer les notifications.
+            </p>
           </CardContent>
         </Card>
       )}
