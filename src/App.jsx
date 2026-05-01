@@ -218,20 +218,27 @@ const AuthenticatedApp = () => {
 
   // Log démarrage + capture erreurs globales
   useEffect(() => {
-    console.log('[APP] START');
+    console.log('[APP] mounted');
 
-    // Capture erreurs JS globales non catchées
+    // Capture erreurs JS globales — LOG SEULEMENT, jamais de throw
     const onError = (event) => {
-      console.error('[ERROR] GLOBAL JS ERROR:', event?.message, '|', event?.filename, ':', event?.lineno);
+      try {
+        console.error('[CRASH-GUARD] JS error:', event?.message, '|', event?.filename, ':', event?.lineno);
+      } catch (_) {}
+      // Empêcher la propagation qui pourrait fermer la WebView
+      event?.preventDefault?.();
     };
     const onUnhandled = (event) => {
-      console.error('[ERROR] PROMISE REJECTION:', event?.reason?.message || event?.reason);
+      try {
+        console.error('[CRASH-GUARD] Unhandled rejection:', event?.reason?.message || String(event?.reason));
+      } catch (_) {}
+      // CRITIQUE : empêcher les unhandled rejections de crasher la WebView Capacitor
+      event?.preventDefault?.();
     };
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onUnhandled);
 
-    // Log WebView active
-    console.log('[WEBVIEW] LOADED | url:', window.location.href, '| protocol:', window.location.protocol);
+    console.log('[WEBVIEW] loaded | protocol:', window.location?.protocol, '| url:', window.location?.href);
 
     return () => {
       window.removeEventListener('error', onError);
