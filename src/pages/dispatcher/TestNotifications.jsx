@@ -101,29 +101,31 @@ export default function TestNotifications() {
 
     setSending(true);
     try {
-      console.log('[TestNotifications] Envoi test vers', selectedEmail, selectedRole);
-      const res = await base44.functions.invoke('testNotification', {
-        recipient_email: selectedEmail,
-        recipient_role: selectedRole,
-      });
+      console.log('[TestNotifications] Calling testFcmSend for:', selectedEmail);
+      const res = await base44.functions.invoke('testFcmSend', {});
 
-      console.log('[TestNotifications] Résultat:', res.data);
+      console.log('[TestNotifications] Response from testFcmSend:', res.data);
 
       if (res.data?.success) {
+        const sent = res.data.sent || 0;
+        const total = res.data.total || 0;
         toast.success(
-          `✅ Notification envoyée!\n${res.data.details.sent}/${res.data.details.tokens_found} tokens reçus`
+          `✅ Notification envoyée!\n${sent}/${total} tokens reçus`
         );
         setLastResult({
           status: 'success',
-          ...res.data.details,
+          sent,
+          tokens_found: total,
+          recipient_email: selectedEmail,
+          timestamp: new Date().toISOString(),
         });
       } else {
         toast.error(
-          `⚠️ Notification non envoyée\n${res.data?.details || res.data?.message}`
+          `⚠️ Notification non envoyée\n${res.data?.message || 'Voir les logs'}`
         );
         setLastResult({
           status: 'failed',
-          message: res.data?.details || res.data?.message,
+          message: res.data?.message || res.data?.error,
         });
       }
 
