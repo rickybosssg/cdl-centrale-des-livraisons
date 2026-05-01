@@ -111,8 +111,8 @@ export default function AdminDashboardPro() {
         coursesRes, usersRes, profilesRes, bedouRes, retraitRes,
         partenaireRes, pubRes, dispatchRes
       ] = await Promise.allSettled([
-        base44.entities.Course.list("-created_date", 200),
-        base44.entities.User.list("-updated_date", 500),
+        base44.entities.Course.list("-created_date", 100),
+        base44.entities.User.list("-updated_date", 100),
         base44.entities.UserProfile.filter({ deleted: false }),
         base44.entities.Bedou.list("-updated_date", 500),
         base44.entities.DemandeRetrait.filter({ statut: "en_attente" }),
@@ -146,16 +146,17 @@ export default function AdminDashboardPro() {
     console.log('[DASHBOARD] mounted');
     load();
 
-    // Intervalle 90s — réduit la charge sur APK natif
+    // Intervalle 5min — réduit la charge mémoire sur APK natif
     const interval = setInterval(() => {
       try { load(); } catch (err) { console.error('[DASHBOARD] interval error (non-fatal):', err?.message); }
-    }, 90000);
+    }, 300000);
 
     let unsubCourse = null, unsubUser = null, unsubProfile = null;
 
-    // Délai 5s avant d'activer les subscriptions temps réel
-    // → laisser le dashboard se rendre complètement avant d'ajouter des listeners WebSocket
+    // Délai 10s + désactivé sur APK natif pour éviter surcharge mémoire WebSocket
+    const isNative = (() => { try { const p = window.location?.protocol; return p === 'capacitor:' || p === 'file:' || (typeof window.Capacitor !== 'undefined'); } catch(_) { return false; } })();
     const subTimer = setTimeout(() => {
+      if (isNative) { console.log('[DASHBOARD] subscriptions SKIPPED on native (polling only)'); return; }
       console.log('[DASHBOARD] activating subscriptions...');
       try {
         unsubCourse = base44.entities.Course.subscribe(ev => {
