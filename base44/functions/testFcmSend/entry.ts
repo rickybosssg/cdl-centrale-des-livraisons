@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
         statusText: res.statusText,
         error: result?.error || result,
         full_response: result,
-      }, { status: res.status });
+      }, { status: 200 });
     }
 
   } catch (error) {
