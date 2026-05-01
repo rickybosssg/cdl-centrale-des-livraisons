@@ -248,7 +248,9 @@ const AuthenticatedApp = () => {
 
   // ANTI-ÉCRAN BLANC : si toujours bloqué après 20s → forcer login
   // (délai allongé pour éviter faux positifs sur réseau lent)
+  // ⚠️ Ne pas démarrer si déjà authentifié (évite le re-render intempestif sur APK lent)
   useEffect(() => {
+    if (isAuthenticated) return; // Auth déjà OK → inutile
     const t = setTimeout(() => {
       if (isLoadingAuth || isLoadingPublicSettings) {
         console.warn('[APP] HARD UNBLOCK après 20s — forcer affichage login');
@@ -256,7 +258,7 @@ const AuthenticatedApp = () => {
       }
     }, 20000);
     return () => clearTimeout(t);
-  }, []);
+  }, [isAuthenticated]);
 
   // ── Routes publiques — AVANT tout check d'auth ──────────────────────────
   // Ces routes sont accessibles sans authentification (important pour APK natif)
