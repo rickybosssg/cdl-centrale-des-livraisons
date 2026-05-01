@@ -267,16 +267,9 @@ async function handleTokenReceived(token, propEmail, listeners) {
     console.log('[FCM] 📧 Email resolved:', email);
     console.log('[FCM] 🔑 Token received (len=' + token.length + '):', token.slice(0, 50) + '...');
 
-    // Get device ID (Android only)
-    let deviceId = 'unknown';
-    try {
-      const { Device } = await import('@capacitor/device');
-      const info = await Device.getId();
-      deviceId = info.identifier || 'unknown';
-      console.log('[FCM] 📱 Device ID:', deviceId);
-    } catch (_) {
-      console.warn('[FCM] Could not get device ID');
-    }
+    // Device type (Android native)
+    const deviceId = 'android_native';
+    console.log('[FCM] 📱 Device Type:', deviceId);
 
     const result = await saveFcmTokenRemote({ 
       user_email: email, 
