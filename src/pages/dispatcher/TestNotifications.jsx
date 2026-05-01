@@ -101,8 +101,12 @@ export default function TestNotifications() {
 
     setSending(true);
     try {
-      console.log('[TestNotifications] Calling testFcmSend for:', selectedEmail);
-      const res = await base44.functions.invoke('testFcmSend', {});
+      console.log('[TestNotifications] Calling testFcmSend for:', selectedEmail, '| Function: testFcmSend');
+      const res = await base44.functions.invoke('testFcmSend', {
+        user_email: selectedEmail,
+        title: '🧪 Test CDL Notification',
+        body: 'Test depuis l\'admin panel',
+      });
 
       console.log('[TestNotifications] Response from testFcmSend:', res.data);
 
