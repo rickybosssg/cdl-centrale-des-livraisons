@@ -37,16 +37,49 @@ async function requestAndroidNotifPermission() {
   console.log('[PERMISSIONS] notification request start (Android native)');
   try {
     const { PushNotifications } = await import('@capacitor/push-notifications');
-    const check = await PushNotifications.checkPermissions();
-    console.log('[PERMISSIONS] checkPermissions result:', check.receive);
+    
+    // ── Étape 1 : Vérifier permission actuelle ────────────────────────────
+    let check;
+    try {
+      check = await PushNotifications.checkPermissions();
+      console.log('[PERMISSIONS] checkPermissions result:', check.receive);
+    } catch (e) {
+      console.warn('[PERMISSIONS] checkPermissions crash (non-fatal):', e?.message);
+      return 'unavailable';
+    }
+    
     if (check.receive === 'granted') return 'granted';
-    if (check.receive === 'denied') return 'denied';
-    // 'prompt' → demander
-    const req = await PushNotifications.requestPermissions();
-    console.log('[PERMISSIONS] requestPermissions result:', req.receive);
-    return req.receive === 'granted' ? 'granted' : 'denied';
+    if (check.receive === 'denied') {
+      console.log('[PERMISSIONS] Permission permanently denied by user');
+      return 'denied';
+    }
+    
+    // ── Étape 2 : Demander permission (avec protection crash) ────────────────
+    // Sur Android 13+, requestPermissions() affiche un dialog natif qui peut crasher la WebView
+    console.log('[PERMISSIONS] requestPermissions() avec timeout de sécurité...');
+    let req;
+    try {
+      // Timeout 8s : si le dialog ne répond pas, on abandonne et on continue l'app
+      req = await Promise.race([
+        PushNotifications.requestPermissions(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('[PERMISSIONS] requestPermissions timeout')), 8000))
+      ]);
+      console.log('[PERMISSIONS] requestPermissions completed:', req.receive);
+      return req.receive === 'granted' ? 'granted' : 'denied';
+    } catch (e) {
+      // Dialog crashé, timeout, ou refusé → considérer comme "prompt" pour relancer après
+      console.warn('[PERMISSIONS] requestPermissions failed/timeout (non-bloquant):', e?.message);
+      // Re-check la permission pour voir si elle a changé
+      try {
+        const recheck = await PushNotifications.checkPermissions();
+        console.log('[PERMISSIONS] recheck after timeout:', recheck.receive);
+        return recheck.receive === 'granted' ? 'granted' : 'denied';
+      } catch (_) {
+        return 'unavailable';
+      }
+    }
   } catch (e) {
-    console.log('[PERMISSIONS] Android notif error (non-bloquant):', e?.message);
+    console.log('[PERMISSIONS] Android notif outer error (non-bloquant):', e?.message);
     return 'unavailable';
   }
 }
@@ -110,11 +143,11 @@ export default function PermissionsOnboarding({ onDone }) {
     console.log('[PERMISSIONS] platform native:', native);
     const res = {};
 
-    // ── Timeout global 6s — quoi qu'il arrive, continuer ────────────────────
+    // ── Timeout global 10s — quoi qu'il arrive, continuer l'app (sécurité crash WebView) ────
     const globalTimer = setTimeout(() => {
-      console.log('[PERMISSIONS] timeout fallback → continue app');
+      console.log('[PERMISSIONS] HARD TIMEOUT 10s → force continue app (crash protection)');
       safeFinish({ ...res, _timeout: true });
-    }, 6000);
+    }, 10000);
 
     try {
       // GPS

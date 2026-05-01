@@ -63,16 +63,21 @@ export default function FcmBootstrap({ userEmail }) {
     if (didRun.current) return;
     didRun.current = true;
 
-    console.log('[FCM] scheduled (delay', FCM_DELAY_MS / 1000, 's)');
+    const native = isNativePlatform();
+    console.log('[FCM] scheduled (delay', FCM_DELAY_MS / 1000, 's | native:', native, '| email:', userEmail || 'none');
 
-    const timer = setTimeout(() => {
-      const native = isNativePlatform();
-      console.log('[FCM] bootstrap start | native:', native, '| email:', userEmail || 'none');
+    // CRITIQUE : Ne pas retourner avant le timer — éviter rechargement module Capacitor
+    const timer = setTimeout(async () => {
+      console.log('[FCM] bootstrap start');
 
-      if (native) {
-        safeRunNativeFcm(userEmail);
-      } else {
-        safeRunWebFcm(userEmail);
+      try {
+        if (native) {
+          await safeRunNativeFcm(userEmail);
+        } else {
+          await safeRunWebFcm(userEmail);
+        }
+      } catch (err) {
+        console.error('[FCM] bootstrap catastrophic error (non-fatal):', err?.message);
       }
     }, FCM_DELAY_MS);
 
@@ -180,17 +185,25 @@ async function runNativeFcm(propEmail) {
 async function handleTokenReceived(tokenData, propEmail, listeners) {
   try {
     const token = tokenData?.value;
-    if (!token) { console.log('[FCM] empty token — skip'); return; }
-    console.log('[FCM] token received:', token.slice(0, 25) + '...');
+    if (!token || typeof token !== 'string') { 
+      console.error('[FCM] ❌ empty/invalid token:', tokenData); 
+      return; 
+    }
+    console.log('[FCM] ✅ token received:', token.slice(0, 30) + '... (length:', token.length + ')');
 
     const email = await resolveEmail(propEmail);
-    if (!email) { console.log('[FCM] email not resolved — token not saved'); return; }
+    if (!email) { 
+      console.error('[FCM] ❌ email not resolved — token NOT saved. Email param:', propEmail); 
+      return; 
+    }
+    console.log('[FCM] email resolved:', email);
 
-    await saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
+    const result = await saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
+    console.log('[FCM] ✅ token saved to DB:', result?.success ? 'SUCCESS' : 'FAILED', '| token_id:', result?.token_id);
 
     for (const l of listeners) { try { await l.remove(); } catch (_) {} }
   } catch (err) {
-    console.log('[FCM] handleTokenReceived error (non-fatal):', err?.message);
+    console.error('[FCM] ❌ handleTokenReceived error (non-fatal):', err?.message);
   }
 }
 
