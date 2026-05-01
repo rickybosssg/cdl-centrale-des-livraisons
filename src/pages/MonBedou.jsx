@@ -115,7 +115,16 @@ export default function MonBedou() {
 
       // ── 2. Créer la demande de recharge (nouvelle fonction) ──────────────────
       console.log('[MonBedou] [BEDOU_RECHARGE] db create start');
+      console.log('[MonBedou] [BEDOU_RECHARGE] file_url:', file_url?.slice(0, 50) || 'EMPTY');
       
+      if (!file_url) {
+        clearTimeout(safetyTimer);
+        setSubmitting(false);
+        console.error('[MonBedou] [BEDOU_RECHARGE] file_url is empty after upload!');
+        toast.error("❌ Erreur upload : URL preuve non reçue. Réessayez.");
+        return;
+      }
+
       const res = await base44.functions.invoke("submitBedouRecharge", {
         montant,
         methode_paiement: form.methode,

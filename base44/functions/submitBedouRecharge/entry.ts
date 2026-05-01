@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     // ── 4. Notification admin (NON-BLOCKING) ──────────────────────────────────
     log('admin notification start');
 
-    // Envoyer async sans attendre
+    // Envoyer async sans attendre — NE PAS BLOQUER LA REPONSE
     Promise.resolve().then(async () => {
       try {
         const admins = await base44.asServiceRole.entities.User.filter(
@@ -102,27 +102,29 @@ Deno.serve(async (req) => {
 
         for (const admin of admins) {
           try {
-            // Envoyer notification Bedou
-            await base44.asServiceRole.functions.invoke('notifyBedouRequest', {
-              admin_email: admin.email,
-              event_type: 'recharge_demanded',
-              requester_name: user.full_name || user.email,
-              requester_email: user.email,
-              montant: montant,
-              bonus: bonus || 0,
-              demande_id: demande.id,
+            // Créer notification directement en BDD
+            await base44.asServiceRole.entities.Notification.create({
+              destinataire_email: admin.email,
+              destinataire_role: 'admin',
+              titre: 'Nouvelle demande de recharge Bedou',
+              message: `${user.full_name || user.email} a demandé une recharge de ${montant} F CFA (+ ${bonus} bonus = ${parseInt(montant) + parseInt(bonus || 0)} F). Validation requise.`,
+              type: 'warning',
+              lue: false,
+              target_screen: '/gestion-bedou',
+              target_entity_type: 'DemandeRecharge',
+              target_entity_id: demande.id,
+              notification_key: `bedou_recharge_${user.email}_${Date.now()}`,
             });
 
-            log(`notification sent to admin: ${admin.email}`);
+            log(`notification created for admin: ${admin.email}`);
           } catch (notifErr) {
             log(`notification error for ${admin.email}: ${notifErr.message}`);
-            // Continue — ne pas bloquer sur erreur notification
+            // Continue — ne pas bloquer
           }
         }
 
         log('admin notification success');
       } catch (err) {
-        // Log seulement, pas de throw
         log(`admin notification global error: ${err.message}`);
       }
     }).catch(err => {
