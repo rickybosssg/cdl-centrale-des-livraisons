@@ -1,32 +1,21 @@
 /**
  * sendFcmNotification — Firebase Cloud Messaging HTTP v1
- * OAuth2 via Service Account JSON (FIREBASE_SERVICE_ACCOUNT_JSON)
- * Project: cdl-app-4743c
+ * Uses same working logic as testFcmSend (which successfully receives notifications on Android)
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// ── Encode base64url (RFC 4648) ───────────────────────────────────────────────
 function base64url(data) {
   let base64;
   if (typeof data === 'string') {
     base64 = btoa(unescape(encodeURIComponent(data)));
   } else {
-    // Uint8Array
     base64 = btoa(String.fromCharCode(...data));
   }
   return base64.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
-// ── Generate OAuth2 access token from Service Account ────────────────────────
 async function getAccessToken(sa) {
-  if (!sa.private_key || !sa.client_email || !sa.project_id) {
-    throw new Error('[OAuth] Service Account JSON invalide — champs manquants: private_key / client_email / project_id');
-  }
-
-  console.log('[OAuth] project_id:', sa.project_id);
-  console.log('[OAuth] client_email:', sa.client_email);
-
   const now = Math.floor(Date.now() / 1000);
 
   const headerStr = JSON.stringify({ alg: 'RS256', typ: 'JWT' });
@@ -43,7 +32,6 @@ async function getAccessToken(sa) {
   const payloadB64 = base64url(payloadStr);
   const signingInput = `${headerB64}.${payloadB64}`;
 
-  // Parse PEM private key
   const pem = sa.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\r\n|\n|\r/g, '');
   const binaryKey = Uint8Array.from(atob(pem), c => c.charCodeAt(0));
 
@@ -64,8 +52,6 @@ async function getAccessToken(sa) {
   const sigB64 = base64url(new Uint8Array(signatureBuffer));
   const jwt = `${signingInput}.${sigB64}`;
 
-  console.log('[OAuth] JWT length:', jwt.length, '— sending to token endpoint...');
-
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -76,34 +62,25 @@ async function getAccessToken(sa) {
   });
 
   const data = await res.json();
-
   if (!res.ok || !data.access_token) {
-    console.error('[OAuth] ERROR', res.status, JSON.stringify(data));
-    throw new Error(`[OAuth] ${res.status} — ${data.error}: ${data.error_description}`);
+    throw new Error(`OAuth2 failed: ${res.status} — ${data.error}`);
   }
 
-  console.log('[OAuth] ✅ Access token obtained — expires_in:', data.expires_in);
   return data.access_token;
 }
 
-// ── Send FCM message to a single token ───────────────────────────────────────
 async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}) {
   const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
-  console.log('[FCM] URL:', url);
-  console.log('[FCM] Token:', fcmToken.slice(0, 25) + '...');
-  console.log('[FCM] Title:', title);
-  console.log('[FCM] Body:', body);
 
-  // Convert all data values to strings (FCM requirement)
+  // Build data payload - convert all to strings
   const dataPayload = {};
   for (const [k, v] of Object.entries(data)) {
     dataPayload[k] = String(v);
   }
-  // Include title/body in data for Capacitor native handler (app closed)
   dataPayload.title = title;
   dataPayload.body = body;
 
-  // FCM v1 exact format per spec
+  // Exact FCM v1 format (same as testFcmSend which works)
   const message = {
     token: fcmToken,
     notification: {
@@ -120,8 +97,6 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
   };
 
   const requestBody = { message };
-  console.log('[FCM] Request body:', JSON.stringify(requestBody, null, 2));
-  console.log('[FCM] Auth header (Bearer):', accessToken.substring(0, 50) + '...');
 
   const res = await fetch(url, {
     method: 'POST',
@@ -138,32 +113,23 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
   } catch (parseErr) {
     const rawText = await res.text();
     console.error('[FCM] JSON parse error:', parseErr.message);
-    console.error('[FCM] Raw response text:', rawText);
+    console.error('[FCM] Raw response:', rawText);
     result = { raw: rawText };
   }
 
-  console.log('[FCM] Response status:', res.status, res.statusText);
-  console.log('[FCM] Response headers Content-Type:', res.headers.get('content-type'));
-  console.log('[FCM] Full response body:', JSON.stringify(result, null, 2));
-
   if (res.ok) {
-    console.log('[FCM] ✅ 200 OK — messageId:', result?.name);
+    console.log('[FCM] ✅ 200 OK — messageId:', result?.name, '| token:', fcmToken.slice(0, 25));
   } else {
-    console.error(`[FCM] ❌ ${res.status} ${res.statusText} — Full response logged above`);
-    if (result?.error) {
-      console.error('[FCM] error.code:', result.error.code);
-      console.error('[FCM] error.message:', result.error.message);
-      console.error('[FCM] error.status:', result.error.status);
-      if (result.error.details) {
-        console.error('[FCM] error.details:', JSON.stringify(result.error.details, null, 2));
-      }
+    console.error('[FCM] ❌ Status', res.status, '| token:', fcmToken.slice(0, 25));
+    console.error('[FCM] Full response:', JSON.stringify(result, null, 2));
+    if (result?.error?.details) {
+      console.error('[FCM] error.details:', JSON.stringify(result.error.details));
     }
   }
 
   return { ok: res.ok, status: res.status, result, token: fcmToken };
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   try {
     const bodyText = await req.text();
@@ -187,7 +153,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'title et body sont requis' }, { status: 400 });
     }
 
-    // Load and parse service account
+    // Load Service Account
     const rawJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
     if (!rawJson) {
       return Response.json({ error: 'Secret FIREBASE_SERVICE_ACCOUNT_JSON manquant' }, { status: 500 });
@@ -197,15 +163,15 @@ Deno.serve(async (req) => {
     try {
       sa = JSON.parse(rawJson);
     } catch (e) {
-      return Response.json({ error: 'FIREBASE_SERVICE_ACCOUNT_JSON invalide (JSON parse error): ' + e.message }, { status: 500 });
+      return Response.json({ error: 'FIREBASE_SERVICE_ACCOUNT_JSON parse error: ' + e.message }, { status: 500 });
     }
 
     const projectId = sa.project_id;
     console.log('[sendFcmNotification] project_id:', projectId);
-    console.log('[sendFcmNotification] client_email:', sa.client_email);
 
     // Get OAuth2 access token
     const accessToken = await getAccessToken(sa);
+    console.log('[sendFcmNotification] OAuth2 token obtained');
 
     // Resolve FCM tokens
     let fcmTokens = Array.isArray(directTokens) ? directTokens : [];
@@ -226,7 +192,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Send to all tokens
+    // Send to all tokens in parallel
     const results = await Promise.allSettled(
       fcmTokens.map(token => sendToToken(accessToken, projectId, token, title, body, data))
     );
@@ -243,11 +209,10 @@ Deno.serve(async (req) => {
       } else {
         failed++;
         const errResult = r.status === 'fulfilled' ? r.value.result : { error: r.reason?.message };
-        const errStatus = r.status === 'fulfilled' ? r.value.result?.error?.status : null;
         details.push({ token: fcmTokens[i].slice(0, 20) + '...', status: 'failed', error: errResult });
 
         // Auto-disable invalid tokens
-        if (errStatus === 'NOT_FOUND' || errStatus === 'INVALID_ARGUMENT') {
+        if (r.status === 'fulfilled' && r.value.result?.error?.status === 'NOT_FOUND') {
           try {
             const records = await base44.asServiceRole.entities.FcmToken.filter({ token: fcmTokens[i] });
             if (records?.[0]) {
