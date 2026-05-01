@@ -1,16 +1,16 @@
 /**
  * CDL — Écran autorisations au premier lancement
- * VERSION DÉFINITIVE ANTI-CRASH APK
+ * VERSION CRASH-PROOF DÉFINITIVE
  *
  * RÈGLES ABSOLUES :
- * 1. Timeout global 6s → continuer quoi qu'il arrive
- * 2. Sur APK Android : NE PAS appeler navigator.geolocation (crash WebView)
- * 3. Sur APK Android : NE PAS appeler Notification.requestPermission (API absente)
- * 4. NE PAS appeler PushNotifications.register() ici → c'est le rôle de FcmBootstrap
- * 5. setStep("results") TOUJOURS atteint dans le finally
+ * 1. Ce composant demande SEUL les permissions (PermissionsOnboarding UNIQUEMENT)
+ * 2. FcmBootstrap ne demande JAMAIS de permission (juste register() si déjà granted)
+ * 3. Timeout global 6s → continuer quoi qu'il arrive
+ * 4. AUCUN dialog de Capacitor en arrière-plan (cause crash WebView)
+ * 5. Try/catch SYNCHRONE autour des callbacks (empêche unhandled rejections)
  */
 import { useState, useRef } from "react";
-import { MapPin, Bell, Camera, CheckCircle2, ChevronRight } from "lucide-react";
+import { MapPin, Bell, Camera, CheckCircle2, ChevronRight, AlertCircle } from "lucide-react";
 
 const STORAGE_KEY = "cdl_permissions_configured";
 
@@ -22,7 +22,6 @@ export function markPermissionsConfigured() {
   try { localStorage.setItem(STORAGE_KEY, "1"); } catch (_) {}
 }
 
-/** Détecte APK Capacitor natif — méthode unifiée */
 function isNativeAndroid() {
   try {
     if (window.location?.protocol === 'capacitor:') return true;
@@ -32,106 +31,111 @@ function isNativeAndroid() {
   return false;
 }
 
-/** Demande permission notification Android via Capacitor PushNotifications (sans register) */
+/**
+ * CRITIQUE : Demande SEULE la permission notification sur APK Android.
+ * Ne lance JAMAIS requestPermissions() depuis un contexte background (FcmBootstrap).
+ * Timeout strict 8s pour éviter blocage WebView.
+ */
 async function requestAndroidNotifPermission() {
-  console.log('[PERMISSIONS] notification request start (Android native)');
+  console.log('[PERMISSIONS] Android notification permission request');
   try {
     let PushNotifications;
     try {
       const mod = await import('@capacitor/push-notifications');
       PushNotifications = mod.PushNotifications;
     } catch (e) {
-      console.error('[PERMISSIONS] Failed to import PushNotifications:', e?.message);
+      console.error('[PERMISSIONS] ❌ Import failed:', e?.message);
       return 'unavailable';
     }
 
     if (!PushNotifications) {
-      console.error('[PERMISSIONS] PushNotifications is null after import');
+      console.error('[PERMISSIONS] ❌ PushNotifications is null');
       return 'unavailable';
     }
     
-    // ── Étape 1 : Vérifier permission actuelle ────────────────────────────
+    // ── Check current status ────────────────────────────────────────────────
     let check;
     try {
-      check = await PushNotifications.checkPermissions();
-      console.log('[PERMISSIONS] checkPermissions result:', check?.receive);
+      check = await Promise.race([
+        PushNotifications.checkPermissions(),
+        new Promise((_, r) => setTimeout(() => r({ receive: 'timeout' }), 4000))
+      ]);
     } catch (e) {
-      console.warn('[PERMISSIONS] checkPermissions crash (non-fatal):', e?.message);
+      console.warn('[PERMISSIONS] ⚠️ checkPermissions error:', e?.message);
       return 'unavailable';
     }
     
-    if (check?.receive === 'granted') {
-      console.log('[PERMISSIONS] Permission already granted');
+    const status = check?.receive;
+    console.log('[PERMISSIONS] Current status:', status);
+
+    if (status === 'granted') {
+      console.log('[PERMISSIONS] ✅ Already granted');
       return 'granted';
     }
-    if (check?.receive === 'denied') {
-      console.log('[PERMISSIONS] Permission permanently denied by user');
+    if (status === 'denied') {
+      console.log('[PERMISSIONS] ❌ Permanently denied');
       return 'denied';
     }
+    if (status === 'timeout') {
+      console.warn('[PERMISSIONS] ⚠️ checkPermissions timeout');
+      return 'unavailable';
+    }
     
-    // ── Étape 2 : Demander permission (avec protection crash) ────────────────
-    // Sur Android 13+, requestPermissions() affiche un dialog natif qui peut crasher la WebView
-    console.log('[PERMISSIONS] requestPermissions() avec timeout de sécurité...');
+    // ── Request permission (status === "prompt") ─────────────────────────────
+    // STRICT TIMEOUT 8s — si dialog ne répond pas, continuer sans bloquer
+    console.log('[PERMISSIONS] 📢 Requesting permission with 8s timeout...');
     let req;
     try {
-      // Timeout 8s : si le dialog ne répond pas, on abandonne et on continue l'app
       req = await Promise.race([
         PushNotifications.requestPermissions(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('[PERMISSIONS] requestPermissions timeout after 8s')), 8000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('requestPermissions timeout')), 8000))
       ]);
-      console.log('[PERMISSIONS] requestPermissions completed:', req?.receive);
+      console.log('[PERMISSIONS] ✅ Request result:', req?.receive);
       return req?.receive === 'granted' ? 'granted' : 'denied';
     } catch (e) {
-      // Dialog crashé, timeout, ou refusé → considérer comme "prompt" pour relancer après
-      console.warn('[PERMISSIONS] requestPermissions failed/timeout (non-bloquant):', e?.message);
-      // Re-check la permission pour voir si elle a changé
+      console.warn('[PERMISSIONS] ⚠️ Request failed/timeout:', e?.message);
+      // Recheck after timeout
       try {
         const recheck = await Promise.race([
           PushNotifications.checkPermissions(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('recheck timeout')), 5000))
+          new Promise((_, r) => setTimeout(() => r({ receive: 'timeout' }), 3000))
         ]);
-        console.log('[PERMISSIONS] recheck after error:', recheck?.receive);
-        return recheck?.receive === 'granted' ? 'granted' : 'denied';
+        const rechecked = recheck?.receive;
+        console.log('[PERMISSIONS] Recheck after timeout:', rechecked);
+        return rechecked === 'granted' ? 'granted' : 'unavailable';
       } catch (_) {
-        console.warn('[PERMISSIONS] recheck also failed');
         return 'unavailable';
       }
     }
   } catch (e) {
-    console.error('[PERMISSIONS] Android notif outer error (non-bloquant):', e?.message);
+    console.error('[PERMISSIONS] ❌ Outer error:', e?.message);
     return 'unavailable';
   }
 }
 
-/** Demande permission notification Web (PWA) */
 async function requestWebNotifPermission() {
-  console.log('[PERMISSIONS] notification request start (web)');
   try {
     if (typeof Notification === 'undefined') return 'unavailable';
     if (Notification.permission === 'granted') return 'granted';
     if (Notification.permission === 'denied') return 'denied';
     const perm = await Notification.requestPermission();
-    console.log('[PERMISSIONS] notification result:', perm);
     return perm;
   } catch (e) {
-    console.log('[PERMISSIONS] web notif error:', e?.message);
+    console.warn('[PERMISSIONS] Web notif error:', e?.message);
     return 'unavailable';
   }
 }
 
-/** Demande GPS via web API — uniquement sur web, avec timeout */
 async function requestGpsWeb() {
   try {
     if (!navigator?.geolocation) return 'unavailable';
     return await Promise.race([
       new Promise((resolve) => {
-        try {
-          navigator.geolocation.getCurrentPosition(
-            () => resolve('granted'),
-            () => resolve('denied'),
-            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
-          );
-        } catch (_) { resolve('unavailable'); }
+        navigator.geolocation.getCurrentPosition(
+          () => resolve('granted'),
+          () => resolve('denied'),
+          { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+        );
       }),
       new Promise((resolve) => setTimeout(() => resolve('unavailable'), 6000)),
     ]);
@@ -148,47 +152,45 @@ export default function PermissionsOnboarding({ onDone }) {
   const safeFinish = (res) => {
     if (doneRef.current) return;
     doneRef.current = true;
-    console.log('[PERMISSIONS] continue app | results:', JSON.stringify(res));
+    console.log('[PERMISSIONS] ✅ Finish — marking configured');
+    markPermissionsConfigured();
     setResults(res || {});
     setStep("results");
   };
 
   const requestAll = async () => {
-    console.log('[PERMISSIONS] start');
+    console.log('[PERMISSIONS] Start');
     setStep("requesting");
     doneRef.current = false;
 
     const native = isNativeAndroid();
-    console.log('[PERMISSIONS] platform native:', native);
     const res = {};
 
-    // ── Timeout global 10s — quoi qu'il arrive, continuer l'app (sécurité crash WebView) ────
+    // GLOBAL TIMEOUT 10s — quoi qu'il arrive, continuer
     const globalTimer = setTimeout(() => {
-      console.log('[PERMISSIONS] HARD TIMEOUT 10s → force continue app (crash protection)');
-      safeFinish({ ...res, _timeout: true });
+      console.log('[PERMISSIONS] GLOBAL TIMEOUT 10s — forcing continue');
+      safeFinish(res);
     }, 10000);
 
     try {
-      // GPS
+      // GPS (skip on native to avoid WebView issues)
       if (native) {
-        // Sur APK : ne pas appeler navigator.geolocation (crash / blocage WebView)
-        // Le GPS sera demandé par le plugin quand nécessaire dans l'app
         res.gps = 'unavailable';
-        console.log('[PERMISSIONS] GPS skipped on native (will be requested in-app)');
+        console.log('[PERMISSIONS] GPS skipped on native');
       } else {
         res.gps = await requestGpsWeb();
         console.log('[PERMISSIONS] GPS result:', res.gps);
       }
 
-      // Notifications
+      // NOTIFICATIONS — SEUL PermissionsOnboarding demande la permission
       if (native) {
         res.notif = await requestAndroidNotifPermission();
       } else {
         res.notif = await requestWebNotifPermission();
       }
-      console.log('[PERMISSIONS] notification result:', res.notif);
+      console.log('[PERMISSIONS] Notification result:', res.notif);
 
-      // Caméra : skip sur APK (crash potentiel), ok sur web
+      // CAMERA
       if (native) {
         res.camera = 'unavailable';
       } else {
@@ -209,7 +211,7 @@ export default function PermissionsOnboarding({ onDone }) {
       }
 
     } catch (e) {
-      console.log('[PERMISSIONS] unexpected error (non-bloquant):', e?.message);
+      console.error('[PERMISSIONS] Unexpected error (non-bloquant):', e?.message);
     } finally {
       clearTimeout(globalTimer);
       safeFinish(res);
@@ -217,8 +219,7 @@ export default function PermissionsOnboarding({ onDone }) {
   };
 
   const handleDone = () => {
-    console.log('[PERMISSIONS] user pressed done/skip');
-    markPermissionsConfigured();
+    console.log('[PERMISSIONS] User pressed done');
     try { onDone?.(); } catch (_) {}
   };
 
@@ -272,7 +273,7 @@ export default function PermissionsOnboarding({ onDone }) {
         <div className="px-6 pb-10 space-y-3">
           <button
             onClick={requestAll}
-            className="w-full h-14 rounded-2xl bg-white text-primary font-extrabold text-base shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+            className="w-full h-14 rounded-2xl bg-white text-[#0F2A5C] font-extrabold text-base shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2"
           >
             Autoriser et continuer <ChevronRight className="h-5 w-5" />
           </button>
@@ -329,7 +330,7 @@ export default function PermissionsOnboarding({ onDone }) {
       <div className="px-4 pb-10">
         <button
           onClick={handleDone}
-          className="w-full h-14 rounded-2xl bg-primary text-white font-extrabold text-base shadow-md active:scale-[0.97] transition-all"
+          className="w-full h-14 rounded-2xl bg-[#1E6BFF] text-white font-extrabold text-base shadow-md active:scale-[0.97] transition-all"
         >
           Accéder à CDL →
         </button>

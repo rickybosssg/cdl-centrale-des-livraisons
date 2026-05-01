@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { TopNotificationProvider, useTopNotification } from '@/context/TopNotificationContext';
 import TopNotificationBanner from '@/components/TopNotificationBanner';
+import FcmErrorBoundary from '@/components/FcmErrorBoundary';
 import AppLayoutWrapper from './components/AppLayoutWrapper';
 import DispatcherGuard from './components/DispatcherGuard';
 import { base44 as b44 } from '@/api/base44Client';
@@ -115,6 +116,7 @@ import AdminDiagnostics from './pages/dispatcher/AdminDiagnostics';
 import AdminAuthDiagnostics from './pages/dispatcher/AdminAuthDiagnostics';
 import TestNotifications from './pages/dispatcher/TestNotifications';
 import FcmDiagnostic from './pages/FcmDiagnostic';
+import FcmQuickTest from './pages/FcmQuickTest';
 import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
 import FcmTestFull from './pages/FcmTestFull';
 import EmailLogin from './pages/EmailLogin';
@@ -392,6 +394,7 @@ const AuthenticatedApp = () => {
         {/* Paramètres utilisateur */}
         <Route path="/settings" element={<Settings />} />
         <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
+        <Route path="/fcm-quick-test" element={<FcmQuickTest />} />
         <Route path="/fcm-test-full" element={<FcmTestFull />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
@@ -533,6 +536,7 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <TopNotificationProvider>
+          <FcmErrorBoundary />
           <Router>
             <AuthenticatedApp />
           </Router>

@@ -424,21 +424,21 @@ export default function Settings() {
 
       {/* Diagnostic notifications */}
       <div className="space-y-2">
+        <Link to="/fcm-quick-test" className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 transition-colors">
+          <span className="text-xl">✅</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-green-900">Test FCM Rapide</p>
+            <p className="text-xs text-green-700">Vérifier token et envoyer notification test</p>
+          </div>
+          <span className="text-green-400 text-sm">›</span>
+        </Link>
         <Link to="/fcm-diagnostic" className="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors">
           <span className="text-xl">🔔</span>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-blue-900">Diagnostic notifications</p>
-            <p className="text-xs text-blue-700">Vérifier token FCM, permission, test d'envoi</p>
+            <p className="text-sm font-semibold text-blue-900">Diagnostic détaillé</p>
+            <p className="text-xs text-blue-700">Debug FCM complet avec tous les logs</p>
           </div>
           <span className="text-blue-400 text-sm">›</span>
-        </Link>
-        <Link to="/fcm-test-full" className="flex items-center gap-3 p-4 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors">
-          <span className="text-xl">🧪</span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-purple-900">Test FCM complet</p>
-            <p className="text-xs text-purple-700">Scénario end-to-end: permission → register → token → notification</p>
-          </div>
-          <span className="text-purple-400 text-sm">›</span>
         </Link>
       </div>
 

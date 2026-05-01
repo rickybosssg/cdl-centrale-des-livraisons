@@ -207,14 +207,25 @@ export default function AppLayoutWrapper({ user }) {
 
   return (
     <>
-      <NotificationPermissionBanner />
-      {showSplash && (
-        <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />
+      {/* PermissionsOnboarding DOIT s'afficher en premier — AVANT AppLayout */}
+      {/* Cela garantit que FCM demande la permission SEUL et avant FcmBootstrap */}
+      {showPermissions && (
+        <PermissionsOnboarding onDone={() => {
+          console.log('[AppLayoutWrapper] Permissions done');
+          setShowPermissions(false);
+        }} />
       )}
-      {showPermissions && !showSplash && (
-        <PermissionsOnboarding onDone={() => setShowPermissions(false)} />
+
+      {/* Après permissions OK → afficher l'app */}
+      {!showPermissions && (
+        <>
+          <NotificationPermissionBanner />
+          {showSplash && (
+            <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />
+          )}
+          <AppLayout userRole={userRole} userEmail={userEmail} />
+        </>
       )}
-      <AppLayout userRole={userRole} userEmail={userEmail} />
     </>
   );
 }
