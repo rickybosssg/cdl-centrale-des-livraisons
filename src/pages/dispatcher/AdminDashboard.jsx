@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2, Activity, ClipboardCheck } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2, Activity, ClipboardCheck, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,8 @@ export default function AdminDashboard() {
   const [syncingLivreurs, setSyncingLivreurs] = useState(false);
   const [dispatchMode, setDispatchMode] = useState('auto');
   const [coursesAAffecter, setCoursesAAffecter] = useState(0);
+  const [testingFirebase, setTestingFirebase] = useState(false);
+  const [firebaseTestResult, setFirebaseTestResult] = useState(null);
 
   const loadData = async () => {
     try {
@@ -630,6 +632,60 @@ export default function AdminDashboard() {
             </Button>
           </Link>
         </div>
+
+        {/* TESTER FIREBASE */}
+        <Button 
+          onClick={async () => {
+            setTestingFirebase(true);
+            try {
+              const res = await base44.functions.invoke('validateFirebaseSend', {});
+              setFirebaseTestResult(res.data);
+              if (res.data?.success) {
+                toast.success(`✅ Notification envoyée!\nMessage ID: ${res.data.message_id?.split('/').pop()}`);
+              } else {
+                toast.error(`❌ Erreur: ${res.data?.firebase_error_message || res.data?.error || 'Inconnu'}`);
+              }
+            } catch (err) {
+              toast.error('Erreur: ' + err.message);
+            } finally {
+              setTestingFirebase(false);
+            }
+          }}
+          disabled={testingFirebase}
+          className="w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold"
+        >
+          {testingFirebase ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Test en cours...
+            </>
+          ) : (
+            <>
+              🧪 Tester Firebase
+            </>
+          )}
+        </Button>
+
+        {/* Résultat test Firebase */}
+        {firebaseTestResult && (
+          <Card className={firebaseTestResult.success ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}>
+            <CardContent className="p-3 space-y-1 text-xs">
+              {firebaseTestResult.success ? (
+                <>
+                  <p className="font-bold text-green-800">✅ Firebase OK</p>
+                  <p><strong>Message ID:</strong> {firebaseTestResult.message_id?.split('/').pop()}</p>
+                  <p><strong>User:</strong> {firebaseTestResult.user_email}</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-bold text-red-800">❌ Erreur Firebase</p>
+                  <p><strong>Code:</strong> {firebaseTestResult.firebase_error_code || 'N/A'}</p>
+                  <p><strong>Message:</strong> {firebaseTestResult.firebase_error_message || firebaseTestResult.error}</p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Clients en ligne par zone */}
