@@ -73,12 +73,11 @@ export default function FcmBootstrap({ userEmail }) {
     if (didRun.current) return;
     didRun.current = true;
 
-    console.log('[FCM] INIT SCHEDULED (delay 3s)');
+    console.log('[FCM] INIT SCHEDULED (delay 15s — après permissions onboarding)');
 
     const timer = setTimeout(() => {
-      // Re-évaluer isNativePlatform() après 8s — après le flux permissions onboarding
       const native = isNativePlatform();
-      console.log('[FCM] PLATFORM CHECK (after 3s) | native:', native, '| protocol:', window.location?.protocol, '| Capacitor:', !!window.Capacitor, '| email:', userEmail || 'none');
+      console.log('[FCM] bootstrap delayed start | native:', native, '| protocol:', window.location?.protocol, '| email:', userEmail || 'none');
 
       if (native) {
         runNativeFcm(userEmail, pendingTokenRef).catch(err => {
@@ -89,7 +88,7 @@ export default function FcmBootstrap({ userEmail }) {
           console.log('[FCM] ERROR NON BLOCKING (web):', err?.message);
         });
       }
-    }, 8000);
+    }, 15000);
 
     return () => clearTimeout(timer);
   }, []); // Dépendances vides : une seule exécution au mount
@@ -124,24 +123,20 @@ async function runNativeFcm(propEmail, pendingTokenRef) {
     });
   } catch (_) {}
 
-  // 3. Permission
+  // 3. Vérifier permission — NE PAS redemander (déjà géré par PermissionsOnboarding)
   let perm;
   try {
     const check = await PushNotifications.checkPermissions();
     perm = check.receive;
-    console.log('[FCM] Permission actuelle:', perm);
-    if (perm !== 'granted') {
-      const req = await PushNotifications.requestPermissions();
-      perm = req.receive;
-      console.log('[FCM] Permission après demande:', perm);
-    }
+    console.log('[FCM] Permission status:', perm);
   } catch (e) {
     console.log('[FCM] ERROR NON BLOCKING — checkPermissions:', e?.message);
-    return;
+    perm = 'unknown';
   }
 
   if (perm !== 'granted') {
-    console.log('[FCM] ERROR NON BLOCKING — Permission refusée:', perm);
+    console.log('[FCM] Permission non accordée:', perm, '— register skipped');
+    console.log('[FCM] non blocking end');
     return;
   }
 
@@ -225,14 +220,15 @@ async function runNativeFcm(propEmail, pendingTokenRef) {
     return;
   }
 
-  // 5. register() — TOUJOURS appelé, Firebase est idempotent
-  console.log('[FCM] REGISTER CALLED');
+  // 5. register() — Firebase est idempotent (renvoie le même token)
+  console.log('[FCM] register start');
   try {
     await PushNotifications.register();
-    console.log('[FCM] register() OK — en attente callback...');
+    console.log('[FCM] register() OK — en attente callback token...');
   } catch (e) {
     console.log('[FCM] ERROR NON BLOCKING — register() échoué:', e?.message);
   }
+  console.log('[FCM] non blocking end');
 }
 
 // ── FCM Web (PWA) ─────────────────────────────────────────────────────────────
