@@ -99,7 +99,10 @@ export default function TestNotifications() {
       return;
     }
 
+    // Réinitialiser l'état avant nouvel envoi
+    setLastResult(null);
     setSending(true);
+    
     try {
       console.log('[TestNotifications] Calling testFcmSend for:', selectedEmail, '| Function: testFcmSend');
       const res = await base44.functions.invoke('testFcmSend', {
@@ -109,27 +112,31 @@ export default function TestNotifications() {
       });
 
       console.log('[TestNotifications] Response from testFcmSend:', res.data);
+      console.log('[TestNotifications] HTTP Status:', res.status);
 
-      if (res.data?.success) {
+      // Succès HTTP + success flag
+      if (res.status === 200 && res.data?.success) {
         const sent = res.data.sent || 0;
         const total = res.data.total || 0;
-        toast.success(
-          `✅ Notification envoyée!\n${sent}/${total} tokens reçus`
-        );
+        console.log('[TestNotifications] ✅ SUCCESS — sent:', sent, '| total:', total);
+        toast.success(`✅ Notification envoyée avec succès!\n${sent}/${total} tokens reçus`);
         setLastResult({
           status: 'success',
           sent,
           tokens_found: total,
           recipient_email: selectedEmail,
           timestamp: new Date().toISOString(),
+          httpStatus: 200,
         });
       } else {
-        toast.error(
-          `⚠️ Notification non envoyée\n${res.data?.message || 'Voir les logs'}`
-        );
+        // Erreur métier (success: false)
+        const errMsg = res.data?.message || res.data?.error || 'Raison inconnue';
+        console.log('[TestNotifications] ❌ FAILED —', errMsg);
+        toast.error(`❌ Notification non envoyée\n${errMsg}`);
         setLastResult({
           status: 'failed',
-          message: res.data?.message || res.data?.error,
+          message: errMsg,
+          httpStatus: res.status || 'unknown',
         });
       }
 
@@ -143,10 +150,14 @@ export default function TestNotifications() {
         setTestLogs(logs);
       }, 1000);
     } catch (err) {
-      toast.error('Erreur: ' + err.message);
+      // Exception HTTP ou réseau
+      const errorMsg = err.response?.data?.error || err.message || 'Erreur inconnue';
+      console.error('[TestNotifications] ❌ EXCEPTION —', errorMsg, '| Status:', err.response?.status);
+      toast.error(`❌ Erreur d'envoi\n${errorMsg}`);
       setLastResult({
         status: 'error',
-        message: err.message,
+        message: errorMsg,
+        httpStatus: err.response?.status || 'network',
       });
     } finally {
       setSending(false);
