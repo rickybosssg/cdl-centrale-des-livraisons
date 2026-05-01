@@ -1,12 +1,8 @@
 /**
- * cleanupAndRegisterFcmToken — Nettoyage des tokens inactifs + enregistrement du dernier token
- * Appelé à chaque démarrage app pour assurer un token unique par user_id + device_id
- *
- * Actions :
- * 1. Chercher les anciens tokens du même user_id + device_id
- * 2. Supprimer les anciens tokens (garder le dernier)
- * 3. Enregistrer/mettre à jour le token actuel
- * 4. Retourner l'état du token
+ * cleanupAndRegisterFcmToken — Smart token deduplication
+ * - Keep ONLY one active token per user + device_id
+ * - Mark old tokens as inactive (not delete, for audit trail)
+ * - Update last_used on existing token or create new one
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
@@ -28,70 +24,69 @@ Deno.serve(async (req) => {
     }
 
     const user_email = user.email;
-    console.log(`[cleanup] user: ${user_email} | device_id: ${device_id} | token_len: ${token.length}`);
+    console.log(`[cleanup] user: ${user_email} | device_id: ${device_id}`);
 
-    // ── 1. Chercher les tokens existants du même user_id + device_id ──────
-    const existingTokens = await base44.entities.FcmToken.filter({
+    // ── 1. Check if exact token already exists ────────────────────────────
+    const exactToken = await base44.entities.FcmToken.filter({
       user_email: user_email,
-      device_type: device_type,
+      token: token,
     });
 
-    console.log(`[cleanup] Found ${existingTokens.length} existing tokens for this user+device`);
+    if (exactToken && exactToken.length > 0) {
+      // Same token — just update last_used
+      console.log(`[cleanup] Token already exists, updating last_used`);
+      await base44.entities.FcmToken.update(exactToken[0].id, {
+        last_used: new Date().toISOString(),
+        is_active: true,
+      });
+
+      return Response.json({
+        success: true,
+        action: 'updated',
+        token_id: exactToken[0].id,
+        old_token_removed: false,
+        message: 'Token already registered',
+      });
+    }
+
+    // ── 2. Get all tokens for this device (same user_email + device_id) ────
+    const oldTokens = await base44.entities.FcmToken.filter({
+      user_email: user_email,
+      device_id: device_id,
+    });
 
     let old_token_removed = false;
     let old_token_id = null;
 
-    // ── 2. Supprimer les anciens tokens (garder le dernier) ──────────────
-    if (existingTokens.length > 0) {
-      // Trier par created_date (plus récent d'abord)
-      const sorted = existingTokens.sort(
-        (a, b) => new Date(b.created_date) - new Date(a.created_date)
-      );
-
-      // Supprimer tous sauf le plus récent
-      for (let i = 1; i < sorted.length; i++) {
-        try {
-          await base44.entities.FcmToken.delete(sorted[i].id);
-          console.log(`[cleanup] Deleted old token: ${sorted[i].id}`);
+    // Mark old tokens as inactive (instead of deleting)
+    if (oldTokens && oldTokens.length > 0) {
+      for (const oldToken of oldTokens) {
+        if (oldToken.is_active) {
+          await base44.entities.FcmToken.update(oldToken.id, {
+            is_active: false,
+          });
+          console.log(`[cleanup] Marked old token inactive: ${oldToken.token.slice(0, 20)}...`);
           old_token_removed = true;
-          old_token_id = sorted[i].id;
-        } catch (e) {
-          console.warn(`[cleanup] Failed to delete token ${sorted[i].id}:`, e?.message);
+          old_token_id = oldToken.id;
         }
-      }
-
-      // Vérifier si le token le plus récent est le même que le nouveau
-      const latestToken = sorted[0];
-      if (latestToken.token === token) {
-        // Même token — juste mettre à jour last_used
-        console.log(`[cleanup] Token already registered, updating last_used`);
-        await base44.entities.FcmToken.update(latestToken.id, {
-          last_used: new Date().toISOString(),
-          is_active: true,
-        });
-
-        return Response.json({
-          success: true,
-          action: 'updated',
-          token_id: latestToken.id,
-          old_token_removed: false,
-          message: 'Token already registered, last_used updated',
-        });
       }
     }
 
-    // ── 3. Enregistrer/créer le nouveau token ─────────────────────────────
+    // ── 3. Create new token ────────────────────────────────────────────────
     const now = new Date().toISOString();
     const newToken = await base44.entities.FcmToken.create({
+      user_id: user.id,
       user_email: user_email,
       token: token,
+      device_id: device_id,
       device_type: device_type,
+      platform: 'android',
       registered_at: now,
       last_used: now,
       is_active: true,
     });
 
-    console.log(`[cleanup] New token registered: ${newToken.id}`);
+    console.log(`[cleanup] New token created: ${newToken.id}`);
 
     return Response.json({
       success: true,

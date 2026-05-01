@@ -2,6 +2,11 @@
   "name": "FcmToken",
   "type": "object",
   "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "ID utilisateur",
+      "index": true
+    },
     "user_email": {
       "type": "string",
       "title": "Email utilisateur",
@@ -10,6 +15,11 @@
     "token": {
       "type": "string",
       "title": "Token FCM",
+      "index": true
+    },
+    "device_id": {
+      "type": "string",
+      "title": "ID appareil",
       "index": true
     },
     "device_type": {
@@ -22,6 +32,11 @@
       "title": "Type d'appareil",
       "default": "android_native"
     },
+    "platform": {
+      "type": "string",
+      "title": "Plateforme",
+      "default": "android"
+    },
     "registered_at": {
       "type": "string",
       "title": "Date d'enregistrement"
@@ -33,7 +48,8 @@
     "is_active": {
       "type": "boolean",
       "title": "Token actif",
-      "default": true
+      "default": true,
+      "index": true
     }
   },
   "required": [
