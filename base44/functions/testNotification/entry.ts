@@ -46,24 +46,53 @@ async function getAccessToken(serviceAccount) {
 async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}) {
   const FCM_URL = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
   console.log(`[testNotification] sendToToken → projectId: ${projectId} | token: ${fcmToken.slice(0, 20)}...`);
+  
+  // Build data payload - convert all to strings
+  const dataPayload = {};
+  for (const [k, v] of Object.entries(data)) {
+    dataPayload[k] = String(v);
+  }
+  dataPayload.title = title;
+  dataPayload.body = body;
+
+  // Exact FCM v1 format (SAME as testFcmSend which works)
+  const message = {
+    token: fcmToken,
+    notification: { title, body },
+    data: dataPayload,
+    android: {
+      priority: 'HIGH',
+      notification: { channel_id: 'default' },
+    },
+  };
+
   const res = await fetch(FCM_URL, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: {
-        token: fcmToken,
-        notification: { title, body },
-        data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
-        android: {
-          priority: "high",
-          notification: { channel_id: "default", sound: "default", visibility: "PUBLIC", default_vibrate_timings: true, notification_priority: "PRIORITY_MAX" },
-        },
-      },
-    }),
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
   });
-  const result = await res.json();
-  if (!res.ok) console.error('[testNotification] FCM error for token:', fcmToken.slice(0, 20), JSON.stringify(result));
-  return { ok: res.ok, status: res.status, result };
+
+  let result;
+  try {
+    result = await res.json();
+  } catch (parseErr) {
+    const rawText = await res.text();
+    console.error('[testNotification] JSON parse error:', parseErr.message);
+    console.error('[testNotification] Raw response:', rawText);
+    result = { raw: rawText };
+  }
+
+  if (res.ok) {
+    console.log('[testNotification] ✅ 200 OK — messageId:', result?.name, '| token:', fcmToken.slice(0, 25));
+  } else {
+    console.error('[testNotification] ❌ Status', res.status, '| token:', fcmToken.slice(0, 25));
+    console.error('[testNotification] Full response:', JSON.stringify(result, null, 2));
+    if (result?.error?.details) {
+      console.error('[testNotification] error.details:', JSON.stringify(result.error.details));
+    }
+  }
+
+  return { ok: res.ok, status: res.status, result, token: fcmToken };
 }
 
 Deno.serve(async (req) => {
