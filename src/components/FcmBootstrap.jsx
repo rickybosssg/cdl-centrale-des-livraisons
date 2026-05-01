@@ -76,7 +76,7 @@ export default function FcmBootstrap({ userEmail }) {
     console.log('[FCM] INIT SCHEDULED (delay 3s)');
 
     const timer = setTimeout(() => {
-      // Re-évaluer isNativePlatform() après 3s — Capacitor est forcément initialisé
+      // Re-évaluer isNativePlatform() après 8s — après le flux permissions onboarding
       const native = isNativePlatform();
       console.log('[FCM] PLATFORM CHECK (after 3s) | native:', native, '| protocol:', window.location?.protocol, '| Capacitor:', !!window.Capacitor, '| email:', userEmail || 'none');
 
@@ -89,7 +89,7 @@ export default function FcmBootstrap({ userEmail }) {
           console.log('[FCM] ERROR NON BLOCKING (web):', err?.message);
         });
       }
-    }, 3000);
+    }, 8000);
 
     return () => clearTimeout(timer);
   }, []); // Dépendances vides : une seule exécution au mount

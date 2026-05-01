@@ -1,11 +1,7 @@
 /**
  * CDL — Écran autorisations au premier lancement
- * GPS + Notifications + Caméra/Galerie
- *
- * Logique clé :
- * - Si permission déjà refusée définitivement (canAskAgain = false ou permission === "denied")
- *   → Ne plus afficher la popup → ouvrir directement les paramètres du téléphone
- * - Si refus partiel → bouton "Ouvrir les paramètres" UNIQUEMENT (pas de "Réessayer")
+ * VERSION ANTI-CRASH APK : toutes les APIs système sont wrappées try/catch
+ * Le flux ne bloque jamais l'app, même si une permission crashe.
  */
 import { useState } from "react";
 import { MapPin, Bell, Camera, CheckCircle2, AlertTriangle, Settings, ChevronRight } from "lucide-react";
@@ -21,180 +17,115 @@ export function markPermissionsConfigured() {
   try { localStorage.setItem(STORAGE_KEY, "1"); } catch (_) {}
 }
 
-const PERM_ITEMS = [
-  {
-    id: "gps",
-    icon: MapPin,
-    color: "text-blue-600 bg-blue-100",
-    title: "Localisation GPS",
-    desc: "Pour trouver les livreurs les plus proches et suivre vos livraisons en temps réel.",
-    required: true,
-  },
-  {
-    id: "notif",
-    icon: Bell,
-    color: "text-amber-600 bg-amber-100",
-    title: "Notifications",
-    desc: "Pour vous alerter quand votre livreur arrive, ou quand une course vous est proposée.",
-    required: true,
-  },
-  {
-    id: "camera",
-    icon: Camera,
-    color: "text-emerald-600 bg-emerald-100",
-    title: "Caméra & Galerie",
-    desc: "Pour envoyer vos documents livreur et les preuves de paiement Bedou.",
-    required: false,
-  },
-];
+/** Détecte APK Capacitor natif Android */
+function isNativeAndroid() {
+  try {
+    if (window.location?.protocol === 'capacitor:') return true;
+    if (window.location?.protocol === 'file:') return true;
+    if (window.Capacitor?.getPlatform?.() === 'android') return true;
+  } catch (_) {}
+  return false;
+}
 
-/** Ouvre les paramètres natifs de l'app (APK) ou affiche un guide (web) */
-function openAppSettings() {
-  const isNative = window?.Capacitor?.isNativePlatform?.() === true;
-  if (isNative) {
-    // Essayer plusieurs approches pour ouvrir les paramètres Android
-    try {
-      if (window.cordova?.plugins?.diagnostic?.switchToAppSettings) {
-        window.cordova.plugins.diagnostic.switchToAppSettings(() => {}, () => {});
-        return;
-      }
-    } catch (_) {}
-    try {
-      if (window.Capacitor?.Plugins?.App) {
-        // Intent Android pour ouvrir les paramètres de l'app
-        import("@capacitor/app").then(() => {}).catch(() => {});
-      }
-    } catch (_) {}
-    // Fallback : alerte guidée
-    alert("Ouvrez les paramètres de votre téléphone → Applications → CDL → Autorisations");
-  } else {
-    alert("Ouvrez les paramètres de votre navigateur pour activer les autorisations CDL.");
+/** Demande GPS — safe, ne crashe pas */
+async function requestGps() {
+  try {
+    if (!navigator.geolocation) return "unavailable";
+    return await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve("unavailable"), 10000);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(timer);
+          try {
+            base44.auth.updateMe({
+              gps_latitude: pos.coords.latitude,
+              gps_longitude: pos.coords.longitude,
+              gps_enabled: true,
+            }).catch(() => {});
+          } catch (_) {}
+          resolve("granted");
+        },
+        () => { clearTimeout(timer); resolve("denied"); },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+    });
+  } catch (_) {
+    return "unavailable";
   }
 }
 
-/** Vérifie si une permission a déjà été refusée définitivement (canAskAgain = false) */
-async function checkPermanentlyDenied() {
-  const denied = { gps: false, notif: false, camera: false };
-
-  // GPS — via Permissions API si disponible
-  if (navigator.permissions) {
-    try {
-      const gps = await navigator.permissions.query({ name: "geolocation" });
-      if (gps.state === "denied") denied.gps = true;
-    } catch (_) {}
-    try {
-      const notif = await navigator.permissions.query({ name: "notifications" });
-      if (notif.state === "denied") denied.notif = true;
-    } catch (_) {}
-    try {
-      const cam = await navigator.permissions.query({ name: "camera" });
-      if (cam.state === "denied") denied.camera = true;
-    } catch (_) {}
+/** Demande notifications — safe, ne crashe pas */
+async function requestNotifications() {
+  try {
+    // Sur APK Android natif : window.Notification n'existe pas
+    // Les notifs push sont gérées par FcmBootstrap séparément
+    if (typeof Notification === "undefined") {
+      console.log('[NOTIF] API Notification absente (APK natif) → unavailable');
+      return "unavailable";
+    }
+    if (Notification.permission === "granted") return "granted";
+    if (Notification.permission === "denied") return "denied";
+    console.log('[NOTIF] request permission start');
+    const perm = await Notification.requestPermission();
+    console.log('[NOTIF] permission result:', perm);
+    return perm;
+  } catch (e) {
+    console.log('[NOTIF] permission error (non-bloquant):', e?.message);
+    return "unavailable";
   }
+}
 
-  // Notifications — fallback direct (NE PAS marquer denied si Notification est absent = APK natif)
-  if (typeof Notification !== "undefined" && Notification.permission === "denied") {
-    denied.notif = true;
+/** Demande caméra — safe, ne crashe pas */
+async function requestCamera() {
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) return "unavailable";
+    // Sur APK, getUserMedia peut être instable — timeout court
+    const stream = await Promise.race([
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+    ]);
+    try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+    return "granted";
+  } catch (e) {
+    if (e?.name === "NotAllowedError") return "denied";
+    return "unavailable";
   }
-  // Sur APK Capacitor, window.Notification n'existe pas → JAMAIS considérer comme bloqué
-  if (typeof Notification === "undefined") {
-    denied.notif = false;
-  }
-
-  return denied;
 }
 
 export default function PermissionsOnboarding({ onDone }) {
   const [step, setStep] = useState("intro"); // intro | requesting | results
-  const [results, setResults] = useState({});     // { gps, notif, camera } = "granted"|"denied"|"unavailable"
-  const [permDenied, setPermDenied] = useState({}); // permissions refusées définitivement
+  const [results, setResults] = useState({});
 
   const requestAll = async () => {
     setStep("requesting");
-
-    // 1. Détecter d'abord les permissions déjà refusées définitivement
-    const alreadyDenied = await checkPermanentlyDenied();
-    setPermDenied(alreadyDenied);
-
     const res = {};
 
-    // GPS
-    if (alreadyDenied.gps) {
-      res.gps = "denied";
-    } else {
-      try {
-        res.gps = await new Promise((resolve) => {
-          if (!navigator.geolocation) { resolve("unavailable"); return; }
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              base44.auth.updateMe({ gps_latitude: pos.coords.latitude, gps_longitude: pos.coords.longitude, gps_enabled: true }).catch(() => {});
-              resolve("granted");
-            },
-            () => resolve("denied"),
-            { enableHighAccuracy: true, timeout: 8000 }
-          );
-        });
-      } catch (_) { res.gps = "denied"; }
-    }
+    // GPS en premier
+    res.gps = await requestGps();
+    console.log('[APP] GPS result:', res.gps);
 
-    // Notifications
-    // Sur APK Capacitor : window.Notification absent → les notifs sont gérées par Capacitor PushNotifications
-    // On marque "unavailable" (pas bloqué) pour ne pas afficher d'erreur
-    if (!("Notification" in window)) {
-      res.notif = "unavailable";
-    } else if (alreadyDenied.notif) {
-      res.notif = "denied";
-    } else {
-      try {
-        if (Notification.permission === "granted") {
-          res.notif = "granted";
-        } else {
-          const perm = await Notification.requestPermission();
-          res.notif = perm;
-          if (perm === "denied") {
-            setPermDenied(prev => ({ ...prev, notif: true }));
-            alreadyDenied.notif = true;
-          }
-        }
-      } catch (_) { res.notif = "unavailable"; }
-    }
+    // Notifications (web seulement — APK = unavailable, FCM gère séparément)
+    res.notif = await requestNotifications();
+    console.log('[APP] Notif result:', res.notif);
 
-    // Caméra
-    if (alreadyDenied.camera) {
-      res.camera = "denied";
-    } else {
-      try {
-        if (navigator.mediaDevices?.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          stream.getTracks().forEach(t => t.stop());
-          res.camera = "granted";
-        } else {
-          res.camera = "unavailable";
-        }
-      } catch (err) {
-        res.camera = "denied";
-        if (err?.name === "NotAllowedError") {
-          setPermDenied(prev => ({ ...prev, camera: true }));
-        }
-      }
-    }
+    // Caméra en dernier (optionnel, ne crashe pas)
+    res.camera = await requestCamera();
+    console.log('[APP] Camera result:', res.camera);
 
-    // Mettre à jour permDenied avec les résultats finaux
-    setPermDenied(alreadyDenied);
+    console.log('[APP] continue after permission');
     setResults(res);
     setStep("results");
   };
 
   const handleDone = () => {
     markPermissionsConfigured();
-    onDone?.();
+    try { onDone?.(); } catch (_) {}
   };
 
-  const allGranted = results.gps === "granted" && (results.notif === "granted" || results.notif === "unavailable");
-  // Sur APK : notif "unavailable" = géré nativement = OK
+  const notifOk = results.notif === "granted" || results.notif === "unavailable";
+  const gpsOk = results.gps === "granted" || results.gps === "unavailable";
+  const allGranted = gpsOk && notifOk;
   const anyDenied = results.gps === "denied" || results.notif === "denied";
-  // Une permission est "définitivement refusée" si canAskAgain = false
-  const anyPermanentlyDenied = Object.values(permDenied).some(Boolean);
 
   // ── INTRO ──
   if (step === "intro") {
@@ -212,8 +143,12 @@ export default function PermissionsOnboarding({ onDone }) {
           <h1 className="text-3xl font-extrabold">Bienvenue sur CDL</h1>
           <p className="text-white/70 mt-2 text-base">Centrale des Livraisons</p>
 
-          <div className="mt-10 space-y-3 w-full max-w-xs text-left">
-            {PERM_ITEMS.map(item => {
+          <div className="mt-8 space-y-3 w-full max-w-xs text-left">
+            {[
+              { id: "gps", icon: MapPin, title: "Localisation GPS", desc: "Pour trouver les livreurs proches.", required: true },
+              { id: "notif", icon: Bell, title: "Notifications", desc: "Pour les alertes de livraison.", required: true },
+              { id: "camera", icon: Camera, title: "Caméra & Galerie", desc: "Pour les documents et preuves.", required: false },
+            ].map(item => {
               const Icon = item.icon;
               return (
                 <div key={item.id} className="flex items-start gap-3 bg-white/10 rounded-2xl p-4 border border-white/15">
@@ -240,7 +175,7 @@ export default function PermissionsOnboarding({ onDone }) {
             onClick={requestAll}
             className="w-full h-14 rounded-2xl bg-white text-primary font-extrabold text-base shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2"
           >
-            Activer GPS et notifications <ChevronRight className="h-5 w-5" />
+            Autoriser et continuer <ChevronRight className="h-5 w-5" />
           </button>
           <button
             onClick={handleDone}
@@ -259,7 +194,7 @@ export default function PermissionsOnboarding({ onDone }) {
       <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-gradient-to-br from-[#0F2A5C] to-[#1E6BFF] text-white px-6">
         <div className="h-16 w-16 border-4 border-white/30 border-t-white rounded-full animate-spin mb-6" />
         <p className="text-xl font-extrabold">Demande en cours…</p>
-        <p className="text-white/60 text-sm mt-2 text-center">Veuillez accepter les autorisations demandées par votre appareil.</p>
+        <p className="text-white/60 text-sm mt-2 text-center">Veuillez accepter les autorisations demandées.</p>
       </div>
     );
   }
@@ -269,45 +204,42 @@ export default function PermissionsOnboarding({ onDone }) {
     <div className="fixed inset-0 z-[300] flex flex-col bg-background">
       <div className="bg-gradient-to-br from-[#0F2A5C] to-[#1E6BFF] px-6 pt-12 pb-8 text-white text-center">
         <div className={`h-16 w-16 rounded-full mx-auto flex items-center justify-center mb-3 ${allGranted ? "bg-emerald-400" : "bg-amber-400"}`}>
-          {allGranted ? <CheckCircle2 className="h-9 w-9 text-white" /> : <AlertTriangle className="h-9 w-9 text-white" />}
+          {allGranted
+            ? <CheckCircle2 className="h-9 w-9 text-white" />
+            : <AlertTriangle className="h-9 w-9 text-white" />}
         </div>
-        <h2 className="text-xl font-extrabold">{allGranted ? "Tout est prêt !" : "Autorisations partielles"}</h2>
+        <h2 className="text-xl font-extrabold">{allGranted ? "Tout est prêt !" : "Configuration partielle"}</h2>
         <p className="text-white/70 text-sm mt-1">
-          {allGranted ? "CDL est configuré pour fonctionner parfaitement." : "Certaines fonctions seront limitées."}
+          {allGranted ? "CDL est prêt à fonctionner." : "Vous pouvez continuer, certaines fonctions seront limitées."}
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {PERM_ITEMS.map(item => {
+        {[
+          { id: "gps", title: "Localisation GPS", icon: MapPin, color: "text-blue-600 bg-blue-100" },
+          { id: "notif", title: "Notifications", icon: Bell, color: "text-amber-600 bg-amber-100" },
+          { id: "camera", title: "Caméra & Galerie", icon: Camera, color: "text-emerald-600 bg-emerald-100" },
+        ].map(item => {
           const Icon = item.icon;
           const status = results[item.id];
-          const granted = status === "granted" || status === "unavailable";
-          const permanentlyDenied = permDenied[item.id] && !granted;
-
+          const ok = status === "granted" || status === "unavailable";
           return (
             <div key={item.id} className="flex items-center gap-4 p-4 rounded-2xl bg-white border border-border shadow-sm">
               <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${item.color}`}>
                 <Icon className="h-5 w-5" />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1">
                 <p className="text-sm font-bold text-foreground">{item.title}</p>
-                <p className={`text-xs mt-0.5 ${granted ? "text-emerald-600" : permanentlyDenied ? "text-red-600 font-semibold" : "text-orange-500"}`}>
-                  {granted
-                    ? "✓ Autorisé"
-                    : permanentlyDenied
-                      ? "✗ Bloqué définitivement — ouvrir les paramètres"
-                      : "✗ Refusé"}
+                <p className={`text-xs mt-0.5 ${ok ? "text-emerald-600" : "text-orange-500"}`}>
+                  {ok ? "✓ Autorisé" : "✗ Non autorisé — modifiable dans les paramètres"}
                 </p>
               </div>
-              {/* Si refusé définitivement → uniquement "Ouvrir paramètres" */}
-              {!granted && (
+              {!ok && (
                 <button
-                  onClick={openAppSettings}
-                  className={`flex-shrink-0 flex items-center gap-1 text-xs font-semibold border px-3 py-1.5 rounded-xl ${
-                    permanentlyDenied
-                      ? "text-red-600 border-red-300 bg-red-50"
-                      : "text-primary border-primary/30"
-                  }`}
+                  onClick={() => {
+                    try { alert("Paramètres → Applications → CDL → Autorisations"); } catch (_) {}
+                  }}
+                  className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold border px-3 py-1.5 rounded-xl text-primary border-primary/30"
                 >
                   <Settings className="h-3 w-3" /> Paramètres
                 </button>
@@ -317,49 +249,16 @@ export default function PermissionsOnboarding({ onDone }) {
         })}
 
         {anyDenied && (
-          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 space-y-2">
-            {anyPermanentlyDenied ? (
-              <>
-                <p className="text-sm font-semibold text-red-800">🚫 Autorisations bloquées définitivement</p>
-                <p className="text-xs text-red-700 leading-relaxed">
-                  Vous avez déjà refusé ces autorisations. L'app ne peut plus les redemander automatiquement.{"\n"}
-                  Allez dans les paramètres de votre téléphone → Applications → CDL → Autorisations.
-                </p>
-                <button
-                  onClick={openAppSettings}
-                  className="w-full mt-1 h-10 rounded-xl bg-red-600 text-white text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
-                >
-                  <Settings className="h-4 w-4" /> Ouvrir les paramètres de l'application
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-amber-800">⚠️ Certaines autorisations sont refusées</p>
-                <p className="text-xs text-amber-700">
-                  Pour activer GPS ou notifications : ouvrez les paramètres → Applications → CDL → Autorisations.
-                </p>
-                <button
-                  onClick={openAppSettings}
-                  className="flex items-center gap-1.5 text-xs font-bold text-amber-800 underline"
-                >
-                  <Settings className="h-3 w-3" /> Ouvrir les paramètres
-                </button>
-              </>
-            )}
+          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4">
+            <p className="text-sm font-semibold text-amber-800">⚠️ Autorisations non accordées</p>
+            <p className="text-xs text-amber-700 mt-1">
+              Vous pouvez les activer plus tard dans : Paramètres → Applications → CDL → Autorisations.
+            </p>
           </div>
         )}
       </div>
 
       <div className="px-4 pb-8 space-y-2">
-        {/* "Réessayer" uniquement si PAS de refus définitif */}
-        {anyDenied && !anyPermanentlyDenied && (
-          <button
-            onClick={requestAll}
-            className="w-full h-12 rounded-2xl border-2 border-primary text-primary font-bold text-sm active:scale-95 transition-all"
-          >
-            Réessayer les autorisations
-          </button>
-        )}
         <button
           onClick={handleDone}
           className="w-full h-14 rounded-2xl bg-primary text-white font-extrabold text-base shadow-md active:scale-[0.97] transition-all"
