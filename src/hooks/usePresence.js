@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 
-const HEARTBEAT_INTERVAL = 30000; // 30s
+const HEARTBEAT_INTERVAL = 60000; // 60s — réduit la charge réseau sur APK
 
 /**
  * usePresence — met à jour last_seen + statut en ligne par rôle actif.

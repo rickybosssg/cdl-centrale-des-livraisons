@@ -145,46 +145,56 @@ export default function AdminDashboardPro() {
   useEffect(() => {
     console.log('[DASHBOARD] mounted');
     load();
-    // Intervalle 60s au lieu de 30s pour réduire la charge sur APK
+
+    // Intervalle 90s — réduit la charge sur APK natif
     const interval = setInterval(() => {
       try { load(); } catch (err) { console.error('[DASHBOARD] interval error (non-fatal):', err?.message); }
-    }, 60000);
+    }, 90000);
 
     let unsubCourse = null, unsubUser = null, unsubProfile = null;
-    try {
-      unsubCourse = base44.entities.Course.subscribe(ev => {
-        try {
-          if (ev.type === "create" && ev.data) setCourses(p => [ev.data, ...p]);
-          else if (ev.type === "update" && ev.data) setCourses(p => p.map(c => c.id === ev.id ? ev.data : c));
-        } catch (_) {}
-      });
-    } catch (err) { console.error('[DASHBOARD] Course subscribe error:', err?.message); }
 
-    try {
-      unsubUser = base44.entities.User.subscribe(ev => {
-        try {
-          if (ev.type === "create" && ev.data) setAllUsers(p => [ev.data, ...p]);
-          else if (ev.type === "update" && ev.data) setAllUsers(p => p.map(u => u.id === ev.id ? ev.data : u));
-        } catch (_) {}
-      });
-    } catch (err) { console.error('[DASHBOARD] User subscribe error:', err?.message); }
+    // Délai 5s avant d'activer les subscriptions temps réel
+    // → laisser le dashboard se rendre complètement avant d'ajouter des listeners WebSocket
+    const subTimer = setTimeout(() => {
+      console.log('[DASHBOARD] activating subscriptions...');
+      try {
+        unsubCourse = base44.entities.Course.subscribe(ev => {
+          try {
+            if (ev.type === "create" && ev.data) setCourses(p => [ev.data, ...p]);
+            else if (ev.type === "update" && ev.data) setCourses(p => p.map(c => c.id === ev.id ? ev.data : c));
+          } catch (_) {}
+        });
+      } catch (err) { console.warn('[DASHBOARD] Course subscribe error (non-fatal):', err?.message); }
 
-    try {
-      unsubProfile = base44.entities.UserProfile.subscribe(ev => {
-        try {
-          if (ev.type === "create" && !ev.data?.deleted) setProfiles(p => [ev.data, ...p]);
-          else if (ev.type === "update" && ev.data) setProfiles(p => {
-            const filtered = p.filter(x => x.id !== ev.id);
-            if (ev.data?.deleted) return filtered;
-            return [ev.data, ...filtered];
-          });
-          else if (ev.type === "delete") setProfiles(p => p.filter(x => x.id !== ev.id));
-        } catch (_) {}
-      });
-    } catch (err) { console.error('[DASHBOARD] Profile subscribe error:', err?.message); }
+      try {
+        unsubUser = base44.entities.User.subscribe(ev => {
+          try {
+            if (ev.type === "create" && ev.data) setAllUsers(p => [ev.data, ...p]);
+            else if (ev.type === "update" && ev.data) setAllUsers(p => p.map(u => u.id === ev.id ? ev.data : u));
+          } catch (_) {}
+        });
+      } catch (err) { console.warn('[DASHBOARD] User subscribe error (non-fatal):', err?.message); }
+
+      try {
+        unsubProfile = base44.entities.UserProfile.subscribe(ev => {
+          try {
+            if (ev.type === "create" && !ev.data?.deleted) setProfiles(p => [ev.data, ...p]);
+            else if (ev.type === "update" && ev.data) setProfiles(p => {
+              const filtered = p.filter(x => x.id !== ev.id);
+              if (ev.data?.deleted) return filtered;
+              return [ev.data, ...filtered];
+            });
+            else if (ev.type === "delete") setProfiles(p => p.filter(x => x.id !== ev.id));
+          } catch (_) {}
+        });
+      } catch (err) { console.warn('[DASHBOARD] Profile subscribe error (non-fatal):', err?.message); }
+
+      console.log('[DASHBOARD] subscriptions activated');
+    }, 5000);
 
     return () => {
       clearInterval(interval);
+      clearTimeout(subTimer);
       try { if (unsubCourse) unsubCourse(); } catch (_) {}
       try { if (unsubUser) unsubUser(); } catch (_) {}
       try { if (unsubProfile) unsubProfile(); } catch (_) {}

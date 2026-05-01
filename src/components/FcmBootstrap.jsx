@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 
 const APP_BASE_URL = 'https://cdl.base44.app';
-const FCM_DELAY_MS = 20000; // 20s — après que permissions onboarding est terminé
+const FCM_DELAY_MS = 45000; // 45s — laisser le dashboard se stabiliser complètement avant FCM
 
 function isNativePlatform() {
   try {
@@ -127,8 +127,11 @@ async function runNativeFcm(propEmail) {
     console.log('[FCM] checkPermissions error (non-fatal):', e?.message);
   }
 
+  // CRITIQUE : Ne jamais appeler register() si permission pas déjà granted.
+  // Afficher un dialog Android pendant que l'UI est active peut crasher la WebView.
+  // La demande de permission est UNIQUEMENT le rôle de PermissionsOnboarding.
   if (perm !== 'granted') {
-    console.log('[FCM] permission not granted:', perm, '— FCM skipped');
+    console.log('[FCM] permission not granted:', perm, '— register() SKIPPED (no dialog from background)');
     return;
   }
 

@@ -51,17 +51,29 @@ export default function GpsLocationManager({ onLocationUpdate, compact = false }
 
   // ─── Vérification initiale de la permission ─────────────────────────────
   useEffect(() => {
-    checkPermissionState();
-    // Écouter retour depuis les paramètres téléphone
+    // Sur APK natif, ne pas appeler checkPermissionState automatiquement au mount
+    // (peut crasher le WebView si permissions pas encore accordées)
+    // → On attend que l'utilisateur appuie sur le bouton "Activer"
+    try {
+      const proto = window.location?.protocol;
+      const isNative = proto === 'capacitor:' || proto === 'file:' ||
+        (typeof window.Capacitor !== 'undefined' && window.Capacitor?.isNativePlatform?.() === true);
+      if (!isNative) checkPermissionState();
+    } catch (_) {}
+
     const onVisible = () => {
-      if (document.visibilityState === "visible" && 
-          (status === GPS_STATUS.unavailable || status === GPS_STATUS.denied || status === GPS_STATUS.denied_perm)) {
-        checkPermissionState(true);
-      }
+      try {
+        if (document.visibilityState === "visible" &&
+            (status === GPS_STATUS.unavailable || status === GPS_STATUS.denied || status === GPS_STATUS.denied_perm)) {
+          checkPermissionState(true);
+        }
+      } catch (_) {}
     };
-    document.addEventListener("visibilitychange", onVisible);
-    visibilityHandlerRef.current = onVisible;
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    try {
+      document.addEventListener("visibilitychange", onVisible);
+      visibilityHandlerRef.current = onVisible;
+    } catch (_) {}
+    return () => { try { document.removeEventListener("visibilitychange", onVisible); } catch (_) {} };
   }, [status]);
 
   const checkPermissionState = async (andRequest = false) => {
@@ -97,21 +109,21 @@ export default function GpsLocationManager({ onLocationUpdate, compact = false }
 
   // ─── Demande de position ─────────────────────────────────────────────────
   const requestPosition = useCallback(() => {
-    if (!("geolocation" in navigator)) {
-      setStatus(GPS_STATUS.error);
-      return;
-    }
-    setStatus(GPS_STATUS.loading);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => onPositionSuccess(position),
-      (err) => onPositionError(err),
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 30000,
+    try {
+      if (!navigator?.geolocation) {
+        setStatus(GPS_STATUS.error);
+        return;
       }
-    );
+      setStatus(GPS_STATUS.loading);
+      navigator.geolocation.getCurrentPosition(
+        (position) => { try { onPositionSuccess(position); } catch (_) {} },
+        (err) => { try { onPositionError(err); } catch (_) {} },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+      );
+    } catch (err) {
+      console.warn('[GPS] requestPosition error (non-fatal):', err?.message);
+      setStatus(GPS_STATUS.error);
+    }
   }, []);
 
   // ─── Succès ─────────────────────────────────────────────────────────────

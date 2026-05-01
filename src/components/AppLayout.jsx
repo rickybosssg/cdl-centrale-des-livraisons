@@ -74,15 +74,21 @@ export default function AppLayout({ userRole, userEmail }) {
     };
     load();
     const interval = setInterval(load, 60000);
-    const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.type === 'create' && event.data?.statut === 'en_attente') {
-        setCourseBadge(prev => prev + 1);
-      } else if (event.type === 'update') {
-        // Recharger si statut change
-        load();
-      }
-    });
-    return () => { clearInterval(interval); if (unsub) unsub(); };
+    let unsub = null;
+    try {
+      unsub = base44.entities.Course.subscribe((event) => {
+        try {
+          if (event.type === 'create' && event.data?.statut === 'en_attente') {
+            setCourseBadge(prev => prev + 1);
+          } else if (event.type === 'update') {
+            load();
+          }
+        } catch (_) {}
+      });
+    } catch (err) {
+      console.warn('[AppLayout] Course subscribe error (non-fatal):', err?.message);
+    }
+    return () => { clearInterval(interval); try { if (unsub) unsub(); } catch (_) {} };
   }, [userRole]);
 
   // Guard post-hooks
