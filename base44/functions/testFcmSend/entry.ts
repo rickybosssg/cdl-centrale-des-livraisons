@@ -175,20 +175,27 @@ Deno.serve(async (req) => {
         response: result,
       });
     } else {
-      console.error('[testFcmSend] ❌ FAILED');
+      console.error('[testFcmSend] ❌ FAILED — Status:', res.status, res.statusText);
+      console.error('[testFcmSend] Full error response:', JSON.stringify(result, null, 2));
+      
       if (result?.error) {
-        console.error('[testFcmSend] error.code:', result.error.code);
-        console.error('[testFcmSend] error.message:', result.error.message);
-        console.error('[testFcmSend] error.status:', result.error.status);
+        console.error('[testFcmSend] Firebase error code:', result.error.code);
+        console.error('[testFcmSend] Firebase error message:', result.error.message);
+        console.error('[testFcmSend] Firebase error status:', result.error.status);
         if (result.error.details) {
-          console.error('[testFcmSend] error.details:', JSON.stringify(result.error.details, null, 2));
+          console.error('[testFcmSend] Firebase error details:', JSON.stringify(result.error.details, null, 2));
         }
       }
+      
+      // Retourner l'erreur détaillée avec status 200 (pas exception HTTP)
       return Response.json({
         success: false,
         status: res.status,
         statusText: res.statusText,
-        error: result?.error || result,
+        error_code: result?.error?.code,
+        error_message: result?.error?.message,
+        error_status: result?.error?.status,
+        error_details: result?.error?.details,
         full_response: result,
       }, { status: 200 });
     }
