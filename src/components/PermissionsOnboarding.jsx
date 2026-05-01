@@ -92,9 +92,13 @@ async function checkPermanentlyDenied() {
     } catch (_) {}
   }
 
-  // Notifications — fallback direct
+  // Notifications — fallback direct (NE PAS marquer denied si Notification est absent = APK natif)
   if (typeof Notification !== "undefined" && Notification.permission === "denied") {
     denied.notif = true;
+  }
+  // Sur APK Capacitor, window.Notification n'existe pas → JAMAIS considérer comme bloqué
+  if (typeof Notification === "undefined") {
+    denied.notif = false;
   }
 
   return denied;
@@ -134,24 +138,25 @@ export default function PermissionsOnboarding({ onDone }) {
     }
 
     // Notifications
-    if (alreadyDenied.notif) {
+    // Sur APK Capacitor : window.Notification absent → les notifs sont gérées par Capacitor PushNotifications
+    // On marque "unavailable" (pas bloqué) pour ne pas afficher d'erreur
+    if (!("Notification" in window)) {
+      res.notif = "unavailable";
+    } else if (alreadyDenied.notif) {
       res.notif = "denied";
     } else {
       try {
-        if (!("Notification" in window)) {
-          res.notif = "unavailable";
-        } else if (Notification.permission === "granted") {
+        if (Notification.permission === "granted") {
           res.notif = "granted";
         } else {
           const perm = await Notification.requestPermission();
           res.notif = perm;
-          // Si refusé maintenant → marquer définitivement
           if (perm === "denied") {
             setPermDenied(prev => ({ ...prev, notif: true }));
             alreadyDenied.notif = true;
           }
         }
-      } catch (_) { res.notif = "denied"; }
+      } catch (_) { res.notif = "unavailable"; }
     }
 
     // Caméra
@@ -186,6 +191,7 @@ export default function PermissionsOnboarding({ onDone }) {
   };
 
   const allGranted = results.gps === "granted" && (results.notif === "granted" || results.notif === "unavailable");
+  // Sur APK : notif "unavailable" = géré nativement = OK
   const anyDenied = results.gps === "denied" || results.notif === "denied";
   // Une permission est "définitivement refusée" si canAskAgain = false
   const anyPermanentlyDenied = Object.values(permDenied).some(Boolean);
