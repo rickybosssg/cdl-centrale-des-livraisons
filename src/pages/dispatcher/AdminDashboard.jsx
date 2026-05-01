@@ -228,6 +228,7 @@ export default function AdminDashboard() {
     partenaires: { icon: Store, text: '🏪 ' + counts.partenaires?.pending + ' partenaires en attente' },
     commerciaux: { icon: Megaphone, text: '📢 ' + counts.commerciaux?.pending + ' commerciaux à valider' },
     blocked: { icon: AlertCircle, text: '🔒 Livreurs bloqués détectés' },
+    bedou: { icon: Wallet, text: '💰 Transactions Bedou à valider' },
   };
 
   console.log('[AdminDashboard] Affichage du JSX');
@@ -257,6 +258,7 @@ export default function AdminDashboard() {
         <div className="px-4 space-y-2">
           {alerts.map((alert, idx) => {
             const cfg = alertConfig[alert.type];
+            if (!cfg) return null;
             return (
               <div key={idx} className="p-3 rounded-xl border-2 border-red-300 bg-red-50">
                 <p className="text-sm font-semibold text-red-700">{cfg.text}</p>
