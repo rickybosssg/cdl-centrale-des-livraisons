@@ -89,7 +89,10 @@ async function getAccessToken(sa) {
 // ── Send FCM message to a single token ───────────────────────────────────────
 async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}) {
   const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
-  console.log('[FCM] Sending to token:', fcmToken.slice(0, 25) + '...');
+  console.log('[FCM] URL:', url);
+  console.log('[FCM] Token:', fcmToken.slice(0, 25) + '...');
+  console.log('[FCM] Title:', title);
+  console.log('[FCM] Body:', body);
 
   // Convert all data values to strings (FCM requirement)
   const dataPayload = {};
@@ -100,24 +103,25 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
   dataPayload.title = title;
   dataPayload.body = body;
 
+  // FCM v1 exact format per spec
   const message = {
     token: fcmToken,
-    // notification block shows system tray notification even when app is closed
     notification: {
       title,
       body,
     },
     data: dataPayload,
     android: {
-      priority: 'high',
-      ttl: '86400s',
+      priority: 'HIGH',
       notification: {
         channel_id: 'default',
-        sound: 'default',
-        click_action: 'FLUTTER_NOTIFICATION_CLICK',
       },
     },
   };
+
+  const requestBody = { message };
+  console.log('[FCM] Request body:', JSON.stringify(requestBody, null, 2));
+  console.log('[FCM] Auth header (Bearer):', accessToken.substring(0, 50) + '...');
 
   const res = await fetch(url, {
     method: 'POST',
@@ -125,29 +129,35 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(requestBody),
   });
 
   let result;
   try {
     result = await res.json();
-  } catch (_) {
-    result = { raw: await res.text() };
+  } catch (parseErr) {
+    const rawText = await res.text();
+    console.error('[FCM] JSON parse error:', parseErr.message);
+    console.error('[FCM] Raw response text:', rawText);
+    result = { raw: rawText };
   }
+
+  console.log('[FCM] Response status:', res.status, res.statusText);
+  console.log('[FCM] Response headers Content-Type:', res.headers.get('content-type'));
+  console.log('[FCM] Full response body:', JSON.stringify(result, null, 2));
 
   if (res.ok) {
     console.log('[FCM] ✅ 200 OK — messageId:', result?.name);
   } else {
-    // Full FCM error details
-    const errCode    = result?.error?.code;
-    const errMsg     = result?.error?.message;
-    const errStatus  = result?.error?.status;
-    const errDetails = JSON.stringify(result?.error?.details || []);
-    console.error(`[FCM] ❌ ${res.status} ERROR`);
-    console.error('[FCM] error.code:', errCode);
-    console.error('[FCM] error.message:', errMsg);
-    console.error('[FCM] error.status:', errStatus);
-    console.error('[FCM] error.details:', errDetails);
+    console.error(`[FCM] ❌ ${res.status} ${res.statusText} — Full response logged above`);
+    if (result?.error) {
+      console.error('[FCM] error.code:', result.error.code);
+      console.error('[FCM] error.message:', result.error.message);
+      console.error('[FCM] error.status:', result.error.status);
+      if (result.error.details) {
+        console.error('[FCM] error.details:', JSON.stringify(result.error.details, null, 2));
+      }
+    }
   }
 
   return { ok: res.ok, status: res.status, result, token: fcmToken };
