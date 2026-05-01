@@ -116,6 +116,7 @@ import AdminAuthDiagnostics from './pages/dispatcher/AdminAuthDiagnostics';
 import TestNotifications from './pages/dispatcher/TestNotifications';
 import FcmDiagnostic from './pages/FcmDiagnostic';
 import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
+import FcmTestFull from './pages/FcmTestFull';
 import EmailLogin from './pages/EmailLogin';
 import AppPublicLink from './pages/AppPublicLink';
 import TrackingPublic from './pages/TrackingPublic';
@@ -391,6 +392,7 @@ const AuthenticatedApp = () => {
         {/* Paramètres utilisateur */}
         <Route path="/settings" element={<Settings />} />
         <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
+        <Route path="/fcm-test-full" element={<FcmTestFull />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />
