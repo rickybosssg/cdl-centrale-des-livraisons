@@ -23,10 +23,12 @@ let _onNotificationTap = null;
 
 // ── Détection contexte natif ──────────────────────────────────────────────────
 export function isNativeApp() {
-  if (typeof window === 'undefined') return false;
-  if (window.location?.protocol === 'capacitor:') return true;
-  // Vérification stricte : Capacitor natif Android uniquement
-  if (window.Capacitor?.isNativePlatform?.() === true && window.Capacitor?.getPlatform?.() === 'android') return true;
+  try {
+    if (typeof window === 'undefined') return false;
+    if (window.location?.protocol === 'capacitor:') return true;
+    if (window.location?.protocol === 'file:') return true;
+    if (window.Capacitor?.getPlatform?.() === 'android') return true;
+  } catch (_) {}
   return false;
 }
 

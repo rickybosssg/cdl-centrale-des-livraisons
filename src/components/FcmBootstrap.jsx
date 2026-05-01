@@ -15,11 +15,9 @@ import { base44 } from '@/api/base44Client';
 function isNativePlatform() {
   try {
     if (typeof window === 'undefined') return false;
-    // Protocole Capacitor — vérification la plus fiable
     if (window.location?.protocol === 'capacitor:') return true;
-    // Capacitor global — UNIQUEMENT si isNativePlatform() retourne true
-    // Ne pas se fier à window.Capacitor seul (présent même en WebView HTTPS)
-    if (window.Capacitor?.isNativePlatform?.() === true && window.Capacitor?.getPlatform?.() === 'android') return true;
+    if (window.location?.protocol === 'file:') return true;
+    if (window.Capacitor?.getPlatform?.() === 'android') return true;
   } catch (_) {}
   return false;
 }

@@ -34,13 +34,16 @@ const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl =
 	return null;
 }
 
-// Détecte si on est dans un APK Capacitor (Android Studio)
+// Détecte si on est dans un APK Capacitor natif Android
+// RÈGLE : protocole capacitor: OU Capacitor.getPlatform() === 'android'
+// NE PAS utiliser window.Capacitor seul (présent même en WebView HTTPS)
 const isCapacitorNative = () => {
 	if (isNode) return false;
-	if (window.location?.protocol === 'capacitor:') return true;
-	if (typeof window.Capacitor !== 'undefined') return true;
-	// Détecter file:// (WebView Android sans Capacitor configuré)
-	if (window.location?.protocol === 'file:') return true;
+	try {
+		if (window.location?.protocol === 'capacitor:') return true;
+		if (window.location?.protocol === 'file:') return true;
+		if (window.Capacitor?.getPlatform?.() === 'android') return true;
+	} catch (_) {}
 	return false;
 };
 
