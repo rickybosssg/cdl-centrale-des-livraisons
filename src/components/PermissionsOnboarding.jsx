@@ -70,14 +70,16 @@ async function requestWebNotifPermission() {
 /** Demande GPS via web API — uniquement sur web, avec timeout */
 async function requestGpsWeb() {
   try {
-    if (!navigator.geolocation) return 'unavailable';
+    if (!navigator?.geolocation) return 'unavailable';
     return await Promise.race([
       new Promise((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-          () => resolve('granted'),
-          () => resolve('denied'),
-          { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
-        );
+        try {
+          navigator.geolocation.getCurrentPosition(
+            () => resolve('granted'),
+            () => resolve('denied'),
+            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+          );
+        } catch (_) { resolve('unavailable'); }
       }),
       new Promise((resolve) => setTimeout(() => resolve('unavailable'), 6000)),
     ]);

@@ -225,24 +225,28 @@ const AuthenticatedApp = () => {
       try {
         console.error('[CRASH-GUARD] JS error:', event?.message, '|', event?.filename, ':', event?.lineno);
       } catch (_) {}
-      // Empêcher la propagation qui pourrait fermer la WebView
-      event?.preventDefault?.();
+      // CRITIQUE : empêcher la propagation qui fermerait la WebView Capacitor
+      try { event?.preventDefault?.(); } catch (_) {}
+      return true; // Marquer l'event comme géré
     };
     const onUnhandled = (event) => {
       try {
-        console.error('[CRASH-GUARD] Unhandled rejection:', event?.reason?.message || String(event?.reason));
+        const reason = event?.reason;
+        const msg = reason?.message || (typeof reason === 'string' ? reason : JSON.stringify(reason));
+        console.error('[CRASH-GUARD] Unhandled rejection:', msg);
       } catch (_) {}
       // CRITIQUE : empêcher les unhandled rejections de crasher la WebView Capacitor
-      event?.preventDefault?.();
+      try { event?.preventDefault?.(); } catch (_) {}
+      return true;
     };
-    window.addEventListener('error', onError);
-    window.addEventListener('unhandledrejection', onUnhandled);
+    window.addEventListener('error', onError, true); // capture phase = intercepte avant tout
+    window.addEventListener('unhandledrejection', onUnhandled, true);
 
     console.log('[WEBVIEW] loaded | protocol:', window.location?.protocol, '| url:', window.location?.href);
 
     return () => {
-      window.removeEventListener('error', onError);
-      window.removeEventListener('unhandledrejection', onUnhandled);
+      window.removeEventListener('error', onError, true);
+      window.removeEventListener('unhandledrejection', onUnhandled, true);
     };
   }, []);
 

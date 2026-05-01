@@ -64,7 +64,9 @@ async function ensureChannel(PN) {
 }
 
 // ── Vérifier / demander la permission ────────────────────────────────────────
-async function ensurePermission(PN) {
+// IMPORTANT : requestPermission=false par défaut pour éviter tout dialog Android inopiné
+// Ne passer requestPermission=true QUE depuis un geste utilisateur explicite (bouton)
+async function ensurePermission(PN, requestPermission = false) {
   try {
     const check = await PN.checkPermissions();
     console.log('[NativePush] checkPermissions():', check.receive);
@@ -73,7 +75,11 @@ async function ensurePermission(PN) {
       console.warn('[NativePush] Permission DENIED définitivement (POST_NOTIFICATIONS bloquée)');
       return 'denied';
     }
-    // 'prompt' ou autre → demander
+    // 'prompt' → demander SEULEMENT si autorisé explicitement
+    if (!requestPermission) {
+      console.log('[NativePush] Permission "prompt" mais requestPermission=false → skip dialog');
+      return 'prompt';
+    }
     console.log('[NativePush] requestPermissions()...');
     const req = await PN.requestPermissions();
     console.log('[NativePush] requestPermissions() résultat:', req.receive);
@@ -173,17 +179,13 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   // Étape 1 : Canal Android
   await ensureChannel(PN);
 
-  // Étape 2 : Permission
-  const perm = await ensurePermission(PN);
-  if (perm === 'denied' || perm === 'error') {
-    console.warn('[NativePush] Permission bloquée:', perm, '→ FCM impossible');
+  // Étape 2 : Permission — NE PAS demander ici (FcmBootstrap = contexte background)
+  // La demande de permission est gérée UNIQUEMENT par PermissionsOnboarding (geste utilisateur)
+  const perm = await ensurePermission(PN, false);
+  if (perm !== 'granted') {
+    console.warn('[NativePush] Permission non accordée:', perm, '→ FCM skip (normal au 1er lancement)');
     if (onPermissionDenied) onPermissionDenied(perm);
     return { permissionStatus: perm };
-  }
-  if (perm !== 'granted') {
-    console.warn('[NativePush] Permission non accordée:', perm);
-    if (onPermissionDenied) onPermissionDenied('user_denied');
-    return { permissionStatus: 'user_denied' };
   }
 
   // Étape 3 : Installer les callbacks globaux
@@ -237,7 +239,8 @@ export async function requestNativePushToken() {
 
   await ensureChannel(PN);
 
-  const perm = await ensurePermission(PN);
+  // requestPermission=true car appelé depuis un bouton utilisateur
+  const perm = await ensurePermission(PN, true);
   console.log('[NativePush] requestNativePushToken — permission:', perm);
   if (perm !== 'granted') return null;
 

@@ -22,49 +22,48 @@ export default function NotificationPermissionRequest({ onSuccess, onDismiss, va
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const { isNativeApp, getPermissionStatus } = await import('@/lib/nativePush');
-
-      let perm;
-      if (isNativeApp()) {
-        perm = await getPermissionStatus();
-      } else {
-        perm = typeof Notification !== 'undefined' ? Notification.permission : 'default';
-      }
-
+    // Délai 3s pour éviter tout appel natif pendant le rendu initial du dashboard
+    const timer = setTimeout(async () => {
       if (cancelled) return;
+      try {
+        const { isNativeApp, getPermissionStatus } = await import('@/lib/nativePush');
 
-      if (perm === 'granted') {
-        onSuccess?.();
-        return;
-      }
+        let perm;
+        if (isNativeApp()) {
+          perm = await getPermissionStatus();
+        } else {
+          perm = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+        }
 
-      // Bloqué définitivement : uniquement si explicitement denied ET déjà demandé
-      // Sur APK natif "denied" au premier check = pas encore demandé → ne pas bloquer
-      const alreadyAskedBefore = localStorage.getItem(LS_ASKED);
-      if (perm === 'denied' && alreadyAskedBefore) {
-        setStep('blocked');
-        return;
-      }
+        if (cancelled) return;
 
-      // Pas encore demandé → afficher le message explicatif
-      const alreadyAsked = localStorage.getItem(LS_ASKED);
-      if (!alreadyAsked) {
-        setStep('explain');
-        return;
-      }
+        if (perm === 'granted') {
+          onSuccess?.();
+          return;
+        }
 
-      // Déjà demandé et refusé → rappel doux (une seule fois)
-      const wasDenied = localStorage.getItem(LS_DENIED);
-      const remindShown = localStorage.getItem(LS_REMIND);
-      if (wasDenied && !remindShown) {
-        setStep('denied_soft');
-        return;
-      }
+        // Sur APK natif : "denied" au premier check = pas encore demandé → ne pas bloquer
+        const alreadyAskedBefore = localStorage.getItem(LS_ASKED);
+        if (perm === 'denied' && alreadyAskedBefore) {
+          setStep('blocked');
+          return;
+        }
 
-      // Sinon ne rien afficher
-    })();
-    return () => { cancelled = true; };
+        if (!alreadyAskedBefore) {
+          setStep('explain');
+          return;
+        }
+
+        const wasDenied = localStorage.getItem(LS_DENIED);
+        const remindShown = localStorage.getItem(LS_REMIND);
+        if (wasDenied && !remindShown) {
+          setStep('denied_soft');
+          return;
+        }
+      } catch (_) {}
+    }, 3000);
+
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   const handleAllow = async () => {

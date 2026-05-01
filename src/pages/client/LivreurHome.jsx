@@ -18,36 +18,56 @@ import PubCDLBanner from "@/components/PubCDLBanner";
 import moment from "moment";
 
 // ── GPS ───────────────────────────────────────────────────────────────────────
+// PROTÉGÉ ANTI-CRASH APK : ne jamais appeler navigator.geolocation au mount sur natif
+function isNativePlatform() {
+  try {
+    const proto = window.location?.protocol;
+    return proto === 'capacitor:' || proto === 'file:' ||
+      (typeof window.Capacitor !== 'undefined' && window.Capacitor?.isNativePlatform?.() === true);
+  } catch (_) { return false; }
+}
+
 function useGPS(userEmail) {
   const [gpsMsg, setGpsMsg] = useState("");
   const [gpsLoading, setGpsLoading] = useState(false);
 
   const request = useCallback(() => {
-    if (!navigator.geolocation) { setGpsMsg("GPS non disponible"); return; }
-    setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGpsLoading(false);
-        setGpsMsg("");
-        base44.auth.updateMe({
-          gps_latitude: pos.coords.latitude,
-          gps_longitude: pos.coords.longitude,
-          gps_enabled: true,
-        }).catch(() => {});
-      },
-      (err) => {
-        setGpsLoading(false);
-        if (err.code === 1) setGpsMsg("Permission GPS refusée.");
-        else if (err.code === 2) setGpsMsg("GPS désactivé.");
-        else setGpsMsg("Position introuvable.");
-        base44.auth.updateMe({ gps_enabled: false }).catch(() => {});
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
+    try {
+      if (!navigator?.geolocation) { setGpsMsg("GPS non disponible"); return; }
+      setGpsLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          try {
+            setGpsLoading(false);
+            setGpsMsg("");
+            base44.auth.updateMe({
+              gps_latitude: pos.coords.latitude,
+              gps_longitude: pos.coords.longitude,
+              gps_enabled: true,
+            }).catch(() => {});
+          } catch (_) { setGpsLoading(false); }
+        },
+        (err) => {
+          try {
+            setGpsLoading(false);
+            if (err.code === 1) setGpsMsg("Permission GPS refusée.");
+            else if (err.code === 2) setGpsMsg("GPS désactivé.");
+            else setGpsMsg("Position introuvable.");
+            base44.auth.updateMe({ gps_enabled: false }).catch(() => {});
+          } catch (_) { setGpsLoading(false); }
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+      );
+    } catch (err) {
+      console.warn('[GPS] useGPS request error (non-fatal):', err?.message);
+      setGpsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (!userEmail) return;
+    // Sur APK natif : NE PAS demander le GPS au mount (crashe WebView Android)
+    // Le bouton "Réessayer" dans le UI déclenchera request() explicitement
+    if (!userEmail || isNativePlatform()) return;
     request();
   }, [userEmail]);
 

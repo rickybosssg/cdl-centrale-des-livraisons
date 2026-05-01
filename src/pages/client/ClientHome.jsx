@@ -89,25 +89,39 @@ export default function ClientHome({ user }) {
   const [courseANoter, setCourseANoter] = useState(null);
   const [city, setCity] = useState(null);
 
-  // Géolocalisation + ville
+  // Géolocalisation + ville — PROTÉGÉ ANTI-CRASH APK
   useEffect(() => {
-    if (!user?.email || !navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        if (!user?.gps_latitude) {
-          base44.auth.updateMe({
-            gps_latitude: pos.coords.latitude,
-            gps_longitude: pos.coords.longitude,
-          });
-        }
-        // Reverse geocoding léger
-        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`)
-          .then(r => r.json())
-          .then(d => setCity(d?.address?.city || d?.address?.town || d?.address?.suburb || null))
-          .catch(() => {});
-      },
-      () => {}
-    );
+    if (!user?.email) return;
+    // Sur APK Android natif : ne PAS appeler navigator.geolocation au mount
+    // car ça peut crasher la WebView si la permission n'est pas encore accordée
+    try {
+      const proto = window.location?.protocol;
+      const isNative = proto === 'capacitor:' || proto === 'file:' ||
+        (typeof window.Capacitor !== 'undefined' && window.Capacitor?.isNativePlatform?.() === true);
+      if (isNative) return; // Sur APK : le GPS est géré par GpsLocationManager sur demande explicite
+    } catch (_) {}
+
+    try {
+      if (!navigator?.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          try {
+            if (!user?.gps_latitude) {
+              base44.auth.updateMe({
+                gps_latitude: pos.coords.latitude,
+                gps_longitude: pos.coords.longitude,
+              }).catch(() => {});
+            }
+            fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`)
+              .then(r => r.json())
+              .then(d => { try { setCity(d?.address?.city || d?.address?.town || d?.address?.suburb || null); } catch (_) {} })
+              .catch(() => {});
+          } catch (_) {}
+        },
+        () => {},
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+      );
+    } catch (_) {}
   }, [user?.email, user?.id]);
 
   // Charger courses
