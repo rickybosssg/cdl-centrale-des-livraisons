@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
         const bedouCDL = await base44.asServiceRole.entities.Bedou.filter({ user_email: 'admin@cdl.local', role: 'admin' });
         if (bedouCDL.length > 0 && commissionCDL > 0) {
           const newSolde = (bedouCDL[0].solde || 0) + commissionCDL;
-          await base44.entities.Bedou.update(bedouCDL[0].id, {
+          await base44.asServiceRole.entities.Bedou.update(bedouCDL[0].id, {
             solde: newSolde,
             gains_totaux: (bedouCDL[0].gains_totaux || 0) + commissionCDL,
           });
@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
         });
 
         // 7. Notifications
-        await base44.entities.Notification.create({
+        await base44.asServiceRole.entities.Notification.create({
           destinataire_email: course.client_email,
           destinataire_role: 'client',
           titre: '✅ Première course validée!',
@@ -216,7 +216,7 @@ Deno.serve(async (req) => {
         });
 
         if (hasValidPromo) {
-          await base44.entities.Notification.create({
+          await base44.asServiceRole.entities.Notification.create({
             destinataire_email: hasValidPromo.commercial_email,
             destinataire_role: 'commercial',
             titre: '💰 Prime première course',
