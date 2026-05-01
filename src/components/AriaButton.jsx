@@ -132,14 +132,20 @@ export default function AriaButton({ userRole = "client" }) {
   // Abonnement temps réel
   useEffect(() => {
     if (!conversation?.id) return;
-    const unsub = base44.agents.subscribeToConversation(conversation.id, (data) => {
-      if (data.messages?.length > 0) {
-        // Reconstruire : garder le greeting + messages agent
-        const agentMsgs = data.messages.filter(m => m.role !== "system");
-        setMessages([{ role: "assistant", content: greeting }, ...agentMsgs]);
-      }
-    });
-    return unsub;
+    let unsub = null;
+    try {
+      unsub = base44.agents.subscribeToConversation(conversation.id, (data) => {
+        try {
+          if (data.messages?.length > 0) {
+            const agentMsgs = data.messages.filter(m => m.role !== "system");
+            setMessages([{ role: "assistant", content: greeting }, ...agentMsgs]);
+          }
+        } catch (_) {}
+      });
+    } catch (err) {
+      console.warn('[CHAT] subscribeToConversation error (non-fatal):', err?.message);
+    }
+    return () => { try { if (unsub) unsub(); } catch (_) {} };
   }, [conversation?.id]);
 
   const sendMessage = async (text) => {

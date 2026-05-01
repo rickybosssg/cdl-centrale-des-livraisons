@@ -26,15 +26,22 @@ export function useMessageCount(userEmail, userRole) {
 
     loadCount();
 
-    const unsub = base44.entities.MessageAdmin.subscribe((event) => {
-      if ((event.type === "create" || event.type === "update") && isMounted) {
-        loadCount();
-      }
-    });
+    let unsub = null;
+    try {
+      unsub = base44.entities.MessageAdmin.subscribe((event) => {
+        try {
+          if ((event.type === "create" || event.type === "update") && isMounted) {
+            loadCount();
+          }
+        } catch (_) {}
+      });
+    } catch (err) {
+      console.warn('[useMessageCount] subscribe error (non-fatal):', err?.message);
+    }
 
     return () => {
       isMounted = false;
-      if (unsub) unsub();
+      try { if (unsub) unsub(); } catch (_) {}
     };
   }, [userEmail, userRole]);
 

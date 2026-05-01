@@ -24,39 +24,50 @@ export default function NotificationBell({ userEmail }) {
 
   useEffect(() => {
     if (!userEmail) return;
+    console.log('[NOTIFICATIONS] init start');
     let isMounted = true;
 
     const initialTimer = setTimeout(() => {
       if (isMounted) loadNotifs();
-    }, 500);
+    }, 2000); // Délai 2s pour laisser le dashboard se stabiliser
 
     const interval = setInterval(() => {
       if (isMounted) loadNotifs();
     }, 120000);
 
-    const unsub = base44.entities.Notification.subscribe((event) => {
-      if (!isMounted || event.data?.destinataire_email !== userEmail) return;
-      if (event.type === 'create') {
-        setNotifs(prev => [event.data, ...prev]);
-        vibrateNotif();
-        playNotificationSound();
-        showNotification({
-          title: event.data.titre,
-          message: event.data.message,
-          type: event.data.type === 'danger' ? 'error' : (event.data.type || 'info'),
-          autoCloseDuration: event.data.priority === 'high' ? 12000 : 7000,
-        });
-
-      } else if (event.type === 'update') {
-        setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
-      }
-    });
+    let unsub = null;
+    try {
+      unsub = base44.entities.Notification.subscribe((event) => {
+        try {
+          if (!isMounted || event.data?.destinataire_email !== userEmail) return;
+          if (event.type === 'create') {
+            setNotifs(prev => [event.data, ...prev]);
+            try { vibrateNotif(); } catch (_) {}
+            try { playNotificationSound(); } catch (_) {}
+            try {
+              showNotification({
+                title: event.data.titre,
+                message: event.data.message,
+                type: event.data.type === 'danger' ? 'error' : (event.data.type || 'info'),
+                autoCloseDuration: event.data.priority === 'high' ? 12000 : 7000,
+              });
+            } catch (_) {}
+          } else if (event.type === 'update') {
+            setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
+          }
+        } catch (err) {
+          console.warn('[NOTIFICATIONS] event handler error (non-fatal):', err?.message);
+        }
+      });
+    } catch (err) {
+      console.warn('[NOTIFICATIONS] subscribe error (non-fatal):', err?.message);
+    }
 
     return () => {
       isMounted = false;
       clearTimeout(initialTimer);
       clearInterval(interval);
-      if (unsub) unsub();
+      try { if (unsub) unsub(); } catch (_) {}
     };
   }, [userEmail]);
 

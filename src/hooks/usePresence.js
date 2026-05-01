@@ -38,33 +38,46 @@ export default function usePresence(userEmail, currentRole) {
 
   const ping = () => {
     if (!userEmail) return;
-    base44.auth.updateMe(buildOnlineFields(true)).catch(() => {});
+    try {
+      base44.auth.updateMe(buildOnlineFields(true)).catch(() => {});
+    } catch (_) {}
   };
 
   const markOffline = () => {
     if (!userEmail) return;
-    base44.auth.updateMe(buildOnlineFields(false)).catch(() => {});
+    try {
+      base44.auth.updateMe(buildOnlineFields(false)).catch(() => {});
+    } catch (_) {}
   };
 
   useEffect(() => {
     if (!userEmail) return;
 
-    ping();
-    intervalRef.current = setInterval(ping, HEARTBEAT_INTERVAL);
+    // Délai 2s avant le premier ping pour laisser le dashboard se stabiliser
+    const initTimer = setTimeout(() => {
+      try { ping(); } catch (_) {}
+    }, 2000);
+
+    intervalRef.current = setInterval(() => {
+      try { ping(); } catch (_) {}
+    }, HEARTBEAT_INTERVAL);
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") ping();
-      else markOffline();
+      try {
+        if (document.visibilityState === "visible") ping();
+        else markOffline();
+      } catch (_) {}
     };
-    const onBeforeUnload = () => markOffline();
+    const onBeforeUnload = () => { try { markOffline(); } catch (_) {} };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("beforeunload", onBeforeUnload);
 
     return () => {
+      clearTimeout(initTimer);
       clearInterval(intervalRef.current);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("beforeunload", onBeforeUnload);
+      try { document.removeEventListener("visibilitychange", onVisibilityChange); } catch (_) {}
+      try { window.removeEventListener("beforeunload", onBeforeUnload); } catch (_) {}
       markOffline();
     };
   }, [userEmail, currentRole]);

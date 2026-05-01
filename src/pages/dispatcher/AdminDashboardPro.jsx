@@ -105,59 +105,90 @@ export default function AdminDashboardPro() {
   const [publicites, setPublicites] = useState([]);
 
   const load = useCallback(async () => {
-    const [
-      coursesRes, usersRes, profilesRes, bedouRes, retraitRes,
-      partenaireRes, pubRes, dispatchRes
-    ] = await Promise.allSettled([
-      base44.entities.Course.list("-created_date", 200),
-      base44.entities.User.list("-updated_date", 500),
-      base44.entities.UserProfile.filter({ deleted: false }),
-      base44.entities.Bedou.list("-updated_date", 500),
-      base44.entities.DemandeRetrait.filter({ statut: "en_attente" }),
-      base44.entities.Partenaire.list("-created_date", 200),
-      base44.entities.Publicite.filter({ deleted: false }),
-      base44.entities.DispatchConfig.list("-updated_date", 1),
-    ]);
+    console.log('[DASHBOARD] sync start');
+    try {
+      const [
+        coursesRes, usersRes, profilesRes, bedouRes, retraitRes,
+        partenaireRes, pubRes, dispatchRes
+      ] = await Promise.allSettled([
+        base44.entities.Course.list("-created_date", 200),
+        base44.entities.User.list("-updated_date", 500),
+        base44.entities.UserProfile.filter({ deleted: false }),
+        base44.entities.Bedou.list("-updated_date", 500),
+        base44.entities.DemandeRetrait.filter({ statut: "en_attente" }),
+        base44.entities.Partenaire.list("-created_date", 200),
+        base44.entities.Publicite.filter({ deleted: false }),
+        base44.entities.DispatchConfig.list("-updated_date", 1),
+      ]);
 
-    if (coursesRes.status === "fulfilled") setCourses(coursesRes.value || []);
-    if (usersRes.status === "fulfilled") setAllUsers(usersRes.value || []);
-    if (profilesRes.status === "fulfilled") setProfiles(profilesRes.value || []);
-    if (bedouRes.status === "fulfilled") setBedouList(bedouRes.value || []);
-    if (retraitRes.status === "fulfilled") setDemandesRetrait(retraitRes.value || []);
-    if (partenaireRes.status === "fulfilled") setPartenaires(partenaireRes.value || []);
-    if (pubRes.status === "fulfilled") setPublicites(pubRes.value || []);
-    if (dispatchRes.status === "fulfilled" && dispatchRes.value?.length > 0) {
-      setDispatchMode(dispatchRes.value[0].mode || "auto");
-      setDispatchConfigId(dispatchRes.value[0].id);
+      if (coursesRes.status === "fulfilled") setCourses(coursesRes.value || []);
+      if (usersRes.status === "fulfilled") setAllUsers(usersRes.value || []);
+      if (profilesRes.status === "fulfilled") setProfiles(profilesRes.value || []);
+      if (bedouRes.status === "fulfilled") setBedouList(bedouRes.value || []);
+      if (retraitRes.status === "fulfilled") setDemandesRetrait(retraitRes.value || []);
+      if (partenaireRes.status === "fulfilled") setPartenaires(partenaireRes.value || []);
+      if (pubRes.status === "fulfilled") setPublicites(pubRes.value || []);
+      if (dispatchRes.status === "fulfilled" && dispatchRes.value?.length > 0) {
+        setDispatchMode(dispatchRes.value[0].mode || "auto");
+        setDispatchConfigId(dispatchRes.value[0].id);
+      }
+
+      setLastSync(new Date());
+      console.log('[DASHBOARD] sync success');
+    } catch (err) {
+      console.error('[DASHBOARD] sync error (non-fatal):', err?.message);
+    } finally {
+      setLoading(false);
     }
-
-    setLastSync(new Date());
-    setLoading(false);
   }, []);
 
   useEffect(() => {
+    console.log('[DASHBOARD] mounted');
     load();
-    const interval = setInterval(load, 30000);
+    // Intervalle 60s au lieu de 30s pour réduire la charge sur APK
+    const interval = setInterval(() => {
+      try { load(); } catch (err) { console.error('[DASHBOARD] interval error (non-fatal):', err?.message); }
+    }, 60000);
 
-    const unsubCourse = base44.entities.Course.subscribe(ev => {
-      if (ev.type === "create") setCourses(p => [ev.data, ...p]);
-      else if (ev.type === "update") setCourses(p => p.map(c => c.id === ev.id ? ev.data : c));
-    });
-    const unsubUser = base44.entities.User.subscribe(ev => {
-      if (ev.type === "create") setAllUsers(p => [ev.data, ...p]);
-      else if (ev.type === "update") setAllUsers(p => p.map(u => u.id === ev.id ? ev.data : u));
-    });
-    const unsubProfile = base44.entities.UserProfile.subscribe(ev => {
-      if (ev.type === "create" && !ev.data?.deleted) setProfiles(p => [ev.data, ...p]);
-      else if (ev.type === "update") setProfiles(p => {
-        const filtered = p.filter(x => x.id !== ev.id);
-        if (ev.data?.deleted) return filtered;
-        return [ev.data, ...filtered];
+    let unsubCourse = null, unsubUser = null, unsubProfile = null;
+    try {
+      unsubCourse = base44.entities.Course.subscribe(ev => {
+        try {
+          if (ev.type === "create" && ev.data) setCourses(p => [ev.data, ...p]);
+          else if (ev.type === "update" && ev.data) setCourses(p => p.map(c => c.id === ev.id ? ev.data : c));
+        } catch (_) {}
       });
-      else if (ev.type === "delete") setProfiles(p => p.filter(x => x.id !== ev.id));
-    });
+    } catch (err) { console.error('[DASHBOARD] Course subscribe error:', err?.message); }
 
-    return () => { clearInterval(interval); unsubCourse(); unsubUser(); unsubProfile(); };
+    try {
+      unsubUser = base44.entities.User.subscribe(ev => {
+        try {
+          if (ev.type === "create" && ev.data) setAllUsers(p => [ev.data, ...p]);
+          else if (ev.type === "update" && ev.data) setAllUsers(p => p.map(u => u.id === ev.id ? ev.data : u));
+        } catch (_) {}
+      });
+    } catch (err) { console.error('[DASHBOARD] User subscribe error:', err?.message); }
+
+    try {
+      unsubProfile = base44.entities.UserProfile.subscribe(ev => {
+        try {
+          if (ev.type === "create" && !ev.data?.deleted) setProfiles(p => [ev.data, ...p]);
+          else if (ev.type === "update" && ev.data) setProfiles(p => {
+            const filtered = p.filter(x => x.id !== ev.id);
+            if (ev.data?.deleted) return filtered;
+            return [ev.data, ...filtered];
+          });
+          else if (ev.type === "delete") setProfiles(p => p.filter(x => x.id !== ev.id));
+        } catch (_) {}
+      });
+    } catch (err) { console.error('[DASHBOARD] Profile subscribe error:', err?.message); }
+
+    return () => {
+      clearInterval(interval);
+      try { if (unsubCourse) unsubCourse(); } catch (_) {}
+      try { if (unsubUser) unsubUser(); } catch (_) {}
+      try { if (unsubProfile) unsubProfile(); } catch (_) {}
+    };
   }, []);
 
   // ── Calculs KPIs ────────────────────────────────────────────────────────────
@@ -217,12 +248,16 @@ export default function AdminDashboardPro() {
     const newMode = dispatchMode === "auto" ? "manuel" : "auto";
     try {
       const res = await base44.functions.invoke("setDispatchMode", { mode: newMode });
-      if (res.data?.success) {
+      if (res?.data?.success) {
         setDispatchMode(newMode);
         toast.success(newMode === "auto" ? "⚡ Mode automatique activé" : "🔧 Mode manuel activé");
       }
-    } catch (e) { toast.error("Erreur: " + e.message); }
-    setTogglingMode(false);
+    } catch (e) {
+      console.error('[DASHBOARD] toggleMode error (non-fatal):', e?.message);
+      toast.error("Erreur changement de mode");
+    } finally {
+      setTogglingMode(false);
+    }
   };
 
   if (loading) {
