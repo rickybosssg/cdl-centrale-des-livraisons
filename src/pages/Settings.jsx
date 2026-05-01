@@ -424,6 +424,14 @@ export default function Settings() {
 
       {/* Diagnostic notifications */}
       <div className="space-y-2">
+        <Link to="/fcm-token-refresh" className="flex items-center gap-3 p-4 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors">
+          <span className="text-xl">🔑</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-purple-900">Gérer Token FCM</p>
+            <p className="text-xs text-purple-700">Rafraîchir et nettoyer les tokens</p>
+          </div>
+          <span className="text-purple-400 text-sm">›</span>
+        </Link>
         <Link to="/fcm-quick-test" className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 transition-colors">
           <span className="text-xl">✅</span>
           <div className="flex-1">

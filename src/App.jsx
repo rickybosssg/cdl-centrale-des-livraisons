@@ -119,6 +119,7 @@ import FcmDiagnostic from './pages/FcmDiagnostic';
 import FcmQuickTest from './pages/FcmQuickTest';
 import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
 import FcmTestFull from './pages/FcmTestFull';
+import FcmTokenRefresh from './pages/FcmTokenRefresh';
 import EmailLogin from './pages/EmailLogin';
 import AppPublicLink from './pages/AppPublicLink';
 import TrackingPublic from './pages/TrackingPublic';
@@ -396,6 +397,7 @@ const AuthenticatedApp = () => {
         <Route path="/fcm-diagnostic" element={<FcmDiagnostic />} />
         <Route path="/fcm-quick-test" element={<FcmQuickTest />} />
         <Route path="/fcm-test-full" element={<FcmTestFull />} />
+        <Route path="/fcm-token-refresh" element={<FcmTokenRefresh />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />

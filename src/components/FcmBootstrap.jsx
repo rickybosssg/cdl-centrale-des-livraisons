@@ -1,13 +1,13 @@
 /**
- * FcmBootstrap — Initialisation FCM 100% crash-proof
+ * FcmBootstrap — Initialisation FCM 100% crash-proof + Token Management
  *
- * RÈGLES ABSOLUES :
- * 1. JAMAIS de requestPermissions() ici (uniquement PermissionsOnboarding demande)
- * 2. Juste checkPermissions() → si granted → register()
- * 3. AUCUN dialog Android en arrière-plan
- * 4. Try/catch SYNCHRONE autour des callbacks Capacitor
- * 5. Timeouts stricts partout (5-10s max)
- * 6. Si ça fail → log et continue (jamais crash l'app)
+ * RÈGLES :
+ * 1. À CHAQUE DÉMARRAGE APP → récupérer + enregistrer le token FCM actuel
+ * 2. Nettoyer les tokens inactifs/dupliqués (ancien par user_id + device_id)
+ * 3. Vérifier permission POST_NOTIFICATIONS (Android 13+)
+ * 4. Vérifier channel Android "default" avec HIGH importance
+ * 5. Listener complets : registration + registrationError + push received + tap
+ * 6. Logs détaillés pour diagnostic
  */
 
 import { useEffect, useRef } from 'react';
@@ -170,7 +170,8 @@ async function runNativeFcm(propEmail) {
       try {
         const token = tokenData?.value;
         if (token && typeof token === 'string') {
-          console.log('[FCM] ✅ Token received:', token.slice(0, 25) + '... (len:' + token.length + ')');
+          console.log('[FCM] ✅ registration callback fired');
+          console.log('[FCM] 🔑 Token received (len:' + token.length + '):', token.slice(0, 50) + '...');
           handleTokenReceived(token, propEmail, listeners).catch((err) => {
             console.error('[FCM] ❌ handleTokenReceived error:', err?.message);
           });
@@ -182,33 +183,42 @@ async function runNativeFcm(propEmail) {
       }
     });
     listeners.push(regListener);
+    console.log('[FCM] ✅ Listener "registration" attached');
 
     const errListener = await PushNotifications.addListener('registrationError', (err) => {
       try {
-        console.error('[FCM] ❌ registrationError:', JSON.stringify(err));
+        const msg = typeof err === 'string' ? err : JSON.stringify(err);
+        console.error('[FCM] ❌ registrationError fired:', msg);
+        // Store error globally for diagnostic
+        try { sessionStorage.setItem('cdl_fcm_reg_error', msg); } catch (_) {}
       } catch (_) {}
     });
     listeners.push(errListener);
+    console.log('[FCM] ✅ Listener "registrationError" attached');
 
     const fgListener = await PushNotifications.addListener('pushNotificationReceived', (notif) => {
       try {
-        console.log('[FCM] 📬 Foreground notif:', notif?.title);
+        console.log('[FCM] 📬 pushNotificationReceived fired');
+        console.log('[FCM] 📬 Foreground notif:', notif?.title || 'N/A');
         handleForegroundNotif(notif);
       } catch (e) {
         console.warn('[FCM] Foreground handler error:', e?.message);
       }
     });
     listeners.push(fgListener);
+    console.log('[FCM] ✅ Listener "pushNotificationReceived" attached');
 
     const tapListener = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       try {
-        console.log('[FCM] 👆 Notification tap');
+        console.log('[FCM] 👆 pushNotificationActionPerformed fired');
+        console.log('[FCM] 👆 Notification tap detected');
         handleNotifTap(action);
       } catch (e) {
         console.warn('[FCM] Tap handler error:', e?.message);
       }
     });
     listeners.push(tapListener);
+    console.log('[FCM] ✅ Listener "pushNotificationActionPerformed" attached');
 
     console.log('[FCM] ✅ Listeners attached:', listeners.length);
   } catch (e) {
@@ -255,13 +265,31 @@ async function handleTokenReceived(token, propEmail, listeners) {
     }
 
     console.log('[FCM] 📧 Email resolved:', email);
+    console.log('[FCM] 🔑 Token received (len=' + token.length + '):', token.slice(0, 50) + '...');
 
-    const result = await saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
+    // Get device ID (Android only)
+    let deviceId = 'unknown';
+    try {
+      const { Device } = await import('@capacitor/device');
+      const info = await Device.getId();
+      deviceId = info.identifier || 'unknown';
+      console.log('[FCM] 📱 Device ID:', deviceId);
+    } catch (_) {
+      console.warn('[FCM] Could not get device ID');
+    }
+
+    const result = await saveFcmTokenRemote({ 
+      user_email: email, 
+      token, 
+      device_type: 'android_native',
+      device_id: deviceId 
+    });
 
     if (result?.success) {
-      console.log('[FCM] ✅ Token saved to DB successfully');
+      console.log('[FCM] ✅ Token saved to DB successfully | ID:', result.token_id);
+      console.log('[FCM] 🔄 Action:', result.action, '| Old token cleaned:', result.old_token_removed ? 'YES' : 'NO');
     } else {
-      console.error('[FCM] ❌ Token save failed');
+      console.error('[FCM] ❌ Token save failed:', result?.error);
     }
 
     // Cleanup listeners
