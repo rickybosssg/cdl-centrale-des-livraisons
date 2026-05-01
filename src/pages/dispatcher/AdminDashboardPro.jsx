@@ -114,7 +114,7 @@ export default function AdminDashboardPro() {
         base44.entities.Course.list("-created_date", 100),
         base44.entities.User.list("-updated_date", 100),
         base44.entities.UserProfile.filter({ deleted: false }),
-        base44.entities.Bedou.list("-updated_date", 500),
+        base44.entities.Bedou.list("-updated_date", 100),
         base44.entities.DemandeRetrait.filter({ statut: "en_attente" }),
         base44.entities.Partenaire.list("-created_date", 200),
         base44.entities.Publicite.filter({ deleted: false }),

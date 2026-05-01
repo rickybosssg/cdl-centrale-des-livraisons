@@ -27,40 +27,49 @@ export default function NotificationBell({ userEmail }) {
     console.log('[NOTIFICATIONS] init start');
     let isMounted = true;
 
+    // Détection APK natif
+    const isNative = (() => { try { const p = window.location?.protocol; return p === 'capacitor:' || p === 'file:' || (typeof window.Capacitor !== 'undefined'); } catch(_) { return false; } })();
+
     const initialTimer = setTimeout(() => {
       if (isMounted) loadNotifs();
-    }, 2000); // Délai 2s pour laisser le dashboard se stabiliser
+    }, 3000);
 
+    // Sur natif : poll 5min. Sur web : poll 2min
     const interval = setInterval(() => {
       if (isMounted) loadNotifs();
-    }, 120000);
+    }, isNative ? 300000 : 120000);
 
+    // WebSocket uniquement sur web — sur APK natif on poll seulement
     let unsub = null;
-    try {
-      unsub = base44.entities.Notification.subscribe((event) => {
-        try {
-          if (!isMounted || event.data?.destinataire_email !== userEmail) return;
-          if (event.type === 'create') {
-            setNotifs(prev => [event.data, ...prev]);
-            try { vibrateNotif(); } catch (_) {}
-            try { playNotificationSound(); } catch (_) {}
-            try {
-              showNotification({
-                title: event.data.titre,
-                message: event.data.message,
-                type: event.data.type === 'danger' ? 'error' : (event.data.type || 'info'),
-                autoCloseDuration: event.data.priority === 'high' ? 12000 : 7000,
-              });
-            } catch (_) {}
-          } else if (event.type === 'update') {
-            setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
+    if (!isNative) {
+      try {
+        unsub = base44.entities.Notification.subscribe((event) => {
+          try {
+            if (!isMounted || event.data?.destinataire_email !== userEmail) return;
+            if (event.type === 'create') {
+              setNotifs(prev => [event.data, ...prev]);
+              try { vibrateNotif(); } catch (_) {}
+              try { playNotificationSound(); } catch (_) {}
+              try {
+                showNotification({
+                  title: event.data.titre,
+                  message: event.data.message,
+                  type: event.data.type === 'danger' ? 'error' : (event.data.type || 'info'),
+                  autoCloseDuration: event.data.priority === 'high' ? 12000 : 7000,
+                });
+              } catch (_) {}
+            } else if (event.type === 'update') {
+              setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
+            }
+          } catch (err) {
+            console.warn('[NOTIFICATIONS] event handler error (non-fatal):', err?.message);
           }
-        } catch (err) {
-          console.warn('[NOTIFICATIONS] event handler error (non-fatal):', err?.message);
-        }
-      });
-    } catch (err) {
-      console.warn('[NOTIFICATIONS] subscribe error (non-fatal):', err?.message);
+        });
+      } catch (err) {
+        console.warn('[NOTIFICATIONS] subscribe error (non-fatal):', err?.message);
+      }
+    } else {
+      console.log('[NOTIFICATIONS] WebSocket SKIPPED on native (polling only)');
     }
 
     return () => {

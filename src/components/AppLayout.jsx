@@ -66,29 +66,48 @@ export default function AppLayout({ userRole, userEmail }) {
   // Badge courses disponibles (livreur uniquement)
   useEffect(() => {
     if (userRole !== 'livreur') return;
+
+    // Détection APK natif
+    const isNative = (() => { try { const p = window.location?.protocol; return p === 'capacitor:' || p === 'file:' || (typeof window.Capacitor !== 'undefined'); } catch(_) { return false; } })();
+
     const load = async () => {
       try {
         const data = await base44.entities.Course.filter({ statut: 'en_attente' }, '-created_date', 20);
         setCourseBadge(Array.isArray(data) ? data.length : 0);
       } catch (_) {}
     };
-    load();
-    const interval = setInterval(load, 60000);
+
+    // Délai 8s au démarrage
+    const initTimer = setTimeout(load, 8000);
+
+    // Sur natif : poll 5min. Sur web : poll 2min
+    const interval = setInterval(load, isNative ? 300000 : 120000);
+
+    // WebSocket uniquement sur web
     let unsub = null;
-    try {
-      unsub = base44.entities.Course.subscribe((event) => {
-        try {
-          if (event.type === 'create' && event.data?.statut === 'en_attente') {
-            setCourseBadge(prev => prev + 1);
-          } else if (event.type === 'update') {
-            load();
-          }
-        } catch (_) {}
-      });
-    } catch (err) {
-      console.warn('[AppLayout] Course subscribe error (non-fatal):', err?.message);
+    if (!isNative) {
+      try {
+        unsub = base44.entities.Course.subscribe((event) => {
+          try {
+            if (event.type === 'create' && event.data?.statut === 'en_attente') {
+              setCourseBadge(prev => prev + 1);
+            } else if (event.type === 'update') {
+              load();
+            }
+          } catch (_) {}
+        });
+      } catch (err) {
+        console.warn('[AppLayout] Course subscribe error (non-fatal):', err?.message);
+      }
+    } else {
+      console.log('[AppLayout] Course WebSocket SKIPPED on native (polling only)');
     }
-    return () => { clearInterval(interval); try { if (unsub) unsub(); } catch (_) {} };
+
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+      try { if (unsub) unsub(); } catch (_) {}
+    };
   }, [userRole]);
 
   // Guard post-hooks
