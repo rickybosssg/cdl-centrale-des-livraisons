@@ -1,6 +1,6 @@
 /**
  * MonBedou — Portefeuille Bedou
- * Flux recharge reconstruit de zéro pour fiabilité APK + web
+ * VERSION DEBUG : logs visibles à l'écran sur APK pour diagnostiquer le flux recharge
  */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -12,8 +12,6 @@ import { toast } from "sonner";
 import moment from "moment";
 import BeDouHistory from "@/components/BeDouHistory";
 import { triggerWhatsAppNotification, waMsgBedouWithdrawRequested } from "@/lib/whatsappNotifications";
-
-// ─── Constantes ──────────────────────────────────────────────────────────────
 
 const METHODES = [
   { value: "orange_money",  label: "Orange Money",  icon: "🟠" },
@@ -47,64 +45,46 @@ const TX_TYPE_CFG = {
   compensation:{ bg: "bg-emerald-50", icon: "🔄" },
 };
 
-// ─── Upload robuste compatible APK Capacitor ──────────────────────────────────
-// Sur Capacitor, les fichiers de la caméra/galerie peuvent nécessiter
-// une conversion Blob explicite pour que l'upload fonctionne
+// Upload robuste compatible APK Capacitor
 async function uploadFileRobust(file) {
-  console.log('[UPLOAD] start — name:', file.name, 'size:', file.size, 'type:', file.type);
-
-  // Tentative 1 : conversion Blob explicite (obligatoire sur Capacitor)
+  console.log('[UPLOAD] start name:', file.name, 'size:', file.size);
   try {
     const arrayBuffer = await file.arrayBuffer();
     const blob = new Blob([arrayBuffer], { type: file.type || 'image/jpeg' });
     const safeFile = new File([blob], file.name || 'preuve.jpg', { type: blob.type });
     const res = await base44.integrations.Core.UploadFile({ file: safeFile });
-    if (res?.file_url) {
-      console.log('[UPLOAD] OK (blob method) —', res.file_url.slice(0, 60));
-      return res.file_url;
-    }
+    if (res?.file_url) return res.file_url;
   } catch (e) {
     console.warn('[UPLOAD] blob method failed:', e.message, '— trying direct');
   }
-
-  // Tentative 2 : upload direct sans conversion
-  try {
-    const res = await base44.integrations.Core.UploadFile({ file });
-    if (res?.file_url) {
-      console.log('[UPLOAD] OK (direct method) —', res.file_url.slice(0, 60));
-      return res.file_url;
-    }
-  } catch (e) {
-    console.error('[UPLOAD] direct method failed:', e.message);
-    throw new Error(`Upload échoué : ${e.message}`);
-  }
-
+  const res = await base44.integrations.Core.UploadFile({ file });
+  if (res?.file_url) return res.file_url;
   throw new Error('Upload échoué : URL vide');
 }
 
-// ─── Composant principal ──────────────────────────────────────────────────────
-
 export default function MonBedou() {
   const navigate = useNavigate();
-  const [user, setUser]               = useState(null);
-  const [bedou, setBedou]             = useState(null);
+  const [user, setUser]                 = useState(null);
+  const [bedou, setBedou]               = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [tab, setTab]                 = useState("solde");
+  const [loading, setLoading]           = useState(true);
+  const [tab, setTab]                   = useState("solde");
   const [filterStatut, setFilterStatut] = useState("tous");
+  const [form, setForm]                 = useState({ montant: "", methode: "orange_money", preuve: null });
+  const [submitting, setSubmitting]     = useState(false);
+  const [successData, setSuccessData]   = useState(null);
+  const [debugLogs, setDebugLogs]       = useState([]); // logs visibles sur APK
+  const [retraitForm, setRetraitForm]   = useState({ montant: "", methode: "orange_money", numero_reception: "" });
 
-  // État recharge
-  const [form, setForm]           = useState({ montant: "", methode: "orange_money", preuve: null });
-  const [submitting, setSubmitting] = useState(false);
-  const [successData, setSuccessData] = useState(null); // null = formulaire, objet = succès
+  const addLog = (msg) => {
+    const line = `${new Date().toLocaleTimeString('fr')} ${msg}`;
+    console.log('[BEDOU]', line);
+    setDebugLogs(prev => [...prev.slice(-10), line]);
+  };
 
-  // État retrait
-  const [retraitForm, setRetraitForm] = useState({ montant: "", methode: "orange_money", numero_reception: "" });
-
-  // ── Chargement données ──────────────────────────────────────────────────────
   const load = async () => {
     setLoading(true);
-    const t = setTimeout(() => setLoading(false), 12000); // safety
+    const t = setTimeout(() => setLoading(false), 12000);
     try {
       const me = await base44.auth.me();
       setUser(me);
@@ -123,28 +103,36 @@ export default function MonBedou() {
 
   useEffect(() => { load(); }, []);
 
-  // ── Flux Recharge ───────────────────────────────────────────────────────────
+  // ── FLUX RECHARGE ─────────────────────────────────────────────────────────────
   const handleRecharge = async () => {
-    // Étape A — Validation formulaire
     const montant = parseInt(form.montant) || 0;
-    if (montant < 100)    { toast.error("Montant minimum 100 F CFA"); return; }
-    if (!form.methode)    { toast.error("Sélectionnez une méthode de paiement"); return; }
-    if (!form.preuve)     { toast.error("Ajoutez une preuve de paiement"); return; }
-    if (!user?.email)     { toast.error("Vous devez être connecté"); return; }
+    if (montant < 100) { toast.error("Montant minimum 100 F CFA"); return; }
+    if (!form.methode) { toast.error("Sélectionnez une méthode"); return; }
+    if (!form.preuve)  { toast.error("Ajoutez une preuve de paiement"); return; }
+    if (!user?.email)  { toast.error("Vous devez être connecté"); return; }
 
     const bonusAmount = getBonus(montant);
-    console.log('[RECHARGE] ▶ START — montant:', montant, 'bonus:', bonusAmount, 'user:', user.email);
-
+    setDebugLogs([]);
+    addLog(`▶ START montant=${montant} bonus=${bonusAmount}`);
+    addLog(`  user=${user.email}`);
+    addLog(`  preuve=${form.preuve?.name} (${form.preuve?.size}b)`);
     setSubmitting(true);
 
     try {
-      // Étape B — Upload preuve
-      alert('[DEBUG] ÉTAPE 1 : Upload preuve en cours...');
-      const preuveUrl = await uploadFileRobust(form.preuve);
-      alert('[DEBUG] ÉTAPE 2 : Upload OK — ' + preuveUrl.slice(0, 60));
+      // B — Upload
+      addLog('▶ UPLOAD preuve...');
+      let preuveUrl;
+      try {
+        preuveUrl = await uploadFileRobust(form.preuve);
+        addLog(`✅ UPLOAD OK`);
+        addLog(`  ${preuveUrl.slice(0, 60)}`);
+      } catch (uploadErr) {
+        addLog(`❌ UPLOAD ERREUR: ${uploadErr.message}`);
+        throw new Error(`Upload échoué: ${uploadErr.message}`);
+      }
 
-      // Étape C — Appel backend
-      alert('[DEBUG] ÉTAPE 3 : Appel backend submitBedouRecharge...');
+      // C — Backend
+      addLog('▶ INVOKE submitBedouRecharge...');
       let res;
       try {
         res = await base44.functions.invoke("submitBedouRecharge", {
@@ -153,53 +141,45 @@ export default function MonBedou() {
           preuve_paiement_url: preuveUrl,
           bonus:               bonusAmount,
         });
+        addLog(`✅ INVOKE retourné`);
+        addLog(`  type=${typeof res} hasData=${'data' in (res||{})}`);
       } catch (invokeErr) {
-        alert('[DEBUG] ERREUR invoke : ' + invokeErr?.message);
-        throw invokeErr;
+        addLog(`❌ INVOKE ERREUR: ${invokeErr.message}`);
+        throw new Error(`Erreur réseau: ${invokeErr.message}`);
       }
 
-      // Afficher la réponse brute sur APK
-      const rawResult = JSON.stringify(res).slice(0, 300);
-      alert('[DEBUG] RÉSULTAT BACKEND : ' + rawResult);
-      console.log('[RECHARGE] res brut:', res);
-
-      // Normaliser : Axios wrappe dans res.data, invoke direct retourne l'objet
+      // Normaliser Axios (res.data) vs réponse directe
       const data = (res && typeof res === 'object' && 'data' in res) ? res.data : res;
-      alert('[DEBUG] data normalisé : success=' + data?.success + ' | message=' + data?.message);
-      console.log('[RECHARGE] data normalisé:', data);
+      addLog(`▶ DATA: success=${data?.success}`);
+      addLog(`  id=${data?.recharge_id}`);
+      addLog(`  msg=${data?.message}`);
 
-      if (!data) {
-        throw new Error("Aucune réponse du serveur (data null)");
-      }
-      if (!data.success) {
-        throw new Error(data.message || data.error || "Échec serveur sans message");
+      if (!data || !data.success) {
+        const reason = data?.message || data?.error || 'success=false sans message';
+        addLog(`❌ ÉCHEC: ${reason}`);
+        throw new Error(reason);
       }
 
-      // Étape D — Succès confirmé
-      alert('[DEBUG] SUCCESS FRONTEND ✅ recharge_id=' + data.recharge_id);
+      // D — Succès
+      addLog('✅ SUCCESS FRONTEND — redirection dans 2.5s');
       toast.success("✅ Demande de recharge envoyée avec succès !");
-
       setForm({ montant: "", methode: "orange_money", preuve: null });
       setSuccessData({ montant, bonus: bonusAmount, recharge_id: data.recharge_id });
-
-      // Étape F — Redirection
-      console.log('[RECHARGE] redirection dans 2s');
-      setTimeout(() => navigate("/"), 2000);
+      setTimeout(() => { addLog('▶ NAVIGATE /'); navigate("/"); }, 2500);
 
     } catch (err) {
-      alert('[DEBUG] ERREUR CATCH : ' + err?.message);
-      console.error('[RECHARGE] ❌ ERREUR:', err?.message);
-      toast.error("❌ " + (err?.message || "Erreur inattendue. Réessayez."));
+      addLog(`❌ CATCH FINAL: ${err?.message}`);
+      toast.error("❌ " + (err?.message || "Erreur inattendue"));
     } finally {
       setSubmitting(false);
-      console.log('[RECHARGE] finally — submitting=false');
+      addLog('▶ FINALLY submitting=false');
     }
   };
 
-  // ── Flux Retrait ────────────────────────────────────────────────────────────
+  // ── FLUX RETRAIT ──────────────────────────────────────────────────────────────
   const handleRetrait = async () => {
     const montant = parseInt(retraitForm.montant) || 0;
-    if (montant < 500)              { toast.error("Montant minimum 500 F CFA"); return; }
+    if (montant < 500)                 { toast.error("Montant minimum 500 F CFA"); return; }
     if (!retraitForm.numero_reception) { toast.error("Numéro de réception requis"); return; }
     setSubmitting(true);
     try {
@@ -221,7 +201,6 @@ export default function MonBedou() {
     }
   };
 
-  // ── Dérivés ─────────────────────────────────────────────────────────────────
   const canRetrait   = user && ["livreur", "partenaire", "commercial"].includes(user.user_type);
   const bonusPreview = parseInt(form.montant) >= 100 ? getBonus(parseInt(form.montant)) : 0;
   const txFiltrees   = transactions.filter(tx => filterStatut === "tous" || tx.statut === filterStatut);
@@ -235,7 +214,7 @@ export default function MonBedou() {
   return (
     <div className="max-w-lg mx-auto pb-16">
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div className="bg-gradient-to-br from-[#0F2A5C] to-[#1E6BFF] px-4 pt-5 pb-8 rounded-b-[2rem] text-white shadow-lg">
         <div className="flex items-center gap-3 mb-5">
           <button onClick={() => navigate(-1)} className="h-9 w-9 rounded-full bg-white/15 flex items-center justify-center border border-white/20">
@@ -271,18 +250,20 @@ export default function MonBedou() {
           </div>
         </div>
         <div className="flex gap-3 mt-4">
-          <button onClick={() => { setSuccessData(null); setTab("recharge"); }} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white text-primary font-bold text-sm shadow-sm active:scale-95 transition-all">
+          <button onClick={() => { setSuccessData(null); setDebugLogs([]); setTab("recharge"); }}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white text-primary font-bold text-sm shadow-sm active:scale-95 transition-all">
             <Plus className="h-4 w-4" /> Recharger
           </button>
           {canRetrait && (
-            <button onClick={() => setTab("retrait")} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/20 text-white font-bold text-sm border border-white/30 active:scale-95 transition-all">
+            <button onClick={() => setTab("retrait")}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/20 text-white font-bold text-sm border border-white/30 active:scale-95 transition-all">
               <ArrowDownCircle className="h-4 w-4" /> Retirer
             </button>
           )}
         </div>
       </div>
 
-      {/* ── STATS ── */}
+      {/* STATS */}
       <div className="px-4 mt-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-white border border-border p-4 shadow-sm text-center">
           <p className="text-xs text-muted-foreground mb-1">Gains totaux</p>
@@ -294,7 +275,7 @@ export default function MonBedou() {
         </div>
       </div>
 
-      {/* ── TABS ── */}
+      {/* TABS */}
       <div className="px-4 mt-4">
         <div className="flex gap-1 p-1 bg-muted/50 rounded-2xl border border-border">
           {[
@@ -311,24 +292,33 @@ export default function MonBedou() {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════
-          APERÇU
-      ══════════════════════════════════════════════════════ */}
+      {/* APERÇU */}
       {tab === "solde" && (
         <div className="px-4 mt-4 space-y-3">
-          <p className="text-sm font-bold text-foreground">Dernières transactions</p>
+          <p className="text-sm font-bold">Dernières transactions</p>
           {transactions.slice(0, 5).map(tx => <TxRow key={tx.id} tx={tx} />)}
           {transactions.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Aucune transaction</p>}
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════
-          RECHARGE
-      ══════════════════════════════════════════════════════ */}
+      {/* RECHARGE */}
       {tab === "recharge" && (
         <div className="px-4 mt-4 space-y-4">
 
-          {/* ── Écran succès ── */}
+          {/* Panneau DEBUG visible à l'écran — s'affiche dès qu'on clique Recharger */}
+          {debugLogs.length > 0 && (
+            <div className="rounded-xl border-2 border-blue-400 bg-blue-950 p-3 space-y-0.5">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-bold text-blue-300">🔍 DEBUG LOG</p>
+                <button onClick={() => setDebugLogs([])} className="text-[10px] text-blue-400 underline">Effacer</button>
+              </div>
+              {debugLogs.map((l, i) => (
+                <p key={i} className={`text-[10px] font-mono ${l.includes('❌') ? 'text-red-300' : l.includes('✅') ? 'text-green-300' : 'text-blue-100'}`}>{l}</p>
+              ))}
+            </div>
+          )}
+
+          {/* Écran succès */}
           {successData ? (
             <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-6 text-center space-y-4">
               <div className="text-6xl">✅</div>
@@ -349,10 +339,9 @@ export default function MonBedou() {
                 Retour à l'accueil maintenant
               </button>
             </div>
-
           ) : (
             <>
-              {/* ── Infos dépôt ── */}
+              {/* Infos dépôt */}
               <div className="rounded-2xl bg-orange-50 border-2 border-orange-300 p-4 space-y-2">
                 <p className="text-sm font-extrabold text-orange-800">📲 Effectuez d'abord le dépôt, puis soumettez la preuve ici.</p>
                 <div className="flex items-center gap-3 mt-2">
@@ -365,18 +354,12 @@ export default function MonBedou() {
                 </div>
               </div>
 
-              {/* ── Montant ── */}
+              {/* Montant */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground">Montant (F CFA) *</label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  placeholder="Ex: 5000"
-                  value={form.montant}
-                  onChange={e => setForm({ ...form, montant: e.target.value })}
-                  className="w-full mt-1.5 h-12 rounded-xl border border-input px-4 text-base font-semibold text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                {/* Tableau bonus TOUJOURS visible */}
+                <input type="number" inputMode="numeric" placeholder="Ex: 5000"
+                  value={form.montant} onChange={e => setForm({ ...form, montant: e.target.value })}
+                  className="w-full mt-1.5 h-12 rounded-xl border border-input px-4 text-base font-semibold text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
                 <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 space-y-1">
                   <p className="text-xs font-bold text-amber-800">🎁 Bonus recharge :</p>
                   <p className="text-xs text-amber-700">• 5 000 F CFA rechargés = <strong>+500 F CFA offerts</strong></p>
@@ -390,7 +373,7 @@ export default function MonBedou() {
                 )}
               </div>
 
-              {/* ── Méthode ── */}
+              {/* Méthode */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground">Méthode de paiement *</label>
                 <div className="grid grid-cols-2 gap-2 mt-1.5">
@@ -403,7 +386,7 @@ export default function MonBedou() {
                 </div>
               </div>
 
-              {/* ── Preuve ── */}
+              {/* Preuve */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground">Preuve de paiement <span className="text-red-500">*</span></label>
                 {!form.preuve ? (
@@ -436,22 +419,18 @@ export default function MonBedou() {
                 )}
               </div>
 
-              {/* ── Bouton submit ── */}
+              {/* Bouton submit */}
               <div className="pb-20">
-                <Button
-                  className="w-full h-14 text-base font-extrabold rounded-2xl shadow-md"
+                <Button className="w-full h-14 text-base font-extrabold rounded-2xl shadow-md"
                   onClick={handleRecharge}
-                  disabled={submitting || !form.montant || !form.preuve}
-                >
+                  disabled={submitting || !form.montant || !form.preuve}>
                   {submitting ? (
                     <span className="flex items-center justify-center gap-2">
                       <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                       Envoi en cours…
                     </span>
                   ) : (
-                    <span>
-                      💰 Recharger{bonusPreview > 0 ? ` (+${fmt(bonusPreview)} bonus)` : ""}
-                    </span>
+                    <span>💰 Recharger{bonusPreview > 0 ? ` (+${fmt(bonusPreview)} bonus)` : ""}</span>
                   )}
                 </Button>
               </div>
@@ -460,9 +439,7 @@ export default function MonBedou() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════
-          RETRAIT
-      ══════════════════════════════════════════════════════ */}
+      {/* RETRAIT */}
       {tab === "retrait" && canRetrait && (
         <div className="px-4 mt-4 space-y-4 pb-20">
           <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
@@ -498,9 +475,7 @@ export default function MonBedou() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════
-          HISTORIQUE
-      ══════════════════════════════════════════════════════ */}
+      {/* HISTORIQUE */}
       {tab === "historique" && (
         <div className="px-4 mt-4 space-y-3">
           <div className="flex gap-2 flex-wrap">
@@ -520,7 +495,6 @@ export default function MonBedou() {
   );
 }
 
-// ─── Composant ligne transaction ──────────────────────────────────────────────
 function TxRow({ tx }) {
   const isCredit = tx.sens === "credit";
   const cfg = TX_TYPE_CFG[tx.type] || { bg: "bg-gray-50", icon: "💳" };
@@ -532,9 +506,7 @@ function TxRow({ tx }) {
   };
   return (
     <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-white shadow-sm">
-      <div className={`h-10 w-10 rounded-xl ${cfg.bg} flex items-center justify-center flex-shrink-0 text-lg`}>
-        {cfg.icon}
-      </div>
+      <div className={`h-10 w-10 rounded-xl ${cfg.bg} flex items-center justify-center flex-shrink-0 text-lg`}>{cfg.icon}</div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-foreground truncate">{tx.description || typeLabels[tx.type] || tx.type}</p>
         <p className="text-[10px] text-muted-foreground">{moment(tx.created_date).format("DD/MM/YY HH:mm")}</p>
