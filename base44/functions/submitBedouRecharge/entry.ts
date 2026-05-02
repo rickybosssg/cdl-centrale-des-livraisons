@@ -162,12 +162,21 @@ Deno.serve(async (req) => {
   (async () => {
     try {
       // Charger admins et service account en parallèle
-      const [admins, rawJson] = await Promise.all([
-        base44.asServiceRole.entities.User.filter({ role: 'admin' }, null, 50),
+      // Charger tous les users avec tokens FCM actifs + tous les admins (role=admin ou user_roles contient admin)
+      const [allUsers, rawJson] = await Promise.all([
+        base44.asServiceRole.entities.User.list(null, 200),
         Promise.resolve(Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || ''),
       ]);
 
-      L(`admins trouvés: ${admins.length}`);
+      const admins = allUsers.filter(u => {
+        if (u.role === 'admin') return true;
+        try {
+          const roles = JSON.parse(u.data?.user_roles || u.user_roles || '[]');
+          return roles.includes('admin') || roles.includes('dispatcher');
+        } catch (_) { return false; }
+      });
+
+      L(`admins trouvés: ${admins.length} (emails: ${admins.map(a => a.email).join(', ')})`);
 
       // a) Notifications internes BDD
       const tInternal = Date.now();
