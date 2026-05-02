@@ -90,8 +90,12 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
     data: dataPayload,
     android: {
       priority: 'HIGH',
+      ttl: '86400s',
       notification: {
         channel_id: 'default',
+        sound: 'default',
+        notification_priority: 'PRIORITY_HIGH',
+        visibility: 'PUBLIC',
       },
     },
   };
