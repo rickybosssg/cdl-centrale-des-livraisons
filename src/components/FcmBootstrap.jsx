@@ -164,15 +164,16 @@ async function runNativeFcm(propEmail) {
     perm = check?.receive || 'unknown';
     console.log('[FCM] Permission status:', perm);
   } catch (e) {
-    console.error('[FCM] ❌ checkPermissions error:', e?.message);
-    return;
+    console.warn('[FCM] ⚠️ checkPermissions error:', e?.message, '— continuing anyway');
   }
 
-  // ── JAMAIS appeler requestPermissions() ici — cause crash WebView ───────────
-  if (perm !== 'granted') {
-    console.log('[FCM] ⚠️ Permission not granted (' + perm + ') — skipping register()');
-    console.log('[FCM] 💡 Permission must be requested in PermissionsOnboarding only');
-    return;
+  // ── ATTENTION : même sans permission vérifiée, on continue register() ────────
+  // Si permission pas granted, register() va la demander (comportement normal Android)
+  // ou les listeners resteront inactifs jusqu'à l'accord utilisateur
+  if (perm === 'denied') {
+    console.log('[FCM] ⚠️ Permission DENIED — listeners won\'t work until user enables in Settings');
+  } else if (perm !== 'granted' && perm !== 'unknown') {
+    console.log('[FCM] ⚠️ Permission status unclear:', perm);
   }
 
   const listeners = [];
