@@ -83,72 +83,83 @@ export default function GestionBedou() {
 
   const handleValider = async (request, type) => {
     setProcessing(true);
-    const table = type === "recharge" ? "DemandeRecharge" : "DemandeRetrait";
-    const montant = request.montant || 0;
+    try {
+      const table = type === "recharge" ? "DemandeRecharge" : "DemandeRetrait";
+      // Pour recharge : créditer montant_total (montant + bonus), sinon montant seul
+      const montantCredite = type === "recharge"
+        ? (request.montant_total || request.montant || 0)
+        : (request.montant || 0);
+      const userName = request.user_name || request.user_nom || request.user_email;
 
-    // Mettre à jour la demande
-    await base44.entities[table].update(request.id, {
-      statut: "valide",
-      date_validation: new Date().toISOString(),
-      valide_par: admin?.email,
-    });
-
-    // Mettre à jour le solde Bedou
-    const bedou = await base44.entities.Bedou.filter({ user_email: request.user_email });
-    if (bedou.length > 0) {
-      const b = bedou[0];
-      const nouveauSolde = type === "recharge"
-        ? (b.solde || 0) + montant
-        : Math.max(0, (b.solde || 0) - montant);
-
-      await base44.entities.Bedou.update(b.id, {
-        solde: nouveauSolde,
-        solde_disponible: nouveauSolde,
-      });
-
-      // Enregistrer la transaction
-      await base44.entities.Transaction.create({
-        user_email: request.user_email,
-        user_nom: request.user_nom,
-        role: request.role,
-        type: type === "recharge" ? "recharge" : "retrait",
-        montant,
-        sens: type === "recharge" ? "credit" : "debit",
-        source: type === "recharge" ? "bedou" : "bedou",
+      // 1. Mettre à jour la demande
+      await base44.entities[table].update(request.id, {
         statut: "valide",
         date_validation: new Date().toISOString(),
         valide_par: admin?.email,
       });
-    }
 
-    // Notifier l'utilisateur
-    await base44.entities.Notification.create({
-      destinataire_email: request.user_email,
-      destinataire_role: request.role,
-      titre: `✅ ${type === "recharge" ? "Recharge" : "Retrait"} Bedou validé`,
-      message: type === "recharge"
-        ? `✅ Recharge réussie ! Votre compte Bedou a été crédité de ${montant.toLocaleString()} FCFA.`
-        : `✅ Retrait effectué ! Vous avez reçu ${montant.toLocaleString()} FCFA.`,
-      type: "success",
-      lue: false,
-    });
+      // 2. Mettre à jour le solde Bedou
+      const bedouList = await base44.entities.Bedou.filter({ user_email: request.user_email });
+      if (bedouList.length > 0) {
+        const b = bedouList[0];
+        const nouveauSolde = type === "recharge"
+          ? (b.solde || 0) + montantCredite
+          : Math.max(0, (b.solde || 0) - montantCredite);
+        const nouveauDisponible = type === "recharge"
+          ? (b.solde_disponible || 0) + montantCredite
+          : Math.max(0, (b.solde_disponible || 0) - montantCredite);
 
-    // Envoyer aussi une notification push
-    try {
-      await base44.functions.invoke('sendFcmNotification', {
-        user_email: request.user_email,
-        title: `✅ ${type === "recharge" ? "Recharge" : "Retrait"} validé`,
-        body: type === "recharge"
-          ? `Votre recharge de ${montant.toLocaleString()} FCFA est validée`
-          : `Votre retrait de ${montant.toLocaleString()} FCFA a été effectué`,
+        await base44.entities.Bedou.update(b.id, {
+          solde: nouveauSolde,
+          solde_disponible: nouveauDisponible,
+        });
+
+        // 3. Enregistrer la transaction
+        await base44.entities.Transaction.create({
+          user_email: request.user_email,
+          user_nom: userName,
+          type: type === "recharge" ? "recharge" : "retrait",
+          montant: montantCredite,
+          sens: type === "recharge" ? "credit" : "debit",
+          source: "bedou",
+          statut: "valide",
+          date_validation: new Date().toISOString(),
+          valide_par: admin?.email,
+        });
+      }
+
+      // 4. Notifier l'utilisateur
+      await base44.entities.Notification.create({
+        destinataire_email: request.user_email,
+        titre: `✅ ${type === "recharge" ? "Recharge" : "Retrait"} Bedou validé`,
+        message: type === "recharge"
+          ? `✅ Recharge réussie ! Votre compte Bedou a été crédité de ${montantCredite.toLocaleString()} FCFA.`
+          : `✅ Retrait effectué ! Vous avez reçu ${montantCredite.toLocaleString()} FCFA.`,
+        type: "success",
+        lue: false,
       });
-    } catch (_) {}
 
-    toast.success("✅ Demande validée");
-    setDialogOpen(false);
-    setComment("");
-    setProcessing(false);
-    loadData();
+      // 5. Notification push (non-bloquante)
+      try {
+        await base44.functions.invoke('sendFcmNotification', {
+          user_email: request.user_email,
+          title: `✅ ${type === "recharge" ? "Recharge" : "Retrait"} validé`,
+          body: type === "recharge"
+            ? `Votre recharge de ${montantCredite.toLocaleString()} FCFA est validée`
+            : `Votre retrait de ${montantCredite.toLocaleString()} FCFA a été effectué`,
+        });
+      } catch (_) {}
+
+      toast.success("✅ Demande validée");
+      setDialogOpen(false);
+      setComment("");
+      loadData();
+    } catch (err) {
+      console.error('[GestionBedou] handleValider error:', err?.message);
+      toast.error("Erreur lors de la validation : " + err?.message);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleRefuser = async (request, type) => {
@@ -158,41 +169,46 @@ export default function GestionBedou() {
     }
 
     setProcessing(true);
-    const table = type === "recharge" ? "DemandeRecharge" : "DemandeRetrait";
-
-    await base44.entities[table].update(request.id, {
-      statut: "refuse",
-      motif_refus: comment,
-      date_validation: new Date().toISOString(),
-      valide_par: admin?.email,
-    });
-
-    // Notifier l'utilisateur
-    await base44.entities.Notification.create({
-      destinataire_email: request.user_email,
-      destinataire_role: request.role,
-      titre: `❌ ${type === "recharge" ? "Recharge" : "Retrait"} Bedou refusé`,
-      message: type === "recharge"
-        ? `❌ Votre rechargement de ${request.montant?.toLocaleString()} FCFA a été refusé. Motif: ${comment}`
-        : `❌ Votre demande de retrait a été refusée. Motif: ${comment}`,
-      type: "danger",
-      lue: false,
-    });
-
-    // Envoyer aussi une notification push
     try {
-      await base44.functions.invoke('sendFcmNotification', {
-        user_email: request.user_email,
-        title: `❌ ${type === "recharge" ? "Recharge" : "Retrait"} refusé`,
-        body: `Motif: ${comment}`,
-      });
-    } catch (_) {}
+      const table = type === "recharge" ? "DemandeRecharge" : "DemandeRetrait";
 
-    toast.success("❌ Demande refusée");
-    setDialogOpen(false);
-    setComment("");
-    setProcessing(false);
-    loadData();
+      await base44.entities[table].update(request.id, {
+        statut: "refuse",
+        motif_refus: comment,
+        date_validation: new Date().toISOString(),
+        valide_par: admin?.email,
+      });
+
+      // Notifier l'utilisateur
+      await base44.entities.Notification.create({
+        destinataire_email: request.user_email,
+        titre: `❌ ${type === "recharge" ? "Recharge" : "Retrait"} Bedou refusé`,
+        message: type === "recharge"
+          ? `❌ Votre rechargement de ${request.montant?.toLocaleString()} FCFA a été refusé. Motif: ${comment}`
+          : `❌ Votre demande de retrait a été refusée. Motif: ${comment}`,
+        type: "danger",
+        lue: false,
+      });
+
+      // Notification push (non-bloquante)
+      try {
+        await base44.functions.invoke('sendFcmNotification', {
+          user_email: request.user_email,
+          title: `❌ ${type === "recharge" ? "Recharge" : "Retrait"} refusé`,
+          body: `Motif: ${comment}`,
+        });
+      } catch (_) {}
+
+      toast.success("❌ Demande refusée");
+      setDialogOpen(false);
+      setComment("");
+      loadData();
+    } catch (err) {
+      console.error('[GestionBedou] handleRefuser error:', err?.message);
+      toast.error("Erreur lors du refus : " + err?.message);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const ouvrirDemande = (request, type) => {
@@ -229,9 +245,9 @@ export default function GestionBedou() {
             <div className="text-right flex-shrink-0 space-y-1">
               <p className="text-lg font-bold text-primary">{request.montant?.toLocaleString()} F</p>
               <p className="text-[10px] text-muted-foreground">{request.methode || "—"}</p>
-              {type === "recharge" && request.preuve_paiement && (
+              {type === "recharge" && (request.preuve_paiement_url || request.preuve_paiement) && (
                 <button
-                  onClick={() => window.open(request.preuve_paiement, "_blank")}
+                  onClick={() => window.open(request.preuve_paiement_url || request.preuve_paiement, "_blank")}
                   className="text-[10px] text-blue-600 underline"
                 >
                   📷 Voir preuve
@@ -393,15 +409,15 @@ export default function GestionBedou() {
               </div>
 
               {/* Preuve de paiement */}
-              {selectedRequest?.type === "recharge" && selectedRequest?.preuve_paiement && (
+              {selectedRequest?.type === "recharge" && (selectedRequest?.preuve_paiement_url || selectedRequest?.preuve_paiement) && (
                 <div className="space-y-1">
                   <label className="text-xs font-semibold">Preuve de paiement</label>
                   <div
                     className="rounded-xl overflow-hidden border-2 border-blue-200 cursor-pointer"
-                    onClick={() => window.open(selectedRequest.preuve_paiement, "_blank")}
+                    onClick={() => window.open(selectedRequest.preuve_paiement_url || selectedRequest.preuve_paiement, "_blank")}
                   >
                     <img
-                      src={selectedRequest.preuve_paiement}
+                      src={selectedRequest.preuve_paiement_url || selectedRequest.preuve_paiement}
                       alt="Preuve de paiement"
                       className="w-full max-h-48 object-contain bg-gray-50"
                     />
@@ -409,6 +425,12 @@ export default function GestionBedou() {
                       🔍 Cliquer pour agrandir
                     </div>
                   </div>
+                </div>
+              )}
+              {/* Afficher aussi le bonus si recharge */}
+              {selectedRequest?.type === "recharge" && selectedRequest?.bonus > 0 && (
+                <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                  🎁 Bonus inclus : +{selectedRequest.bonus?.toLocaleString()} F → Total à créditer : <strong>{selectedRequest.montant_total?.toLocaleString()} F</strong>
                 </div>
               )}
 
