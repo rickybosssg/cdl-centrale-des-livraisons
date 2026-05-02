@@ -348,7 +348,20 @@ export default function MonBedou() {
                 <label className="text-xs font-semibold text-muted-foreground">Montant (F CFA) *</label>
                 <input type="number" placeholder="Ex: 2000" value={form.montant} onChange={e => setForm({ ...form, montant: e.target.value })}
                   className="w-full mt-1.5 h-12 rounded-xl border border-input px-4 text-base font-semibold text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
-                {bonus > 0 && <p className="text-xs text-emerald-700 mt-1.5 font-semibold">🎁 Bonus automatique : +{fmt(bonus)} F !</p>}
+
+                {/* Tableau bonus permanent */}
+                <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 space-y-1">
+                  <p className="text-xs font-bold text-amber-800">🎁 Bonus recharge :</p>
+                  <p className="text-xs text-amber-700">• 5 000 F CFA rechargés = <strong>+500 F CFA offerts</strong></p>
+                  <p className="text-xs text-amber-700">• 10 000 F CFA rechargés = <strong>+1 500 F CFA offerts</strong></p>
+                </div>
+
+                {bonus > 0 && (
+                  <div className="mt-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center gap-2">
+                    <span className="text-base">✅</span>
+                    <p className="text-sm font-extrabold text-emerald-700">Bonus appliqué : +{fmt(bonus)} F CFA !</p>
+                  </div>
+                )}
               </div>
 
               {/* Méthode */}
