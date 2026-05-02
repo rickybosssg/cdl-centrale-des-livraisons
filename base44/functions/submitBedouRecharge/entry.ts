@@ -282,5 +282,10 @@ Deno.serve(async (req) => {
     montant:       montantInt,
     bonus:         bonusInt,
     montant_total: montantInt + bonusInt,
+    logs: {
+      admins_count: admins.length,
+      tokens_found: allTokenRecords.length,
+      firebase_sa_present: !!rawJson,
+    },
   });
 });

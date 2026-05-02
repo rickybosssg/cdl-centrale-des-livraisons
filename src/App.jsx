@@ -84,6 +84,7 @@ import HealthDashboard from './pages/dispatcher/HealthDashboard';
 import AuditComplet from './pages/dispatcher/AuditComplet';
 import TestPublicitesVisibilite from './pages/dispatcher/TestPublicitesVisibilite';
 import BedouAudit from './pages/dispatcher/BedouAudit';
+import BedouFcmTest from './pages/dispatcher/BedouFcmTest';
 import AdminProfilUnifie from './pages/dispatcher/AdminProfilUnifie';
 import TestMallE2E from './pages/dispatcher/TestMallE2E';
 import Mall from './pages/Mall';
@@ -446,6 +447,7 @@ const AuthenticatedApp = () => {
           <Route path="/audit-complet" element={<AuditComplet />} />
           <Route path="/test-publicites" element={<TestPublicitesVisibilite />} />
           <Route path="/bedou-audit" element={<BedouAudit />} />
+          <Route path="/bedou-fcm-test" element={<BedouFcmTest />} />
           <Route path="/admin/profil/:userId" element={<AdminProfilUnifie />} />
           <Route path="/test-mall-e2e" element={<TestMallE2E />} />
           <Route path="/gestion-signalements" element={<GestionSignalements />} />
