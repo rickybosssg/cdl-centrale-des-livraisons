@@ -1,15 +1,14 @@
 /**
  * notifyCourseEvents — Handler automation entity Course
- *
  * Déclenché sur create + update de Course.
- * Envoie les notifications FCM push via base44.functions.invoke (SDK)
- * pour que l'appel soit authentifié et que asServiceRole fonctionne côté sendCdlNotification.
  *
- * Anti-doublon : vérifie oldStatut !== statut avant d'envoyer.
+ * LOGS : action, destinataires, statut, délai total
+ * RÈGLE : ne jamais bloquer — toujours retourner { ok: true }
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
+  const t0 = Date.now();
   try {
     const body = await req.json().catch(() => ({}));
     const { event, data, old_data } = body;
@@ -21,198 +20,142 @@ Deno.serve(async (req) => {
     const statut = course.statut || '';
     const oldStatut = old_data?.statut || '';
 
-    console.log(`[notifyCourseEvents] event=${event?.type} | statut=${statut} | oldStatut=${oldStatut} | id=${courseId}`);
+    console.log(`[notifyCourseEvents] START | event=${event?.type} | statut=${statut} | oldStatut=${oldStatut} | id=${courseId}`);
 
-    // Utiliser le SDK pour que sendCdlNotification reçoive un contexte authentifié
     const base44 = createClientFromRequest(req);
 
-    const notify = (payload) =>
-      base44.asServiceRole.functions.invoke('sendCdlNotification', payload).catch(e =>
+    const notify = (payload) => {
+      console.log(`[notifyCourseEvents] → notify | user=${payload.user_email || ''} role=${payload.role || ''} type=${payload.data?.type || ''}`);
+      return base44.asServiceRole.functions.invoke('sendCdlNotification', payload).catch(e =>
         console.warn('[notifyCourseEvents] notify error (non-fatal):', e.message)
       );
+    };
 
-    // ── CRÉATION : nouvelle course → notifier client (confirmation) + admins ──
+    // ── CRÉATION ──────────────────────────────────────────────────────────────
     if (event?.type === 'create') {
-      // 1. Confirmation immédiate au client
+      const tasks = [];
+
+      // Confirmation client
       if (course.client_email) {
-        await notify({
+        tasks.push(notify({
           user_email: course.client_email,
-          title: '✅ Course créée avec succès !',
+          title: '✅ Course créée !',
           body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${course.prix || 0} F. Recherche d'un livreur en cours...`,
-          data: {
-            type: 'course_created',
-            entity_id: courseId,
-            role: 'client',
-            notif_route: `/course/${courseId}/track`,
-          },
-        });
+          data: { type: 'course_created', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
+        }));
       }
-      // 2. Notification admin
-      await notify({
+
+      // Notification admin
+      tasks.push(notify({
         role: 'admin',
-        title: '🛵 Nouvelle course créée',
-        body: `${course.client_name || course.client_email} : ${course.quartier_depart} → ${course.quartier_arrivee} (${course.prix || 0} F)`,
-        data: {
-          type: 'new_course',
-          screen: 'GererCourses',
-          entity_id: courseId,
-          role: 'admin',
-          notif_route: '/gerer-courses',
-        },
-      });
+        title: '🛵 Nouvelle course',
+        body: `${course.client_name || course.client_email || '?'} : ${course.quartier_depart} → ${course.quartier_arrivee} (${course.prix || 0} F)`,
+        data: { type: 'new_course', entity_id: courseId, entity_type: 'Course', notif_route: '/gerer-courses' },
+      }));
+
+      await Promise.allSettled(tasks);
+      console.log(`[notifyCourseEvents] DONE create | +${Date.now() - t0}ms`);
       return Response.json({ ok: true });
     }
 
-    // ── UPDATE : seulement si le statut a vraiment changé ─────────────────────
+    // ── UPDATE : seulement si statut a changé ─────────────────────────────────
     if (event?.type !== 'update' || statut === oldStatut) {
       return Response.json({ ok: true });
     }
 
-    // En recherche → notifier le client
-    if (statut === 'en_recherche' && course.client_email) {
-      await notify({
-        user_email: course.client_email,
-        title: '🔍 Recherche d\'un livreur...',
-        body: `Nous cherchons le meilleur livreur disponible pour votre course ${course.quartier_depart} → ${course.quartier_arrivee}.`,
-        data: {
-          type: 'course_searching',
-          entity_id: courseId,
-          role: 'client',
-          notif_route: `/course/${courseId}/track`,
-        },
-      });
-    }
+    const tasks = [];
 
-    // Assignée/proposée au livreur → notifier livreur avec priorité selon urgence
+    // Assignée au livreur
     if (statut === 'assignee_attente' && course.livreur_email) {
       const urgence = course.urgence || 'normal';
-      const urgenceEmoji = urgence === 'tres_urgent' ? '🔥🔥' : urgence === 'urgent' ? '🔥' : '🛵';
-      const prixDisplay = course.prix ? `${course.prix.toLocaleString()} F` : '';
-      await notify({
+      const emoji = urgence === 'tres_urgent' ? '🔥🔥' : urgence === 'urgent' ? '🔥' : '🛵';
+      tasks.push(notify({
         user_email: course.livreur_email,
-        title: `${urgenceEmoji} Nouvelle course${urgence !== 'normal' ? ' URGENTE' : ''} !`,
-        body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${prixDisplay}. Répondez en 60s !`,
+        title: `${emoji} Nouvelle course${urgence !== 'normal' ? ' URGENTE' : ''} !`,
+        body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${course.prix || 0} F. Répondez en 60s !`,
         urgence,
-        data: {
-          type: 'course_assigned',
-          entity_id: courseId,
-          role: 'livreur',
-          urgence,
-          notif_route: `/course-livreur/${courseId}`,
-        },
-      });
+        data: { type: 'course_assigned', entity_id: courseId, entity_type: 'Course', notif_route: `/course-livreur/${courseId}` },
+      }));
     }
 
-    // Acceptée par le livreur → notifier client
+    // Acceptée → client
     if (statut === 'acceptee' && course.client_email) {
-      await notify({
+      tasks.push(notify({
         user_email: course.client_email,
         title: '✅ Livreur en chemin !',
         body: `${course.livreur_name || 'Votre livreur'} a accepté votre course et arrive bientôt.`,
-        data: {
-          type: 'course_accepted',
-          entity_id: courseId,
-          role: 'client',
-          notif_route: `/course/${courseId}/track`,
-        },
-      });
+        data: { type: 'course_accepted', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
+      }));
     }
 
-    // Colis récupéré (en_cours) → notifier client
+    // En cours (colis récupéré) → client
     if (statut === 'en_cours' && course.client_email) {
-      await notify({
+      tasks.push(notify({
         user_email: course.client_email,
         title: '🏃 Colis en route !',
-        body: `Votre colis est en cours de livraison vers ${course.quartier_arrivee}.`,
-        data: {
-          type: 'course_in_progress',
-          entity_id: courseId,
-          role: 'client',
-          notif_route: `/course/${courseId}/track`,
-        },
-      });
+        body: `Votre colis est en livraison vers ${course.quartier_arrivee}.`,
+        data: { type: 'course_in_progress', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
+      }));
     }
 
-    // Livrée → notifier client + livreur
+    // Livrée → client + livreur
     if (statut === 'livree') {
       if (course.client_email) {
-        await notify({
+        tasks.push(notify({
           user_email: course.client_email,
           title: '🎉 Colis livré !',
-          body: `Votre colis a bien été livré par ${course.livreur_name || 'votre livreur'}. Notez-le !`,
-          data: {
-            type: 'course_delivered',
-            entity_id: courseId,
-            role: 'client',
-            notif_route: `/course/${courseId}/track`,
-          },
-        });
+          body: `Votre colis a été livré par ${course.livreur_name || 'votre livreur'}. Notez-le !`,
+          data: { type: 'course_delivered', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
+        }));
       }
       if (course.livreur_email) {
-        await notify({
+        tasks.push(notify({
           user_email: course.livreur_email,
           title: '💰 Livraison confirmée !',
           body: `${course.quartier_arrivee} — Gain : +${course.gain_livreur || 0} F crédités sur votre Bedou.`,
-          data: {
-            type: 'course_delivered_driver',
-            entity_id: courseId,
-            role: 'livreur',
-            notif_route: '/mes-livraisons',
-          },
-        });
+          data: { type: 'course_delivered_driver', entity_id: courseId, entity_type: 'Course', notif_route: '/mes-livraisons' },
+        }));
       }
     }
 
-    // Paiement validé (livrée + paiement confirmé) → notifier livreur
+    // Paiement validé → livreur
     if (statut === 'paiement_valide' && course.livreur_email) {
-      await notify({
+      tasks.push(notify({
         user_email: course.livreur_email,
         title: '💸 Paiement reçu !',
-        body: `Le paiement de ${course.gain_livreur || course.prix || 0} F a été validé pour la course ${course.quartier_depart} → ${course.quartier_arrivee}.`,
-        data: {
-          type: 'payment_validated',
-          entity_id: courseId,
-          role: 'livreur',
-          notif_route: '/mes-gains',
-        },
-      });
+        body: `Le paiement de ${course.gain_livreur || course.prix || 0} F a été validé — ${course.quartier_depart} → ${course.quartier_arrivee}.`,
+        data: { type: 'payment_validated', entity_id: courseId, entity_type: 'Course', notif_route: '/mes-gains' },
+      }));
     }
 
-    // Annulée → notifier client + livreur
+    // Annulée → client + livreur
     if (statut === 'annulee') {
       if (course.client_email) {
-        await notify({
+        tasks.push(notify({
           user_email: course.client_email,
           title: '❌ Course annulée',
           body: course.frais_annulation > 0
             ? `Votre course a été annulée. Frais : ${course.frais_annulation.toLocaleString()} F.`
             : `Votre course ${course.quartier_depart} → ${course.quartier_arrivee} a été annulée.`,
-          data: {
-            type: 'course_cancelled',
-            entity_id: courseId,
-            role: 'client',
-            notif_route: '/mes-courses',
-          },
-        });
+          data: { type: 'course_cancelled', entity_id: courseId, entity_type: 'Course', notif_route: '/mes-courses' },
+        }));
       }
       if (course.livreur_email) {
-        await notify({
+        tasks.push(notify({
           user_email: course.livreur_email,
           title: '❌ Course annulée',
           body: `La course ${course.quartier_depart} → ${course.quartier_arrivee} a été annulée.`,
-          data: {
-            type: 'course_cancelled',
-            entity_id: courseId,
-            role: 'livreur',
-            notif_route: '/courses-disponibles',
-          },
-        });
+          data: { type: 'course_cancelled', entity_id: courseId, entity_type: 'Course', notif_route: '/courses-disponibles' },
+        }));
       }
     }
 
+    await Promise.allSettled(tasks);
+    console.log(`[notifyCourseEvents] DONE update statut=${statut} tasks=${tasks.length} | +${Date.now() - t0}ms`);
     return Response.json({ ok: true });
+
   } catch (err) {
     console.error('[notifyCourseEvents] ERROR:', err.message);
-    return Response.json({ ok: true }); // Ne jamais bloquer l'automation
+    return Response.json({ ok: true });
   }
 });

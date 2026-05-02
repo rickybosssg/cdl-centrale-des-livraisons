@@ -1,20 +1,23 @@
 /**
- * sendCdlNotification — Fonction centrale FCM CDL
+ * sendCdlNotification — Fonction centrale CDL
+ * Double notification : interne BDD + push FCM Android
  *
- * LOGIQUE DÉFINITIVE (NE PAS MODIFIER) :
- * - Utilise UNIQUEMENT les tokens is_active=true
- * - Désactive un token UNIQUEMENT sur erreur Firebase UNREGISTERED ou INVALID_ARGUMENT
- * - Jamais désactiver un token pour une autre raison
- * - Log clair de chaque tentative avec réponse Firebase exacte
+ * PAYLOAD FCM OBLIGATOIRE :
+ * - notification.title + notification.body
+ * - data.type, data.screen, data.id (notif_route)
+ * - android.priority HIGH + channel importance HIGH
+ * - default_sound/vibrate/light_settings = true
  *
  * Cas 1 : notifier un utilisateur précis → { user_email, title, body, data }
  * Cas 2 : notifier un rôle entier        → { role, title, body, data }
+ *
+ * RÈGLE : jamais bloquer l'action principale si push échoue.
+ * LOGS : action, destinataires, tokens, sent, failed, délai total.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const SA_JSON = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
 
-// Tokens de test à ignorer
 const BLACKLISTED_TOKENS = ['test_diagnostic_token', 'test_public_endpoint', 'test_e2e_audit'];
 function isTestToken(token) {
   if (!token) return true;
@@ -22,21 +25,19 @@ function isTestToken(token) {
   return BLACKLISTED_TOKENS.some(b => t.includes(b)) || t.includes('_test_') || t.startsWith('test_');
 }
 
-// ── Firebase OAuth2 JWT → Access Token ───────────────────────────────────────
+// ── Firebase OAuth2 ───────────────────────────────────────────────────────────
 async function getAccessToken(sa) {
   const now = Math.floor(Date.now() / 1000);
-  const payload = {
+  const enc = (obj) => btoa(unescape(encodeURIComponent(JSON.stringify(obj)))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const header = enc({ alg: 'RS256', typ: 'JWT' });
+  const pl = enc({
     iss: sa.client_email, sub: sa.client_email,
     aud: 'https://oauth2.googleapis.com/token',
     iat: now, exp: now + 3600,
     scope: 'https://www.googleapis.com/auth/firebase.messaging',
-  };
-  const enc = (obj) => btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const header = enc({ alg: 'RS256', typ: 'JWT' });
-  const pl = enc(payload);
+  });
   const input = `${header}.${pl}`;
-
-  const pem = sa.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, '');
+  const pem = sa.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\r\n|\n|\r/g, '');
   const key = await crypto.subtle.importKey(
     'pkcs8', Uint8Array.from(atob(pem), c => c.charCodeAt(0)),
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
@@ -44,7 +45,6 @@ async function getAccessToken(sa) {
   const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(input));
   const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   const jwt = `${input}.${sigB64}`;
-
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -55,15 +55,19 @@ async function getAccessToken(sa) {
   return d.access_token;
 }
 
-// ── Envoi FCM à un token ─────────────────────────────────────────────────────
+// ── Envoi FCM v1 ──────────────────────────────────────────────────────────────
 async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}, urgence = 'normal') {
   const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
+
+  // Tous les champs data en string (obligatoire FCM)
   const stringData = {};
   for (const [k, v] of Object.entries(data)) {
     stringData[k] = v == null ? '' : String(v);
   }
+  // Toujours inclure title/body dans data pour app fermée
+  stringData.title = title;
+  stringData.body = body;
 
-  const isUrgent = urgence === 'urgent' || urgence === 'tres_urgent';
   const isTresUrgent = urgence === 'tres_urgent';
 
   const res = await fetch(url, {
@@ -72,51 +76,100 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
     body: JSON.stringify({
       message: {
         token: fcmToken,
+        // notification block obligatoire pour affichage system tray (app fermée)
         notification: { title, body },
+        // data block pour deep link et foreground handler
         data: stringData,
         android: {
-          priority: 'high',
+          priority: 'HIGH',
+          ttl: '86400s',
           notification: {
             channel_id: isTresUrgent ? 'urgent' : 'default',
             sound: 'default',
             visibility: 'PUBLIC',
-            default_vibrate_timings: !isTresUrgent,
-            notification_priority: isTresUrgent ? 'PRIORITY_MAX' : isUrgent ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
+            notification_priority: isTresUrgent ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+            default_sound: true,
+            default_vibrate_timings: true,
+            default_light_settings: true,
           },
         },
         webpush: {
           notification: {
             icon: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
             badge: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
-            vibrate: isTresUrgent ? [200, 100, 200, 100, 400] : [200, 100, 200],
-            requireInteraction: isUrgent,
+            requireInteraction: isTresUrgent,
           },
         },
       },
     }),
   });
 
-  const result = await res.json();
-
-  // Extraire le code d'erreur Firebase exact
+  const result = await res.json().catch(() => ({}));
   const errCode = !res.ok
     ? (result?.error?.details?.[0]?.errorCode || result?.error?.status || 'FCM_ERROR')
     : null;
 
   if (res.ok) {
-    console.log(`[sendCdlNotification] ✅ OK → token: ${fcmToken.slice(0, 20)}... | messageId: ${result?.name}`);
+    console.log(`[CDL-FCM] ✅ OK → token:${fcmToken.slice(0, 20)}... msgId:${result?.name}`);
   } else {
-    console.error(`[sendCdlNotification] ❌ Firebase error=${errCode} | HTTP=${res.status} | token: ${fcmToken.slice(0, 20)}... | response: ${JSON.stringify(result)}`);
+    console.error(`[CDL-FCM] ❌ err=${errCode} HTTP=${res.status} token:${fcmToken.slice(0, 20)}...`);
   }
-
   return { ok: res.ok, result, errCode, token: fcmToken };
 }
 
-// ── Erreurs Firebase qui justifient la désactivation du token ─────────────────
+// ── Notification interne BDD ──────────────────────────────────────────────────
+async function createInternalNotif(base44, { destinataire_email, title, body, data = {}, notifType = 'info' }) {
+  try {
+    // Mapper data.type → notifType CDL
+    const typeMap = {
+      bedou_recharge_request: 'warning',
+      bedou_recharge_approved: 'success',
+      bedou_recharge_rejected: 'danger',
+      bedou_withdrawal_request: 'warning',
+      bedou_withdrawal_approved: 'success',
+      bedou_withdrawal_rejected: 'danger',
+      new_course: 'info',
+      course_created: 'success',
+      course_assigned: 'warning',
+      course_accepted: 'success',
+      course_in_progress: 'info',
+      course_delivered: 'success',
+      course_delivered_driver: 'success',
+      course_cancelled: 'danger',
+      payment_validated: 'success',
+      new_profile_request: 'warning',
+      profile_pending_review: 'warning',
+      profile_validated: 'success',
+      profile_refused: 'danger',
+      profile_suspended: 'danger',
+      new_order: 'info',
+      new_marketplace_order: 'info',
+      order_accepted: 'success',
+      order_delivering: 'info',
+      order_delivered: 'success',
+      order_cancelled: 'danger',
+    };
+    const type = typeMap[data?.type] || notifType;
+    await base44.asServiceRole.entities.Notification.create({
+      destinataire_email,
+      titre: title,
+      message: body,
+      type,
+      lue: false,
+      target_screen: data?.notif_route || '/',
+      target_entity_type: data?.entity_type || '',
+      target_entity_id: data?.entity_id || '',
+    });
+  } catch (e) {
+    console.warn('[CDL-Notif] Notif interne BDD échouée (non-fatal):', e.message);
+  }
+}
+
 const FATAL_FCM_ERRORS = ['UNREGISTERED', 'INVALID_ARGUMENT'];
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
+  const t0 = Date.now();
   try {
     const body = await req.json().catch(() => ({}));
     const { user_email, role, title, body: msgBody, data = {}, urgence = 'normal' } = body;
@@ -127,104 +180,102 @@ Deno.serve(async (req) => {
     if (!user_email && !role) {
       return Response.json({ error: 'user_email ou role requis' }, { status: 400 });
     }
-    if (!SA_JSON) {
-      return Response.json({ error: 'FIREBASE_SERVICE_ACCOUNT_JSON manquant' }, { status: 500 });
-    }
 
     const base44 = createClientFromRequest(req);
-    const sa = JSON.parse(SA_JSON);
-    const projectId = sa.project_id;
-    console.log(`[sendCdlNotification] project_id=${projectId} | user=${user_email || ''} | role=${role || ''} | urgence=${urgence}`);
+    console.log(`[sendCdlNotification] START | user=${user_email || ''} | role=${role || ''} | type=${data?.type || ''} | urgence=${urgence}`);
 
-    const accessToken = await getAccessToken(sa);
-
-    // ── Récupérer les tokens FCM actifs cibles ────────────────────────────────
-    let tokenRecords = [];
+    // ── 1. Résoudre les destinataires (emails) ────────────────────────────────
+    let targetEmails = [];
 
     if (user_email) {
-      tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({
-        user_email: user_email.toLowerCase(),
-        is_active: true,
-      });
-      // Filtrer les tokens de test
-      tokenRecords = tokenRecords.filter(r => !isTestToken(r.token));
-      console.log(`[sendCdlNotification] user=${user_email} → ${tokenRecords.length} token(s) actif(s)`);
-
+      targetEmails = [user_email.toLowerCase()];
     } else if (role === 'admin') {
       const adminUsers = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
-      for (const u of adminUsers) {
-        const tokens = await base44.asServiceRole.entities.FcmToken.filter({
-          user_email: u.email.toLowerCase(),
-          is_active: true,
-        });
-        tokenRecords.push(...tokens.filter(r => !isTestToken(r.token)));
-      }
-      console.log(`[sendCdlNotification] role=admin → ${tokenRecords.length} token(s) actif(s)`);
-
+      targetEmails = adminUsers.map(u => u.email.toLowerCase());
+      console.log(`[sendCdlNotification] admins trouvés: ${targetEmails.length} → ${targetEmails.join(', ')}`);
     } else if (role) {
       const profiles = await base44.asServiceRole.entities.UserProfile.filter({
         profile_type: role,
         status: 'actif',
         deleted: false,
       });
-      const emails = [...new Set(profiles.map(p => p.user_email.toLowerCase()))];
-      for (const email of emails) {
-        const tokens = await base44.asServiceRole.entities.FcmToken.filter({
-          user_email: email,
-          is_active: true,
-        });
-        tokenRecords.push(...tokens.filter(r => !isTestToken(r.token)));
-      }
-      console.log(`[sendCdlNotification] role=${role} → ${tokenRecords.length} token(s) actif(s)`);
+      targetEmails = [...new Set(profiles.map(p => p.user_email.toLowerCase()))];
+      console.log(`[sendCdlNotification] role=${role} → ${targetEmails.length} profil(s) actif(s)`);
     }
+
+    if (targetEmails.length === 0) {
+      console.warn(`[sendCdlNotification] ⚠️ Aucun destinataire trouvé — skip | +${Date.now() - t0}ms`);
+      return Response.json({ sent: 0, failed: 0, total: 0, note: 'Aucun destinataire' });
+    }
+    console.log(`[sendCdlNotification] Destinataires: ${targetEmails.length}`);
+
+    // ── 2. Notifications internes BDD (SYNCHRONES, toujours) ─────────────────
+    await Promise.allSettled(
+      targetEmails.map(email => createInternalNotif(base44, {
+        destinataire_email: email,
+        title,
+        body: msgBody,
+        data,
+      }))
+    );
+    console.log(`[sendCdlNotification] Notifs internes BDD créées | +${Date.now() - t0}ms`);
+
+    // ── 3. FCM Push ──────────────────────────────────────────────────────────
+    if (!SA_JSON) {
+      console.warn('[sendCdlNotification] FIREBASE_SERVICE_ACCOUNT_JSON manquant — skip FCM');
+      return Response.json({ sent: 0, failed: 0, total: 0, note: 'FCM désactivé' });
+    }
+
+    // Récupérer tous les tokens actifs des destinataires en parallèle
+    const tokenResults = await Promise.allSettled(
+      targetEmails.map(email => base44.asServiceRole.entities.FcmToken.filter({
+        user_email: email,
+        is_active: true,
+      }))
+    );
+
+    let tokenRecords = [];
+    for (const r of tokenResults) {
+      if (r.status === 'fulfilled') {
+        tokenRecords.push(...(r.value || []).filter(t => !isTestToken(t.token)));
+      }
+    }
+
+    console.log(`[sendCdlNotification] Tokens FCM actifs: ${tokenRecords.length} | +${Date.now() - t0}ms`);
 
     if (tokenRecords.length === 0) {
-      console.warn('[sendCdlNotification] ⚠️ Aucun token FCM actif trouvé — notifications impossibles');
-      return Response.json({ sent: 0, failed: 0, total: 0, note: 'Aucun token FCM actif' });
+      console.warn('[sendCdlNotification] ⚠️ Aucun token FCM actif');
+      return Response.json({ sent: 0, failed: 0, total: 0, note: 'Aucun token FCM' });
     }
 
-    // ── Envoi FCM ─────────────────────────────────────────────────────────────
+    const sa = JSON.parse(SA_JSON);
+    const projectId = sa.project_id;
+    const accessToken = await getAccessToken(sa);
+
     let sent = 0, failed = 0;
-    const logDetails = [];
-    const tokensToDeactivate = []; // UNIQUEMENT sur erreur Firebase fatale
+    const tokensToDeactivate = [];
 
-    for (const record of tokenRecords) {
-      try {
-        const { ok, result, errCode } = await sendToToken(
-          accessToken, projectId, record.token, title, msgBody, data, urgence
-        );
+    const fcmResults = await Promise.allSettled(
+      tokenRecords.map(record => sendToToken(accessToken, projectId, record.token, title, msgBody, data, urgence))
+    );
 
-        if (ok) {
-          sent++;
-          // Mettre à jour last_used sur succès
-          base44.asServiceRole.entities.FcmToken.update(record.id, {
-            last_used: new Date().toISOString(),
-          }).catch(() => {});
-          logDetails.push({ user_email: record.user_email, status: 'success', device_type: record.device_type });
-        } else {
-          failed++;
-          logDetails.push({
-            user_email: record.user_email,
-            status: 'failed',
-            error: errCode,
-            firebase_response: result,
-            device_type: record.device_type,
-          });
-          // Désactiver UNIQUEMENT sur erreur Firebase fatale confirmée
-          if (FATAL_FCM_ERRORS.includes(errCode)) {
-            tokensToDeactivate.push(record);
-            console.warn(`[sendCdlNotification] ⛔ Token désactivé (${errCode}): ${record.token.slice(0, 20)}...`);
-          }
-          // Pour toute autre erreur : NE PAS désactiver — peut être temporaire
-        }
-      } catch (e) {
+    for (let i = 0; i < fcmResults.length; i++) {
+      const r = fcmResults[i];
+      if (r.status === 'fulfilled' && r.value.ok) {
+        sent++;
+        base44.asServiceRole.entities.FcmToken.update(tokenRecords[i].id, {
+          last_used: new Date().toISOString(),
+        }).catch(() => {});
+      } else {
         failed++;
-        console.error('[sendCdlNotification] Erreur envoi:', e.message);
-        logDetails.push({ user_email: record.user_email, status: 'error', error: e.message });
+        const errCode = r.status === 'fulfilled' ? r.value.errCode : 'EXCEPTION';
+        if (FATAL_FCM_ERRORS.includes(errCode)) {
+          tokensToDeactivate.push(tokenRecords[i]);
+        }
       }
     }
 
-    // Désactiver les tokens irrémédiablement invalides (UNREGISTERED / INVALID_ARGUMENT)
+    // Désactiver tokens invalides (UNREGISTERED/INVALID_ARGUMENT)
     for (const r of tokensToDeactivate) {
       base44.asServiceRole.entities.FcmToken.update(r.id, {
         is_active: false,
@@ -233,14 +284,9 @@ Deno.serve(async (req) => {
       }).catch(() => {});
     }
 
-    console.log(`[sendCdlNotification] ✅ DONE — sent=${sent} failed=${failed} total=${tokenRecords.length} deactivated=${tokensToDeactivate.length}`);
-    return Response.json({
-      sent,
-      failed,
-      total: tokenRecords.length,
-      deactivated: tokensToDeactivate.length,
-      details: logDetails,
-    });
+    const elapsed = Date.now() - t0;
+    console.log(`[sendCdlNotification] ✅ DONE | sent=${sent} failed=${failed} total=${tokenRecords.length} deactivated=${tokensToDeactivate.length} | délai=${elapsed}ms`);
+    return Response.json({ sent, failed, total: tokenRecords.length, deactivated: tokensToDeactivate.length, elapsed_ms: elapsed });
 
   } catch (err) {
     console.error('[sendCdlNotification] ERREUR CRITIQUE:', err.message);
