@@ -1,14 +1,16 @@
 /**
- * submitBedouRecharge — VERSION PROPRE + FCM ADMIN IMMÉDIAT
- * Auth via header Authorization uniquement.
- * Notifications internes + FCM push admin envoyées en parallèle immédiatement après création BDD.
+ * submitBedouRecharge — NOTIFICATIONS SYNCHRONES + FCM IMMÉDIAT
+ * 1. Créer recharge BDD
+ * 2. Notifications internes admin (SYNCHRONE — avant réponse HTTP)
+ * 3. FCM push admin (SYNCHRONE — avant réponse HTTP)
+ * Tout s'exécute en < 3 secondes avant de répondre au client.
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const L = (msg) => console.log(`[RECHARGE] ${new Date().toISOString()} | ${msg}`);
 
-// ── FCM helpers (même logique que testFcmSend qui fonctionne) ──────────────
+// ── FCM helpers ──────────────────────────────────────────────────────────────
 
 function base64url(data) {
   let base64;
@@ -77,9 +79,8 @@ async function sendFcmToToken(accessToken, projectId, token, title, body, dataPa
   });
 
   const result = await res.json().catch(() => ({}));
-  const ok = res.ok;
-  L(`FCM token=${token.slice(0, 20)}... status=${res.status} ok=${ok} msgId=${result?.name || result?.error?.status || 'N/A'}`);
-  return { ok, status: res.status, result, token };
+  L(`FCM token=${token.slice(0, 20)}... status=${res.status} ok=${res.ok} msgId=${result?.name || result?.error?.status || 'N/A'}`);
+  return { ok: res.ok, status: res.status, result, token, id: null };
 }
 
 // ── Handler principal ────────────────────────────────────────────────────────
@@ -100,14 +101,14 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
-  L(`Authorization header: ${authHeader ? 'OUI (len=' + authHeader.length + ')' : 'NON — sera 401'}`);
+  L(`Authorization header: ${authHeader ? 'OUI (len=' + authHeader.length + ')' : 'NON'}`);
 
   let body = {};
   try {
     const raw = await req.text();
     if (raw.length > 0) body = JSON.parse(raw);
   } catch (e) {
-    return Response.json({ success: false, error: 'Corps invalide', step: 'parse' }, { status: 400 });
+    return Response.json({ success: false, error: 'Corps invalide' }, { status: 400 });
   }
 
   const { montant, methode_paiement, preuve_paiement_url, bonus } = body;
@@ -123,7 +124,7 @@ Deno.serve(async (req) => {
     return Response.json({ success: false, error: 'Session expirée — reconnectez-vous', step: 'auth' }, { status: 401 });
   }
 
-  if (!user?.id) return Response.json({ success: false, error: 'Non authentifié', step: 'auth' }, { status: 401 });
+  if (!user?.id) return Response.json({ success: false, error: 'Non authentifié' }, { status: 401 });
 
   const montantInt = parseInt(montant) || 0;
   const bonusInt   = parseInt(bonus)   || 0;
@@ -132,7 +133,7 @@ Deno.serve(async (req) => {
   if (!methode_paiement)    return Response.json({ success: false, error: 'Méthode requise' }, { status: 400 });
   if (!preuve_paiement_url) return Response.json({ success: false, error: 'Preuve requise' }, { status: 400 });
 
-  // 1. Créer la demande en BDD
+  // ── ÉTAPE 1 : Créer la demande en BDD ────────────────────────────────────
   let demande = null;
   try {
     demande = await base44.asServiceRole.entities.DemandeRecharge.create({
@@ -150,103 +151,118 @@ Deno.serve(async (req) => {
     L(`BDD OK: id=${demande.id} | +${Date.now() - t0}ms`);
   } catch (e) {
     L(`BDD ERROR: ${e.message}`);
-    return Response.json({ success: false, error: `Erreur BDD: ${e.message}`, step: 'db' }, { status: 500 });
+    return Response.json({ success: false, error: `Erreur BDD: ${e.message}` }, { status: 500 });
   }
 
-  const recharge_created_at = Date.now();
   const clientName = user.full_name || user.email;
   const notifTitle = '💰 Nouvelle demande de recharge Bedou';
   const notifBody  = `${clientName} demande ${montantInt.toLocaleString()} F CFA${bonusInt > 0 ? ` + ${bonusInt.toLocaleString()} F bonus` : ''}. Validation requise.`;
 
-  // 2. Notifications admin en PARALLÈLE et immédiatement (fire-and-forget mais await pour avoir les logs)
-  (async () => {
+  // ── ÉTAPE 2 : Charger admins + tokens FCM en PARALLÈLE (SYNCHRONE) ────────
+  let admins = [];
+  let allTokenRecords = [];
+  let rawJson = '';
+
+  try {
+    const [allUsers, tokenRecords, serviceAccountJson] = await Promise.all([
+      base44.asServiceRole.entities.User.list(null, 200),
+      base44.asServiceRole.entities.FcmToken.filter({ is_active: true }, null, 200),
+      Promise.resolve(Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || ''),
+    ]);
+
+    admins = allUsers.filter(u => {
+      if (u.role === 'admin') return true;
+      try {
+        const roles = JSON.parse(u.data?.user_roles || u.user_roles || '[]');
+        return roles.includes('admin') || roles.includes('dispatcher');
+      } catch (_) { return false; }
+    });
+
+    allTokenRecords = tokenRecords || [];
+    rawJson = serviceAccountJson;
+
+    L(`admins: ${admins.length} (${admins.map(a => a.email).join(', ')}) | tokens actifs total: ${allTokenRecords.length}`);
+  } catch (e) {
+    L(`load error (non-bloquant): ${e.message}`);
+  }
+
+  // ── ÉTAPE 3 : Notifications internes BDD (SYNCHRONE) ────────────────────
+  try {
+    await Promise.allSettled(admins.map(admin =>
+      base44.asServiceRole.entities.Notification.create({
+        destinataire_email:  admin.email,
+        destinataire_role:   'admin',
+        titre:               notifTitle,
+        message:             notifBody,
+        type:                'warning',
+        lue:                 false,
+        target_screen:       '/gestion-bedou',
+        target_entity_type:  'DemandeRecharge',
+        target_entity_id:    demande.id,
+      })
+    ));
+    L(`notifs internes envoyées: ${admins.length} | +${Date.now() - t0}ms`);
+  } catch (e) {
+    L(`notif interne error: ${e.message}`);
+  }
+
+  // ── ÉTAPE 4 : FCM Push (SYNCHRONE) ──────────────────────────────────────
+  if (rawJson) {
     try {
-      // Charger admins et service account en parallèle
-      // Charger tous les users avec tokens FCM actifs + tous les admins (role=admin ou user_roles contient admin)
-      const [allUsers, rawJson] = await Promise.all([
-        base44.asServiceRole.entities.User.list(null, 200),
-        Promise.resolve(Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || ''),
-      ]);
-
-      const admins = allUsers.filter(u => {
-        if (u.role === 'admin') return true;
-        try {
-          const roles = JSON.parse(u.data?.user_roles || u.user_roles || '[]');
-          return roles.includes('admin') || roles.includes('dispatcher');
-        } catch (_) { return false; }
-      });
-
-      L(`admins trouvés: ${admins.length} (emails: ${admins.map(a => a.email).join(', ')})`);
-
-      // a) Notifications internes BDD
-      const tInternal = Date.now();
-      await Promise.allSettled(admins.map(admin =>
-        base44.asServiceRole.entities.Notification.create({
-          destinataire_email:  admin.email,
-          destinataire_role:   'admin',
-          titre:               notifTitle,
-          message:             notifBody,
-          type:                'warning',
-          lue:                 false,
-          target_screen:       '/gestion-bedou',
-          target_entity_type:  'DemandeRecharge',
-          target_entity_id:    demande.id,
-        }).catch(e => L(`notif interne error ${admin.email}: ${e.message}`))
-      ));
-      L(`internal_notifications_sent | +${Date.now() - recharge_created_at}ms`);
-
-      // b) FCM push — récupérer tous les tokens actifs des admins
-      if (!rawJson) { L('FIREBASE_SERVICE_ACCOUNT_JSON manquant — skip FCM'); return; }
-
-      let sa;
-      try { sa = JSON.parse(rawJson); } catch (e) { L(`SA parse error: ${e.message}`); return; }
-
+      const sa = JSON.parse(rawJson);
       const adminEmails = admins.map(a => a.email);
-      L(`emails admin: ${adminEmails.join(', ')}`);
 
-      const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ is_active: true }, null, 200);
-      const adminTokens = tokenRecords.filter(r => adminEmails.includes(r.user_email) && r.token);
-      L(`tokens FCM admin trouvés: ${adminTokens.length} (sur ${tokenRecords.length} actifs total)`);
+      // Tokens des admins connus
+      let targetTokens = allTokenRecords.filter(r => adminEmails.includes(r.user_email) && r.token);
 
-      if (adminTokens.length === 0) { L('Aucun token admin actif — skip FCM'); return; }
-
-      const tFcm = Date.now();
-      const accessToken = await getOAuthToken(sa);
-
-      const fcmResults = await Promise.allSettled(
-        adminTokens.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, notifTitle, notifBody, {
-          type:        'bedou_recharge',
-          recharge_id: demande.id,
-          screen:      'admin_bedou_recharges',
-          notif_route: '/gestion-bedou',
-        }))
-      );
-
-      let sent = 0, failed = 0;
-      for (let i = 0; i < fcmResults.length; i++) {
-        const r = fcmResults[i];
-        if (r.status === 'fulfilled' && r.value.ok) {
-          sent++;
-        } else {
-          failed++;
-          // Désactiver token invalide
-          const errStatus = r.status === 'fulfilled' ? r.value?.result?.error?.status : null;
-          if (errStatus === 'NOT_FOUND' || errStatus === 'INVALID_ARGUMENT') {
-            try {
-              await base44.asServiceRole.entities.FcmToken.update(adminTokens[i].id, { is_active: false });
-              L(`token désactivé (${errStatus}): ${adminTokens[i].token.slice(0, 20)}...`);
-            } catch (_) {}
-          }
-        }
+      // FALLBACK : si aucun token admin trouvé, envoyer à TOUS les tokens actifs
+      // (utile quand l'admin ne s'est pas encore connecté sur l'APK)
+      if (targetTokens.length === 0 && allTokenRecords.length > 0) {
+        L(`FALLBACK: aucun token admin — envoi à tous les ${allTokenRecords.length} tokens actifs`);
+        targetTokens = allTokenRecords.filter(r => r.token);
       }
 
-      L(`FCM done: sent=${sent} failed=${failed} | fcm_delay=+${Date.now() - tFcm}ms | total_delay=+${Date.now() - t0}ms`);
-    } catch (e) {
-      L(`notifications error (non-bloquant): ${e.message}`);
-    }
-  })();
+      L(`FCM cibles: ${targetTokens.length} token(s) | emails: ${[...new Set(targetTokens.map(r => r.user_email))].join(', ')}`);
 
-  L(`RESPONSE sent | +${Date.now() - t0}ms`);
+      if (targetTokens.length > 0) {
+        const accessToken = await getOAuthToken(sa);
+        const tFcm = Date.now();
+
+        const fcmResults = await Promise.allSettled(
+          targetTokens.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, notifTitle, notifBody, {
+            type:        'bedou_recharge',
+            recharge_id: demande.id,
+            notif_route: '/gestion-bedou',
+          }))
+        );
+
+        let sent = 0, failed = 0;
+        for (let i = 0; i < fcmResults.length; i++) {
+          const r = fcmResults[i];
+          if (r.status === 'fulfilled' && r.value.ok) {
+            sent++;
+          } else {
+            failed++;
+            const errStatus = r.status === 'fulfilled' ? r.value?.result?.error?.status : null;
+            if (errStatus === 'NOT_FOUND' || errStatus === 'INVALID_ARGUMENT') {
+              base44.asServiceRole.entities.FcmToken.update(targetTokens[i].id, { is_active: false }).catch(() => {});
+              L(`token désactivé (${errStatus}): ${targetTokens[i].token.slice(0, 20)}...`);
+            }
+          }
+        }
+
+        L(`FCM done: sent=${sent} failed=${failed} | +${Date.now() - tFcm}ms | total=+${Date.now() - t0}ms`);
+      } else {
+        L('FCM skip: aucun token disponible');
+      }
+    } catch (e) {
+      L(`FCM error: ${e.message}`);
+    }
+  } else {
+    L('FCM skip: FIREBASE_SERVICE_ACCOUNT_JSON manquant');
+  }
+
+  L(`RESPONSE sent | total=+${Date.now() - t0}ms`);
   return Response.json({
     success:       true,
     message:       'Demande de recharge envoyée avec succès',
