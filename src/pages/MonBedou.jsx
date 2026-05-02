@@ -1,29 +1,31 @@
+/**
+ * MonBedou — Portefeuille Bedou
+ * Flux recharge reconstruit de zéro pour fiabilité APK + web
+ */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Wallet, ArrowLeft, Plus, ArrowDownCircle, TrendingUp, Lock, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { ArrowLeft, Plus, ArrowDownCircle, TrendingUp, Lock, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { fmt } from "@/lib/formatMoney";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import moment from "moment";
 import BeDouHistory from "@/components/BeDouHistory";
-import { triggerWhatsAppNotification, waMsgBedouTopupRequested, waMsgBedouWithdrawRequested } from "@/lib/whatsappNotifications";
+import { triggerWhatsAppNotification, waMsgBedouWithdrawRequested } from "@/lib/whatsappNotifications";
+
+// ─── Constantes ──────────────────────────────────────────────────────────────
 
 const METHODES = [
-  { value: "orange_money", label: "Orange Money", icon: "🟠" },
-  { value: "moov_money",   label: "Moov Money",   icon: "🔵" },
-  { value: "telecel_money",label: "Telecel Money", icon: "🟣" },
-  { value: "cash",         label: "Cash",          icon: "💵" },
-];
-
-const BONUS_RECHARGE = [
-  { seuil: 10000, bonus: 1500 },
-  { seuil: 5000,  bonus: 500  },
+  { value: "orange_money",  label: "Orange Money",  icon: "🟠" },
+  { value: "moov_money",    label: "Moov Money",    icon: "🔵" },
+  { value: "telecel_money", label: "Telecel Money", icon: "🟣" },
+  { value: "cash",          label: "Cash",          icon: "💵" },
 ];
 
 function getBonus(montant) {
-  const obj = BONUS_RECHARGE.find(b => montant >= b.seuil);
-  return obj ? obj.bonus : 0;
+  if (montant >= 10000) return 1500;
+  if (montant >= 5000)  return 500;
+  return 0;
 }
 
 const STATUT_BADGE = {
@@ -34,132 +36,186 @@ const STATUT_BADGE = {
 };
 
 const TX_TYPE_CFG = {
-  recharge:    { bg: "bg-emerald-50",  amt: "text-emerald-700", icon: "💰" },
-  gain:        { bg: "bg-emerald-50",  amt: "text-emerald-700", icon: "🏆" },
-  bonus:       { bg: "bg-blue-50",     amt: "text-blue-700",    icon: "🎁" },
-  paiement:    { bg: "bg-red-50",      amt: "text-red-700",     icon: "🛵" },
-  retrait:     { bg: "bg-orange-50",   amt: "text-orange-700",  icon: "💸" },
-  commission:  { bg: "bg-purple-50",   amt: "text-purple-700",  icon: "📊" },
-  ajustement:  { bg: "bg-gray-50",     amt: "text-gray-700",    icon: "⚙️" },
-  annulation:  { bg: "bg-red-50",      amt: "text-red-700",     icon: "❌" },
-  compensation:{ bg: "bg-emerald-50",  amt: "text-emerald-700", icon: "🔄" },
+  recharge:    { bg: "bg-emerald-50", icon: "💰" },
+  gain:        { bg: "bg-emerald-50", icon: "🏆" },
+  bonus:       { bg: "bg-blue-50",    icon: "🎁" },
+  paiement:    { bg: "bg-red-50",     icon: "🛵" },
+  retrait:     { bg: "bg-orange-50",  icon: "💸" },
+  commission:  { bg: "bg-purple-50",  icon: "📊" },
+  ajustement:  { bg: "bg-gray-50",    icon: "⚙️" },
+  annulation:  { bg: "bg-red-50",     icon: "❌" },
+  compensation:{ bg: "bg-emerald-50", icon: "🔄" },
 };
+
+// ─── Upload robuste compatible APK Capacitor ──────────────────────────────────
+// Sur Capacitor, les fichiers de la caméra/galerie peuvent nécessiter
+// une conversion Blob explicite pour que l'upload fonctionne
+async function uploadFileRobust(file) {
+  console.log('[UPLOAD] start — name:', file.name, 'size:', file.size, 'type:', file.type);
+
+  // Tentative 1 : conversion Blob explicite (obligatoire sur Capacitor)
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: file.type || 'image/jpeg' });
+    const safeFile = new File([blob], file.name || 'preuve.jpg', { type: blob.type });
+    const res = await base44.integrations.Core.UploadFile({ file: safeFile });
+    if (res?.file_url) {
+      console.log('[UPLOAD] OK (blob method) —', res.file_url.slice(0, 60));
+      return res.file_url;
+    }
+  } catch (e) {
+    console.warn('[UPLOAD] blob method failed:', e.message, '— trying direct');
+  }
+
+  // Tentative 2 : upload direct sans conversion
+  try {
+    const res = await base44.integrations.Core.UploadFile({ file });
+    if (res?.file_url) {
+      console.log('[UPLOAD] OK (direct method) —', res.file_url.slice(0, 60));
+      return res.file_url;
+    }
+  } catch (e) {
+    console.error('[UPLOAD] direct method failed:', e.message);
+    throw new Error(`Upload échoué : ${e.message}`);
+  }
+
+  throw new Error('Upload échoué : URL vide');
+}
+
+// ─── Composant principal ──────────────────────────────────────────────────────
 
 export default function MonBedou() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-  const [bedou, setBedou] = useState(null);
+  const [user, setUser]               = useState(null);
+  const [bedou, setBedou]             = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("solde");
-  const [form, setForm] = useState({ montant: "", methode: "orange_money", preuve: null });
-  const [submitted, setSubmitted] = useState(null); // null | { bonus, bonus_restants }
-  const [retraitForm, setRetraitForm] = useState({ montant: "", methode: "orange_money", numero_reception: "", nom_compte: "" });
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading]         = useState(true);
+  const [tab, setTab]                 = useState("solde");
   const [filterStatut, setFilterStatut] = useState("tous");
 
+  // État recharge
+  const [form, setForm]           = useState({ montant: "", methode: "orange_money", preuve: null });
+  const [submitting, setSubmitting] = useState(false);
+  const [successData, setSuccessData] = useState(null); // null = formulaire, objet = succès
+
+  // État retrait
+  const [retraitForm, setRetraitForm] = useState({ montant: "", methode: "orange_money", numero_reception: "" });
+
+  // ── Chargement données ──────────────────────────────────────────────────────
   const load = async () => {
     setLoading(true);
-    // Timeout de sécurité 10s pour éviter boucle infinie
-    const safetyTimeout = setTimeout(() => { setLoading(false); }, 10000);
+    const t = setTimeout(() => setLoading(false), 12000); // safety
     try {
       const me = await base44.auth.me();
       setUser(me);
       const res = await base44.functions.invoke("bedouEngine", { action: "get_bedou" });
       const d = res?.data ?? res;
-      setBedou(d.bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
+      setBedou(d.bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0, solde_bonus: 0 });
       setTransactions(d.transactions || []);
-    } catch (err) {
-      console.error('[MonBedou] Erreur chargement:', err);
-      setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
+    } catch (e) {
+      console.error('[MonBedou] load error:', e.message);
+      setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, solde_bonus: 0 });
     } finally {
-      clearTimeout(safetyTimeout);
+      clearTimeout(t);
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []); // Dépendances vides — ne se relance pas en boucle
+  useEffect(() => { load(); }, []);
 
+  // ── Flux Recharge ───────────────────────────────────────────────────────────
   const handleRecharge = async () => {
-    const montant = parseInt(form.montant);
-    if (!montant || montant < 100) { toast.error("Montant minimum 100 F CFA"); return; }
-    if (!form.methode) { toast.error("Veuillez sélectionner une méthode"); return; }
-    if (!form.preuve) { toast.error("Veuillez ajouter une preuve de paiement"); return; }
-    if (!user) { toast.error("Vous devez être connecté"); return; }
+    // Étape A — Validation formulaire
+    const montant = parseInt(form.montant) || 0;
+    if (montant < 100)    { toast.error("Montant minimum 100 F CFA"); return; }
+    if (!form.methode)    { toast.error("Sélectionnez une méthode de paiement"); return; }
+    if (!form.preuve)     { toast.error("Ajoutez une preuve de paiement"); return; }
+    if (!user?.email)     { toast.error("Vous devez être connecté"); return; }
 
     const bonusAmount = getBonus(montant);
-    console.log('[RECHARGE] start — montant:', montant, 'bonus:', bonusAmount);
+    console.log('[RECHARGE] ▶ START — montant:', montant, 'bonus:', bonusAmount, 'user:', user.email);
+
     setSubmitting(true);
 
     try {
-      // 1. Upload preuve (re-création Blob pour compatibilité APK Capacitor)
-      console.log('[RECHARGE] upload start');
-      const fileBlob = new Blob([await form.preuve.arrayBuffer()], { type: form.preuve.type || 'image/jpeg' });
-      const renamedFile = new File([fileBlob], form.preuve.name || 'preuve.jpg', { type: fileBlob.type });
-      const uploadRes = await base44.integrations.Core.UploadFile({ file: renamedFile });
-      const file_url = uploadRes?.file_url || "";
-      if (!file_url) throw new Error("Upload échoué : URL vide");
-      console.log('[RECHARGE] upload OK');
+      // Étape B — Upload preuve
+      console.log('[RECHARGE] ▶ UPLOAD preuve...');
+      const preuveUrl = await uploadFileRobust(form.preuve);
+      console.log('[RECHARGE] ✅ UPLOAD OK —', preuveUrl.slice(0, 50));
 
-      // 2. Soumettre la demande (auth_token en fallback pour APK natif)
-      let authToken = '';
-      try {
-        const sessionToken = localStorage.getItem('base44_session_token') || localStorage.getItem('b44_token') || '';
-        authToken = sessionToken;
-      } catch (_) {}
-
+      // Étape C — Création demande en BDD via backend
+      console.log('[RECHARGE] ▶ SUBMIT backend...');
       const res = await base44.functions.invoke("submitBedouRecharge", {
         montant,
-        methode_paiement: form.methode,
-        preuve_paiement_url: file_url,
-        bonus: bonusAmount,
-        ...(authToken ? { auth_token: authToken } : {}),
+        methode_paiement:    form.methode,
+        preuve_paiement_url: preuveUrl,
+        bonus:               bonusAmount,
       });
+
+      // Normaliser la réponse Axios (res.data) vs réponse directe
       const data = res?.data ?? res;
-      if (!data?.success) throw new Error(data?.error || "Soumission échouée");
-      console.log('[RECHARGE] SUCCESS — id:', data.demande_id);
+      console.log('[RECHARGE] backend response:', JSON.stringify(data).slice(0, 200));
 
-      // 3. WhatsApp non-bloquant
-      try {
-        triggerWhatsAppNotification({ eventType: "bedou_topup_requested", recipientRole: "client", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouTopupRequested(), entityId: user?.id, entityType: "bedou", priority: "high" });
-      } catch (_) {}
+      if (!data?.success) {
+        throw new Error(data?.message || data?.error || "Soumission échouée côté serveur");
+      }
 
-      // 4. Succès → afficher écran + rediriger vers accueil après 3s
+      // Étape D — Succès confirmé
+      console.log('[RECHARGE] ✅ SUCCESS — recharge_id:', data.recharge_id);
+
+      // Étape E — Toast immédiat
+      toast.success("✅ Demande de recharge envoyée avec succès !");
+
+      // Réinitialiser formulaire + afficher écran succès
       setForm({ montant: "", methode: "orange_money", preuve: null });
-      setSubmitted({ bonus: data.bonus || 0, montant });
-      setTimeout(() => navigate("/"), 3000);
+      setSuccessData({ montant, bonus: bonusAmount, recharge_id: data.recharge_id });
+
+      // Étape F — Redirection accueil après 2.5s
+      console.log('[RECHARGE] ▶ REDIRECT accueil dans 2.5s...');
+      setTimeout(() => {
+        console.log('[RECHARGE] ▶ NAVIGATING to /');
+        navigate("/");
+      }, 2500);
 
     } catch (err) {
-      console.error('[RECHARGE] ERREUR:', err?.message);
+      console.error('[RECHARGE] ❌ ERREUR:', err?.message);
       toast.error("❌ " + (err?.message || "Erreur inattendue. Réessayez."));
+    } finally {
+      // TOUJOURS libérer le bouton — que ce soit succès ou erreur
+      setSubmitting(false);
+      console.log('[RECHARGE] ▶ FINALLY — submitting = false');
+    }
+  };
+
+  // ── Flux Retrait ────────────────────────────────────────────────────────────
+  const handleRetrait = async () => {
+    const montant = parseInt(retraitForm.montant) || 0;
+    if (montant < 500)              { toast.error("Montant minimum 500 F CFA"); return; }
+    if (!retraitForm.numero_reception) { toast.error("Numéro de réception requis"); return; }
+    setSubmitting(true);
+    try {
+      const res = await base44.functions.invoke("bedouEngine", { action: "demande_retrait", ...retraitForm, montant });
+      const rd = res?.data ?? res;
+      if (rd?.success) {
+        toast.success("Demande de retrait envoyée !");
+        try { triggerWhatsAppNotification({ eventType: "bedou_withdraw_requested", recipientRole: "driver", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouWithdrawRequested(), entityId: user?.id, entityType: "bedou", priority: "high" }); } catch (_) {}
+        setRetraitForm({ montant: "", methode: "orange_money", numero_reception: "" });
+        load();
+        setTab("historique");
+      } else {
+        toast.error(rd?.message || rd?.error || "Erreur");
+      }
+    } catch (e) {
+      toast.error("❌ " + e.message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleRetrait = async () => {
-    const montant = parseInt(retraitForm.montant);
-    if (!montant || montant < 500) return toast.error("Montant minimum 500 F CFA");
-    if (!retraitForm.numero_reception) return toast.error("Veuillez entrer votre numéro de réception");
-    setSubmitting(true);
-    const res = await base44.functions.invoke("bedouEngine", { action: "demande_retrait", ...retraitForm, montant });
-    setSubmitting(false);
-    const rd = res?.data ?? res;
-    if (rd?.success) {
-      toast.success("Demande de retrait envoyée ! L'admin va la traiter.");
-      try { triggerWhatsAppNotification({ eventType: "bedou_withdraw_requested", recipientRole: "driver", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouWithdrawRequested(), entityId: user?.id, entityType: "bedou", priority: "high" }); } catch (_) {}
-      setRetraitForm({ montant: "", methode: "orange_money", numero_reception: "", nom_compte: "" });
-      load();
-      setTab("historique");
-    } else {
-      toast.error(rd?.error || "Erreur");
-    }
-  };
-
-  const canRetrait = user && ["livreur", "partenaire", "commercial"].includes(user.user_type);
-  const bonus = parseInt(form.montant) >= 100 ? getBonus(parseInt(form.montant)) : 0;
-
-  const txFiltrees = transactions.filter(tx => filterStatut === "tous" || tx.statut === filterStatut);
+  // ── Dérivés ─────────────────────────────────────────────────────────────────
+  const canRetrait   = user && ["livreur", "partenaire", "commercial"].includes(user.user_type);
+  const bonusPreview = parseInt(form.montant) >= 100 ? getBonus(parseInt(form.montant)) : 0;
+  const txFiltrees   = transactions.filter(tx => filterStatut === "tous" || tx.statut === filterStatut);
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -168,7 +224,8 @@ export default function MonBedou() {
   );
 
   return (
-    <div className="max-w-lg mx-auto pb-16 space-y-0">
+    <div className="max-w-lg mx-auto pb-16">
+
       {/* ── HEADER ── */}
       <div className="bg-gradient-to-br from-[#0F2A5C] to-[#1E6BFF] px-4 pt-5 pb-8 rounded-b-[2rem] text-white shadow-lg">
         <div className="flex items-center gap-3 mb-5">
@@ -177,14 +234,10 @@ export default function MonBedou() {
           </button>
           <h1 className="text-lg font-extrabold">Mon Bedou</h1>
         </div>
-
-        {/* Solde principal */}
         <div className="text-center mb-1">
           <p className="text-sm text-white/60 font-medium">Solde total</p>
           <p className="text-5xl font-extrabold tracking-tight mt-1">{fmt(bedou?.solde || 0)}</p>
         </div>
-
-        {/* Détail solde */}
         <div className="grid grid-cols-3 gap-2 mt-5">
           <div className="bg-white/15 rounded-2xl p-3 text-center border border-white/10">
             <div className="flex items-center justify-center gap-1 mb-1">
@@ -208,10 +261,8 @@ export default function MonBedou() {
             <p className="font-extrabold text-sm">{fmt(bedou?.solde_bonus || 0)}</p>
           </div>
         </div>
-
-        {/* Boutons rapides */}
         <div className="flex gap-3 mt-4">
-          <button onClick={() => setTab("recharge")} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white text-primary font-bold text-sm shadow-sm active:scale-95 transition-all">
+          <button onClick={() => { setSuccessData(null); setTab("recharge"); }} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white text-primary font-bold text-sm shadow-sm active:scale-95 transition-all">
             <Plus className="h-4 w-4" /> Recharger
           </button>
           {canRetrait && (
@@ -238,66 +289,63 @@ export default function MonBedou() {
       <div className="px-4 mt-4">
         <div className="flex gap-1 p-1 bg-muted/50 rounded-2xl border border-border">
           {[
-            { key: "solde",     label: "Aperçu" },
-            { key: "recharge",  label: "Recharger" },
+            { key: "solde",      label: "Aperçu" },
+            { key: "recharge",   label: "Recharger" },
             ...(canRetrait ? [{ key: "retrait", label: "Retirer" }] : []),
             { key: "historique", label: "Historique" },
           ].map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex-1 px-2 py-2 rounded-xl text-xs font-semibold transition-all ${
-                tab === t.key ? "bg-white text-primary shadow-sm" : "text-muted-foreground"
-              }`}
-            >
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`flex-1 px-2 py-2 rounded-xl text-xs font-semibold transition-all ${tab === t.key ? "bg-white text-primary shadow-sm" : "text-muted-foreground"}`}>
               {t.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Aperçu ── */}
+      {/* ══════════════════════════════════════════════════════
+          APERÇU
+      ══════════════════════════════════════════════════════ */}
       {tab === "solde" && (
         <div className="px-4 mt-4 space-y-3">
           <p className="text-sm font-bold text-foreground">Dernières transactions</p>
           {transactions.slice(0, 5).map(tx => <TxRow key={tx.id} tx={tx} />)}
-          {transactions.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">Aucune transaction</div>
-          )}
+          {transactions.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Aucune transaction</p>}
         </div>
       )}
 
-      {/* ── Recharge ── */}
+      {/* ══════════════════════════════════════════════════════
+          RECHARGE
+      ══════════════════════════════════════════════════════ */}
       {tab === "recharge" && (
         <div className="px-4 mt-4 space-y-4">
 
-          {/* Succès */}
-          {submitted ? (
-            <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-6 text-center space-y-3">
-              <div className="text-5xl">✅</div>
-              <p className="text-base font-extrabold text-emerald-800">Demande de recharge envoyée avec succès !</p>
-              <p className="text-sm text-emerald-700">
-                Votre recharge de <strong>{fmt(submitted.montant || 0)} F CFA</strong> a bien été envoyée.{" "}
-                Elle sera validée par l'administrateur sous 24h.
-              </p>
-              {submitted.bonus > 0 && (
-                <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm font-semibold text-amber-800">
-                  🎁 Bonus de +{fmt(submitted.bonus)} F CFA sera crédité à la validation !
+          {/* ── Écran succès ── */}
+          {successData ? (
+            <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-6 text-center space-y-4">
+              <div className="text-6xl">✅</div>
+              <div>
+                <p className="text-lg font-extrabold text-emerald-800">Demande envoyée avec succès !</p>
+                <p className="text-sm text-emerald-700 mt-1">
+                  Recharge de <strong>{fmt(successData.montant)} F CFA</strong> en cours de validation.
+                </p>
+              </div>
+              {successData.bonus > 0 && (
+                <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-300 text-sm font-semibold text-amber-800">
+                  🎁 Bonus +{fmt(successData.bonus)} F CFA crédité à la validation !
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">Redirection vers l'accueil dans 3 secondes…</p>
-              <button
-                onClick={() => navigate("/")}
-                className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm active:scale-95 transition-all"
-              >
-                Retour à l'accueil
+              <p className="text-xs text-muted-foreground">Redirection automatique dans 2 secondes…</p>
+              <button onClick={() => navigate("/")}
+                className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm active:scale-95 transition-all">
+                Retour à l'accueil maintenant
               </button>
             </div>
+
           ) : (
             <>
-              {/* Infos dépôt */}
+              {/* ── Infos dépôt ── */}
               <div className="rounded-2xl bg-orange-50 border-2 border-orange-300 p-4 space-y-2">
-                <p className="text-sm font-extrabold text-orange-800">📲 Effectuez le dépôt via Orange Money puis ajoutez la preuve de paiement.</p>
+                <p className="text-sm font-extrabold text-orange-800">📲 Effectuez d'abord le dépôt, puis soumettez la preuve ici.</p>
                 <div className="flex items-center gap-3 mt-2">
                   <div className="h-10 w-10 rounded-xl bg-orange-100 flex items-center justify-center text-xl flex-shrink-0">🟠</div>
                   <div>
@@ -308,28 +356,32 @@ export default function MonBedou() {
                 </div>
               </div>
 
-              {/* Montant */}
+              {/* ── Montant ── */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground">Montant (F CFA) *</label>
-                <input type="number" placeholder="Ex: 2000" value={form.montant} onChange={e => setForm({ ...form, montant: e.target.value })}
-                  className="w-full mt-1.5 h-12 rounded-xl border border-input px-4 text-base font-semibold text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
-
-                {/* Tableau bonus permanent */}
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="Ex: 5000"
+                  value={form.montant}
+                  onChange={e => setForm({ ...form, montant: e.target.value })}
+                  className="w-full mt-1.5 h-12 rounded-xl border border-input px-4 text-base font-semibold text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                {/* Tableau bonus TOUJOURS visible */}
                 <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 space-y-1">
                   <p className="text-xs font-bold text-amber-800">🎁 Bonus recharge :</p>
                   <p className="text-xs text-amber-700">• 5 000 F CFA rechargés = <strong>+500 F CFA offerts</strong></p>
                   <p className="text-xs text-amber-700">• 10 000 F CFA rechargés = <strong>+1 500 F CFA offerts</strong></p>
                 </div>
-
-                {bonus > 0 && (
+                {bonusPreview > 0 && (
                   <div className="mt-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center gap-2">
-                    <span className="text-base">✅</span>
-                    <p className="text-sm font-extrabold text-emerald-700">Bonus appliqué : +{fmt(bonus)} F CFA !</p>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <p className="text-sm font-extrabold text-emerald-700">Bonus : +{fmt(bonusPreview)} F CFA appliqué !</p>
                   </div>
                 )}
               </div>
 
-              {/* Méthode */}
+              {/* ── Méthode ── */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground">Méthode de paiement *</label>
                 <div className="grid grid-cols-2 gap-2 mt-1.5">
@@ -342,7 +394,7 @@ export default function MonBedou() {
                 </div>
               </div>
 
-              {/* Preuve */}
+              {/* ── Preuve ── */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground">Preuve de paiement <span className="text-red-500">*</span></label>
                 {!form.preuve ? (
@@ -350,19 +402,22 @@ export default function MonBedou() {
                     <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors">
                       <span className="text-2xl">📷</span>
                       <span className="text-xs font-semibold text-primary">Prendre une photo</span>
-                      <input type="file" accept="image/jpg,image/jpeg,image/png" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setForm(prev => ({ ...prev, preuve: f })); }} />
+                      <input type="file" accept="image/*" capture="environment" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) setForm(p => ({ ...p, preuve: f })); }} />
                     </label>
                     <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-border hover:bg-muted/50 transition-colors">
                       <span className="text-2xl">🖼️</span>
                       <span className="text-xs font-semibold text-muted-foreground">Galerie</span>
-                      <input type="file" accept="image/jpg,image/jpeg,image/png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setForm(prev => ({ ...prev, preuve: f })); }} />
+                      <input type="file" accept="image/*" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) setForm(p => ({ ...p, preuve: f })); }} />
                     </label>
                   </div>
                 ) : (
                   <div className="mt-1.5 space-y-2">
                     <div className="relative rounded-xl overflow-hidden border-2 border-emerald-300">
                       <img src={URL.createObjectURL(form.preuve)} alt="Preuve" className="w-full h-40 object-cover" />
-                      <button onClick={() => setForm(prev => ({ ...prev, preuve: null }))} className="absolute top-2 right-2 bg-red-600 text-white rounded-full h-7 w-7 flex items-center justify-center font-bold shadow">×</button>
+                      <button onClick={() => setForm(p => ({ ...p, preuve: null }))}
+                        className="absolute top-2 right-2 bg-red-600 text-white rounded-full h-7 w-7 flex items-center justify-center font-bold shadow">×</button>
                     </div>
                     <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
@@ -372,17 +427,23 @@ export default function MonBedou() {
                 )}
               </div>
 
-              {/* Bouton soumettre */}
-              <div className="mt-5 mb-20 mx-auto w-[90%]">
+              {/* ── Bouton submit ── */}
+              <div className="pb-20">
                 <Button
                   className="w-full h-14 text-base font-extrabold rounded-2xl shadow-md"
-                  size="lg"
                   onClick={handleRecharge}
-                  disabled={submitting || !form.montant || !form.methode || !form.preuve}
+                  disabled={submitting || !form.montant || !form.preuve}
                 >
-                  {submitting
-                    ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Envoi en cours…</span>
-                    : <span className="flex items-center justify-center gap-1 flex-wrap">💰 Recharger{bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ""}</span>}
+                  {submitting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      Envoi en cours…
+                    </span>
+                  ) : (
+                    <span>
+                      💰 Recharger{bonusPreview > 0 ? ` (+${fmt(bonusPreview)} bonus)` : ""}
+                    </span>
+                  )}
                 </Button>
               </div>
             </>
@@ -390,15 +451,18 @@ export default function MonBedou() {
         </div>
       )}
 
-      {/* ── Retrait ── */}
+      {/* ══════════════════════════════════════════════════════
+          RETRAIT
+      ══════════════════════════════════════════════════════ */}
       {tab === "retrait" && canRetrait && (
-        <div className="px-4 mt-4 space-y-4">
+        <div className="px-4 mt-4 space-y-4 pb-20">
           <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
             ⚠️ Disponible : <strong>{fmt(bedou?.solde_disponible || 0)}</strong> · Min. 500 F CFA
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground">Montant à retirer (F CFA) *</label>
-            <input type="number" placeholder="Ex: 1000" value={retraitForm.montant} onChange={e => setRetraitForm({ ...retraitForm, montant: e.target.value })}
+            <input type="number" inputMode="numeric" placeholder="Ex: 1000" value={retraitForm.montant}
+              onChange={e => setRetraitForm({ ...retraitForm, montant: e.target.value })}
               className="w-full mt-1.5 h-12 rounded-xl border border-input px-4 text-base font-semibold text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
           <div>
@@ -414,16 +478,20 @@ export default function MonBedou() {
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground">Numéro de réception *</label>
-            <input type="text" placeholder="Ex: 0706070607" value={retraitForm.numero_reception} onChange={e => setRetraitForm({ ...retraitForm, numero_reception: e.target.value })}
+            <input type="text" inputMode="numeric" placeholder="Ex: 0706070607" value={retraitForm.numero_reception}
+              onChange={e => setRetraitForm({ ...retraitForm, numero_reception: e.target.value })}
               className="w-full mt-1.5 h-11 rounded-xl border border-input px-4 text-sm text-foreground bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
-          <Button className="w-full h-13 font-bold rounded-2xl" size="lg" onClick={handleRetrait} disabled={submitting || !retraitForm.montant || !retraitForm.numero_reception}>
+          <Button className="w-full h-12 font-bold rounded-2xl" onClick={handleRetrait}
+            disabled={submitting || !retraitForm.montant || !retraitForm.numero_reception}>
             {submitting ? "Envoi en cours…" : "Envoyer la demande de retrait"}
           </Button>
         </div>
       )}
 
-      {/* ── Historique ── */}
+      {/* ══════════════════════════════════════════════════════
+          HISTORIQUE
+      ══════════════════════════════════════════════════════ */}
       {tab === "historique" && (
         <div className="px-4 mt-4 space-y-3">
           <div className="flex gap-2 flex-wrap">
@@ -436,20 +504,25 @@ export default function MonBedou() {
           </div>
           <BeDouHistory userEmail={user?.email} userRole={user?.user_type} />
           {txFiltrees.slice(0, 20).map(tx => <TxRow key={tx.id} tx={tx} />)}
-          {txFiltrees.length === 0 && <div className="text-center py-8 text-muted-foreground text-sm">Aucune transaction</div>}
+          {txFiltrees.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Aucune transaction</p>}
         </div>
       )}
     </div>
   );
 }
 
+// ─── Composant ligne transaction ──────────────────────────────────────────────
 function TxRow({ tx }) {
   const isCredit = tx.sens === "credit";
-  const cfg = TX_TYPE_CFG[tx.type] || { bg: "bg-gray-50", amt: "text-gray-700", icon: "💳" };
+  const cfg = TX_TYPE_CFG[tx.type] || { bg: "bg-gray-50", icon: "💳" };
   const badge = STATUT_BADGE[tx.statut];
-  const typeLabels = { recharge: "Recharge", gain: "Gain course", bonus: "Bonus", paiement: "Paiement course", retrait: "Retrait", commission: "Commission", ajustement: "Ajustement", annulation: "Frais annulation", compensation: "Compensation" };
+  const typeLabels = {
+    recharge: "Recharge", gain: "Gain course", bonus: "Bonus", paiement: "Paiement course",
+    retrait: "Retrait", commission: "Commission", ajustement: "Ajustement",
+    annulation: "Frais annulation", compensation: "Compensation"
+  };
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-xl border border-border bg-white shadow-sm`}>
+    <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-white shadow-sm">
       <div className={`h-10 w-10 rounded-xl ${cfg.bg} flex items-center justify-center flex-shrink-0 text-lg`}>
         {cfg.icon}
       </div>
