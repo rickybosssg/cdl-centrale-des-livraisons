@@ -122,18 +122,22 @@ async function runNativeFcm(propEmail) {
 
   // ── Create channel ──────────────────────────────────────────────────────────
   try {
+    // importance: 4 = IMPORTANCE_HIGH (Android constant) — obligatoire pour heads-up notification
+    // importance: 5 = IMPORTANCE_MAX (pour alarmes) — souvent bloqué par Android
     await Promise.race([
       PushNotifications.createChannel({
         id: 'default',
         name: 'CDL Notifications',
-        importance: 5,
+        description: 'Toutes les notifications CDL',
+        importance: 4,
         sound: 'default',
         vibration: true,
         lights: true,
+        lightColor: '#1E6BFF',
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
     ]);
-    console.log('[FCM] ✅ Channel created');
+    console.log('[FCM] ✅ Channel created (importance=4/HIGH)');
   } catch (e) {
     console.warn('[FCM] ⚠️ Channel creation error:', e?.message);
   }

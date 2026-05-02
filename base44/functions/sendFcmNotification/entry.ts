@@ -94,8 +94,11 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
       notification: {
         channel_id: 'default',
         sound: 'default',
-        notification_priority: 'PRIORITY_HIGH',
+        notification_priority: 'PRIORITY_MAX',
         visibility: 'PUBLIC',
+        default_sound: true,
+        default_vibrate_timings: true,
+        default_light_settings: true,
       },
     },
   };

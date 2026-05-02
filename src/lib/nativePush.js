@@ -49,15 +49,16 @@ async function getPN() {
 // ── Canal Android ─────────────────────────────────────────────────────────────
 async function ensureChannel(PN) {
   try {
+    // importance: 4 = IMPORTANCE_HIGH (Android) — heads-up notification visible même app fermée
     await PN.createChannel({
       id: 'default',
       name: 'CDL Notifications',
       description: 'Toutes les notifications CDL',
-      importance: 5,
+      importance: 4,
       sound: 'default',
       vibration: true,
       lights: true,
-      lightColor: '#1a73e8',
+      lightColor: '#1E6BFF',
     });
     console.log('[NativePush] Canal "default" créé/vérifié');
   } catch (_) {}
