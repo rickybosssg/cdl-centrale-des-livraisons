@@ -131,38 +131,52 @@ export default function MonBedou() {
         throw new Error(`Upload échoué: ${uploadErr.message}`);
       }
 
-      // C — Backend (inclure auth_token pour compatibilité APK Capacitor)
-      addLog('▶ INVOKE submitBedouRecharge...');
+      // C — Backend via fetch DIRECT avec Authorization header (bypass SDK APK)
+      addLog('▶ FETCH direct submitBedouRecharge...');
       let authToken = '';
       try {
         authToken = localStorage.getItem('base44_access_token') || '';
-        addLog(`  auth_token: ${authToken ? 'OUI (len=' + authToken.length + ')' : 'NON — 403 probable'}`);
+        addLog(`  auth_token: ${authToken ? 'OUI (len=' + authToken.length + ')' : 'NON'}`);
       } catch (_) {}
 
-      let res;
+      // URL directe de la fonction (domaine de l'app CDL)
+      const fnUrl = `https://cdl.base44.app/functions/submitBedouRecharge`;
+      addLog(`  url: ${fnUrl}`);
+      addLog(`  Authorization header: ${authToken ? 'Bearer ...' + authToken.slice(-8) : 'ABSENT'}`);
+
+      let fetchRes;
       try {
-        res = await base44.functions.invoke("submitBedouRecharge", {
-          montant,
-          methode_paiement:    form.methode,
-          preuve_paiement_url: preuveUrl,
-          bonus:               bonusAmount,
-          auth_token:          authToken,
+        fetchRes = await fetch(fnUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          },
+          body: JSON.stringify({
+            montant,
+            methode_paiement:    form.methode,
+            preuve_paiement_url: preuveUrl,
+            bonus:               bonusAmount,
+            auth_token:          authToken, // fallback dans le body aussi
+          }),
         });
-        addLog(`✅ INVOKE retourné`);
-        addLog(`  type=${typeof res} hasData=${'data' in (res||{})}`);
-      } catch (invokeErr) {
-        addLog(`❌ INVOKE ERREUR: ${invokeErr.message}`);
-        throw new Error(`Erreur réseau: ${invokeErr.message}`);
+        addLog(`  HTTP status: ${fetchRes.status}`);
+      } catch (fetchErr) {
+        addLog(`❌ FETCH réseau ERREUR: ${fetchErr.message}`);
+        throw new Error(`Erreur réseau: ${fetchErr.message}`);
       }
 
-      // Normaliser Axios (res.data) vs réponse directe
-      const data = (res && typeof res === 'object' && 'data' in res) ? res.data : res;
-      addLog(`▶ DATA: success=${data?.success}`);
-      addLog(`  id=${data?.recharge_id}`);
-      addLog(`  msg=${data?.message}`);
+      let data;
+      try {
+        data = await fetchRes.json();
+        addLog(`  response: success=${data?.success} id=${data?.recharge_id}`);
+      } catch (parseErr) {
+        addLog(`❌ JSON parse erreur: ${parseErr.message} (status=${fetchRes.status})`);
+        throw new Error(`Réponse invalide du serveur (status ${fetchRes.status})`);
+      }
 
       if (!data || !data.success) {
-        const reason = data?.message || data?.error || 'success=false sans message';
+        const reason = data?.message || data?.error || `Échec (HTTP ${fetchRes.status})`;
         addLog(`❌ ÉCHEC: ${reason}`);
         throw new Error(reason);
       }

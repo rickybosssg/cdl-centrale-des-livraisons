@@ -1,12 +1,13 @@
 /**
- * submitBedouRecharge — VERSION ANTI-403 FINALE
+ * submitBedouRecharge — VERSION FETCH-DIRECT APK
  *
- * CAUSE DU 403 RÉELLE : Sur APK Capacitor, base44.functions.invoke() envoie
- * le token dans le body JSON (pas dans le header Authorization).
- * createClientFromRequest() ne voit pas le header → 403.
+ * Appelé via fetch() natif depuis MonBedou avec header Authorization.
+ * Le token est dans Authorization: Bearer <token> ET dans body.auth_token.
  *
- * FIX : On reconstruit manuellement la Request avec le token dans le header,
- * extrait soit du header existant, soit du champ auth_token du body.
+ * Stratégie auth :
+ * 1. Header Authorization (fetch direct avec token explicite)
+ * 2. body.auth_token injecté dans le header en fallback
+ * 3. createClientFromRequest → base44.auth.me()
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
@@ -15,6 +16,7 @@ const L = (msg) => console.log(`[RECHARGE] ${new Date().toISOString()} | ${msg}`
 
 Deno.serve(async (req) => {
   L('=== START ===');
+  L(`method: ${req.method} | url: ${req.url}`);
 
   // ── CORS preflight ──────────────────────────────────────────────────────────
   if (req.method === 'OPTIONS') {
@@ -28,48 +30,43 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ── ÉTAPE 1 : Lire le body EN PREMIER ──────────────────────────────────────
+  // ── ÉTAPE 1 : Lire le body ──────────────────────────────────────────────────
   let body = {};
   try {
     const raw = await req.text();
     L(`body length: ${raw.length}`);
     if (raw.length > 0) body = JSON.parse(raw);
   } catch (e) {
-    L(`body parse error: ${e.message}`);
     return Response.json({ success: false, error: 'Corps invalide', step: 'parse' }, { status: 400 });
   }
 
-  const { montant, methode_paiement, preuve_paiement_url, bonus, auth_token } = body;
+  const { montant, methode_paiement, preuve_paiement_url, bonus, auth_token: bodyToken } = body;
   L(`montant=${montant} methode=${methode_paiement} bonus=${bonus}`);
-  L(`preuve_present=${!!preuve_paiement_url} body_token_present=${!!auth_token} body_token_len=${auth_token?.length || 0}`);
 
-  // ── ÉTAPE 2 : Reconstruire la Request avec le bon token dans le header ──────
-  const existingHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
-  L(`existing_auth_header: "${existingHeader.slice(0, 30)}..."`);
+  // ── ÉTAPE 2 : Construire la Request avec le token dans le header ────────────
+  const headerToken = req.headers.get('Authorization') || req.headers.get('authorization') || '';
+  const effectiveToken = headerToken.replace(/^Bearer\s+/i, '') || bodyToken || '';
 
-  // Si pas de header mais token dans body → injecter dans les headers
-  const newHeaders = new Headers(req.headers);
-  if (!existingHeader && auth_token) {
-    newHeaders.set('Authorization', `Bearer ${auth_token}`);
-    L('injected body token into Authorization header');
+  L(`header_token len=${headerToken.length} | body_token len=${bodyToken?.length || 0} | effective len=${effectiveToken.length}`);
+
+  if (!effectiveToken) {
+    L('REJECT: no token found in header or body');
+    return Response.json({ success: false, error: 'Token manquant — reconnectez-vous', step: 'auth' }, { status: 401 });
   }
 
-  const reqWithToken = new Request(req.url, {
-    method: 'GET', // body déjà lu, pas besoin
-    headers: newHeaders,
-  });
+  // Reconstruire la Request avec le token dans Authorization header
+  const authHeaders = new Headers(req.headers);
+  authHeaders.set('Authorization', `Bearer ${effectiveToken}`);
+  const reqWithAuth = new Request(req.url, { method: 'GET', headers: authHeaders });
 
   // ── ÉTAPE 3 : Auth via SDK ──────────────────────────────────────────────────
   let user = null;
   try {
-    const base44 = createClientFromRequest(reqWithToken);
+    const base44 = createClientFromRequest(reqWithAuth);
     user = await base44.auth.me();
-    L(`auth OK: user=${user?.email} id=${user?.id} role=${user?.role}`);
+    L(`auth OK: user=${user?.email} role=${user?.role}`);
   } catch (e) {
-    L(`auth ERROR: ${e.message}`);
-    // Log le header utilisé pour diagnostiquer
-    const finalHeader = newHeaders.get('Authorization') || '';
-    L(`auth header used: "${finalHeader.slice(0, 50)}..."`);
+    L(`auth ERROR: ${e.message} | token_prefix=${effectiveToken.slice(0, 20)}...`);
     return Response.json({
       success: false,
       error: 'Session expirée — reconnectez-vous',
@@ -78,41 +75,36 @@ Deno.serve(async (req) => {
     }, { status: 401 });
   }
 
-  if (!user) {
-    L('auth FAILED: user null');
+  if (!user?.id) {
+    L('auth FAILED: user null or no id');
     return Response.json({ success: false, error: 'Non authentifié', step: 'auth' }, { status: 401 });
   }
 
-  // ── ÉTAPE 4 : Validation paramètres ────────────────────────────────────────
+  // ── ÉTAPE 4 : Validation ────────────────────────────────────────────────────
   const montantInt = parseInt(montant) || 0;
   const bonusInt   = parseInt(bonus)   || 0;
 
-  if (montantInt < 100) {
-    return Response.json({ success: false, error: 'Montant minimum 100 F CFA', step: 'validation' }, { status: 400 });
-  }
-  if (!methode_paiement) {
-    return Response.json({ success: false, error: 'Méthode de paiement requise', step: 'validation' }, { status: 400 });
-  }
-  if (!preuve_paiement_url) {
-    return Response.json({ success: false, error: 'Preuve de paiement requise', step: 'validation' }, { status: 400 });
-  }
+  if (montantInt < 100)       return Response.json({ success: false, error: 'Montant minimum 100 F CFA', step: 'validation' }, { status: 400 });
+  if (!methode_paiement)      return Response.json({ success: false, error: 'Méthode requise', step: 'validation' }, { status: 400 });
+  if (!preuve_paiement_url)   return Response.json({ success: false, error: 'Preuve requise', step: 'validation' }, { status: 400 });
+
   L(`validation OK: montant=${montantInt} bonus=${bonusInt}`);
 
-  // ── ÉTAPE 5 : Créer la demande en BDD ──────────────────────────────────────
-  const base44db = createClientFromRequest(reqWithToken);
+  // ── ÉTAPE 5 : Créer la demande (service role — pas besoin d'auth user) ──────
+  const base44sr = createClientFromRequest(reqWithAuth);
   let demande = null;
   try {
-    demande = await base44db.asServiceRole.entities.DemandeRecharge.create({
-      user_id:            user.id,
-      user_email:         user.email,
-      user_name:          user.full_name || user.email,
-      montant:            montantInt,
-      bonus:              bonusInt,
-      montant_total:      montantInt + bonusInt,
+    demande = await base44sr.asServiceRole.entities.DemandeRecharge.create({
+      user_id:             user.id,
+      user_email:          user.email,
+      user_name:           user.full_name || user.email,
+      montant:             montantInt,
+      bonus:               bonusInt,
+      montant_total:       montantInt + bonusInt,
       methode_paiement,
       preuve_paiement_url,
-      statut:             'en_attente',
-      type:               'recharge_bedou',
+      statut:              'en_attente',
+      type:                'recharge_bedou',
     });
     L(`BDD OK: demande.id=${demande.id}`);
   } catch (e) {
@@ -120,15 +112,13 @@ Deno.serve(async (req) => {
     return Response.json({ success: false, error: `Erreur création BDD: ${e.message}`, step: 'db' }, { status: 500 });
   }
 
-  // ── ÉTAPE 6 : Notifications admin en tâche de fond ─────────────────────────
+  // ── ÉTAPE 6 : Notifications admin (tâche de fond, non-bloquante) ────────────
   (async () => {
     try {
-      const b44 = createClientFromRequest(reqWithToken);
-      const admins = await b44.asServiceRole.entities.User.filter({ role: 'admin' }, null, 50);
-      L(`notif: ${admins.length} admins`);
+      const admins = await base44sr.asServiceRole.entities.User.filter({ role: 'admin' }, null, 50);
       for (const admin of admins) {
         try {
-          await b44.asServiceRole.entities.Notification.create({
+          await base44sr.asServiceRole.entities.Notification.create({
             destinataire_email:  admin.email,
             destinataire_role:   'admin',
             titre:               '💰 Nouvelle demande de recharge Bedou',
@@ -141,12 +131,13 @@ Deno.serve(async (req) => {
           });
         } catch (_) {}
       }
+      L(`notifs envoyées: ${admins.length} admin(s)`);
     } catch (e) {
       L(`notif error (non-bloquant): ${e.message}`);
     }
   })();
 
-  // ── ÉTAPE 7 : Réponse succès ────────────────────────────────────────────────
+  // ── ÉTAPE 7 : Succès ────────────────────────────────────────────────────────
   L(`SUCCESS → recharge_id=${demande.id}`);
   return Response.json({
     success:       true,
