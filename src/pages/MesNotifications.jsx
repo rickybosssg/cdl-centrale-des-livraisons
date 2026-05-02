@@ -2,22 +2,24 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Bell, CheckCheck, Trash2, ArrowLeft } from "lucide-react";
-import { resolveNotifRoute, resolveActionLabel } from "@/lib/notificationRouter";
+import { resolveNotifRoute, resolveActionLabel, resolveNotifIcon, resolveNotifPriority } from "@/lib/notificationRouter";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import moment from "moment";
 
-const TYPE_CFG = {
-  success: { bg: "bg-emerald-50 border-emerald-200", dot: "bg-emerald-500", bar: "border-l-emerald-500", icon: "✅", badge: "bg-emerald-100 text-emerald-700" },
-  info:    { bg: "bg-blue-50 border-blue-200",       dot: "bg-blue-500",    bar: "border-l-blue-500",    icon: "ℹ️", badge: "bg-blue-100 text-blue-700" },
-  warning: { bg: "bg-amber-50 border-amber-200",     dot: "bg-amber-500",   bar: "border-l-amber-500",   icon: "⚠️", badge: "bg-amber-100 text-amber-700" },
-  danger:  { bg: "bg-red-50 border-red-200",         dot: "bg-red-500",     bar: "border-l-red-500",     icon: "🚨", badge: "bg-red-100 text-red-700" },
+// Config par priorité
+const PRIORITY_CFG = {
+  critical: { bg: "bg-red-50",    bar: "border-l-red-500",    dot: "bg-red-500" },
+  normal:   { bg: "bg-amber-50",  bar: "border-l-amber-400",  dot: "bg-amber-400" },
+  info:     { bg: "bg-blue-50",   bar: "border-l-blue-400",   dot: "bg-blue-400" },
 };
 
 function NotifDetailModal({ notif, onClose, onNavigate }) {
   if (!notif) return null;
-  const cfg = TYPE_CFG[notif.type] || TYPE_CFG.info;
+  const priority = resolveNotifPriority(notif);
+  const pCfg = PRIORITY_CFG[priority] || PRIORITY_CFG.info;
+  const icon = resolveNotifIcon(notif);
   const route = resolveNotifRoute(notif);
   return (
     <motion.div
@@ -35,10 +37,12 @@ function NotifDetailModal({ notif, onClose, onNavigate }) {
         className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header coloré */}
-        <div className={`px-5 py-5 border-l-4 ${cfg.bar} ${cfg.bg}`}>
+        {/* Header coloré avec icône emoji */}
+        <div className={`px-5 py-4 border-l-4 ${pCfg.bar} ${pCfg.bg}`}>
           <div className="flex items-start gap-3">
-            <span className="text-2xl flex-shrink-0">{cfg.icon}</span>
+            <div className="h-11 w-11 rounded-2xl bg-white/80 flex items-center justify-center text-2xl shadow-sm flex-shrink-0 border border-border/20">
+              {icon}
+            </div>
             <div className="flex-1 min-w-0">
               <p className="font-extrabold text-base text-foreground leading-snug">{notif.titre}</p>
               <p className="text-[11px] text-muted-foreground mt-1">{moment(notif.created_date).format("DD/MM/YYYY à HH:mm")}</p>
@@ -117,7 +121,12 @@ export default function MesNotifications() {
     setNotifs(prev => prev.filter(n => n.id !== id));
   };
 
-  const filtered = filter === "unread" ? notifs.filter(n => !n.lue) : notifs;
+  const filtered = (() => {
+    if (filter === "unread") return notifs.filter(n => !n.lue);
+    if (filter === "critical") return notifs.filter(n => resolveNotifPriority(n) === 'critical');
+    if (filter === "normal") return notifs.filter(n => resolveNotifPriority(n) === 'normal');
+    return notifs;
+  })();
   const unreadCount = notifs.filter(n => !n.lue).length;
 
   return (
@@ -144,17 +153,7 @@ export default function MesNotifications() {
         </div>
       </div>
 
-      {/* Filtres */}
-      <div className="px-4 mt-4">
-        <div className="flex gap-2">
-          {["all", "unread"].map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${filter === f ? "bg-primary text-white border-primary shadow-sm" : "bg-white border-border text-muted-foreground"}`}>
-              {f === "all" ? `Toutes (${notifs.length})` : `Non lues (${unreadCount})`}
-            </button>
-          ))}
-        </div>
-      </div>
+
 
       {/* Loading */}
       {loading && (
@@ -175,11 +174,28 @@ export default function MesNotifications() {
         </div>
       )}
 
+      {/* Filtre par priorité */}
+      <div className="px-4 mt-3 flex gap-2 overflow-x-auto pb-1">
+        {[
+          { key: "all",      label: `Toutes (${notifs.length})` },
+          { key: "unread",   label: `Non lues (${unreadCount})` },
+          { key: "critical", label: "⚠️ Critiques" },
+          { key: "normal",   label: "🔔 Normales" },
+        ].map(f => (
+          <button key={f.key} onClick={() => setFilter(f.key)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === f.key ? "bg-primary text-white border-primary shadow-sm" : "bg-white border-border text-muted-foreground"}`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       {/* Liste */}
-      <div className="px-4 mt-4 space-y-2">
+      <div className="px-4 mt-3 space-y-2">
         <AnimatePresence>
           {filtered.map(notif => {
-            const cfg = TYPE_CFG[notif.type] || TYPE_CFG.info;
+            const priority = resolveNotifPriority(notif);
+            const pCfg = PRIORITY_CFG[priority] || PRIORITY_CFG.info;
+            const icon = resolveNotifIcon(notif);
             const hasAction = !!resolveNotifRoute(notif);
             return (
               <motion.div
@@ -188,17 +204,17 @@ export default function MesNotifications() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 10 }}
                 onClick={() => markRead(notif)}
-                className={`flex items-start gap-3 p-4 rounded-2xl border border-l-4 ${cfg.bar} bg-white shadow-sm transition-all ${
-                  !notif.lue ? "shadow-sm" : "opacity-70"
+                className={`flex items-start gap-3 p-4 rounded-2xl border border-l-4 ${pCfg.bar} ${!notif.lue ? pCfg.bg : 'bg-white'} shadow-sm transition-all ${
+                  !notif.lue ? "" : "opacity-60"
                 } ${hasAction ? "cursor-pointer active:scale-[0.99]" : ""}`}
               >
-                {/* Icône + dot */}
+                {/* Icône emoji + dot non-lu */}
                 <div className="flex-shrink-0 mt-0.5 relative">
-                  <div className={`h-9 w-9 rounded-xl ${cfg.bg.split(" ")[0]} flex items-center justify-center text-lg`}>
-                    {cfg.icon}
+                  <div className="h-10 w-10 rounded-xl bg-white/90 border border-border/30 flex items-center justify-center text-xl shadow-sm">
+                    {icon}
                   </div>
                   {!notif.lue && (
-                    <span className={`absolute -top-1 -right-1 h-3 w-3 rounded-full ${cfg.dot} border-2 border-white`} />
+                    <span className={`absolute -top-1 -right-1 h-3 w-3 rounded-full ${pCfg.dot} border-2 border-white`} />
                   )}
                 </div>
                 {/* Contenu */}
@@ -207,7 +223,12 @@ export default function MesNotifications() {
                     {notif.titre}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{notif.message}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1.5">{moment(notif.created_date).fromNow()}</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <p className="text-[10px] text-muted-foreground">{moment(notif.created_date).fromNow()}</p>
+                    {hasAction && (
+                      <span className="text-[10px] text-primary font-semibold">Appuyer pour voir →</span>
+                    )}
+                  </div>
                 </div>
                 {/* Supprimer */}
                 <button onClick={(e) => deleteNotif(e, notif.id)} className="flex-shrink-0 h-7 w-7 rounded-lg flex items-center justify-center hover:bg-red-50 transition-colors">

@@ -90,6 +90,16 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
     stringData.body = body;
 
     const isTresUrgent = urgence === 'tres_urgent';
+    // CDL_ALERTS_HIGH pour les events critiques métier
+    const CRITICAL_TYPES = [
+      'bedou_recharge_request', 'bedou_withdrawal_request',
+      'course_assigned', 'new_course',
+      'new_profile_request', 'profile_pending_review',
+      'bedou_recharge_approved', 'bedou_withdrawal_approved',
+      'bedou_recharge_rejected', 'bedou_withdrawal_rejected',
+    ];
+    const isCritical = isTresUrgent || CRITICAL_TYPES.includes(stringData.type || '');
+    const channelId = isTresUrgent ? 'urgent' : (isCritical ? 'CDL_ALERTS_HIGH' : 'default');
 
     // ❌ NE PAS MODIFIER CE PAYLOAD FCM — verrouillé
     const fcmPayload = {
@@ -101,10 +111,10 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
           priority: 'HIGH',                 // ← VERROUILLÉ — ne pas downgrader
           ttl: '86400s',
           notification: {
-            channel_id: isTresUrgent ? 'urgent' : 'default',
+            channel_id: channelId,
             sound: 'default',
             visibility: 'PUBLIC',
-            notification_priority: isTresUrgent ? 'PRIORITY_MAX' : 'PRIORITY_HIGH', // ← VERROUILLÉ
+            notification_priority: isCritical ? 'PRIORITY_MAX' : 'PRIORITY_HIGH', // ← VERROUILLÉ
             default_sound: true,            // ← VERROUILLÉ
             default_vibrate_timings: true,  // ← VERROUILLÉ
             default_light_settings: true,   // ← VERROUILLÉ
@@ -143,6 +153,29 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
   }
 }
 
+// ── Anti-doublon 60s ──────────────────────────────────────────────────────────
+// Évite plusieurs notifications identiques pour la même action en 60 secondes
+async function checkDuplicate(base44, destinataire_email, data, title) {
+  try {
+    const entityId = data?.entity_id || '';
+    const entityType = data?.entity_type || '';
+    const eventType = data?.type || '';
+    if (!entityId || !entityType || !eventType) return false; // pas de clé → pas de dédupliq
+    const since60s = new Date(Date.now() - 60000).toISOString();
+    const existing = await base44.asServiceRole.entities.Notification.filter({
+      destinataire_email,
+      notification_key: `${destinataire_email}__${eventType}__${entityId}__${title}`,
+    }, '-created_date', 1);
+    if (existing?.length > 0 && existing[0].created_date > since60s) {
+      console.log(`[CDL-BDD] Doublon détecté (60s) — skip pour ${destinataire_email} | key=${eventType}__${entityId}`);
+      return true;
+    }
+    return false;
+  } catch (_) {
+    return false; // en cas d'erreur on laisse passer
+  }
+}
+
 // ── Notification interne BDD ──────────────────────────────────────────────────
 // ✅ TOUJOURS appelée — fallback garanti même si FCM échoue
 // ❌ NE PAS SUPPRIMER cette fonction
@@ -177,6 +210,12 @@ async function createInternalNotif(base44, { destinataire_email, title, body, da
       order_cancelled: 'danger',
     };
     const type = typeMap[data?.type] || 'info';
+    const entityId = data?.entity_id || '';
+    const entityType = data?.entity_type || '';
+    const eventType = data?.type || '';
+    const notifKey = entityId && entityType && eventType
+      ? `${destinataire_email}__${eventType}__${entityId}__${title}`
+      : '';
     await base44.asServiceRole.entities.Notification.create({
       destinataire_email,
       titre: title,
@@ -184,8 +223,9 @@ async function createInternalNotif(base44, { destinataire_email, title, body, da
       type,
       lue: false,
       target_screen: data?.notif_route || '/',
-      target_entity_type: data?.entity_type || '',
-      target_entity_id: data?.entity_id || '',
+      target_entity_type: entityType,
+      target_entity_id: entityId,
+      notification_key: notifKey,
     });
     return true;
   } catch (e) {
@@ -258,15 +298,20 @@ Deno.serve(async (req) => {
     // ✅ Fallback garanti : même si FCM échoue complètement, l'utilisateur voit la notif dans l'app
     let bddCreated = 0;
     try {
-      const bddResults = await Promise.allSettled(
-        targetEmails.map(email => createInternalNotif(base44, {
-          destinataire_email: email,
-          title,
-          body: msgBody,
-          data,
-        }))
+      // Anti-doublon 60s : vérifier avant de créer
+      const bddTasks = await Promise.allSettled(
+        targetEmails.map(async (email) => {
+          const isDuplicate = await checkDuplicate(base44, email, data, title);
+          if (isDuplicate) return false;
+          return createInternalNotif(base44, {
+            destinataire_email: email,
+            title,
+            body: msgBody,
+            data,
+          });
+        })
       );
-      bddCreated = bddResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
+      bddCreated = bddTasks.filter(r => r.status === 'fulfilled' && r.value === true).length;
       console.log(`[sendCdlNotification] BDD notifs créées: ${bddCreated}/${targetEmails.length} | +${Date.now() - t0}ms`);
     } catch (e) {
       console.error(`[sendCdlNotification] ❌ BDD batch failed: ${e.message}`);

@@ -120,24 +120,36 @@ async function runNativeFcm(propEmail) {
     return;
   }
 
-  // ── Create channel ──────────────────────────────────────────────────────────
+  // ── Create channels ──────────────────────────────────────────────────────────
   try {
-    // importance: 4 = IMPORTANCE_HIGH (Android constant) — obligatoire pour heads-up notification
-    // importance: 5 = IMPORTANCE_MAX (pour alarmes) — souvent bloqué par Android
     await Promise.race([
-      PushNotifications.createChannel({
-        id: 'default',
-        name: 'CDL Notifications',
-        description: 'Toutes les notifications CDL',
-        importance: 4,
-        sound: 'default',
-        vibration: true,
-        lights: true,
-        lightColor: '#1E6BFF',
-      }),
+      Promise.all([
+        // Canal défaut — toutes les notifs normales
+        PushNotifications.createChannel({
+          id: 'default',
+          name: 'CDL Notifications',
+          description: 'Toutes les notifications CDL',
+          importance: 4,
+          sound: 'default',
+          vibration: true,
+          lights: true,
+          lightColor: '#1E6BFF',
+        }),
+        // Canal critique — recharges, courses, retraits, profils
+        PushNotifications.createChannel({
+          id: 'CDL_ALERTS_HIGH',
+          name: 'CDL Alertes Critiques',
+          description: 'Courses, recharges, retraits, demandes profil',
+          importance: 5,
+          sound: 'default',
+          vibration: true,
+          lights: true,
+          lightColor: '#FF6B1E',
+        }),
+      ]),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
     ]);
-    console.log('[FCM] ✅ Channel created (importance=4/HIGH)');
+    console.log('[FCM] ✅ Channels created (default + CDL_ALERTS_HIGH)');
   } catch (e) {
     console.warn('[FCM] ⚠️ Channel creation error:', e?.message);
   }
