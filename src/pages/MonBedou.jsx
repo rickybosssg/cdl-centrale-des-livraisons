@@ -131,18 +131,22 @@ export default function MonBedou() {
         throw new Error(`Upload échoué: ${uploadErr.message}`);
       }
 
-      // C — Backend via fetch DIRECT avec Authorization header (bypass SDK APK)
-      addLog('▶ FETCH direct submitBedouRecharge...');
+      // C — Appel backend avec Authorization header explicite (compatible APK Capacitor)
+      addLog('▶ FETCH submitBedouRecharge...');
       let authToken = '';
       try {
         authToken = localStorage.getItem('base44_access_token') || '';
-        addLog(`  auth_token: ${authToken ? 'OUI (len=' + authToken.length + ')' : 'NON'}`);
       } catch (_) {}
 
-      // URL directe de la fonction (domaine de l'app CDL)
+      addLog(`  auth_token présent: ${authToken ? 'OUI (len=' + authToken.length + ')' : 'NON ← 401 probable'}`);
+      addLog(`  Authorization header envoyé: ${authToken ? 'OUI' : 'NON'}`);
+
       const fnUrl = `https://cdl.base44.app/functions/submitBedouRecharge`;
       addLog(`  url: ${fnUrl}`);
-      addLog(`  Authorization header: ${authToken ? 'Bearer ...' + authToken.slice(-8) : 'ABSENT'}`);
+
+      if (!authToken) {
+        throw new Error('Token manquant — reconnectez-vous');
+      }
 
       let fetchRes;
       try {
@@ -150,14 +154,13 @@ export default function MonBedou() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+            'Authorization': `Bearer ${authToken}`,
           },
           body: JSON.stringify({
             montant,
             methode_paiement:    form.methode,
             preuve_paiement_url: preuveUrl,
             bonus:               bonusAmount,
-            auth_token:          authToken, // fallback dans le body aussi
           }),
         });
         addLog(`  HTTP status: ${fetchRes.status}`);
@@ -169,14 +172,14 @@ export default function MonBedou() {
       let data;
       try {
         data = await fetchRes.json();
-        addLog(`  response: success=${data?.success} id=${data?.recharge_id}`);
+        addLog(`  response: success=${data?.success} id=${data?.recharge_id} msg=${data?.message || data?.error || ''}`);
       } catch (parseErr) {
-        addLog(`❌ JSON parse erreur: ${parseErr.message} (status=${fetchRes.status})`);
+        addLog(`❌ JSON parse erreur (status=${fetchRes.status})`);
         throw new Error(`Réponse invalide du serveur (status ${fetchRes.status})`);
       }
 
       if (!data || !data.success) {
-        const reason = data?.message || data?.error || `Échec (HTTP ${fetchRes.status})`;
+        const reason = data?.message || data?.error || `Échec HTTP ${fetchRes.status}`;
         addLog(`❌ ÉCHEC: ${reason}`);
         throw new Error(reason);
       }
