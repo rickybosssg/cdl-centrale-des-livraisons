@@ -139,51 +139,60 @@ export default function MonBedou() {
 
     try {
       // Étape B — Upload preuve
-      console.log('[RECHARGE] ▶ UPLOAD preuve...');
+      alert('[DEBUG] ÉTAPE 1 : Upload preuve en cours...');
       const preuveUrl = await uploadFileRobust(form.preuve);
-      console.log('[RECHARGE] ✅ UPLOAD OK —', preuveUrl.slice(0, 50));
+      alert('[DEBUG] ÉTAPE 2 : Upload OK — ' + preuveUrl.slice(0, 60));
 
-      // Étape C — Création demande en BDD via backend
-      console.log('[RECHARGE] ▶ SUBMIT backend...');
-      const res = await base44.functions.invoke("submitBedouRecharge", {
-        montant,
-        methode_paiement:    form.methode,
-        preuve_paiement_url: preuveUrl,
-        bonus:               bonusAmount,
-      });
+      // Étape C — Appel backend
+      alert('[DEBUG] ÉTAPE 3 : Appel backend submitBedouRecharge...');
+      let res;
+      try {
+        res = await base44.functions.invoke("submitBedouRecharge", {
+          montant,
+          methode_paiement:    form.methode,
+          preuve_paiement_url: preuveUrl,
+          bonus:               bonusAmount,
+        });
+      } catch (invokeErr) {
+        alert('[DEBUG] ERREUR invoke : ' + invokeErr?.message);
+        throw invokeErr;
+      }
 
-      // Normaliser la réponse Axios (res.data) vs réponse directe
-      const data = res?.data ?? res;
-      console.log('[RECHARGE] backend response:', JSON.stringify(data).slice(0, 200));
+      // Afficher la réponse brute sur APK
+      const rawResult = JSON.stringify(res).slice(0, 300);
+      alert('[DEBUG] RÉSULTAT BACKEND : ' + rawResult);
+      console.log('[RECHARGE] res brut:', res);
 
-      if (!data?.success) {
-        throw new Error(data?.message || data?.error || "Soumission échouée côté serveur");
+      // Normaliser : Axios wrappe dans res.data, invoke direct retourne l'objet
+      const data = (res && typeof res === 'object' && 'data' in res) ? res.data : res;
+      alert('[DEBUG] data normalisé : success=' + data?.success + ' | message=' + data?.message);
+      console.log('[RECHARGE] data normalisé:', data);
+
+      if (!data) {
+        throw new Error("Aucune réponse du serveur (data null)");
+      }
+      if (!data.success) {
+        throw new Error(data.message || data.error || "Échec serveur sans message");
       }
 
       // Étape D — Succès confirmé
-      console.log('[RECHARGE] ✅ SUCCESS — recharge_id:', data.recharge_id);
-
-      // Étape E — Toast immédiat
+      alert('[DEBUG] SUCCESS FRONTEND ✅ recharge_id=' + data.recharge_id);
       toast.success("✅ Demande de recharge envoyée avec succès !");
 
-      // Réinitialiser formulaire + afficher écran succès
       setForm({ montant: "", methode: "orange_money", preuve: null });
       setSuccessData({ montant, bonus: bonusAmount, recharge_id: data.recharge_id });
 
-      // Étape F — Redirection accueil après 2.5s
-      console.log('[RECHARGE] ▶ REDIRECT accueil dans 2.5s...');
-      setTimeout(() => {
-        console.log('[RECHARGE] ▶ NAVIGATING to /');
-        navigate("/");
-      }, 2500);
+      // Étape F — Redirection
+      console.log('[RECHARGE] redirection dans 2s');
+      setTimeout(() => navigate("/"), 2000);
 
     } catch (err) {
+      alert('[DEBUG] ERREUR CATCH : ' + err?.message);
       console.error('[RECHARGE] ❌ ERREUR:', err?.message);
       toast.error("❌ " + (err?.message || "Erreur inattendue. Réessayez."));
     } finally {
-      // TOUJOURS libérer le bouton — que ce soit succès ou erreur
       setSubmitting(false);
-      console.log('[RECHARGE] ▶ FINALLY — submitting = false');
+      console.log('[RECHARGE] finally — submitting=false');
     }
   };
 
