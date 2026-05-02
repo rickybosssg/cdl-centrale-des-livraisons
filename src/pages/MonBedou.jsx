@@ -95,24 +95,30 @@ export default function MonBedou() {
     setSubmitting(true);
 
     try {
-      // Safety timeout 25s — débloquer sans crash si réseau lent
+      // Safety timeout 30s — débloquer sans crash si réseau lent
       safetyTimer = setTimeout(() => {
         console.warn('[BEDOU_RECHARGE] safety timeout triggered');
         setSubmitting(false);
         toast.error("⏱️ La requête prend trop de temps. Vérifiez votre connexion.");
-      }, 25000);
+      }, 30000);
 
       // ── 1. Upload preuve ────────────────────────────────────────────────────
-      console.log('[BEDOU_RECHARGE] upload start');
+      console.log('[BEDOU_RECHARGE] upload start, file:', form.preuve?.name, form.preuve?.size);
       let file_url = "";
       try {
-        const uploadRes = await base44.integrations.Core.UploadFile({ file: form.preuve });
+        const uploadTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Upload timeout (20s)")), 20000)
+        );
+        const uploadRes = await Promise.race([
+          base44.integrations.Core.UploadFile({ file: form.preuve }),
+          uploadTimeout,
+        ]);
         file_url = uploadRes?.file_url || "";
         if (!file_url) throw new Error("URL preuve vide après upload");
         console.log('[BEDOU_RECHARGE] upload success:', file_url.slice(0, 60));
       } catch (uploadErr) {
         console.error('[BEDOU_RECHARGE] upload error:', uploadErr?.message);
-        toast.error("❌ Impossible d'uploader la preuve. Réessayez.");
+        toast.error("❌ Upload échoué : " + (uploadErr?.message || "Réessayez"));
         return; // finally s'exécutera quand même
       }
 
@@ -398,7 +404,7 @@ export default function MonBedou() {
                 >
                   {submitting
                     ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Envoi en cours…</span>
-                    : <span className="flex items-center justify-center gap-1 flex-wrap">🎁 Soumettre la demande de recharge{bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ""}</span>}
+                    : <span className="flex items-center justify-center gap-1 flex-wrap">💰 Recharger{bonus > 0 ? ` (+${fmt(bonus)} bonus)` : ""}</span>}
                 </Button>
               </div>
             </>
