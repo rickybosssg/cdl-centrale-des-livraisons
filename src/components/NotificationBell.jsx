@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Bell } from "lucide-react";
-import { vibrateNotif, playNotificationSound } from "@/lib/vibration";
+import { vibrateNotif, vibrateCritical, playNotificationSound, playNotificationSoundCritical } from "@/lib/vibration";
+import { resolveNotifPriority } from "@/lib/notificationRouter";
 
 import { motion } from "framer-motion";
 import NotificationPanel from "./NotificationPanel";
@@ -16,7 +17,13 @@ export default function NotificationBell({ userEmail }) {
     if (!userEmail) return;
     try {
       const data = await base44.entities.Notification.filter({ destinataire_email: userEmail }, "-created_date", 30);
-      setNotifs(Array.isArray(data) ? data : []);
+      const notifList = Array.isArray(data) ? data : [];
+      setNotifs(notifList);
+      // Badge navigateur (PWA)
+      const unreadCount = notifList.filter(n => !n.lue).length;
+      try {
+        if ('setAppBadge' in navigator) navigator.setAppBadge(unreadCount || 0);
+      } catch (_) {}
     } catch (err) {
       console.warn('[NotificationBell] Load error:', err?.message);
     }
@@ -47,19 +54,33 @@ export default function NotificationBell({ userEmail }) {
           try {
             if (!isMounted || event.data?.destinataire_email !== userEmail) return;
             if (event.type === 'create') {
-              setNotifs(prev => [event.data, ...prev]);
-              try { vibrateNotif(); } catch (_) {}
-              try { playNotificationSound(); } catch (_) {}
+              const newNotif = event.data;
+              setNotifs(prev => [newNotif, ...prev]);
+              // Son + vibration différenciés par priorité
+              const priority = resolveNotifPriority(newNotif);
+              if (priority === 'critical') {
+                try { vibrateCritical(); } catch (_) {}
+                try { playNotificationSoundCritical(); } catch (_) {}
+              } else {
+                try { vibrateNotif(); } catch (_) {}
+                try { playNotificationSound(); } catch (_) {}
+              }
+              // Toast in-app
               try {
                 showNotification({
-                  title: event.data.titre,
-                  message: event.data.message,
-                  type: event.data.type === 'danger' ? 'error' : (event.data.type || 'info'),
-                  autoCloseDuration: event.data.priority === 'high' ? 12000 : 7000,
+                  title: newNotif.titre,
+                  message: newNotif.message,
+                  type: priority === 'critical' ? 'error' : (newNotif.type === 'success' ? 'success' : 'info'),
+                  autoCloseDuration: priority === 'critical' ? 12000 : 7000,
                 });
               } catch (_) {}
             } else if (event.type === 'update') {
-              setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
+              setNotifs(prev => {
+                const updated = prev.map(n => n.id === event.id ? event.data : n);
+                const unreadCount = updated.filter(n => !n.lue).length;
+                try { if ('setAppBadge' in navigator) navigator.setAppBadge(unreadCount || 0); } catch (_) {}
+                return updated;
+              });
             }
           } catch (err) {
             console.warn('[NOTIFICATIONS] event handler error (non-fatal):', err?.message);

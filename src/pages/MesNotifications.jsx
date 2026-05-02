@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Bell, CheckCheck, Trash2, ArrowLeft } from "lucide-react";
-import { resolveNotifRoute, resolveActionLabel, resolveNotifIcon, resolveNotifPriority } from "@/lib/notificationRouter";
+import { resolveNotifRoute, resolveActionLabel, resolveNotifIcon, resolveNotifPriority, resolveQuickActions } from "@/lib/notificationRouter";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -203,37 +203,53 @@ export default function MesNotifications() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 10 }}
-                onClick={() => markRead(notif)}
-                className={`flex items-start gap-3 p-4 rounded-2xl border border-l-4 ${pCfg.bar} ${!notif.lue ? pCfg.bg : 'bg-white'} shadow-sm transition-all ${
-                  !notif.lue ? "" : "opacity-60"
-                } ${hasAction ? "cursor-pointer active:scale-[0.99]" : ""}`}
+                className={`rounded-2xl border border-l-4 ${pCfg.bar} ${!notif.lue ? pCfg.bg : 'bg-white'} shadow-sm transition-all ${!notif.lue ? "" : "opacity-60"}`}
               >
-                {/* Icône emoji + dot non-lu */}
-                <div className="flex-shrink-0 mt-0.5 relative">
-                  <div className="h-10 w-10 rounded-xl bg-white/90 border border-border/30 flex items-center justify-center text-xl shadow-sm">
-                    {icon}
-                  </div>
-                  {!notif.lue && (
-                    <span className={`absolute -top-1 -right-1 h-3 w-3 rounded-full ${pCfg.dot} border-2 border-white`} />
-                  )}
-                </div>
-                {/* Contenu */}
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-bold leading-snug ${!notif.lue ? "text-foreground" : "text-muted-foreground"}`}>
-                    {notif.titre}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{notif.message}</p>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <p className="text-[10px] text-muted-foreground">{moment(notif.created_date).fromNow()}</p>
-                    {hasAction && (
-                      <span className="text-[10px] text-primary font-semibold">Appuyer pour voir →</span>
+                {/* Ligne principale */}
+                <div
+                  onClick={() => markRead(notif)}
+                  className={`flex items-start gap-3 p-4 pb-3 ${hasAction ? "cursor-pointer active:scale-[0.99]" : ""}`}
+                >
+                  {/* Icône emoji + dot non-lu */}
+                  <div className="flex-shrink-0 mt-0.5 relative">
+                    <div className="h-10 w-10 rounded-xl bg-white/90 border border-border/30 flex items-center justify-center text-xl shadow-sm">
+                      {icon}
+                    </div>
+                    {!notif.lue && (
+                      <span className={`absolute -top-1 -right-1 h-3 w-3 rounded-full ${pCfg.dot} border-2 border-white`} />
                     )}
                   </div>
+                  {/* Contenu */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold leading-snug ${!notif.lue ? "text-foreground" : "text-muted-foreground"}`}>
+                      {notif.titre}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{notif.message}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1.5">{moment(notif.created_date).fromNow()}</p>
+                  </div>
+                  {/* Supprimer */}
+                  <button onClick={(e) => deleteNotif(e, notif.id)} className="flex-shrink-0 h-7 w-7 rounded-lg flex items-center justify-center hover:bg-red-50 transition-colors">
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
                 </div>
-                {/* Supprimer */}
-                <button onClick={(e) => deleteNotif(e, notif.id)} className="flex-shrink-0 h-7 w-7 rounded-lg flex items-center justify-center hover:bg-red-50 transition-colors">
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
+                {/* Actions rapides contextuelles */}
+                {(() => {
+                  const actions = resolveQuickActions(notif);
+                  if (!actions.length) return null;
+                  return (
+                    <div className="px-4 pb-3 flex gap-2">
+                      {actions.map((action, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleNavigate(action.route)}
+                          className="flex-1 py-2 px-3 rounded-xl bg-primary text-white text-xs font-bold shadow-sm active:scale-95 transition-all text-center"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
               </motion.div>
             );
           })}

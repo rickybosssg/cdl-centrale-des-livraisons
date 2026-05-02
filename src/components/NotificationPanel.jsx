@@ -4,7 +4,7 @@ import { X, Bell, Check, AlertTriangle, Info, CheckCircle2, XCircle } from "luci
 import { base44 } from "@/api/base44Client";
 import { useNavigate, Link } from "react-router-dom";
 import moment from "moment";
-import { resolveNotifRoute, resolveActionLabel, resolveNotifIcon, resolveNotifPriority } from "@/lib/notificationRouter";
+import { resolveNotifRoute, resolveActionLabel, resolveNotifIcon, resolveNotifPriority, resolveQuickActions } from "@/lib/notificationRouter";
 
 moment.locale("fr");
 
@@ -232,36 +232,54 @@ export default function NotificationPanel({ open, onClose, notifs, setNotifs, us
                     const priority = resolveNotifPriority(n);
                     const pCfg = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.info;
                     const icon = resolveNotifIcon(n);
+                    const quickActions = resolveQuickActions(n);
 
                     return (
-                      <button
+                      <div
                         key={n.id}
-                        onClick={() => handleClick(n)}
-                        className={`w-full text-left px-4 py-3 border-l-4 transition-all ${pCfg.border} ${!n.lue ? pCfg.bg : 'bg-white'} ${
-                          !n.lue ? "opacity-100" : "opacity-60"
-                        } cursor-pointer hover:brightness-95 active:brightness-90`}
+                        className={`border-l-4 transition-all ${pCfg.border} ${!n.lue ? pCfg.bg : 'bg-white'} ${!n.lue ? "opacity-100" : "opacity-60"}`}
                       >
-                        <div className="flex items-start gap-2.5">
-                          {/* Icône emoji */}
-                          <div className="flex-shrink-0 h-8 w-8 rounded-xl bg-white/80 flex items-center justify-center text-base shadow-sm mt-0.5 border border-border/30">
-                            {icon}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-1 mb-0.5">
-                              <p className={`text-xs leading-snug ${!n.lue ? "font-bold text-foreground" : "font-medium text-foreground/70"} flex-1 min-w-0`}>
-                                {n.titre}
-                              </p>
-                              {!n.lue && (
-                                <span className={`flex-shrink-0 h-2 w-2 rounded-full ${pCfg.dot} mt-0.5`} />
-                              )}
+                        <button
+                          onClick={() => handleClick(n)}
+                          className="w-full text-left px-4 pt-3 pb-2 cursor-pointer hover:brightness-95 active:brightness-90"
+                        >
+                          <div className="flex items-start gap-2.5">
+                            {/* Icône emoji */}
+                            <div className="flex-shrink-0 h-8 w-8 rounded-xl bg-white/80 flex items-center justify-center text-base shadow-sm mt-0.5 border border-border/30">
+                              {icon}
                             </div>
-                            <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">{n.message}</p>
-                            <p className="text-[10px] text-muted-foreground/60 mt-1">
-                              {moment(n.created_date).fromNow()}
-                            </p>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-1 mb-0.5">
+                                <p className={`text-xs leading-snug ${!n.lue ? "font-bold text-foreground" : "font-medium text-foreground/70"} flex-1 min-w-0`}>
+                                  {n.titre}
+                                </p>
+                                {!n.lue && (
+                                  <span className={`flex-shrink-0 h-2 w-2 rounded-full ${pCfg.dot} mt-0.5`} />
+                                )}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">{n.message}</p>
+                              <p className="text-[10px] text-muted-foreground/60 mt-1">
+                                {moment(n.created_date).fromNow()}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </button>
+                        </button>
+
+                        {/* Actions rapides — visibles seulement si non lue + actions disponibles */}
+                        {!n.lue && quickActions.length > 0 && (
+                          <div className="px-4 pb-3 flex gap-2">
+                            {quickActions.map((action, idx) => (
+                              <button
+                                key={idx}
+                                onClick={(e) => { e.stopPropagation(); handleNavigate(action.route); }}
+                                className="flex-1 py-1.5 px-2 rounded-lg bg-primary text-white text-[11px] font-bold shadow-sm active:scale-95 transition-all text-center"
+                              >
+                                {action.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
