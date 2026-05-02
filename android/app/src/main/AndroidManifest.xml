@@ -1,18 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- INTERNET -->
+<uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- PERMISSIONS -->
-    <uses-permission android:name="android.permission.INTERNET" />
+<!-- LOCALISATION -->
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<!-- CAMERA -->
+<uses-permission android:name="android.permission.CAMERA" />
 
-    <uses-permission android:name="android.permission.CAMERA" />
+<!-- STOCKAGE -->
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<!-- NOTIFICATIONS -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<!-- NOTIFICATIONS EN ARRIERE-PLAN -->
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application
@@ -24,12 +29,12 @@
         android:theme="@style/AppTheme">
 
         <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
-            android:exported="true"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize">
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -43,12 +48,10 @@
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
-
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
+                android:resource="@xml/file_paths"></meta-data>
         </provider>
-
     </application>
 
 </manifest>
