@@ -101,12 +101,19 @@ export default function MonBedou() {
       if (!file_url) throw new Error("Upload échoué : URL vide");
       console.log('[RECHARGE] upload OK');
 
-      // 2. Soumettre la demande
+      // 2. Soumettre la demande (auth_token en fallback pour APK natif)
+      let authToken = '';
+      try {
+        const sessionToken = localStorage.getItem('base44_session_token') || localStorage.getItem('b44_token') || '';
+        authToken = sessionToken;
+      } catch (_) {}
+
       const res = await base44.functions.invoke("submitBedouRecharge", {
         montant,
         methode_paiement: form.methode,
         preuve_paiement_url: file_url,
         bonus: bonusAmount,
+        ...(authToken ? { auth_token: authToken } : {}),
       });
       const data = res?.data ?? res;
       if (!data?.success) throw new Error(data?.error || "Soumission échouée");
