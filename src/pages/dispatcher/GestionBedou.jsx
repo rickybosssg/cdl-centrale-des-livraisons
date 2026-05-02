@@ -82,14 +82,21 @@ export default function GestionBedou() {
   };
 
   const handleValider = async (request, type) => {
+    console.log('[BEDOU_VALIDATE] click', { requestId: request.id, type });
     setProcessing(true);
     try {
       const table = type === "recharge" ? "DemandeRecharge" : "DemandeRetrait";
-      // Pour recharge : créditer montant_total (montant + bonus), sinon montant seul
       const montantCredite = type === "recharge"
         ? (request.montant_total || request.montant || 0)
         : (request.montant || 0);
+      const bonusAmount = type === "recharge" ? (request.bonus || 0) : 0;
       const userName = request.user_name || request.user_nom || request.user_email;
+
+      console.log('[BEDOU_VALIDATE] request_id', request.id);
+      console.log('[BEDOU_VALIDATE] user_id', request.user_id || 'unknown');
+      console.log('[BEDOU_VALIDATE] amount', montantCredite);
+      console.log('[BEDOU_VALIDATE] bonus', bonusAmount);
+      console.log('[BEDOU_VALIDATE] backend_start');
 
       // 1. Mettre à jour la demande
       await base44.entities[table].update(request.id, {
@@ -98,41 +105,58 @@ export default function GestionBedou() {
         valide_par: admin?.email,
       });
 
-      // 2. Mettre à jour le solde Bedou
-      const bedouList = await base44.entities.Bedou.filter({ user_email: request.user_email });
-      if (bedouList.length > 0) {
-        const b = bedouList[0];
-        const nouveauSolde = type === "recharge"
-          ? (b.solde || 0) + montantCredite
-          : Math.max(0, (b.solde || 0) - montantCredite);
-        const nouveauDisponible = type === "recharge"
-          ? (b.solde_disponible || 0) + montantCredite
-          : Math.max(0, (b.solde_disponible || 0) - montantCredite);
+      // 2. Mettre à jour ou créer le Bedou
+      let bedouList = await base44.entities.Bedou.filter({ user_email: request.user_email });
+      let b = bedouList?.[0];
 
-        await base44.entities.Bedou.update(b.id, {
-          solde: nouveauSolde,
-          solde_disponible: nouveauDisponible,
-        });
-
-        // 3. Enregistrer la transaction
-        await base44.entities.Transaction.create({
+      if (!b) {
+        console.warn('[BEDOU_VALIDATE] Bedou not found — creating...');
+        b = await base44.entities.Bedou.create({
           user_email: request.user_email,
+          user_id: request.user_id || '',
           user_nom: userName,
-          type: type === "recharge" ? "recharge" : "retrait",
-          montant: montantCredite,
-          sens: type === "recharge" ? "credit" : "debit",
-          source: "bedou",
-          statut: "valide",
-          date_validation: new Date().toISOString(),
-          valide_par: admin?.email,
+          role: 'livreur', // default
+          solde: 0,
+          solde_disponible: 0,
+          solde_bloque: 0,
+          solde_bonus: 0,
+          bonus: 0,
+          gains_totaux: 0,
+          depenses_totales: 0,
+          statut_bedou: 'actif',
+          date_creation: new Date().toISOString(),
         });
       }
 
-      // 4. Notifier l'utilisateur (BDD)
-      const bonusCredite = type === "recharge" ? (request.bonus || 0) : 0;
+      const nouveauSolde = type === "recharge"
+        ? (b.solde || 0) + montantCredite
+        : Math.max(0, (b.solde || 0) - montantCredite);
+      const nouveauDisponible = type === "recharge"
+        ? (b.solde_disponible || 0) + montantCredite
+        : Math.max(0, (b.solde_disponible || 0) - montantCredite);
+
+      await base44.entities.Bedou.update(b.id, {
+        solde: nouveauSolde,
+        solde_disponible: nouveauDisponible,
+      });
+
+      // 3. Enregistrer la transaction
+      await base44.entities.Transaction.create({
+        user_email: request.user_email,
+        user_nom: userName,
+        type: type === "recharge" ? "recharge" : "retrait",
+        montant: montantCredite,
+        sens: type === "recharge" ? "credit" : "debit",
+        source: "bedou",
+        statut: "valide",
+        date_validation: new Date().toISOString(),
+        valide_par: admin?.email,
+      });
+
+      // 4. Notifier l'utilisateur
       const notifTitle = type === "recharge" ? "Recharge Bedou validée ✅" : "Retrait Bedou validé ✅";
       const notifMsg = type === "recharge"
-        ? `Votre recharge de ${request.montant?.toLocaleString()} F CFA a été validée.${bonusCredite > 0 ? ` Bonus ajouté : ${bonusCredite.toLocaleString()} F CFA.` : ""} Total crédité : ${montantCredite.toLocaleString()} F CFA.`
+        ? `Votre recharge de ${request.montant?.toLocaleString()} F CFA a été validée.${bonusAmount > 0 ? ` Bonus ajouté : ${bonusAmount.toLocaleString()} F CFA.` : ""} Total crédité : ${montantCredite.toLocaleString()} F CFA.`
         : `Votre retrait de ${montantCredite.toLocaleString()} F CFA a été effectué.`;
 
       await base44.entities.Notification.create({
@@ -142,28 +166,38 @@ export default function GestionBedou() {
         type: "success",
         lue: false,
         target_screen: "/mon-bedou",
-        target_entity_type: "Bedou",
+        target_entity_type: "DemandeRecharge",
+        target_entity_id: request.id,
+        notification_key: `${request.user_email}__bedou_${type}_approved__${request.id}__${notifTitle}`,
       });
 
-      // 5. Notification push FCM client (non-bloquante — ne jamais bloquer la validation)
+      // 5. FCM push (non-bloquant)
       try {
-        await base44.functions.invoke('sendFcmNotification', {
+        await base44.functions.invoke('sendCdlNotification', {
           user_email: request.user_email,
           title: notifTitle,
           body: notifMsg,
-          data: { notif_route: "/mon-bedou" },
+          data: {
+            type: type === 'recharge' ? 'bedou_recharge_approved' : 'bedou_withdrawal_approved',
+            entity_id: request.id,
+            entity_type: 'DemandeRecharge',
+            notif_route: '/mon-bedou',
+            amount: String(montantCredite),
+          },
         });
       } catch (pushErr) {
-        console.error('[GestionBedou] Push client échouée (non bloquant):', pushErr?.message);
+        console.warn('[BEDOU_VALIDATE] FCM échouée (non bloquant):', pushErr?.message);
       }
 
-      toast.success("✅ Demande validée");
+      console.log('[BEDOU_VALIDATE] success', { newBalance: nouveauSolde, newAvailable: nouveauDisponible });
+      toast.success("✅ Demande validée — Solde crédité");
       setDialogOpen(false);
       setComment("");
       loadData();
     } catch (err) {
-      console.error('[GestionBedou] handleValider error:', err?.message);
-      toast.error("Erreur lors de la validation : " + err?.message);
+      console.error('[BEDOU_VALIDATE] error', err?.message);
+      console.error('[BEDOU_VALIDATE] error_details', err);
+      toast.error("❌ " + (err?.message || "Erreur inconnue"));
     } finally {
       setProcessing(false);
     }
