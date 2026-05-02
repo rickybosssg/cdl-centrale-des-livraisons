@@ -222,10 +222,10 @@ Deno.serve(async (req) => {
   if (rawJson) {
     try {
       const sa = JSON.parse(rawJson);
-      const adminEmails = admins.map(a => a.email);
+      const adminEmails = admins.map(a => a.email.toLowerCase());
 
       // Tokens des admins connus
-      let targetTokens = allTokenRecords.filter(r => adminEmails.includes(r.user_email) && r.token);
+      let targetTokens = allTokenRecords.filter(r => adminEmails.includes((r.user_email || '').toLowerCase()) && r.token);
 
       // FALLBACK : si aucun token admin trouvé, envoyer à TOUS les tokens actifs
       // (utile quand l'admin ne s'est pas encore connecté sur l'APK)
