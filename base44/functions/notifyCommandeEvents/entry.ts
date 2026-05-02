@@ -1,4 +1,12 @@
 /**
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║  notifyCommandeEvents — VERROUILLÉ                          ║
+ * ║  NOTIFICATIONS_SYSTEM_LOCKED = true                         ║
+ * ║  ❌ NE PAS MODIFIER les appels notify()                     ║
+ * ║  ✅ Toujours retourner { ok: true }                         ║
+ * ║  LOGS : event_type | user_id | fcm_sent | execution_time   ║
+ * ╚══════════════════════════════════════════════════════════════╝
+ *
  * notifyCommandeEvents — Handler automation entity CommandePartenaire
  *
  * - Nouvelle commande → partenaire + admin
@@ -127,7 +135,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true });
 
   } catch (err) {
-    console.error('[notifyCommandeEvents] ERROR:', err.message);
+    console.error(`[notifyCommandeEvents] 🔴 ERREUR CRITIQUE | ${err.message} | execution_time=${Date.now() - t0}ms`);
     return Response.json({ ok: true });
   }
 });

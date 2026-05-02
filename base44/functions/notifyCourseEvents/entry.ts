@@ -1,9 +1,12 @@
 /**
- * notifyCourseEvents — Handler automation entity Course
- * Déclenché sur create + update de Course.
- *
- * LOGS : action, destinataires, statut, délai total
- * RÈGLE : ne jamais bloquer — toujours retourner { ok: true }
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║  notifyCourseEvents — VERROUILLÉ                            ║
+ * ║  NOTIFICATIONS_SYSTEM_LOCKED = true                         ║
+ * ║  ❌ NE PAS MODIFIER les appels notify()                     ║
+ * ║  ❌ NE PAS SUPPRIMER les try/catch                          ║
+ * ║  ✅ Toujours retourner { ok: true }                         ║
+ * ║  LOGS : event_type | user_id | fcm_sent | execution_time   ║
+ * ╚══════════════════════════════════════════════════════════════╝
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
@@ -23,6 +26,9 @@ Deno.serve(async (req) => {
     console.log(`[notifyCourseEvents] START | event=${event?.type} | statut=${statut} | oldStatut=${oldStatut} | id=${courseId}`);
 
     const base44 = createClientFromRequest(req);
+
+    // LOG OBLIGATOIRE
+    console.log(`[notifyCourseEvents] ━━━ START ━━━ | event_type=${event?.type} | statut=${statut} | oldStatut=${oldStatut} | entity_id=${courseId}`);
 
     const notify = (payload) => {
       console.log(`[notifyCourseEvents] → notify | user=${payload.user_email || ''} role=${payload.role || ''} type=${payload.data?.type || ''}`);
@@ -155,7 +161,8 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true });
 
   } catch (err) {
-    console.error('[notifyCourseEvents] ERROR:', err.message);
+    // Protection globale — jamais throw bloquant
+    console.error(`[notifyCourseEvents] 🔴 ERREUR CRITIQUE | ${err.message} | execution_time=${Date.now() - t0}ms`);
     return Response.json({ ok: true });
   }
 });

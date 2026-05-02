@@ -1,10 +1,15 @@
 /**
- * notifyProfileEvents — Handler automation entity UserProfile
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║  notifyProfileEvents — VERROUILLÉ                           ║
+ * ║  NOTIFICATIONS_SYSTEM_LOCKED = true                         ║
+ * ║  ❌ NE PAS MODIFIER les appels notify()                     ║
+ * ║  ✅ Toujours retourner { ok: true }                         ║
+ * ║  LOGS : event_type | user_id | fcm_sent | execution_time   ║
+ * ╚══════════════════════════════════════════════════════════════╝
  *
+ * notifyProfileEvents — Handler automation entity UserProfile
  * - Nouvelle demande → admins
  * - Profil validé/refusé/suspendu → utilisateur concerné
- *
- * LOGS : action, destinataires, délai total
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
@@ -141,7 +146,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true });
 
   } catch (err) {
-    console.error('[notifyProfileEvents] ERROR:', err.message);
+    console.error(`[notifyProfileEvents] 🔴 ERREUR CRITIQUE | ${err.message} | execution_time=${Date.now() - t0}ms`);
     return Response.json({ ok: true });
   }
 });

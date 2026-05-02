@@ -1,4 +1,12 @@
 /**
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║  notifyBedouEvents — VERROUILLÉ                             ║
+ * ║  NOTIFICATIONS_SYSTEM_LOCKED = true                         ║
+ * ║  ❌ NE PAS MODIFIER les appels notify()                     ║
+ * ║  ✅ Toujours retourner { ok: true }                         ║
+ * ║  LOGS : event_type | user_id | fcm_sent | execution_time   ║
+ * ╚══════════════════════════════════════════════════════════════╝
+ *
  * notifyBedouEvents — Handler automation entity DemandeRecharge
  *
  * - Nouvelle demande de recharge → admins
@@ -99,7 +107,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true });
 
   } catch (err) {
-    console.error('[notifyBedouEvents] ERROR:', err.message);
+    console.error(`[notifyBedouEvents] 🔴 ERREUR CRITIQUE | ${err.message} | execution_time=${Date.now() - t0}ms`);
     return Response.json({ ok: true });
   }
 });
