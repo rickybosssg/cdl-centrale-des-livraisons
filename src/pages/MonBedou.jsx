@@ -131,8 +131,14 @@ export default function MonBedou() {
         throw new Error(`Upload échoué: ${uploadErr.message}`);
       }
 
-      // C — Backend
+      // C — Backend (inclure auth_token pour compatibilité APK Capacitor)
       addLog('▶ INVOKE submitBedouRecharge...');
+      let authToken = '';
+      try {
+        authToken = localStorage.getItem('base44_access_token') || '';
+        addLog(`  auth_token: ${authToken ? 'OUI (len=' + authToken.length + ')' : 'NON — 403 probable'}`);
+      } catch (_) {}
+
       let res;
       try {
         res = await base44.functions.invoke("submitBedouRecharge", {
@@ -140,6 +146,7 @@ export default function MonBedou() {
           methode_paiement:    form.methode,
           preuve_paiement_url: preuveUrl,
           bonus:               bonusAmount,
+          auth_token:          authToken,
         });
         addLog(`✅ INVOKE retourné`);
         addLog(`  type=${typeof res} hasData=${'data' in (res||{})}`);

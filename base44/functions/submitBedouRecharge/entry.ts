@@ -35,21 +35,28 @@ Deno.serve(async (req) => {
     return Response.json({ success: false, message: 'Corps de requête invalide' }, { status: 400 });
   }
 
-  const { montant, methode_paiement, preuve_paiement_url, bonus } = body;
+  const { montant, methode_paiement, preuve_paiement_url, bonus, auth_token } = body;
 
   // ═══════════════════════════════════════════════════════════
-  // ÉTAPE 2 : Authentification via header (déjà dans req.headers)
+  // ÉTAPE 2 : Authentification — header OU body (APK Capacitor)
+  // Sur APK, le SDK Capacitor n'envoie pas toujours l'Authorization header
+  // → fallback : auth_token passé dans le body
   // ═══════════════════════════════════════════════════════════
-  // Le SDK base44.functions.invoke() envoie toujours le token dans Authorization header.
-  // On reconstruit une Request sans body (déjà consommé) mais avec les mêmes headers.
   let user = null;
   try {
     const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
-    L(`auth header present: ${!!authHeader}`);
+    L(`auth header present: ${!!authHeader}, body token present: ${!!auth_token}`);
+
+    // Construire les headers effectifs avec le token (header ou body)
+    const effectiveHeaders = new Headers(req.headers);
+    if (!authHeader && auth_token) {
+      effectiveHeaders.set('Authorization', `Bearer ${auth_token}`);
+      L('auth: using body token as fallback');
+    }
 
     const reqForAuth = new Request(req.url, {
-      method: 'GET', // body non nécessaire pour auth
-      headers: req.headers,
+      method: 'GET',
+      headers: effectiveHeaders,
     });
     const base44 = createClientFromRequest(reqForAuth);
     user = await base44.auth.me();
