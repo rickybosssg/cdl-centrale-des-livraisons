@@ -128,27 +128,34 @@ export default function GestionBedou() {
         });
       }
 
-      // 4. Notifier l'utilisateur
+      // 4. Notifier l'utilisateur (BDD)
+      const bonusCredite = type === "recharge" ? (request.bonus || 0) : 0;
+      const notifTitle = type === "recharge" ? "Recharge Bedou validée ✅" : "Retrait Bedou validé ✅";
+      const notifMsg = type === "recharge"
+        ? `Votre recharge de ${request.montant?.toLocaleString()} F CFA a été validée.${bonusCredite > 0 ? ` Bonus ajouté : ${bonusCredite.toLocaleString()} F CFA.` : ""} Total crédité : ${montantCredite.toLocaleString()} F CFA.`
+        : `Votre retrait de ${montantCredite.toLocaleString()} F CFA a été effectué.`;
+
       await base44.entities.Notification.create({
         destinataire_email: request.user_email,
-        titre: `✅ ${type === "recharge" ? "Recharge" : "Retrait"} Bedou validé`,
-        message: type === "recharge"
-          ? `✅ Recharge réussie ! Votre compte Bedou a été crédité de ${montantCredite.toLocaleString()} FCFA.`
-          : `✅ Retrait effectué ! Vous avez reçu ${montantCredite.toLocaleString()} FCFA.`,
+        titre: notifTitle,
+        message: notifMsg,
         type: "success",
         lue: false,
+        target_screen: "/mon-bedou",
+        target_entity_type: "Bedou",
       });
 
-      // 5. Notification push (non-bloquante)
+      // 5. Notification push FCM client (non-bloquante — ne jamais bloquer la validation)
       try {
         await base44.functions.invoke('sendFcmNotification', {
           user_email: request.user_email,
-          title: `✅ ${type === "recharge" ? "Recharge" : "Retrait"} validé`,
-          body: type === "recharge"
-            ? `Votre recharge de ${montantCredite.toLocaleString()} FCFA est validée`
-            : `Votre retrait de ${montantCredite.toLocaleString()} FCFA a été effectué`,
+          title: notifTitle,
+          body: notifMsg,
+          data: { notif_route: "/mon-bedou" },
         });
-      } catch (_) {}
+      } catch (pushErr) {
+        console.error('[GestionBedou] Push client échouée (non bloquant):', pushErr?.message);
+      }
 
       toast.success("✅ Demande validée");
       setDialogOpen(false);
