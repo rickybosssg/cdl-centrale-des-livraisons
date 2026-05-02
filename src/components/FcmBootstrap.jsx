@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 
 const APP_BASE_URL = 'https://cdl.base44.app';
-const FCM_DELAY_MS = 45000; // 45s — attendre stabilisation complète
+const FCM_DELAY_MS = 3000; // 3s — délai minimal de stabilisation
 
 function isNativePlatform() {
   try {
@@ -241,14 +241,9 @@ async function runNativeFcm(propEmail) {
     console.error('[FCM] ❌ register() error:', e?.message);
   }
 
-  // ── Cleanup après 25s ──────────────────────────────────────────────────────
-  console.log('[FCM] Cleanup scheduled (25s)');
-  setTimeout(() => {
-    console.log('[FCM] Cleaning up listeners');
-    for (const l of listeners) {
-      try { l.remove(); } catch (_) {}
-    }
-  }, 25000);
+  // NOTE : On ne nettoie PAS les listeners push — ils doivent rester actifs toute la vie de l'app.
+  // Seul le listener 'registration' peut être nettoyé après réception du token (fait dans handleTokenReceived).
+  console.log('[FCM] ✅ Listeners push actifs — pas de cleanup (durée de vie = app)');
 }
 
 async function handleTokenReceived(token, propEmail, listeners) {
@@ -284,11 +279,8 @@ async function handleTokenReceived(token, propEmail, listeners) {
     } else {
       console.error('[FCM] ❌ Token save failed:', result?.error);
     }
-
-    // Cleanup listeners
-    for (const l of listeners) {
-      try { await l.remove(); } catch (_) {}
-    }
+    // NOTE : On ne supprime PAS les listeners — pushNotificationReceived et pushNotificationActionPerformed
+    // doivent rester actifs toute la durée de vie de l'app pour recevoir les notifications.
   } catch (err) {
     console.error('[FCM] ❌ handleTokenReceived error:', err?.message);
   }
@@ -298,9 +290,25 @@ function handleForegroundNotif(notif) {
   try {
     const title = notif?.title || notif?.data?.title || 'CDL';
     const body = notif?.body || notif?.data?.body || '';
-    console.log('[FCM] Foreground notif:', title, '| body:', body.slice(0, 30));
+    const route = notif?.data?.notif_route || notif?.data?.route || null;
+    console.log('[FCM] 📬 Foreground notif:', title, '| body:', body.slice(0, 50), '| route:', route);
     
     try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
+
+    // Afficher un toast dans l'app (foreground)
+    import('sonner').then(({ toast }) => {
+      toast(title, {
+        description: body,
+        duration: 8000,
+        action: route ? {
+          label: 'Voir',
+          onClick: () => {
+            try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
+            window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
+          }
+        } : undefined,
+      });
+    }).catch(() => {});
   } catch (_) {}
 }
 

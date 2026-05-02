@@ -73,7 +73,16 @@ async function sendFcmToToken(accessToken, projectId, token, title, body, dataPa
         token,
         notification: { title, body },
         data: strData,
-        android: { priority: 'HIGH', notification: { channel_id: 'default' } },
+        android: {
+          priority: 'HIGH',
+          ttl: '86400s',
+          notification: {
+            channel_id: 'default',
+            sound: 'default',
+            notification_priority: 'PRIORITY_HIGH',
+            visibility: 'PUBLIC',
+          },
+        },
       },
     }),
   });
