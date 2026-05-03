@@ -318,15 +318,19 @@ export default function ValidationLivreurs() {
       await base44.entities.User.update(livreur.id, {
         statut_validation_livreur: 'valide', profil_valide: true, actif: true, date_validation: now,
       });
-      await base44.entities.Notification.create({
-        destinataire_email: livreur.email,
-        destinataire_role: 'livreur',
-        titre: '✅ Profil livreur validé !',
-        message: `Félicitations ${livreur.full_name} ! Votre profil a été validé. Vous pouvez maintenant recevoir des courses CDL 🛵`,
-        type: 'success',
-        lue: false,
-      });
-      toast.success(`✅ ${livreur.full_name} validé avec succès !`);
+      // Push FCM via sendCdlNotification (canal cdl_critical_alerts_v2)
+      base44.functions.invoke('sendCdlNotification', {
+        user_email: livreur.email,
+        title: '✅ Profil livreur validé !',
+        body: `Félicitations ${livreur.full_name} ! Votre profil a été validé. Vous pouvez maintenant passer en ligne et recevoir des courses CDL 🛵`,
+        data: {
+          type: 'profile_validated',
+          entity_id: profile?.id || livreur.id,
+          entity_type: 'UserProfile',
+          notif_route: '/',
+        },
+      }).catch(e => console.warn('[ValidationLivreurs] FCM push non-bloquant:', e.message));
+      toast.success(`✅ ${livreur.full_name} validé — push FCM envoyé`);
       await loadData();
     } catch (err) {
       toast.error('Erreur : ' + err.message);
@@ -344,15 +348,19 @@ export default function ValidationLivreurs() {
       await base44.entities.User.update(livreur.id, {
         statut_validation_livreur: 'refuse', profil_valide: false, motif_refus: reason,
       });
-      await base44.entities.Notification.create({
-        destinataire_email: livreur.email,
-        destinataire_role: 'livreur',
-        titre: '❌ Dossier refusé',
-        message: `Votre dossier a été refusé. Motif : ${reason}. Contactez CDL pour corriger et resoumettre.`,
-        type: 'danger',
-        lue: false,
-      });
-      toast.success(`Dossier de ${livreur.full_name} refusé`);
+      // Push FCM via sendCdlNotification (canal cdl_critical_alerts_v2)
+      base44.functions.invoke('sendCdlNotification', {
+        user_email: livreur.email,
+        title: '❌ Dossier livreur refusé',
+        body: `Motif : ${reason}. Corrigez vos documents et resoumettez votre dossier.`,
+        data: {
+          type: 'profile_refused',
+          entity_id: profile?.id || livreur.id,
+          entity_type: 'UserProfile',
+          notif_route: '/settings',
+        },
+      }).catch(e => console.warn('[ValidationLivreurs] FCM push non-bloquant:', e.message));
+      toast.success(`Dossier de ${livreur.full_name} refusé — push FCM envoyé`);
       await loadData();
     } catch (err) {
       toast.error('Erreur : ' + err.message);

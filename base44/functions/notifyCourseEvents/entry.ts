@@ -94,8 +94,18 @@ Deno.serve(async (req) => {
       }));
     }
 
-    // Livreur arrivé au point de départ → client
-    if (statut === 'arrivee_point_depart' && course.client_email) {
+    // Livreur en route vers départ → client
+    if (statut === 'driver_en_route_pickup' && course.client_email) {
+      tasks.push(notify({
+        user_email: course.client_email,
+        title: '🛵 Votre livreur est en route !',
+        body: `${course.livreur_name || 'Votre livreur'} se dirige vers le point de récupération.`,
+        data: { type: 'course_assigned', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
+      }));
+    }
+
+    // Livreur arrivé au point de départ → client (statuts anciens + nouveaux)
+    if ((statut === 'arrived_pickup' || statut === 'arrivee_point_depart') && course.client_email) {
       tasks.push(notify({
         user_email: course.client_email,
         title: '📍 Votre livreur est arrivé !',
@@ -108,18 +118,18 @@ Deno.serve(async (req) => {
     if (statut === 'en_cours' && course.client_email) {
       tasks.push(notify({
         user_email: course.client_email,
-        title: '🏃 Colis en route !',
+        title: '📦 Colis récupéré — en route !',
         body: `Votre colis est en livraison vers ${course.quartier_arrivee}.`,
         data: { type: 'course_in_progress', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
       }));
     }
 
-    // Proche destination → client
-    if (statut === 'proche_destination' && course.client_email) {
+    // Livreur arrivé à destination → client
+    if ((statut === 'arrived_dropoff' || statut === 'proche_destination') && course.client_email) {
       tasks.push(notify({
         user_email: course.client_email,
-        title: '⚡ Livreur proche !',
-        body: `${course.livreur_name || 'Votre livreur'} est presque arrivé à destination. Soyez prêt !`,
+        title: '⚡ Livreur à destination !',
+        body: `${course.livreur_name || 'Votre livreur'} est arrivé à destination. Préparez-vous à recevoir votre colis.`,
         data: { type: 'livreur_near_destination', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
       }));
     }

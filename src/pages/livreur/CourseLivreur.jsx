@@ -68,7 +68,7 @@ export default function CourseLivreur() {
 
   // GPS tracking — partage la position du livreur en temps réel
   useEffect(() => {
-    if (!course || !['acceptee', 'en_cours'].includes(course.statut)) return;
+    if (!course || !['acceptee', 'driver_en_route_pickup', 'arrived_pickup', 'en_cours', 'driver_en_route_dropoff', 'arrived_dropoff'].includes(course.statut)) return;
     if (!navigator.geolocation) return;
     const update = (pos) => {
       base44.entities.Course.update(id, {
@@ -85,17 +85,59 @@ export default function CourseLivreur() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [course?.statut, id]);
 
-  const recupererColis = async () => {
+  // ── Étapes intermédiaires ──────────────────────────────────────────────────
+  const updateStatut = async (newStatut, extra = {}) => {
+    if (updating) return;
     setUpdating(true);
-    // Optimistic UI
-    setCourse(prev => ({ ...prev, statut: "en_cours", date_recuperation: new Date().toISOString() }));
-    await base44.entities.Course.update(id, {
-      statut: "en_cours",
-      date_recuperation: new Date().toISOString(),
-    });
-    vibrateSuccess();
-    toast.success("Colis récupéré !");
-    setUpdating(false);
+    try {
+      const update = { statut: newStatut, ...extra };
+      setCourse(prev => ({ ...prev, ...update }));
+      await base44.entities.Course.update(id, update);
+      vibrateSuccess();
+    } catch (err) {
+      toast.error("Erreur : " + (err?.message || "réessayez"));
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const recupererColis = () => updateStatut("en_cours", { date_recuperation: new Date().toISOString() });
+
+  const signalerProbleme = async () => {
+    if (updating) return;
+    const desc = window.prompt("Décrivez le problème :");
+    if (!desc) return;
+    setUpdating(true);
+    try {
+      await base44.entities.CourseIssue.create({
+        course_id: id,
+        client_email: course.client_email,
+        client_name: course.client_name,
+        livreur_email: course.livreur_email,
+        livreur_name: course.livreur_name,
+        issue_type: "autre",
+        description: desc,
+        urgency: "urgent",
+        status: "nouveau",
+        course_statut_at_report: course.statut,
+        course_prix: course.prix,
+        course_quartier_depart: course.quartier_depart,
+        course_quartier_arrivee: course.quartier_arrivee,
+      });
+      // Notifier admin immédiatement
+      base44.functions.invoke("sendCdlNotification", {
+        role: "admin",
+        title: "⚠️ Problème signalé par livreur",
+        body: `${course.livreur_name} : ${desc} — Course ${course.quartier_depart}→${course.quartier_arrivee}`,
+        data: { type: "issue_reported", entity_id: id, entity_type: "Course", notif_route: "/gestion-signalements" },
+      }).catch(() => {});
+      vibrateNotif();
+      toast.success("✅ Signalement envoyé à l'admin");
+    } catch (err) {
+      toast.error("Erreur signalement : " + err.message);
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const BEDOU_INVOKE_MS = 45000;
@@ -391,14 +433,14 @@ export default function CourseLivreur() {
         </button>
       </div>
 
-      {/* Bouton Maps arrivée si colis récupéré */}
-      {course.statut === "en_cours" && (
+      {/* Bouton signalement — disponible dès que la course est acceptée */}
+      {['acceptee', 'driver_en_route_pickup', 'arrived_pickup', 'en_cours', 'arrived_dropoff'].includes(course.statut) && (
         <button
-          onClick={openMapsArrivee}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-blue-300 bg-blue-50 text-blue-700 font-semibold active:scale-95 transition-all"
+          onClick={signalerProbleme}
+          disabled={updating}
+          className="w-full py-3 rounded-xl border-2 border-red-200 text-red-600 text-sm font-semibold active:scale-95 transition-all"
         >
-          <Navigation className="h-5 w-5" />
-          Naviguer vers la livraison
+          ⚠️ Signaler un problème
         </button>
       )}
 
@@ -549,30 +591,102 @@ export default function CourseLivreur() {
         </div>
       )}
 
-      {/* acceptee : je suis arrivé + récupéré */}
+      {/* ÉTAPE 1 — acceptée : en route vers le départ */}
       {course.statut === "acceptee" && (
         <div className="space-y-3">
-          <p className="text-xs text-center text-gray-400 font-medium">Étape 1 — Allez récupérer le colis</p>
+          <div className="px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-700 text-center font-medium">
+            📍 Étape 1/4 — Rendez-vous au point de récupération
+          </div>
           <button
-            onClick={recupererColis}
+            onClick={() => { vibrateMedium(); updateStatut("driver_en_route_pickup"); toast.success("En route vers le départ !"); }}
             disabled={updating}
             className="w-full py-5 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-blue-200"
           >
-            {updating ? "Mise à jour..." : "📦 J'ai récupéré le colis"}
+            {updating ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Mise à jour...</span> : "🛵 Je suis en route (départ)"}
           </button>
         </div>
       )}
 
-      {/* en_cours : livré */}
+      {/* ÉTAPE 2 — En route vers pickup : arrivé au départ */}
+      {course.statut === "driver_en_route_pickup" && (
+        <div className="space-y-3">
+          <div className="px-3 py-2 rounded-xl bg-orange-50 border border-orange-200 text-xs text-orange-700 text-center font-medium">
+            📍 Étape 2/4 — Arrivez au point de récupération
+          </div>
+          <button
+            onClick={() => { vibrateMedium(); updateStatut("arrived_pickup", { date_arrivee_depart: new Date().toISOString() }); toast.success("Arrivé au point de départ !"); }}
+            disabled={updating}
+            className="w-full py-5 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-orange-200"
+          >
+            {updating ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Mise à jour...</span> : "📍 Arrivé au point de départ"}
+          </button>
+        </div>
+      )}
+
+      {/* ÉTAPE 3 — Arrivé pickup : colis récupéré + en route destination */}
+      {course.statut === "arrived_pickup" && (
+        <div className="space-y-3">
+          <div className="px-3 py-2 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-700 text-center font-medium">
+            📦 Étape 3/4 — Récupérez le colis, puis partez en livraison
+          </div>
+          <button
+            onClick={() => { vibrateSuccess(); recupererColis(); toast.success("Colis récupéré — en route !"); }}
+            disabled={updating}
+            className="w-full py-5 rounded-2xl bg-purple-500 hover:bg-purple-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-purple-200"
+          >
+            {updating ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Mise à jour...</span> : "📦 Colis récupéré — En route !"}
+          </button>
+        </div>
+      )}
+
+      {/* Maps arrivée si colis récupéré / en_cours */}
+      {course.statut === "en_cours" && (
+        <button
+          onClick={openMapsArrivee}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-blue-300 bg-blue-50 text-blue-700 font-semibold active:scale-95 transition-all"
+        >
+          <Navigation className="h-5 w-5" />
+          Naviguer vers la livraison
+        </button>
+      )}
+
+      {/* ÉTAPE 4a — En_cours : arrivé destination */}
       {course.statut === "en_cours" && (
         <div className="space-y-3">
-          <p className="text-xs text-center text-gray-400 font-medium">Étape 2 — Livrez le colis au destinataire</p>
+          <div className="px-3 py-2 rounded-xl bg-teal-50 border border-teal-200 text-xs text-teal-700 text-center font-medium">
+            🏁 Étape 4/4 — Livrez le colis au destinataire
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => { vibrateMedium(); updateStatut("arrived_dropoff", { date_arrivee_destination: new Date().toISOString() }); toast.success("Arrivé à destination !"); }}
+              disabled={updating}
+              className="flex-1 py-4 rounded-2xl bg-teal-500 hover:bg-teal-600 text-white text-sm font-extrabold active:scale-95 transition-all shadow-md shadow-teal-200"
+            >
+              {updating ? "..." : "📍 Arrivé destination"}
+            </button>
+            <button
+              onClick={livrerColis}
+              disabled={updating}
+              className="flex-[2] py-4 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-green-200"
+            >
+              {updating ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Traitement...</span> : "✅ Colis livré"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ÉTAPE 4b — Arrivé destination : livraison finale */}
+      {course.statut === "arrived_dropoff" && (
+        <div className="space-y-3">
+          <div className="px-3 py-2 rounded-xl bg-green-50 border border-green-200 text-xs text-green-700 text-center font-medium">
+            🎯 Remettez le colis et confirmez la livraison
+          </div>
           <button
             onClick={livrerColis}
             disabled={updating}
             className="w-full py-5 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-green-200"
           >
-            {updating ? "Mise à jour..." : "✅ Colis livré"}
+            {updating ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Traitement...</span> : "✅ Colis livré — Confirmer"}
           </button>
         </div>
       )}
