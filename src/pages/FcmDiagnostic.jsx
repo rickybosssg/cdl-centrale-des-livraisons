@@ -405,37 +405,85 @@ export default function FcmDiagnostic() {
     }
   };
 
-  // ── Test envoi ──────────────────────────────────────────────────────────────
+  // ── Test interne (BDD seulement) ────────────────────────────────────────────
+  const [sendingInternal, setSendingInternal] = useState(false);
+  const [internalResult, setInternalResult] = useState(null);
+
+  const sendInternalTest = async () => {
+    if (!user?.email) return;
+    setSendingInternal(true);
+    setInternalResult(null);
+    addLog('Test notification INTERNE (BDD)...');
+    try {
+      const { base44: b44 } = await import('@/api/base44Client');
+      await b44.entities.Notification.create({
+        destinataire_email: user.email,
+        titre: '🔔 Test notification interne',
+        message: `Test interne — ${new Date().toLocaleTimeString('fr-FR')}`,
+        type: 'info',
+        lue: false,
+        target_screen: '/mes-notifications',
+      });
+      setInternalResult({ ok: true, msg: '✅ Notification interne créée — vérifiez la cloche dans l\'app' });
+      addLog('✅ Notif interne créée en BDD', 'info');
+    } catch (err) {
+      setInternalResult({ ok: false, msg: err.message });
+      addLog('❌ Erreur: ' + err.message, 'error');
+    } finally {
+      setSendingInternal(false);
+    }
+  };
+
+  // ── Test push système Android ────────────────────────────────────────────────
+  const [pushSysResult, setPushSysResult] = useState(null);
+
   const sendTest = async () => {
     if (!user?.email) return;
     setSending(true);
     setSendResult(null);
-    addLog(`Envoi test vers ${user.email}...`);
+    setPushSysResult(null);
+    const t0 = Date.now();
+    const sentAt = new Date().toISOString();
+    addLog(`🚀 Envoi test PUSH SYSTÈME → ${user.email} | channel: cdl_critical_alerts_v2`);
     try {
       const res = await base44.functions.invoke('sendCdlNotification', {
         user_email: user.email,
-        title: '🔔 Test CDL Push',
-        body: `Test notification — ${new Date().toLocaleTimeString('fr-FR')}`,
+        title: '🔔 Test Push Système CDL',
+        body: `Push Android système — ${new Date().toLocaleTimeString('fr-FR')} — canal cdl_critical_alerts_v2`,
+        urgence: 'tres_urgent',
         data: {
-          type: 'new_course',
+          type: 'bedou_recharge_approved',
           notif_route: '/mes-notifications',
-          entity_id: 'diag_test',
+          entity_id: 'diag_push_test',
           entity_type: 'Course',
+          event_created_at: sentAt,
         },
       });
       const d = res.data;
+      const delay = Date.now() - t0;
       const sent = d?.sent ?? 0;
       const total = d?.total ?? 0;
-      if (sent > 0) {
-        setSendResult({ ok: true, msg: `✅ Envoyée ! ${sent}/${total} token(s) — vérifiez votre téléphone` });
-        addLog(`✅ FCM sent=${sent} total=${total} bdd=${d?.bdd}`, 'info');
-        toast.success('Notification envoyée — vérifiez votre téléphone');
+      const pushOk = sent > 0;
+      setPushSysResult({
+        PUSH_SYSTEM_VISIBLE: pushOk,
+        delay_ms: delay,
+        channelId: 'cdl_critical_alerts_v2',
+        sent: sent,
+        failed: d?.failed ?? 0,
+        total: total,
+        error: !pushOk ? (d?.note || 'Aucun token FCM actif') : null,
+        notification_sent_at: sentAt,
+      });
+      if (pushOk) {
+        setSendResult({ ok: true, msg: `✅ Push système envoyé ! ${sent}/${total} token(s)` });
+        addLog(`✅ FCM sent=${sent}/${total} | channel=cdl_critical_alerts_v2 | delay=${delay}ms`, 'info');
+        toast.success('Push envoyé — vérifiez la barre de notifications Android');
       } else if (d?.bdd > 0) {
-        setSendResult({ ok: true, msg: `⚠️ Notif BDD créée mais FCM=0 token (token manquant ?)` });
-        addLog('⚠️ Pas de token FCM — notif BDD seulement', 'warn');
+        setSendResult({ ok: false, msg: `⚠️ Notif BDD ok mais FCM=0 (token manquant ?)` });
+        addLog('⚠️ FCM=0 — token absent ou expiré', 'warn');
       } else {
-        setSendResult({ ok: false, msg: d?.note || d?.error || 'Échec envoi' });
-        addLog('❌ Échec: ' + (d?.note || d?.error || 'inconnu'), 'error');
+        setSendResult({ ok: false, msg: d?.note || d?.error || 'Échec' });
+        addLog('❌ Échec: ' + (d?.note || d?.error), 'error');
       }
     } catch (err) {
       setSendResult({ ok: false, msg: err.message });
@@ -474,7 +522,7 @@ export default function FcmDiagnostic() {
 
       {/* Version indicator */}
       <div className="bg-emerald-600 text-white text-center py-2 px-3 rounded-xl font-bold text-sm tracking-wide">
-        ✅ FCM FIX V8 — 03/05 — deleteChannel + recreate importance=5
+        ✅ FCM V9 — canal cdl_critical_alerts_v2 — importance=5 heads-up garanti
       </div>
 
       {/* Header */}
@@ -677,27 +725,61 @@ export default function FcmDiagnostic() {
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="p-3 space-y-1.5 text-xs text-blue-900">
             <p className="font-bold">📋 Vérification affichage Android</p>
-            <p>• <strong>App ouverte</strong> → notification dans le toast (sonner)</p>
-            <p>• <strong>App fond/fermée</strong> → barre de notification Android (canal importance=5)</p>
+            <p>• <strong>App ouverte</strong> → toast Sonner dans l'app + notification barre système</p>
+            <p>• <strong>App fond/fermée</strong> → barre de notifications Android automatiquement</p>
             <p>• Vérifier : <strong>Paramètres → Apps → CDL → Notifications → CDL Alertes Critiques</strong> = activé</p>
-            <p>• Si canal bloqué → désinstaller/réinstaller l'APK (les canaux sont cachés après création)</p>
+            <p>• Canal : <strong>cdl_critical_alerts_v2</strong> (nouveau — importance=5 forcé)</p>
           </CardContent>
         </Card>
       )}
 
-      {/* Test envoi */}
-      <Card>
+      {/* Tests séparés : Interne vs Système */}
+      <Card className="border-slate-300">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Envoyer notification de test</CardTitle>
+          <CardTitle className="text-sm">🧪 Tests séparés</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 px-4 pb-4">
-          <Button onClick={sendTest} disabled={sending || fcmTokens.length === 0} className="w-full">
-            {sending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Envoi...</> : <><Send className="h-4 w-4 mr-2" />Envoyer test</>}
-          </Button>
-          {fcmTokens.length === 0 && <p className="text-xs text-muted-foreground text-center">⚠️ Enregistrez d'abord un token FCM.</p>}
-          {sendResult && (
-            <div className={`p-3 rounded-lg text-sm font-medium ${sendResult.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
-              {sendResult.msg}
+          {/* Bouton 1 : Notification interne BDD */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-700">Bouton 1 — Notification interne app (BDD uniquement)</p>
+            <Button variant="outline" onClick={sendInternalTest} disabled={sendingInternal} className="w-full border-slate-400 text-slate-700">
+              {sendingInternal ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />...</> : '🔔 Tester notification interne'}
+            </Button>
+            {internalResult && (
+              <div className={`p-2 rounded text-xs font-medium ${internalResult.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                {internalResult.msg}
+              </div>
+            )}
+          </div>
+
+          <hr className="border-slate-200" />
+
+          {/* Bouton 2 : Push système Android */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-700">Bouton 2 — Vraie notification push Android système</p>
+            <Button onClick={sendTest} disabled={sending || fcmTokens.length === 0} className="w-full bg-orange-600 hover:bg-orange-700">
+              {sending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Envoi...</> : <><Send className="h-4 w-4 mr-2" />Tester push système Android</>}
+            </Button>
+            {fcmTokens.length === 0 && <p className="text-xs text-amber-700 font-medium text-center">⚠️ Enregistrez d'abord un token FCM.</p>}
+            {sendResult && (
+              <div className={`p-2 rounded text-xs font-medium ${sendResult.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                {sendResult.msg}
+              </div>
+            )}
+          </div>
+
+          {/* Résultats détaillés push système */}
+          {pushSysResult && (
+            <div className="mt-2 p-3 rounded-lg bg-slate-900 space-y-1 text-[11px] font-mono">
+              <p className={`font-bold ${pushSysResult.PUSH_SYSTEM_VISIBLE ? 'text-green-400' : 'text-red-400'}`}>
+                PUSH_SYSTEM_VISIBLE = {String(pushSysResult.PUSH_SYSTEM_VISIBLE)}
+              </p>
+              <p className="text-slate-300">delay_ms = {pushSysResult.delay_ms}</p>
+              <p className="text-slate-300">channelId = {pushSysResult.channelId}</p>
+              <p className="text-slate-300">sent = {pushSysResult.sent} / {pushSysResult.total}</p>
+              <p className="text-slate-300">failed = {pushSysResult.failed}</p>
+              {pushSysResult.error && <p className="text-red-400">error = {pushSysResult.error}</p>}
+              <p className="text-slate-500">sent_at = {pushSysResult.notification_sent_at}</p>
             </div>
           )}
         </CardContent>

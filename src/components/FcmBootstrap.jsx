@@ -107,13 +107,16 @@ async function runNativeFcm(propEmail) {
   }
 
   // ── Canaux Android ────────────────────────────────────────────────────────
-  // IMPORTANT : Sur Android, un canal créé avec une importance basse NE PEUT PAS
-  // être mis à jour. Il faut supprimer puis recréer pour forcer importance=5 (heads-up).
-  const CHANNELS = [
+  // STRATÉGIE : canaux V2 avec nouveaux IDs jamais vus par Android
+  // Android interdit de modifier l'importance d'un canal existant.
+  // Nouveaux IDs = importance=5 heads-up garanti dès la première installation.
+  // Les anciens canaux sont supprimés pour éviter confusion dans les paramètres.
+  const OLD_CHANNEL_IDS = ['default', 'CDL_ALERTS_HIGH', 'urgent'];
+  const CHANNELS_V2 = [
     {
-      id: 'default',
+      id: 'cdl_default_v2',
       name: 'CDL Notifications',
-      description: 'Notifications CDL',
+      description: 'Notifications générales CDL',
       importance: 5,
       sound: 'default',
       vibration: true,
@@ -121,9 +124,9 @@ async function runNativeFcm(propEmail) {
       lightColor: '#1E6BFF',
     },
     {
-      id: 'CDL_ALERTS_HIGH',
+      id: 'cdl_critical_alerts_v2',
       name: 'CDL Alertes Critiques',
-      description: 'Courses, recharges, profils',
+      description: 'Courses, recharges Bedou, profils — priorité maximale',
       importance: 5,
       sound: 'default',
       vibration: true,
@@ -133,13 +136,11 @@ async function runNativeFcm(propEmail) {
   ];
 
   try {
-    // Supprimer d'abord les anciens canaux (nécessaire pour changer l'importance)
-    await Promise.allSettled(
-      CHANNELS.map(ch => PushNotifications.deleteChannel({ id: ch.id }))
-    );
-    // Recréer avec importance=5
-    await Promise.all(CHANNELS.map(ch => PushNotifications.createChannel(ch)));
-    console.log('[FCM] ✅ Channels (re)created with importance=5');
+    // Supprimer anciens canaux (silencieux si déjà absents)
+    await Promise.allSettled(OLD_CHANNEL_IDS.map(id => PushNotifications.deleteChannel({ id })));
+    // Créer les nouveaux canaux V2 (ne pas delete/recreate → importance figée par Android)
+    await Promise.all(CHANNELS_V2.map(ch => PushNotifications.createChannel(ch)));
+    console.log('[FCM] ✅ Channels V2 created: cdl_default_v2 + cdl_critical_alerts_v2 (importance=5)');
   } catch (e) {
     console.warn('[FCM] Channel error (non-fatal):', e?.message);
   }
@@ -193,11 +194,17 @@ async function runNativeFcm(propEmail) {
 
     listeners.push(await PushNotifications.addListener('pushNotificationReceived', (notif) => {
       try {
+        const receivedAt = new Date().toISOString();
         const title = notif?.title || notif?.data?.title || 'CDL';
         const body = notif?.body || notif?.data?.body || '';
         const route = notif?.data?.notif_route || notif?.data?.route || null;
-        console.log('[FCM] 📬 Foreground:', title, '| route:', route);
+        const sentAt = notif?.data?.notification_sent_at || null;
+        const delayMs = sentAt ? Date.now() - new Date(sentAt).getTime() : null;
+        console.log(`[FCM] 📬 Foreground | title="${title}" | channel=${notif?.data?.channel_id || '?'} | delay=${delayMs != null ? delayMs + 'ms' : 'N/A'} | received_at=${receivedAt}`);
         try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
+        // NOTE : Sur Android, FCM affiche automatiquement la notification dans la barre système
+        // même si l'app est au premier plan (depuis Android 13+ avec notification block = false).
+        // Le toast Sonner est un affichage IN-APP supplémentaire, pas un remplacement.
         import('sonner').then(({ toast }) => {
           toast(title, {
             description: body,

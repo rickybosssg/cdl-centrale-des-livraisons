@@ -74,10 +74,20 @@ async function getAccessToken(sa) {
   }
 }
 
+// ── Canal cible ───────────────────────────────────────────────────────────────
+// cdl_critical_alerts_v2 = nouveau canal jamais vu par Android → importance=5 garantie
+const CRITICAL_TYPES = [
+  'bedou_recharge_request', 'bedou_withdrawal_request',
+  'course_assigned', 'new_course',
+  'new_profile_request', 'profile_pending_review',
+  'bedou_recharge_approved', 'bedou_withdrawal_approved',
+  'bedou_recharge_rejected', 'bedou_withdrawal_rejected',
+];
+
 // ── Envoi FCM v1 ──────────────────────────────────────────────────────────────
-// ❌ NE PAS MODIFIER le payload — android.priority HIGH est obligatoire app fermée
 async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}, urgence = 'normal') {
   try {
+    const sentAt = new Date().toISOString();
     const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
     // Tous les champs data en string (obligatoire FCM v1)
@@ -85,46 +95,44 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
     for (const [k, v] of Object.entries(data)) {
       stringData[k] = v == null ? '' : String(v);
     }
-    // title/body dans data → garantit réception app fermée (killed state)
+    // title/body dans data → garantit réception killed state
     stringData.title = title;
     stringData.body = body;
+    // Timestamps pour diagnostic délai
+    stringData.notification_sent_at = sentAt;
+    stringData.event_created_at = stringData.event_created_at || sentAt;
 
-    const isTresUrgent = urgence === 'tres_urgent';
-    // CDL_ALERTS_HIGH pour les events critiques métier
-    const CRITICAL_TYPES = [
-      'bedou_recharge_request', 'bedou_withdrawal_request',
-      'course_assigned', 'new_course',
-      'new_profile_request', 'profile_pending_review',
-      'bedou_recharge_approved', 'bedou_withdrawal_approved',
-      'bedou_recharge_rejected', 'bedou_withdrawal_rejected',
-    ];
-    const isCritical = isTresUrgent || CRITICAL_TYPES.includes(stringData.type || '');
-    const channelId = isTresUrgent ? 'urgent' : (isCritical ? 'CDL_ALERTS_HIGH' : 'default');
+    const isCritical = urgence === 'tres_urgent' || CRITICAL_TYPES.includes(stringData.type || '');
 
-    // ❌ NE PAS MODIFIER CE PAYLOAD FCM — verrouillé
+    // NOUVEAU canal v2 — jamais vu par Android = importance=5 garanti immédiatement
+    const channelId = isCritical ? 'cdl_critical_alerts_v2' : 'cdl_default_v2';
+
     const fcmPayload = {
       message: {
         token: fcmToken,
-        notification: { title, body },     // ← obligatoire system tray Android
-        data: stringData,                   // ← obligatoire deep link + killed state
+        // notification block = obligatoire pour affichage système Android (background/killed)
+        notification: { title, body },
+        data: stringData,
         android: {
-          priority: 'HIGH',                 // ← VERROUILLÉ — ne pas downgrader
+          priority: 'HIGH',
           ttl: '86400s',
           notification: {
             channel_id: channelId,
             sound: 'default',
             visibility: 'PUBLIC',
-            notification_priority: isCritical ? 'PRIORITY_MAX' : 'PRIORITY_HIGH', // ← VERROUILLÉ
-            default_sound: true,            // ← VERROUILLÉ
-            default_vibrate_timings: true,  // ← VERROUILLÉ
-            default_light_settings: true,   // ← VERROUILLÉ
+            notification_priority: isCritical ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+            default_sound: true,
+            default_vibrate_timings: true,
+            default_light_settings: true,
+            // badge et tag pour forcer affichage même si notif similaire existe
+            notification_count: 1,
           },
         },
         webpush: {
           notification: {
             icon: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
             badge: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
-            requireInteraction: isTresUrgent,
+            requireInteraction: isCritical,
           },
         },
       },
@@ -142,11 +150,11 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
       : null;
 
     if (res.ok) {
-      console.log(`[CDL-FCM] ✅ OK | token:${fcmToken.slice(0, 20)}... | msgId:${result?.name}`);
+      console.log(`[CDL-FCM] ✅ OK | channel=${channelId} | token:${fcmToken.slice(0, 20)}... | msgId:${result?.name} | sent_at=${sentAt}`);
     } else {
       console.error(`[CDL-FCM] ❌ FAIL | err=${errCode} | HTTP=${res.status} | token:${fcmToken.slice(0, 20)}...`);
     }
-    return { ok: res.ok, result, errCode, token: fcmToken };
+    return { ok: res.ok, result, errCode, token: fcmToken, channelId, sentAt };
   } catch (e) {
     console.error(`[CDL-FCM] ❌ EXCEPTION | token:${fcmToken.slice(0, 20)}... | ${e.message}`);
     return { ok: false, result: null, errCode: 'EXCEPTION', token: fcmToken };
