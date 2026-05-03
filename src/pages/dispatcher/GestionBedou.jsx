@@ -82,122 +82,47 @@ export default function GestionBedou() {
   };
 
   const handleValider = async (request, type) => {
-    console.log('[BEDOU_VALIDATE] click', { requestId: request.id, type });
+    // ANTI-DOUBLE-CLIC : vérifier statut localement avant d'appeler le backend
+    if (request.statut !== "en_attente") {
+      toast.error("Cette demande a déjà été traitée.");
+      setDialogOpen(false);
+      return;
+    }
+
     setProcessing(true);
+    console.log('[BEDOU_VALIDATE] START | request_id:', request.id, '| type:', type, '| user:', request.user_email);
+
     try {
-      const table = type === "recharge" ? "DemandeRecharge" : "DemandeRetrait";
-      const montantCredite = type === "recharge"
-        ? (request.montant_total || request.montant || 0)
-        : (request.montant || 0);
-      const bonusAmount = type === "recharge" ? (request.bonus || 0) : 0;
-      const userName = request.user_name || request.user_nom || request.user_email;
-
-      console.log('[BEDOU_VALIDATE] request_id', request.id);
-      console.log('[BEDOU_VALIDATE] user_id', request.user_id || 'unknown');
-      console.log('[BEDOU_VALIDATE] amount', montantCredite);
-      console.log('[BEDOU_VALIDATE] bonus', bonusAmount);
-      console.log('[BEDOU_VALIDATE] backend_start');
-
-      // 1. Mettre à jour la demande
-      await base44.entities[table].update(request.id, {
-        statut: "valide",
-        date_validation: new Date().toISOString(),
-        valide_par: admin?.email,
+      const res = await base44.functions.invoke('validateBedouRequest', {
+        request_id: request.id,
+        type,
+        action: 'valider',
       });
 
-      // 2. Mettre à jour ou créer le Bedou
-      let bedouList = await base44.entities.Bedou.filter({ user_email: request.user_email });
-      let b = bedouList?.[0];
+      const d = res.data;
+      console.log('[BEDOU_VALIDATE] RESULT |', JSON.stringify({
+        recharge_id: d?.recharge_id,
+        user_email: d?.user_email,
+        montant_credite: d?.montant_credite,
+        ancien_solde: d?.ancien_solde,
+        nouveau_solde: d?.nouveau_solde,
+        notification_client_sent: d?.notification_client_sent,
+        elapsed_ms: d?.elapsed_ms,
+      }));
 
-      if (!b) {
-        console.warn('[BEDOU_VALIDATE] Bedou not found — creating...');
-        b = await base44.entities.Bedou.create({
-          user_email: request.user_email,
-          user_id: request.user_id || '',
-          user_nom: userName,
-          role: 'livreur', // default
-          solde: 0,
-          solde_disponible: 0,
-          solde_bloque: 0,
-          solde_bonus: 0,
-          bonus: 0,
-          gains_totaux: 0,
-          depenses_totales: 0,
-          statut_bedou: 'actif',
-          date_creation: new Date().toISOString(),
-        });
+      if (d?.already_processed) {
+        toast.warning("⚠️ Demande déjà traitée — aucun double crédit.");
+        setDialogOpen(false);
+        loadData();
+        return;
       }
 
-      const nouveauSolde = type === "recharge"
-        ? (b.solde || 0) + montantCredite
-        : Math.max(0, (b.solde || 0) - montantCredite);
-      const nouveauDisponible = type === "recharge"
-        ? (b.solde_disponible || 0) + montantCredite
-        : Math.max(0, (b.solde_disponible || 0) - montantCredite);
-
-      await base44.entities.Bedou.update(b.id, {
-        solde: nouveauSolde,
-        solde_disponible: nouveauDisponible,
-      });
-
-      // 3. Enregistrer la transaction
-      await base44.entities.Transaction.create({
-        user_email: request.user_email,
-        user_nom: userName,
-        role: "client",
-        type: type === "recharge" ? "recharge" : "retrait",
-        montant: montantCredite,
-        sens: type === "recharge" ? "credit" : "debit",
-        source: "bedou",
-        statut: "valide",
-        date_validation: new Date().toISOString(),
-        valide_par: admin?.email,
-      });
-
-      // 4. Notifier l'utilisateur
-      const notifTitle = type === "recharge" ? "Recharge Bedou validée ✅" : "Retrait Bedou validé ✅";
-      const notifMsg = type === "recharge"
-        ? `Votre recharge de ${request.montant?.toLocaleString()} F CFA a été validée.${bonusAmount > 0 ? ` Bonus ajouté : ${bonusAmount.toLocaleString()} F CFA.` : ""} Total crédité : ${montantCredite.toLocaleString()} F CFA.`
-        : `Votre retrait de ${montantCredite.toLocaleString()} F CFA a été effectué.`;
-
-      await base44.entities.Notification.create({
-        destinataire_email: request.user_email,
-        titre: notifTitle,
-        message: notifMsg,
-        type: "success",
-        lue: false,
-        target_screen: "/mon-bedou",
-        target_entity_type: "DemandeRecharge",
-        target_entity_id: request.id,
-        notification_key: `${request.user_email}__bedou_${type}_approved__${request.id}__${notifTitle}`,
-      });
-
-      // 5. FCM push (non-bloquant)
-      try {
-        await base44.functions.invoke('sendCdlNotification', {
-          user_email: request.user_email,
-          title: notifTitle,
-          body: notifMsg,
-          data: {
-            type: type === 'recharge' ? 'bedou_recharge_approved' : 'bedou_withdrawal_approved',
-            entity_id: request.id,
-            entity_type: 'DemandeRecharge',
-            notif_route: '/mon-bedou',
-            amount: String(montantCredite),
-          },
-        });
-      } catch (pushErr) {
-        console.warn('[BEDOU_VALIDATE] FCM échouée (non bloquant):', pushErr?.message);
-      }
-
-      console.log('[BEDOU_VALIDATE] success', { newBalance: nouveauSolde, newAvailable: nouveauDisponible });
-      toast.success("✅ Demande validée — Solde crédité");
+      toast.success(`✅ Solde crédité de ${d?.montant_credite?.toLocaleString()} F CFA | Notification: ${d?.notification_client_sent ? '✅' : '⚠️ en attente'}`);
       setDialogOpen(false);
       setComment("");
       loadData();
     } catch (err) {
-      console.error('[BEDOU_VALIDATE] error', err?.message);
-      console.error('[BEDOU_VALIDATE] error_details', err);
+      console.error('[BEDOU_VALIDATE] ERROR:', err?.message);
       toast.error("❌ " + (err?.message || "Erreur inconnue"));
     } finally {
       setProcessing(false);
@@ -212,36 +137,21 @@ export default function GestionBedou() {
 
     setProcessing(true);
     try {
-      const table = type === "recharge" ? "DemandeRecharge" : "DemandeRetrait";
-
-      await base44.entities[table].update(request.id, {
-        statut: "refuse",
-        motif_refus: comment,
-        date_validation: new Date().toISOString(),
-        valide_par: admin?.email,
+      const res = await base44.functions.invoke('validateBedouRequest', {
+        request_id: request.id,
+        type,
+        action: 'refuser',
+        motif_refus: comment.trim(),
       });
 
-      // Notifier l'utilisateur
-      await base44.entities.Notification.create({
-        destinataire_email: request.user_email,
-        titre: `❌ ${type === "recharge" ? "Recharge" : "Retrait"} Bedou refusé`,
-        message: type === "recharge"
-          ? `❌ Votre rechargement de ${request.montant?.toLocaleString()} FCFA a été refusé. Motif: ${comment}`
-          : `❌ Votre demande de retrait a été refusée. Motif: ${comment}`,
-        type: "danger",
-        lue: false,
-      });
+      if (res.data?.already_processed) {
+        toast.warning("⚠️ Demande déjà traitée.");
+        setDialogOpen(false);
+        loadData();
+        return;
+      }
 
-      // Notification push (non-bloquante)
-      try {
-        await base44.functions.invoke('sendFcmNotification', {
-          user_email: request.user_email,
-          title: `❌ ${type === "recharge" ? "Recharge" : "Retrait"} refusé`,
-          body: `Motif: ${comment}`,
-        });
-      } catch (_) {}
-
-      toast.success("❌ Demande refusée");
+      toast.success("Demande refusée — client notifié");
       setDialogOpen(false);
       setComment("");
       loadData();
