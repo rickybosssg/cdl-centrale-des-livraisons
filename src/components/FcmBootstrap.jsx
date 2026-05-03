@@ -1,20 +1,20 @@
 /**
- * FcmBootstrap — Initialisation FCM 100% crash-proof + Token Management
+ * FcmBootstrap — Initialisation FCM unifiée via nativePush.js
  *
  * RÈGLES :
- * 1. À CHAQUE DÉMARRAGE APP → récupérer + enregistrer le token FCM actuel
- * 2. Nettoyer les tokens inactifs/dupliqués (ancien par user_id + device_id)
- * 3. Vérifier permission POST_NOTIFICATIONS (Android 13+)
- * 4. Vérifier channel Android "default" avec HIGH importance
- * 5. Listener complets : registration + registrationError + push received + tap
- * 6. Logs détaillés pour diagnostic
+ * 1. Utilise nativePush.js comme couche unique (pas de duplication)
+ * 2. register() est TOUJOURS appelé au démarrage (même si permission 'prompt')
+ *    → Firebase demandera la permission si nécessaire
+ * 3. Token sauvegardé via saveFcmTokenPublic à chaque démarrage (upsert)
+ * 4. Listeners push permanents (pas de cleanup)
+ * 5. Web FCM géré séparément (PWA)
  */
 
 import { useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 
 const APP_BASE_URL = 'https://cdl.base44.app';
-const FCM_DELAY_MS = 3000; // 3s — délai minimal de stabilisation
+const FCM_DELAY_MS = 2000;
 
 function isNativePlatform() {
   try {
@@ -27,12 +27,8 @@ function isNativePlatform() {
 }
 
 async function saveFcmTokenRemote({ user_email, token, device_type = 'android_native' }) {
-  if (!user_email || !token) {
-    console.error('[FCM] ❌ Missing email or token');
-    return { success: false };
-  }
+  if (!user_email || !token) return { success: false };
   try {
-    console.log('[FCM] 💾 Saving token to backend...');
     const res = await fetch(`${APP_BASE_URL}/functions/saveFcmTokenPublic`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -40,13 +36,13 @@ async function saveFcmTokenRemote({ user_email, token, device_type = 'android_na
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data?.success) {
-      console.log('[FCM] ✅ Token saved successfully');
+      console.log('[FCM] ✅ Token saved | action:', data.action, '| id:', data.token_id);
       return data;
     }
-    console.error('[FCM] ❌ Token save failed:', data?.error || 'Unknown error');
+    console.error('[FCM] ❌ Token save failed:', data?.error);
     return { success: false };
   } catch (err) {
-    console.error('[FCM] ❌ Token save network error:', err?.message);
+    console.error('[FCM] ❌ Token save error:', err?.message);
     return { success: false };
   }
 }
@@ -69,42 +65,33 @@ export default function FcmBootstrap({ userEmail }) {
   const didRun = useRef(false);
 
   useEffect(() => {
+    // Ne lancer qu'une fois ET seulement quand on a un email
     if (didRun.current) return;
+    if (!userEmail) return; // attendre que l'email soit résolu
     didRun.current = true;
 
     const native = isNativePlatform();
-    console.log('[FCM] Bootstrap scheduled (delay', FCM_DELAY_MS / 1000, 's | native:', native, '| email:', userEmail || 'none');
+    console.log('[FCM] Bootstrap | native:', native, '| email:', userEmail);
 
     const timer = setTimeout(async () => {
-      console.log('[FCM] Bootstrap starting...');
       try {
         if (native) {
-          await safeRunNativeFcm(userEmail);
+          await runNativeFcm(userEmail);
         } else {
-          await safeRunWebFcm(userEmail);
+          await runWebFcm(userEmail);
         }
       } catch (err) {
-        console.error('[FCM] ❌ Bootstrap catastrophic error (app continues):', err?.message);
+        console.error('[FCM] Bootstrap error (non-fatal):', err?.message);
       }
     }, FCM_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userEmail]); // relancer si email change (connexion tardive)
 
   return null;
 }
 
-// ─── NATIVE FCM ──────────────────────────────────────────────────────────────
-
-function safeRunNativeFcm(propEmail) {
-  try {
-    runNativeFcm(propEmail).catch((err) => {
-      console.error('[FCM] ❌ Native error (app continues):', err?.message);
-    });
-  } catch (err) {
-    console.error('[FCM] ❌ Native sync error (app continues):', err?.message);
-  }
-}
+// ─── NATIVE FCM ───────────────────────────────────────────────────────────────
 
 async function runNativeFcm(propEmail) {
   console.log('[FCM] Native init start');
@@ -113,287 +100,162 @@ async function runNativeFcm(propEmail) {
   try {
     const mod = await import('@capacitor/push-notifications');
     PushNotifications = mod.PushNotifications;
-    if (!PushNotifications) throw new Error('PushNotifications is null');
-    console.log('[FCM] ✅ Plugin loaded');
+    if (!PushNotifications) throw new Error('null');
   } catch (e) {
-    console.error('[FCM] ❌ Plugin unavailable:', e?.message);
+    console.error('[FCM] Plugin unavailable:', e?.message);
     return;
   }
 
-  // ── Create channels ──────────────────────────────────────────────────────────
+  // ── Canal Android (importance 5 = heads-up même app fermée) ──────────────
   try {
-    await Promise.race([
-      Promise.all([
-        // Canal défaut — toutes les notifs normales
-        PushNotifications.createChannel({
-          id: 'default',
-          name: 'CDL Notifications',
-          description: 'Toutes les notifications CDL',
-          importance: 4,
-          sound: 'default',
-          vibration: true,
-          lights: true,
-          lightColor: '#1E6BFF',
-        }),
-        // Canal critique — recharges, courses, retraits, profils
-        PushNotifications.createChannel({
-          id: 'CDL_ALERTS_HIGH',
-          name: 'CDL Alertes Critiques',
-          description: 'Courses, recharges, retraits, demandes profil',
-          importance: 5,
-          sound: 'default',
-          vibration: true,
-          lights: true,
-          lightColor: '#FF6B1E',
-        }),
-      ]),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+    await Promise.all([
+      PushNotifications.createChannel({
+        id: 'default',
+        name: 'CDL Notifications',
+        importance: 5,         // IMPORTANCE_HIGH — affichage heads-up obligatoire
+        sound: 'default',
+        vibration: true,
+        lights: true,
+        lightColor: '#1E6BFF',
+      }),
+      PushNotifications.createChannel({
+        id: 'CDL_ALERTS_HIGH',
+        name: 'CDL Alertes Critiques',
+        importance: 5,
+        sound: 'default',
+        vibration: true,
+        lights: true,
+        lightColor: '#FF6B1E',
+      }),
     ]);
-    console.log('[FCM] ✅ Channels created (default + CDL_ALERTS_HIGH)');
+    console.log('[FCM] ✅ Channels created');
   } catch (e) {
-    console.warn('[FCM] ⚠️ Channel creation error:', e?.message);
+    console.warn('[FCM] Channel error (non-fatal):', e?.message);
   }
 
-  // ── Check permission (JAMAIS demander ici) ─────────────────────────────────
+  // ── Permission — demander si pas encore accordée ──────────────────────────
   let perm = 'unknown';
   try {
-    const check = await Promise.race([
-      PushNotifications.checkPermissions(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-    ]);
+    const check = await PushNotifications.checkPermissions();
     perm = check?.receive || 'unknown';
     console.log('[FCM] Permission status:', perm);
+
+    if (perm === 'prompt' || perm === 'prompt-with-rationale') {
+      console.log('[FCM] Requesting permission...');
+      const req = await Promise.race([
+        PushNotifications.requestPermissions(),
+        new Promise((_, r) => setTimeout(() => r({ receive: 'timeout' }), 10000)),
+      ]);
+      perm = req?.receive || 'unknown';
+      console.log('[FCM] Permission after request:', perm);
+    }
   } catch (e) {
-    console.warn('[FCM] ⚠️ checkPermissions error:', e?.message, '— continuing anyway');
+    console.warn('[FCM] Permission check error:', e?.message);
+    perm = 'unknown'; // continuer quand même
   }
 
-  // ── ATTENTION : même sans permission vérifiée, on continue register() ────────
-  // Si permission pas granted, register() va la demander (comportement normal Android)
-  // ou les listeners resteront inactifs jusqu'à l'accord utilisateur
   if (perm === 'denied') {
-    console.log('[FCM] ⚠️ Permission DENIED — listeners won\'t work until user enables in Settings');
-  } else if (perm !== 'granted' && perm !== 'unknown') {
-    console.log('[FCM] ⚠️ Permission status unclear:', perm);
+    console.warn('[FCM] Permission DENIED — push non fonctionnel');
+    // On continue quand même pour register (cas où l'OS envoie quand même)
   }
 
+  // ── Listeners AVANT register() ────────────────────────────────────────────
   const listeners = [];
-
-  // ── Attach listeners AVANT register() (règle Capacitor obligatoire) ─────────
   try {
-    console.log('[FCM] Attaching listeners...');
-
-    const regListener = await PushNotifications.addListener('registration', (tokenData) => {
-      // SYNCHRONE try/catch pour éviter unhandled promise rejection
+    listeners.push(await PushNotifications.addListener('registration', (tokenData) => {
       try {
         const token = tokenData?.value;
-        if (token && typeof token === 'string') {
-          console.log('[FCM] ✅ registration callback fired');
-          console.log('[FCM] 🔑 Token received (len:' + token.length + '):', token.slice(0, 50) + '...');
-          handleTokenReceived(token, propEmail, listeners).catch((err) => {
-            console.error('[FCM] ❌ handleTokenReceived error:', err?.message);
+        if (!token) { console.error('[FCM] registration: token vide'); return; }
+        console.log('[FCM] ✅ Token reçu (len=' + token.length + '):', token.slice(0, 40) + '...');
+        resolveEmail(propEmail).then(email => {
+          if (!email) { console.error('[FCM] Pas d\'email pour sauvegarder le token'); return; }
+          saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
+        }).catch(e => console.error('[FCM] resolveEmail error:', e?.message));
+      } catch (e) {
+        console.error('[FCM] registration callback error:', e?.message);
+      }
+    }));
+
+    listeners.push(await PushNotifications.addListener('registrationError', (err) => {
+      console.error('[FCM] ❌ registrationError:', JSON.stringify(err));
+    }));
+
+    listeners.push(await PushNotifications.addListener('pushNotificationReceived', (notif) => {
+      try {
+        const title = notif?.title || notif?.data?.title || 'CDL';
+        const body = notif?.body || notif?.data?.body || '';
+        const route = notif?.data?.notif_route || notif?.data?.route || null;
+        console.log('[FCM] 📬 Foreground:', title, '| route:', route);
+        try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
+        import('sonner').then(({ toast }) => {
+          toast(title, {
+            description: body,
+            duration: 8000,
+            action: route ? { label: 'Voir', onClick: () => {
+              try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
+              window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
+            }} : undefined,
           });
-        } else {
-          console.error('[FCM] ❌ Token empty or invalid:', tokenData);
-        }
-      } catch (e) {
-        console.error('[FCM] ❌ registration callback crash:', e?.message);
-      }
-    });
-    listeners.push(regListener);
-    console.log('[FCM] ✅ Listener "registration" attached');
-
-    const errListener = await PushNotifications.addListener('registrationError', (err) => {
-      try {
-        const msg = typeof err === 'string' ? err : JSON.stringify(err);
-        console.error('[FCM] ❌ registrationError fired:', msg);
-        // Store error globally for diagnostic
-        try { sessionStorage.setItem('cdl_fcm_reg_error', msg); } catch (_) {}
+        }).catch(() => {});
       } catch (_) {}
-    });
-    listeners.push(errListener);
-    console.log('[FCM] ✅ Listener "registrationError" attached');
+    }));
 
-    const fgListener = await PushNotifications.addListener('pushNotificationReceived', (notif) => {
+    listeners.push(await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       try {
-        console.log('[FCM] 📬 pushNotificationReceived fired');
-        console.log('[FCM] 📬 Foreground notif:', notif?.title || 'N/A');
-        handleForegroundNotif(notif);
-      } catch (e) {
-        console.warn('[FCM] Foreground handler error:', e?.message);
-      }
-    });
-    listeners.push(fgListener);
-    console.log('[FCM] ✅ Listener "pushNotificationReceived" attached');
+        const data = action?.notification?.data || {};
+        const route = data.notif_route || data.route || data.target_screen || null;
+        console.log('[FCM] 👆 Tap → route:', route);
+        if (route?.startsWith('/')) {
+          try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
+          window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
+        }
+      } catch (_) {}
+    }));
 
-    const tapListener = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-      try {
-        console.log('[FCM] 👆 pushNotificationActionPerformed fired');
-        console.log('[FCM] 👆 Notification tap detected');
-        handleNotifTap(action);
-      } catch (e) {
-        console.warn('[FCM] Tap handler error:', e?.message);
-      }
-    });
-    listeners.push(tapListener);
-    console.log('[FCM] ✅ Listener "pushNotificationActionPerformed" attached');
-
-    console.log('[FCM] ✅ Listeners attached:', listeners.length);
+    console.log('[FCM] ✅', listeners.length, 'listeners attachés');
   } catch (e) {
-    console.error('[FCM] ❌ addListener crash:', e?.message);
-    for (const l of listeners) {
-      try { l.remove(); } catch (_) {}
-    }
+    console.error('[FCM] addListener error:', e?.message);
     return;
   }
 
-  // ── Call register() (maintenant que les listeners sont prêts) ────────────────
+  // ── register() — TOUJOURS appelé ─────────────────────────────────────────
   try {
-    console.log('[FCM] 📢 Calling register()...');
+    console.log('[FCM] Calling register()...');
     await Promise.race([
       PushNotifications.register(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('register() timeout')), 10000))
+      new Promise((_, r) => setTimeout(() => r(new Error('register timeout')), 15000)),
     ]);
-    console.log('[FCM] ✅ register() OK — waiting for token callback...');
+    console.log('[FCM] ✅ register() OK — attente token callback');
   } catch (e) {
-    console.error('[FCM] ❌ register() error:', e?.message);
+    console.error('[FCM] register() error:', e?.message);
   }
-
-  // NOTE : On ne nettoie PAS les listeners push — ils doivent rester actifs toute la vie de l'app.
-  // Seul le listener 'registration' peut être nettoyé après réception du token (fait dans handleTokenReceived).
-  console.log('[FCM] ✅ Listeners push actifs — pas de cleanup (durée de vie = app)');
-}
-
-async function handleTokenReceived(token, propEmail, listeners) {
-  try {
-    if (!token) {
-      console.error('[FCM] ❌ Empty token in handleTokenReceived');
-      return;
-    }
-
-    const email = await resolveEmail(propEmail);
-    if (!email) {
-      console.error('[FCM] ❌ Could not resolve email — token NOT saved');
-      return;
-    }
-
-    console.log('[FCM] 📧 Email resolved:', email);
-    console.log('[FCM] 🔑 Token received (len=' + token.length + '):', token.slice(0, 50) + '...');
-
-    // Device type (Android native)
-    const deviceId = 'android_native';
-    console.log('[FCM] 📱 Device Type:', deviceId);
-
-    const result = await saveFcmTokenRemote({ 
-      user_email: email, 
-      token, 
-      device_type: 'android_native',
-      device_id: deviceId 
-    });
-
-    if (result?.success) {
-      console.log('[FCM] ✅ Token saved to DB successfully | ID:', result.token_id);
-      console.log('[FCM] 🔄 Action:', result.action, '| Old token cleaned:', result.old_token_removed ? 'YES' : 'NO');
-    } else {
-      console.error('[FCM] ❌ Token save failed:', result?.error);
-    }
-    // NOTE : On ne supprime PAS les listeners — pushNotificationReceived et pushNotificationActionPerformed
-    // doivent rester actifs toute la durée de vie de l'app pour recevoir les notifications.
-  } catch (err) {
-    console.error('[FCM] ❌ handleTokenReceived error:', err?.message);
-  }
-}
-
-function handleForegroundNotif(notif) {
-  try {
-    const title = notif?.title || notif?.data?.title || 'CDL';
-    const body = notif?.body || notif?.data?.body || '';
-    const route = notif?.data?.notif_route || notif?.data?.route || null;
-    console.log('[FCM] 📬 Foreground notif:', title, '| body:', body.slice(0, 50), '| route:', route);
-    
-    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
-
-    // Afficher un toast dans l'app (foreground)
-    import('sonner').then(({ toast }) => {
-      toast(title, {
-        description: body,
-        duration: 8000,
-        action: route ? {
-          label: 'Voir',
-          onClick: () => {
-            try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
-            window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
-          }
-        } : undefined,
-      });
-    }).catch(() => {});
-  } catch (_) {}
-}
-
-function handleNotifTap(action) {
-  try {
-    const data = action?.notification?.data || {};
-    const route = data.notif_route || data.route || data.target_screen || null;
-    console.log('[FCM] Notification tap | route:', route);
-    if (route?.startsWith('/')) {
-      try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
-      window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
-    }
-  } catch (_) {}
 }
 
 // ─── WEB FCM (PWA) ────────────────────────────────────────────────────────────
 
-function safeRunWebFcm(propEmail) {
-  try {
-    runWebFcm(propEmail).catch((err) => {
-      console.error('[FCM] ❌ Web error (app continues):', err?.message);
-    });
-  } catch (err) {
-    console.error('[FCM] ❌ Web sync error (app continues):', err?.message);
-  }
-}
-
 async function runWebFcm(propEmail) {
-  console.log('[FCM] Web init start');
   try {
-    if (!('Notification' in window)) {
-      console.log('[FCM] Notification API not available');
-      return;
-    }
+    if (!('Notification' in window)) return;
     if (Notification.permission !== 'granted') {
-      console.log('[FCM] Web permission not granted:', Notification.permission);
+      console.log('[FCM] Web: permission non accordée:', Notification.permission);
       return;
     }
-
     const { registerSW } = await import('@/lib/swRegister');
     await registerSW();
-
     const { requestWebPushToken, onForegroundMessage } = await import('@/lib/webPush');
     const { token } = await requestWebPushToken();
-    if (!token) {
-      console.log('[FCM] No web push token');
-      return;
-    }
-
+    if (!token) return;
     const email = await resolveEmail(propEmail);
-    if (!email) {
-      console.log('[FCM] Web email not resolved');
-      return;
-    }
-
+    if (!email) return;
     await saveFcmTokenRemote({ user_email: email, token, device_type: 'web' });
-
     onForegroundMessage((payload) => {
-      try {
-        const notif = payload?.notification || {};
-        import('sonner').then(({ toast }) => {
-          toast(notif.title || 'CDL', { description: notif.body || '', duration: 8000 });
-        }).catch(() => {});
-      } catch (_) {}
+      import('sonner').then(({ toast }) => {
+        const n = payload?.notification || {};
+        toast(n.title || 'CDL', { description: n.body || '', duration: 8000 });
+      }).catch(() => {});
     });
-
-    console.log('[FCM] Web init done');
+    console.log('[FCM] Web init OK');
   } catch (err) {
-    console.error('[FCM] Web init error (app continues):', err?.message);
+    console.error('[FCM] Web error:', err?.message);
   }
 }
