@@ -144,6 +144,7 @@ export default function GestionBedou() {
       await base44.entities.Transaction.create({
         user_email: request.user_email,
         user_nom: userName,
+        role: "client",
         type: type === "recharge" ? "recharge" : "retrait",
         montant: montantCredite,
         sens: type === "recharge" ? "credit" : "debit",
