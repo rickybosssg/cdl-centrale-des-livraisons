@@ -64,7 +64,10 @@
         "livree",
         "annulee",
         "aucun_livreur",
-        "refusee"
+        "refusee",
+        "driver_en_route_pickup",
+        "arrived_pickup",
+        "arrived_dropoff"
       ],
       "title": "Statut"
     },
@@ -176,6 +179,26 @@
       "type": "number",
       "title": "Longitude arriv\u00e9e"
     },
+    "client_lat_live": {
+      "type": "number",
+      "title": "Latitude client live"
+    },
+    "client_lng_live": {
+      "type": "number",
+      "title": "Longitude client live"
+    },
+    "destinataire_lat_live": {
+      "type": "number",
+      "title": "Latitude destinataire live"
+    },
+    "destinataire_lng_live": {
+      "type": "number",
+      "title": "Longitude destinataire live"
+    },
+    "client_sharing_location": {
+      "type": "boolean",
+      "title": "Client partage sa position"
+    },
     "mode_assignation": {
       "type": "string",
       "enum": [
@@ -223,6 +246,29 @@
     "montant_base": {
       "type": "number",
       "title": "Montant de base"
+    },
+    "frais_annulation": {
+      "type": "number",
+      "title": "Frais d'annulation (FCFA)"
+    },
+    "settlement_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed",
+        "failed"
+      ],
+      "title": "Statut r\u00e8glement financier",
+      "default": "pending",
+      "index": true
+    },
+    "settled_at": {
+      "type": "string",
+      "title": "Date/heure r\u00e8glement financier"
+    },
+    "settlement_error": {
+      "type": "string",
+      "title": "Erreur r\u00e8glement (si \u00e9chec)"
     }
   },
   "required": [

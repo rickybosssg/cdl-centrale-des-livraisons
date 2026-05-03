@@ -20,7 +20,8 @@
         "client",
         "livreur",
         "partenaire",
-        "commercial"
+        "commercial",
+        "admin"
       ],
       "title": "R\u00f4le"
     },
@@ -102,6 +103,10 @@
     "motif_refus": {
       "type": "string",
       "title": "Motif de refus"
+    },
+    "source_validation": {
+      "type": "string",
+      "title": "Source validation (validation_admin, auto...)"
     }
   },
   "required": [

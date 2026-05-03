@@ -1,0 +1,86 @@
+{
+  "name": "CourseSettlementLog",
+  "type": "object",
+  "properties": {
+    "course_id": {
+      "type": "string",
+      "title": "ID de la course",
+      "index": true
+    },
+    "client_email": {
+      "type": "string",
+      "title": "Email client",
+      "index": true
+    },
+    "client_nom": {
+      "type": "string",
+      "title": "Nom client"
+    },
+    "driver_email": {
+      "type": "string",
+      "title": "Email livreur",
+      "index": true
+    },
+    "driver_nom": {
+      "type": "string",
+      "title": "Nom livreur"
+    },
+    "cdl_wallet_email": {
+      "type": "string",
+      "title": "Email wallet CDL"
+    },
+    "course_amount": {
+      "type": "number",
+      "title": "Montant total course (FCFA)"
+    },
+    "client_debit": {
+      "type": "number",
+      "title": "D\u00e9bit client (FCFA)"
+    },
+    "driver_credit": {
+      "type": "number",
+      "title": "Cr\u00e9dit livreur 80% (FCFA)"
+    },
+    "cdl_commission": {
+      "type": "number",
+      "title": "Commission CDL 20% (FCFA)"
+    },
+    "settlement_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed",
+        "failed"
+      ],
+      "title": "Statut r\u00e8glement",
+      "default": "pending",
+      "index": true
+    },
+    "error_message": {
+      "type": "string",
+      "title": "Message d'erreur (si \u00e9chec)"
+    },
+    "settled_at": {
+      "type": "string",
+      "title": "Date/heure r\u00e8glement"
+    },
+    "tx_client_id": {
+      "type": "string",
+      "title": "ID transaction client"
+    },
+    "tx_driver_id": {
+      "type": "string",
+      "title": "ID transaction livreur"
+    },
+    "tx_cdl_id": {
+      "type": "string",
+      "title": "ID transaction CDL"
+    }
+  },
+  "required": [
+    "course_id",
+    "client_email",
+    "driver_email",
+    "course_amount"
+  ]
+}
