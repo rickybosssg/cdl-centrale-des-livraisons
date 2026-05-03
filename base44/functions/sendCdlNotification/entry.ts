@@ -29,8 +29,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // ── Vérification lock système ─────────────────────────────────────────────────
 const SYSTEM_LOCKED = Deno.env.get('NOTIFICATIONS_SYSTEM_LOCKED') !== 'false';
+const NOTIFICATIONS_LOCK = Deno.env.get('NOTIFICATIONS_LOCK') === 'true';
 if (SYSTEM_LOCKED) {
   console.log('[sendCdlNotification] 🔒 NOTIFICATIONS_SYSTEM_LOCKED=true — système verrouillé');
+}
+if (NOTIFICATIONS_LOCK) {
+  console.log('[sendCdlNotification] 🔴 NOTIFICATIONS_LOCK=true — MODE PRODUCTION — extensions uniquement');
 }
 
 const SA_JSON = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
