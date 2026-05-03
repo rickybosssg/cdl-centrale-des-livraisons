@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { saveFcmToken as saveFcmTokenDirect, getFcmTokens as getFcmTokensDirect } from '@/lib/fcmApi';
+import FcmStatusPanel from '@/components/FcmStatusPanel';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,7 @@ export default function FcmDiagnostic() {
   const [registering, setRegistering] = useState(false);
   const [sending, setSending]     = useState(false);
   const [sendResult, setSendResult] = useState(null);
+  const [lastDelayMs, setLastDelayMs] = useState(null);
   const [nativeInfo, setNativeInfo] = useState(null);
   const [registrationError, setRegistrationError] = useState(null);
   const [logs, setLogs]           = useState([]);
@@ -461,9 +463,14 @@ export default function FcmDiagnostic() {
       });
       const d = res.data;
       const delay = Date.now() - t0;
+      setLastDelayMs(delay);
       const sent = d?.sent ?? 0;
       const total = d?.total ?? 0;
       const pushOk = sent > 0;
+      setSendResult(pushOk
+        ? { ok: true, sent, total, error: null }
+        : { ok: false, sent: 0, total, error: d?.note || 'Aucun token FCM actif' }
+      );
       setPushSysResult({
         PUSH_SYSTEM_VISIBLE: pushOk,
         delay_ms: delay,
@@ -522,8 +529,15 @@ export default function FcmDiagnostic() {
 
       {/* Version indicator */}
       <div className="bg-emerald-600 text-white text-center py-2 px-3 rounded-xl font-bold text-sm tracking-wide">
-        ✅ FCM V9 — canal cdl_critical_alerts_v2 — importance=5 heads-up garanti
+        🔒 FCM V9 LOCKED — cdl_critical_alerts_v2 — importance=5 heads-up garanti
       </div>
+
+      {/* Panneau de statut verrouillé */}
+      <FcmStatusPanel
+        fcmTokens={fcmTokens}
+        lastSendResult={sendResult}
+        lastDelayMs={lastDelayMs}
+      />
 
       {/* Header */}
       <div className="flex items-center gap-3">

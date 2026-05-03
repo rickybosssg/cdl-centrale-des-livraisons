@@ -1,19 +1,22 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║  sendCdlNotification — SYSTÈME VERROUILLÉ v2.0                         ║
- * ║  NOTIFICATIONS_SYSTEM_LOCKED = true                                     ║
+ * ║  sendCdlNotification — SYSTÈME VERROUILLÉ v3.0 — NE PAS MODIFIER      ║
+ * ║  CANAL OFFICIEL UNIQUE = cdl_critical_alerts_v2                         ║
  * ╠══════════════════════════════════════════════════════════════════════════╣
- * ║  ❌ NE PAS MODIFIER le payload FCM                                      ║
- * ║  ❌ NE PAS downgrader android.priority                                  ║
- * ║  ❌ NE PAS supprimer notification.title/body                            ║
+ * ║  🔒 CANAL VERROUILLÉ : cdl_critical_alerts_v2 (importance=5, heads-up) ║
+ * ║  ❌ NE JAMAIS changer channel_id → default, CDL_ALERTS_HIGH ou autre   ║
+ * ║  ❌ NE PAS modifier android.priority (doit rester HIGH)                ║
+ * ║  ❌ NE PAS supprimer notification.title/body (obligatoire background)   ║
  * ║  ❌ NE PAS supprimer default_sound/vibrate/light_settings               ║
- * ║  ❌ NE PAS supprimer createInternalNotif                                ║
+ * ║  ❌ NE PAS supprimer createInternalNotif (fallback BDD obligatoire)     ║
+ * ║  ❌ NE PAS créer de fonction parallèle — tout doit passer par ici      ║
  * ╠══════════════════════════════════════════════════════════════════════════╣
+ * ║  ✅ CANAL UNIQUE : cdl_critical_alerts_v2 pour TOUS les types           ║
  * ║  ✅ Double notification : interne BDD TOUJOURS + FCM push               ║
  * ║  ✅ Fallback : si FCM fail → notif BDD déjà créée en amont              ║
  * ║  ✅ Jamais throw bloquant — toujours retourner 200                      ║
  * ║  ✅ android.priority = HIGH (obligatoire app fermée/écran éteint)       ║
- * ║  ✅ notification_priority = PRIORITY_HIGH minimum                       ║
+ * ║  ✅ Payload standard : notification.title/body + data.type/screen/user  ║
  * ╠══════════════════════════════════════════════════════════════════════════╣
  * ║  LOGS OBLIGATOIRES :                                                    ║
  * ║  event_type | user_id | tokens_count | fcm_sent | fcm_failed | time    ║
@@ -74,17 +77,14 @@ async function getAccessToken(sa) {
   }
 }
 
-// ── Canal cible ───────────────────────────────────────────────────────────────
-// cdl_critical_alerts_v2 = nouveau canal jamais vu par Android → importance=5 garantie
-const CRITICAL_TYPES = [
-  'bedou_recharge_request', 'bedou_withdrawal_request',
-  'course_assigned', 'new_course',
-  'new_profile_request', 'profile_pending_review',
-  'bedou_recharge_approved', 'bedou_withdrawal_approved',
-  'bedou_recharge_rejected', 'bedou_withdrawal_rejected',
-];
+// ── Canal VERROUILLÉ ──────────────────────────────────────────────────────────
+// 🔒 CDL_CHANNEL = cdl_critical_alerts_v2 — NE JAMAIS MODIFIER
+// Android a figé ce canal avec importance=5 heads-up dès la première création.
+// Changer l'ID = revenir à un canal avec importance inconnue → pas de heads-up.
+const CDL_CHANNEL = 'cdl_critical_alerts_v2'; // ← VERROUILLÉ — ne pas modifier
 
 // ── Envoi FCM v1 ──────────────────────────────────────────────────────────────
+// 🔒 PAYLOAD STANDARD VERROUILLÉ — ne pas modifier la structure
 async function sendToToken(accessToken, projectId, fcmToken, title, body, data = {}, urgence = 'normal') {
   try {
     const sentAt = new Date().toISOString();
@@ -95,36 +95,39 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
     for (const [k, v] of Object.entries(data)) {
       stringData[k] = v == null ? '' : String(v);
     }
-    // title/body dans data → garantit réception killed state
+    // Payload standard verrouillé : title, body, type, screen, user dans data
     stringData.title = title;
     stringData.body = body;
     // Timestamps pour diagnostic délai
     stringData.notification_sent_at = sentAt;
     stringData.event_created_at = stringData.event_created_at || sentAt;
+    // screen = alias de notif_route pour compatibilité
+    if (!stringData.screen && stringData.notif_route) stringData.screen = stringData.notif_route;
 
-    const isCritical = urgence === 'tres_urgent' || CRITICAL_TYPES.includes(stringData.type || '');
-
-    // NOUVEAU canal v2 — jamais vu par Android = importance=5 garanti immédiatement
-    const channelId = isCritical ? 'cdl_critical_alerts_v2' : 'cdl_default_v2';
+    // 🔒 CANAL UNIQUE VERROUILLÉ — toujours cdl_critical_alerts_v2
+    // Ne jamais changer vers default, CDL_ALERTS_HIGH ou autre
+    const channelId = CDL_CHANNEL;
 
     const fcmPayload = {
       message: {
         token: fcmToken,
-        // notification block = obligatoire pour affichage système Android (background/killed)
+        // 🔒 notification block OBLIGATOIRE — affichage système Android background/killed
         notification: { title, body },
         data: stringData,
         android: {
+          // 🔒 priority HIGH OBLIGATOIRE — app fermée / écran éteint
           priority: 'HIGH',
           ttl: '86400s',
           notification: {
+            // 🔒 channel_id VERROUILLÉ — ne jamais changer
             channel_id: channelId,
+            // 🔒 son + vibration + lumière OBLIGATOIRES
             sound: 'default',
             visibility: 'PUBLIC',
-            notification_priority: isCritical ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+            notification_priority: 'PRIORITY_MAX',
             default_sound: true,
             default_vibrate_timings: true,
             default_light_settings: true,
-            // badge et tag pour forcer affichage même si notif similaire existe
             notification_count: 1,
           },
         },
@@ -132,7 +135,7 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
           notification: {
             icon: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
             badge: 'https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg',
-            requireInteraction: isCritical,
+            requireInteraction: true,
           },
         },
       },

@@ -107,23 +107,14 @@ async function runNativeFcm(propEmail) {
   }
 
   // ── Canaux Android ────────────────────────────────────────────────────────
-  // STRATÉGIE : canaux V2 avec nouveaux IDs jamais vus par Android
+  // 🔒 CANAL VERROUILLÉ : cdl_critical_alerts_v2 — NE PAS MODIFIER
   // Android interdit de modifier l'importance d'un canal existant.
-  // Nouveaux IDs = importance=5 heads-up garanti dès la première installation.
+  // Nouveaux IDs V2 = importance=5 heads-up garanti dès la première installation.
   // Les anciens canaux sont supprimés pour éviter confusion dans les paramètres.
-  const OLD_CHANNEL_IDS = ['default', 'CDL_ALERTS_HIGH', 'urgent'];
+  const OLD_CHANNEL_IDS = ['default', 'CDL_ALERTS_HIGH', 'urgent', 'cdl_default_v2'];
   const CHANNELS_V2 = [
     {
-      id: 'cdl_default_v2',
-      name: 'CDL Notifications',
-      description: 'Notifications générales CDL',
-      importance: 5,
-      sound: 'default',
-      vibration: true,
-      lights: true,
-      lightColor: '#1E6BFF',
-    },
-    {
+      // 🔒 CANAL PRINCIPAL VERROUILLÉ — utilisé pour TOUS les envois push CDL
       id: 'cdl_critical_alerts_v2',
       name: 'CDL Alertes Critiques',
       description: 'Courses, recharges Bedou, profils — priorité maximale',
