@@ -34,10 +34,9 @@ Deno.serve(async (req) => {
   // ── 1. Charger la demande et vérifier qu'elle est encore en_attente ─────────
   let demande;
   try {
-    const list = await base44.asServiceRole.entities[table].filter({ id: request_id });
-    demande = list?.[0];
+    demande = await base44.asServiceRole.entities[table].get(request_id);
   } catch (e) {
-    L(`Erreur chargement demande: ${e.message}`);
+    L(`Demande introuvable: ${e.message}`);
     return Response.json({ error: 'Demande introuvable' }, { status: 404 });
   }
 
