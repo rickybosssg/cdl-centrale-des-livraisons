@@ -9,9 +9,11 @@
  * ╚══════════════════════════════════════════════════════════════════╝
  *
  * Signaux détectés :
- *   1. rapid_validations  — +3 validations même client en < 2 min
- *   2. high_amount        — montant_total > 50 000 F CFA
- *   3. admin_burst        — admin valide > 10 demandes en < 5 min
+ *   1. rapid_validations       — +3 validations même client en < 2 min
+ *   2. high_amount             — montant_total > 50 000 F CFA
+ *   3. admin_burst             — admin valide > 10 demandes en < 5 min
+ *   4. daily_client_cumul      — cumul journalier client > 100 000 F CFA
+ *   5. daily_admin_overload    — validations journalières admin > 50
  *
  * Appelé APRÈS validateBedouRequest (non bloquant, fire-and-forget)
  */
@@ -52,6 +54,7 @@ Deno.serve(async (req) => {
     const now = Date.now();
     const twoMinAgo = new Date(now - 2 * 60 * 1000).toISOString();
     const fiveMinAgo = new Date(now - 5 * 60 * 1000).toISOString();
+    const todayStart = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
     const fraudSignals = [];
 
     // ── Signal 1 : Validations rapides du même client (< 2 min) ────────────
@@ -126,6 +129,57 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Signal 4 : Cumul journalier client > 100 000 F ─────────────────────
+    if (client_email) {
+      try {
+        const todayClientTx = await base44.asServiceRole.entities.Transaction.filter(
+          { user_email: client_email, source: 'validation_admin', statut: 'valide', type: 'recharge' },
+          '-date_validation',
+          100
+        );
+        const todayTx = todayClientTx.filter(t => t.date_validation?.startsWith(todayStart));
+        const cumulJour = todayTx.reduce((s, t) => s + (t.montant || 0), 0) + (montant_total || 0);
+        if (cumulJour > 100000) {
+          const signal = {
+            type: 'daily_client_cumul',
+            client_id: client_email,
+            admin_id: admin_email || '',
+            niveau: cumulJour > 200000 ? 'high' : 'medium',
+            details: JSON.stringify({ cumul_jour: cumulJour, nb_tx: todayTx.length + 1, seuil: 100000, request_id }),
+          };
+          fraudSignals.push(signal);
+          L(`Signal daily_client_cumul | client=${client_email} | cumul=${cumulJour}`);
+        }
+      } catch (e) {
+        L(`Signal 4 ignoré: ${e.message}`);
+      }
+    }
+
+    // ── Signal 5 : Validations journalières admin > 50 ─────────────────────
+    if (admin_email) {
+      try {
+        const todayAdminTx = await base44.asServiceRole.entities.Transaction.filter(
+          { valide_par: admin_email, source: 'validation_admin', statut: 'valide' },
+          '-date_validation',
+          100
+        );
+        const todayAdminCount = todayAdminTx.filter(t => t.date_validation?.startsWith(todayStart)).length + 1;
+        if (todayAdminCount > 50) {
+          const signal = {
+            type: 'daily_admin_overload',
+            client_id: client_email || '',
+            admin_id: admin_email,
+            niveau: todayAdminCount > 100 ? 'high' : 'low',
+            details: JSON.stringify({ count_jour: todayAdminCount, seuil: 50, admin: admin_email }),
+          };
+          fraudSignals.push(signal);
+          L(`Signal daily_admin_overload | admin=${admin_email} | count=${todayAdminCount}`);
+        }
+      } catch (e) {
+        L(`Signal 5 ignoré: ${e.message}`);
+      }
+    }
+
     // ── Enregistrer les signaux + notifier admin ────────────────────────────
     if (fraudSignals.length === 0) {
       L(`Aucun signal détecté — tout normal`);
@@ -143,11 +197,16 @@ Deno.serve(async (req) => {
         L(`BEDOU_FRAUD_LOG créé | type=${signal.type} | niveau=${signal.niveau} | id=${saved.id}`);
 
         // Notification admin — informative uniquement
+        const d = JSON.parse(signal.details);
         const bodyMsg = signal.type === 'rapid_validations'
-          ? `Client ${signal.client_id} a reçu ${JSON.parse(signal.details).count} validations en < 2min`
+          ? `Client ${signal.client_id} : ${d.count} validations en < 2min`
           : signal.type === 'high_amount'
-          ? `Montant élevé détecté : ${JSON.parse(signal.details).montant_total?.toLocaleString()} F CFA pour ${signal.client_id}`
-          : `Admin ${signal.admin_id} a validé ${JSON.parse(signal.details).count} demandes en < 5min`;
+          ? `Montant élevé : ${d.montant_total?.toLocaleString()} F CFA — client ${signal.client_id}`
+          : signal.type === 'daily_client_cumul'
+          ? `Cumul journalier client ${signal.client_id} dépasse ${d.cumul_jour?.toLocaleString()} F CFA (seuil 100k)`
+          : signal.type === 'daily_admin_overload'
+          ? `Admin ${signal.admin_id} : ${d.count_jour} validations aujourd'hui (seuil 50)`
+          : `Admin ${signal.admin_id} : ${d.count} demandes en < 5min`;
 
         // Update notified flag
         await base44.asServiceRole.entities.BedouFraudLog.update(saved.id, { notified: true }).catch(() => {});
