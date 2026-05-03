@@ -53,7 +53,19 @@ export default function CreateCourse() {
 
   const handleSubmit = async ({ form, typeService, urgence, prixBase, supplement, prixTotal }) => {
     if (!prixBase || prixBase <= 0) { toast.error("Prix requis"); return; }
-    if (soldeBedou !== null && soldeBedou < prixTotal) { toast.error("Solde Bedou insuffisant"); return; }
+    
+    // SÉCURITÉ : Vérifier solde Bedou AVANT création de course
+    if (soldeBedou !== null && soldeBedou < prixTotal) {
+      toast.error("Solde Bedou insuffisant");
+      // Envoyer notification push au client
+      base44.functions.invoke('sendCdlNotification', {
+        user_email: user?.email,
+        title: '💳 Solde Bedou insuffisant',
+        body: `Rechargez votre Bedou pour effectuer cette course. Solde actuel: ${soldeBedou.toLocaleString()} F / Requis: ${prixTotal.toLocaleString()} F`,
+        data: { type: 'insufficient_balance', notif_route: '/mon-bedou' },
+      }).catch(() => {});
+      return;
+    }
 
     setLoading(true);
     try {
@@ -244,13 +256,21 @@ export default function CreateCourse() {
       <div className="hidden">
         <GpsLocationManager onLocationUpdate={handleGpsLocationUpdate} />
       </div>
-      <GuidedOrderWizard
-        user={user}
-        soldeBedou={soldeBedou}
-        gpsDepart={gpsDepart}
-        onSubmit={handleSubmit}
-        loading={loading}
-      />
+      {/* Afficher banneau si solde insuffisant */}
+      {soldeBedou !== null && soldeBedou < 100 && (
+        <div className="fixed top-0 left-0 right-0 z-50 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white text-center shadow-lg">
+          <p className="text-sm font-bold">💳 Solde Bedou faible: {soldeBedou.toLocaleString()} F</p>
+        </div>
+      )}
+      <div className={soldeBedou !== null && soldeBedou < 100 ? "mt-12" : ""}>
+        <GuidedOrderWizard
+          user={user}
+          soldeBedou={soldeBedou}
+          gpsDepart={gpsDepart}
+          onSubmit={handleSubmit}
+          loading={loading}
+        />
+      </div>
     </>
   );
 }

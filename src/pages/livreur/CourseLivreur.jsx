@@ -143,7 +143,15 @@ export default function CourseLivreur() {
   const BEDOU_INVOKE_MS = 45000;
 
   const livrerColis = async () => {
-    if (updating || livreeVerrouilleRef.current) return;
+    // Sécurité : bloquer double-clic + settlement_status completed
+    if (updating || livreeVerrouilleRef.current) {
+      toast.info("Livraison déjà en cours ou terminée");
+      return;
+    }
+    if (course.settlement_status === 'completed') {
+      toast.info("Cette course a déjà été réglée");
+      return;
+    }
     setUpdating(true);
     console.log('[CourseLivreur] livrerColis START — course.id:', course.id, 'statut:', course.statut);
     const montant = course.prix || 0;
@@ -683,10 +691,13 @@ export default function CourseLivreur() {
           </div>
           <button
             onClick={livrerColis}
-            disabled={updating}
-            className="w-full py-5 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-green-200"
+            disabled={updating || course.settlement_status === 'completed'}
+            className="w-full py-5 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {updating ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Traitement...</span> : "✅ Colis livré — Confirmer"}
+            {course.settlement_status === 'completed'
+              ? "✅ Course terminée"
+              : updating ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Traitement...</span>
+              : "✅ Colis livré — Confirmer"}
           </button>
         </div>
       )}

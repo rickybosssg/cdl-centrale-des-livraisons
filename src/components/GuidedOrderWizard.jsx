@@ -4,6 +4,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, MapPin, Wallet, ChevronRight, Navigation, CheckCircle2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { QUARTIERS_OUAGADOUGOU } from "@/lib/quartiers";
 import { fmt } from "@/lib/formatMoney";
 
@@ -460,6 +461,20 @@ function StepUrgence({ urgence, setUrgence, onNext }) {
   );
 }
 
+// ── Bouton Recharger Bedou ───────────────────────────────────────────────────
+function RechargeBtn() {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate('/mon-bedou')}
+      className="w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
+      style={{ background: `linear-gradient(135deg, ${RED}, #ff6b6b)`, boxShadow: `0 4px 16px ${RED}40` }}
+    >
+      💳 Recharger mon Bedou
+    </button>
+  );
+}
+
 // ── ÉTAPE 8 : Récapitulatif ──────────────────────────────────────────────────
 function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal, soldeBedou, loading, onConfirm }) {
 
@@ -519,9 +534,14 @@ function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal
 
       {soldeInsuffisant && (
         <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-          className="p-3.5 rounded-xl text-center text-sm font-semibold"
-          style={{ background: `${RED}12`, border: `1.5px solid ${RED}40`, color: RED }}>
-          Il vous manque {fmt(prixTotal - soldeBedou)} — rechargez votre Bedou
+          className="space-y-2">
+          <div className="p-3.5 rounded-xl text-center text-sm font-semibold"
+            style={{ background: `${RED}12`, border: `1.5px solid ${RED}40`, color: RED }}>
+            💳 Solde Bedou insuffisant. Rechargez votre Bedou pour effectuer cette course.
+            <br />
+            <span className="text-xs font-normal">Il vous manque {fmt(prixTotal - soldeBedou)}</span>
+          </div>
+          <RechargeBtn />
         </motion.div>
       )}
 
