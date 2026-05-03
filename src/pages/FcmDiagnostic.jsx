@@ -60,6 +60,7 @@ export default function FcmDiagnostic() {
   const [chain, setChain] = useState({
     user: 'loading', permission: 'pending', register: 'pending', token: 'pending', db: 'pending',
   });
+  const [lastReceivedNotif, setLastReceivedNotif] = useState(null);
 
   // ── Infos Capacitor natives ─────────────────────────────────────────────────
   const loadNativeInfo = async () => {
@@ -132,7 +133,7 @@ export default function FcmDiagnostic() {
         addLog(`Permission Capacitor: ${perm.receive}`);
         setChain(c => ({ ...c, permission: perm.receive === 'granted' ? 'ok' : perm.receive === 'denied' ? 'error' : 'warn' }));
 
-        // Attacher un listener registrationError permanent pour capturer les erreurs Firebase
+        // Attacher listeners permanents pour capturer notifs en temps réel
         try {
           const errHandle = await PushNotifications.addListener('registrationError', (err) => {
             const msg = JSON.stringify(err);
@@ -141,7 +142,16 @@ export default function FcmDiagnostic() {
             addLog('registrationError: ' + msg, 'error');
           });
           cleanupListenersRef.current.push(errHandle);
-          addLog('Listener registrationError actif');
+
+          // Listener foreground — capture les notifs reçues pendant que l'app est ouverte
+          const fgHandle = await PushNotifications.addListener('pushNotificationReceived', (notif) => {
+            const info = { title: notif?.title, body: notif?.body, data: notif?.data, ts: new Date().toLocaleTimeString('fr-FR') };
+            setLastReceivedNotif(info);
+            addLog(`📬 FOREGROUND reçu: "${notif?.title}" | body: "${notif?.body}"`, 'info');
+          });
+          cleanupListenersRef.current.push(fgHandle);
+
+          addLog('✅ Listeners registrationError + pushNotificationReceived actifs');
         } catch (le) {
           addLog('Impossible attacher listener: ' + le?.message, 'warn');
         }
@@ -225,14 +235,30 @@ export default function FcmDiagnostic() {
         return;
       }
 
-      // ── 2. Créer canal Android ────────────────────────────────────────────
+      // ── 2. Créer canaux Android (importance 5 = URGENT = heads-up visible) ──
       try {
-        await PushNotifications.createChannel({
-          id: 'default', name: 'CDL Notifications',
-          importance: 5, sound: 'default', vibration: true,
-        });
-        addLog('Canal Android "default" créé/vérifié');
-      } catch (_) {}
+        await Promise.all([
+          PushNotifications.createChannel({
+            id: 'default',
+            name: 'CDL Notifications',
+            importance: 5,
+            sound: 'default',
+            vibration: true,
+            lights: true,
+            lightColor: '#1E6BFF',
+          }),
+          PushNotifications.createChannel({
+            id: 'CDL_ALERTS_HIGH',
+            name: 'CDL Alertes Critiques',
+            importance: 5,
+            sound: 'default',
+            vibration: true,
+            lights: true,
+            lightColor: '#FF6B1E',
+          }),
+        ]);
+        addLog('✅ Canaux Android créés (default + CDL_ALERTS_HIGH, importance=5)');
+      } catch (e) { addLog('Canal: ' + e?.message, 'warn'); }
 
       // ── 3. Vérifier/demander permission ──────────────────────────────────
       let perm;
@@ -398,20 +424,36 @@ export default function FcmDiagnostic() {
     if (!user?.email) return;
     setSending(true);
     setSendResult(null);
+    addLog(`Envoi test vers ${user.email}...`);
     try {
-      const res = await base44.functions.invoke('testNotification', {
-        recipient_email: user.email,
-        recipient_role: user.role || 'user',
+      const res = await base44.functions.invoke('sendCdlNotification', {
+        user_email: user.email,
+        title: '🔔 Test CDL Push',
+        body: `Test notification — ${new Date().toLocaleTimeString('fr-FR')}`,
+        data: {
+          type: 'new_course',
+          notif_route: '/mes-notifications',
+          entity_id: 'diag_test',
+          entity_type: 'Course',
+        },
       });
       const d = res.data;
-      if (d?.success) {
-        setSendResult({ ok: true, msg: `✅ Envoyée ! ${d.details?.sent}/${d.details?.tokens_found} token(s)` });
+      const sent = d?.sent ?? 0;
+      const total = d?.total ?? 0;
+      if (sent > 0) {
+        setSendResult({ ok: true, msg: `✅ Envoyée ! ${sent}/${total} token(s) — vérifiez votre téléphone` });
+        addLog(`✅ FCM sent=${sent} total=${total} bdd=${d?.bdd}`, 'info');
         toast.success('Notification envoyée — vérifiez votre téléphone');
+      } else if (d?.bdd > 0) {
+        setSendResult({ ok: true, msg: `⚠️ Notif BDD créée mais FCM=0 token (token manquant ?)` });
+        addLog('⚠️ Pas de token FCM — notif BDD seulement', 'warn');
       } else {
-        setSendResult({ ok: false, msg: d?.details || d?.message || 'Échec envoi' });
+        setSendResult({ ok: false, msg: d?.note || d?.error || 'Échec envoi' });
+        addLog('❌ Échec: ' + (d?.note || d?.error || 'inconnu'), 'error');
       }
     } catch (err) {
       setSendResult({ ok: false, msg: err.message });
+      addLog('❌ Erreur: ' + err.message, 'error');
     } finally {
       setSending(false);
     }
@@ -444,9 +486,9 @@ export default function FcmDiagnostic() {
   return (
     <div className="space-y-4 pb-20 max-w-lg mx-auto px-2">
 
-      {/* Version indicator — NE PAS SUPPRIMER — permet de vérifier que l'APK contient la dernière correction */}
+      {/* Version indicator */}
       <div className="bg-emerald-600 text-white text-center py-2 px-3 rounded-xl font-bold text-sm tracking-wide">
-        ✅ FCM FIX V6 — 30/04 — 21h10
+        ✅ FCM FIX V7 — 03/05 — Canaux importance=5 + Foreground handler
       </div>
 
       {/* Header */}
@@ -628,6 +670,34 @@ export default function FcmDiagnostic() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dernière notification reçue */}
+      {lastReceivedNotif && (
+        <Card className="border-green-400 bg-green-50">
+          <CardContent className="p-3 space-y-1">
+            <p className="text-xs font-bold text-green-800">📬 Dernière notification reçue (FOREGROUND)</p>
+            <p className="text-xs text-green-700"><strong>Titre :</strong> {lastReceivedNotif.title || '—'}</p>
+            <p className="text-xs text-green-700"><strong>Corps :</strong> {lastReceivedNotif.body || '—'}</p>
+            <p className="text-xs text-green-600"><strong>Heure :</strong> {lastReceivedNotif.ts}</p>
+            {lastReceivedNotif.data && (
+              <p className="text-[10px] text-green-600 font-mono break-all">data: {JSON.stringify(lastReceivedNotif.data)}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Guide affichage Android */}
+      {isNative && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-3 space-y-1.5 text-xs text-blue-900">
+            <p className="font-bold">📋 Vérification affichage Android</p>
+            <p>• <strong>App ouverte</strong> → notification dans le toast (sonner)</p>
+            <p>• <strong>App fond/fermée</strong> → barre de notification Android (canal importance=5)</p>
+            <p>• Vérifier : <strong>Paramètres → Apps → CDL → Notifications → CDL Alertes Critiques</strong> = activé</p>
+            <p>• Si canal bloqué → désinstaller/réinstaller l'APK (les canaux sont cachés après création)</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Test envoi */}
       <Card>
