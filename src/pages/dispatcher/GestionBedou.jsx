@@ -82,15 +82,23 @@ export default function GestionBedou() {
   };
 
   const handleValider = async (request, type) => {
-    // ANTI-DOUBLE-CLIC : vérifier statut localement avant d'appeler le backend
+    console.log('[BEDOU_VALIDATE] clic_valider=true | request_id:', request?.id, '| type:', type, '| statut:', request?.statut);
+
+    // ANTI-DOUBLE-CLIC
     if (request.statut !== "en_attente") {
       toast.error("Cette demande a déjà été traitée.");
       setDialogOpen(false);
       return;
     }
 
+    const montant = request.montant || 0;
+    const bonus = request.bonus || 0;
+    const totalCredit = request.montant_total || (montant + bonus);
+    const clientId = request.user_id || request.user_email;
+
+    console.log('[BEDOU_VALIDATE] validation_started=true | recharge_id:', request.id, '| client_id:', clientId, '| amount:', montant, '| bonus:', bonus, '| total_credit:', totalCredit);
+
     setProcessing(true);
-    console.log('[BEDOU_VALIDATE] START | request_id:', request.id, '| type:', type, '| user:', request.user_email);
 
     try {
       const res = await base44.functions.invoke('validateBedouRequest', {
@@ -99,20 +107,8 @@ export default function GestionBedou() {
         action: 'valider',
       });
 
-      const d = res.data;
-      console.log('[BEDOU_VALIDATE] RESULT |', JSON.stringify({
-        recharge_id: d?.recharge_id,
-        client_id: d?.user_id,
-        user_email: d?.user_email,
-        ancien_solde: d?.ancien_solde,
-        montant_credite: d?.montant_credite,
-        nouveau_solde: d?.nouveau_solde,
-        fcm_sent: d?.fcm_sent,
-        fcm_failed: d?.fcm_failed,
-        channel_id: d?.channel_id,
-        notification_client_sent: d?.notification_client_sent,
-        elapsed_ms: d?.elapsed_ms,
-      }));
+      const d = res?.data;
+      console.log('[BEDOU_VALIDATE] success=true | recharge_id:', d?.recharge_id, '| client_id:', d?.user_id, '| montant_credite:', d?.montant_credite, '| nouveau_solde:', d?.nouveau_solde, '| notification_client_sent:', d?.notification_client_sent, '| fcm_sent:', d?.fcm_sent, '| channel_id:', d?.channel_id);
 
       if (d?.already_processed) {
         toast.warning("⚠️ Demande déjà traitée — aucun double crédit.");
@@ -122,19 +118,17 @@ export default function GestionBedou() {
       }
 
       const notifStatus = d?.notification_client_sent
-        ? `push ✅ (${d.fcm_sent}/${(d.fcm_sent || 0) + (d.fcm_failed || 0)} | ${d.channel_id})`
-        : '⚠️ push non envoyé (token absent ?)';
+        ? `push ✅ (${d.fcm_sent}/${(d.fcm_sent || 0) + (d.fcm_failed || 0)})`
+        : '⚠️ token absent';
       toast.success(
-        `✅ Crédité ${d?.montant_credite?.toLocaleString()} F CFA\n` +
-        `Solde: ${d?.ancien_solde?.toLocaleString()} → ${d?.nouveau_solde?.toLocaleString()} F\n` +
-        `Notif client: ${notifStatus}`
+        `✅ Crédité ${(d?.montant_credite || totalCredit)?.toLocaleString()} F CFA — Notif: ${notifStatus}`
       );
       setDialogOpen(false);
       setComment("");
       loadData();
     } catch (err) {
-      console.error('[BEDOU_VALIDATE] ERROR:', err?.message);
-      toast.error("❌ " + (err?.message || "Erreur inconnue"));
+      console.error('[BEDOU_VALIDATE] error=true | message:', err?.message, '| request_id:', request?.id);
+      toast.error("❌ Erreur validation : " + (err?.message || "Erreur inconnue"));
     } finally {
       setProcessing(false);
     }
@@ -411,7 +405,8 @@ export default function GestionBedou() {
                 <Button
                   variant="outline"
                   className="flex-1"
-                  onClick={() => setDialogOpen(false)}
+                  onClick={() => { setDialogOpen(false); setComment(""); }}
+                  disabled={processing}
                 >
                   Annuler
                 </Button>
@@ -419,16 +414,27 @@ export default function GestionBedou() {
                   variant="destructive"
                   className="flex-1"
                   onClick={() => handleRefuser(selectedRequest, selectedRequest.type)}
-                  disabled={processing}
+                  disabled={processing || !comment.trim()}
                 >
-                  ❌ Refuser
+                  {processing ? "..." : "❌ Refuser"}
                 </Button>
                 <Button
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                  onClick={() => handleValider(selectedRequest, selectedRequest.type)}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => {
+                    console.log('[BEDOU_UI] Bouton Valider cliqué | id:', selectedRequest?.id);
+                    handleValider(selectedRequest, selectedRequest.type);
+                  }}
                   disabled={processing}
                 >
-                  ✅ Valider
+                  {processing ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Traitement...
+                    </span>
+                  ) : "✅ Valider"}
                 </Button>
               </div>
             </div>
