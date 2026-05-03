@@ -102,10 +102,14 @@ export default function GestionBedou() {
       const d = res.data;
       console.log('[BEDOU_VALIDATE] RESULT |', JSON.stringify({
         recharge_id: d?.recharge_id,
+        client_id: d?.user_id,
         user_email: d?.user_email,
-        montant_credite: d?.montant_credite,
         ancien_solde: d?.ancien_solde,
+        montant_credite: d?.montant_credite,
         nouveau_solde: d?.nouveau_solde,
+        fcm_sent: d?.fcm_sent,
+        fcm_failed: d?.fcm_failed,
+        channel_id: d?.channel_id,
         notification_client_sent: d?.notification_client_sent,
         elapsed_ms: d?.elapsed_ms,
       }));
@@ -117,7 +121,14 @@ export default function GestionBedou() {
         return;
       }
 
-      toast.success(`✅ Solde crédité de ${d?.montant_credite?.toLocaleString()} F CFA | Notification: ${d?.notification_client_sent ? '✅' : '⚠️ en attente'}`);
+      const notifStatus = d?.notification_client_sent
+        ? `push ✅ (${d.fcm_sent}/${(d.fcm_sent || 0) + (d.fcm_failed || 0)} | ${d.channel_id})`
+        : '⚠️ push non envoyé (token absent ?)';
+      toast.success(
+        `✅ Crédité ${d?.montant_credite?.toLocaleString()} F CFA\n` +
+        `Solde: ${d?.ancien_solde?.toLocaleString()} → ${d?.nouveau_solde?.toLocaleString()} F\n` +
+        `Notif client: ${notifStatus}`
+      );
       setDialogOpen(false);
       setComment("");
       loadData();
