@@ -94,6 +94,16 @@ Deno.serve(async (req) => {
       }));
     }
 
+    // Livreur arrivé au point de départ → client
+    if (statut === 'arrivee_point_depart' && course.client_email) {
+      tasks.push(notify({
+        user_email: course.client_email,
+        title: '📍 Votre livreur est arrivé !',
+        body: `${course.livreur_name || 'Votre livreur'} est au point de récupération. Préparez votre colis.`,
+        data: { type: 'livreur_arrived_pickup', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
+      }));
+    }
+
     // En cours (colis récupéré) → client
     if (statut === 'en_cours' && course.client_email) {
       tasks.push(notify({
@@ -101,6 +111,16 @@ Deno.serve(async (req) => {
         title: '🏃 Colis en route !',
         body: `Votre colis est en livraison vers ${course.quartier_arrivee}.`,
         data: { type: 'course_in_progress', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
+      }));
+    }
+
+    // Proche destination → client
+    if (statut === 'proche_destination' && course.client_email) {
+      tasks.push(notify({
+        user_email: course.client_email,
+        title: '⚡ Livreur proche !',
+        body: `${course.livreur_name || 'Votre livreur'} est presque arrivé à destination. Soyez prêt !`,
+        data: { type: 'livreur_near_destination', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
       }));
     }
 

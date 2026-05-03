@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { saveFcmToken as saveFcmTokenDirect, getFcmTokens as getFcmTokensDirect } from '@/lib/fcmApi';
 import FcmStatusPanel from '@/components/FcmStatusPanel';
+import FcmPushHistory from '@/components/FcmPushHistory';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, RefreshCw, Copy, CheckCircle2, XCircle, AlertCircle, Loader2, Smartphone, Globe, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -817,6 +818,11 @@ export default function FcmDiagnostic() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Historique Push */}
+      {user && (
+        <FcmPushHistory userEmail={user.email} isAdmin={user.role === 'admin'} />
       )}
 
       {/* Checklist natif Firebase */}

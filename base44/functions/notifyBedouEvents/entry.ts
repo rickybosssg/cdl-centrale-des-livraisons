@@ -103,6 +103,26 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Solde faible (update Bedou → solde_disponible < 500)
+    if (event?.entity_name === 'Bedou' && event?.type === 'update') {
+      const solde = data?.solde_disponible || 0;
+      const oldSolde = old_data?.solde_disponible || 0;
+      if (solde < 500 && oldSolde >= 500 && data?.user_email) {
+        await notify({
+          user_email: data.user_email,
+          title: '⚠️ Solde Bedou faible',
+          body: `Votre solde disponible est de ${solde.toLocaleString()} F CFA. Rechargez pour continuer à utiliser CDL.`,
+          data: {
+            type: 'bedou_low_balance',
+            entity_id: event?.entity_id || '',
+            entity_type: 'Bedou',
+            amount: String(solde),
+            notif_route: '/mon-bedou',
+          },
+        });
+      }
+    }
+
     console.log(`[notifyBedouEvents] DONE | +${Date.now() - t0}ms`);
     return Response.json({ ok: true });
 

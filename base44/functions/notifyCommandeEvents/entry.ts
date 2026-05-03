@@ -74,6 +74,16 @@ Deno.serve(async (req) => {
 
     const tasks = [];
 
+    // Commande prête (partenaire a préparé la commande) → client
+    if (statut === 'prete' && commande.client_email) {
+      tasks.push(notify({
+        user_email: commande.client_email,
+        title: '✅ Commande prête !',
+        body: `Votre commande chez ${nom_commerce} est prête. Un livreur va être assigné.`,
+        data: { type: 'order_ready', entity_id: commandeId, entity_type: 'CommandePartenaire', notif_route: `/commande-marketplace/${commandeId}` },
+      }));
+    }
+
     if (statut === 'acceptee' && commande.client_email) {
       tasks.push(notify({
         user_email: commande.client_email,

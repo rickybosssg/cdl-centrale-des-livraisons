@@ -65,6 +65,16 @@ Deno.serve(async (req) => {
           data: { type: 'ad_deactivated', entity_id: pubId, role: 'annonceur', notif_route: '/mes-publicites-annonceur' },
         });
       }
+
+      // Publicité refusée (deleted=true ET jamais active) → annonceur
+      if (pub.deleted === true && old_data?.deleted !== true && !pub.active && annonceurEmail) {
+        await notify({
+          user_email: annonceurEmail,
+          title: '❌ Publicité refusée',
+          body: `Votre publicité "${pub.titre}" a été refusée. Contactez l'équipe CDL pour plus d'informations.`,
+          data: { type: 'ad_refused', entity_id: pubId, role: 'annonceur', notif_route: '/mes-publicites-annonceur' },
+        });
+      }
     }
 
     return Response.json({ ok: true });
