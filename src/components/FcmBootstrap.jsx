@@ -106,29 +106,40 @@ async function runNativeFcm(propEmail) {
     return;
   }
 
-  // ── Canal Android (importance 5 = heads-up même app fermée) ──────────────
+  // ── Canaux Android ────────────────────────────────────────────────────────
+  // IMPORTANT : Sur Android, un canal créé avec une importance basse NE PEUT PAS
+  // être mis à jour. Il faut supprimer puis recréer pour forcer importance=5 (heads-up).
+  const CHANNELS = [
+    {
+      id: 'default',
+      name: 'CDL Notifications',
+      description: 'Notifications CDL',
+      importance: 5,
+      sound: 'default',
+      vibration: true,
+      lights: true,
+      lightColor: '#1E6BFF',
+    },
+    {
+      id: 'CDL_ALERTS_HIGH',
+      name: 'CDL Alertes Critiques',
+      description: 'Courses, recharges, profils',
+      importance: 5,
+      sound: 'default',
+      vibration: true,
+      lights: true,
+      lightColor: '#FF6B1E',
+    },
+  ];
+
   try {
-    await Promise.all([
-      PushNotifications.createChannel({
-        id: 'default',
-        name: 'CDL Notifications',
-        importance: 5,         // IMPORTANCE_HIGH — affichage heads-up obligatoire
-        sound: 'default',
-        vibration: true,
-        lights: true,
-        lightColor: '#1E6BFF',
-      }),
-      PushNotifications.createChannel({
-        id: 'CDL_ALERTS_HIGH',
-        name: 'CDL Alertes Critiques',
-        importance: 5,
-        sound: 'default',
-        vibration: true,
-        lights: true,
-        lightColor: '#FF6B1E',
-      }),
-    ]);
-    console.log('[FCM] ✅ Channels created');
+    // Supprimer d'abord les anciens canaux (nécessaire pour changer l'importance)
+    await Promise.allSettled(
+      CHANNELS.map(ch => PushNotifications.deleteChannel({ id: ch.id }))
+    );
+    // Recréer avec importance=5
+    await Promise.all(CHANNELS.map(ch => PushNotifications.createChannel(ch)));
+    console.log('[FCM] ✅ Channels (re)created with importance=5');
   } catch (e) {
     console.warn('[FCM] Channel error (non-fatal):', e?.message);
   }

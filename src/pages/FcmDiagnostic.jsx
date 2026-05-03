@@ -235,29 +235,15 @@ export default function FcmDiagnostic() {
         return;
       }
 
-      // ── 2. Créer canaux Android (importance 5 = URGENT = heads-up visible) ──
+      // ── 2. Supprimer + Recréer canaux (force importance=5 même si existaient avant) ──
       try {
-        await Promise.all([
-          PushNotifications.createChannel({
-            id: 'default',
-            name: 'CDL Notifications',
-            importance: 5,
-            sound: 'default',
-            vibration: true,
-            lights: true,
-            lightColor: '#1E6BFF',
-          }),
-          PushNotifications.createChannel({
-            id: 'CDL_ALERTS_HIGH',
-            name: 'CDL Alertes Critiques',
-            importance: 5,
-            sound: 'default',
-            vibration: true,
-            lights: true,
-            lightColor: '#FF6B1E',
-          }),
-        ]);
-        addLog('✅ Canaux Android créés (default + CDL_ALERTS_HIGH, importance=5)');
+        const CHANNELS = [
+          { id: 'default', name: 'CDL Notifications', description: 'Notifications CDL', importance: 5, sound: 'default', vibration: true, lights: true, lightColor: '#1E6BFF' },
+          { id: 'CDL_ALERTS_HIGH', name: 'CDL Alertes Critiques', description: 'Courses, recharges, profils', importance: 5, sound: 'default', vibration: true, lights: true, lightColor: '#FF6B1E' },
+        ];
+        await Promise.allSettled(CHANNELS.map(ch => PushNotifications.deleteChannel({ id: ch.id })));
+        await Promise.all(CHANNELS.map(ch => PushNotifications.createChannel(ch)));
+        addLog('✅ Canaux supprimés + recréés avec importance=5 (heads-up garanti)');
       } catch (e) { addLog('Canal: ' + e?.message, 'warn'); }
 
       // ── 3. Vérifier/demander permission ──────────────────────────────────
@@ -488,7 +474,7 @@ export default function FcmDiagnostic() {
 
       {/* Version indicator */}
       <div className="bg-emerald-600 text-white text-center py-2 px-3 rounded-xl font-bold text-sm tracking-wide">
-        ✅ FCM FIX V7 — 03/05 — Canaux importance=5 + Foreground handler
+        ✅ FCM FIX V8 — 03/05 — deleteChannel + recreate importance=5
       </div>
 
       {/* Header */}
