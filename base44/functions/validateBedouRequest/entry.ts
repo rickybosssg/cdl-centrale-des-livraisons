@@ -1,14 +1,25 @@
 /**
- * validateBedouRequest — Validation atomique d'une demande Bedou (recharge ou retrait)
- *
- * ORDRE CRITIQUE (anti-doublon garanti) :
- *   1. Vérifier statut = en_attente  ← BLOQUE si déjà traité
- *   2. Charger/créer wallet Bedou client
- *   3. Créditer solde Bedou           ← AVANT de marquer validé
- *   4. Créer transaction
- *   5. Marquer demande comme validée  ← seulement si crédit OK
- *   6. Notification interne BDD
- *   7. FCM push direct Firebase (canal cdl_critical_alerts_v2)
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  validateBedouRequest — FONCTION VERROUILLÉE v2.0 — NE PAS MODIFIER   ║
+ * ╠══════════════════════════════════════════════════════════════════════════╣
+ * ║  🔒 LOGIQUE VERROUILLÉE — validée et testée en production              ║
+ * ║  ❌ NE JAMAIS hardcoder email, user_id ou wallet                        ║
+ * ║  ❌ NE JAMAIS modifier l'ordre des étapes 1→7                           ║
+ * ║  ❌ NE JAMAIS supprimer l'anti-double-crédit (statut = en_attente)      ║
+ * ║  ❌ NE JAMAIS supprimer le log d'audit BEDOU_AUDIT                      ║
+ * ║  ❌ NE JAMAIS changer channel_id → toujours cdl_critical_alerts_v2     ║
+ * ║  ✅ Extensions autorisées UNIQUEMENT par ajout — jamais remplacement    ║
+ * ╠══════════════════════════════════════════════════════════════════════════╣
+ * ║  ORDRE CRITIQUE (anti-doublon garanti) :                                ║
+ * ║    1. Vérifier statut = en_attente  ← BLOQUE si déjà traité            ║
+ * ║    2. LOG AUDIT permanent           ← admin_id/request_id/client_id    ║
+ * ║    3. Charger/créer wallet Bedou client                                 ║
+ * ║    4. Créditer solde Bedou          ← AVANT de marquer validé          ║
+ * ║    5. Créer transaction                                                 ║
+ * ║    6. Marquer demande comme validée ← seulement si crédit OK           ║
+ * ║    7. Notification interne BDD                                          ║
+ * ║    8. FCM push direct Firebase (canal cdl_critical_alerts_v2)          ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
  *
  * FCM appelé directement (pas via functions.invoke) — évite erreur 403 inter-fonctions.
  */
@@ -233,6 +244,11 @@ Deno.serve(async (req) => {
     }, { status: 409 });
   }
 
+  // ── 🔒 LOG D'AUDIT PERMANENT — NE PAS SUPPRIMER ──────────────────────────
+  // Trace immuable de chaque action admin sur une demande Bedou
+  const auditTs = new Date().toISOString();
+  console.log(`[BEDOU_AUDIT] timestamp=${auditTs} | action=${action} | type=${type} | request_id=${request_id} | admin_id=${user.id || user.email} | admin_email=${user.email} | client_id=${demande.user_id || demande.user_email} | client_email=${demande.user_email} | montant=${demande.montant} | bonus=${demande.bonus || 0} | montant_total=${demande.montant_total || demande.montant} | methode=${demande.methode_paiement || 'N/A'}`);
+
   // ── REFUS ─────────────────────────────────────────────────────────────────
   if (action === 'refuser') {
     if (!motif_refus?.trim()) {
@@ -271,7 +287,9 @@ Deno.serve(async (req) => {
       screen: '/mon-bedou',
     }).catch(e => L(`FCM refus non-bloquant: ${e.message}`));
 
-    L(`REFUS OK | +${Date.now() - t0}ms`);
+    const elapsedRefus = Date.now() - t0;
+    console.log(`[BEDOU_AUDIT] timestamp=${auditTs} | result=refuse | request_id=${request_id} | admin_email=${user.email} | client_email=${demande.user_email} | motif=${motif_refus.trim()} | delay_ms=${elapsedRefus}`);
+    L(`REFUS OK | +${elapsedRefus}ms`);
     return Response.json({ success: true, action: 'refuse' });
   }
 
