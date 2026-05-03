@@ -30,6 +30,12 @@ Deno.serve(async (req) => {
     const cleanToken = String(token).trim();
     const cleanEmail = String(user_email).toLowerCase().trim();
 
+    // ── 🔒 GUARD : token vide → rejet sans toucher aux anciens tokens ─────────
+    if (!cleanToken || cleanToken.length < 10) {
+      console.error(`[saveFcmTokenPublic] 🔴 GUARD — token vide ou trop court (len=${cleanToken.length}) pour ${cleanEmail} — anciens tokens PRÉSERVÉS`);
+      return Response.json({ success: false, error: 'token invalide — anciens tokens préservés', guard: 'TOKEN_EMPTY' }, { status: 400 });
+    }
+
     // ── Bloquer les tokens de test ───────────────────────────────────────────
     if (isTestToken(cleanToken)) {
       console.warn('[saveFcmTokenPublic] Token de test ignoré:', cleanToken.substring(0, 30));

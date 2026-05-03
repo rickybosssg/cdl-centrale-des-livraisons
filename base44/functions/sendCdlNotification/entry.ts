@@ -266,9 +266,18 @@ Deno.serve(async (req) => {
     // LOG OBLIGATOIRE : event_type dès le début
     console.log(`[sendCdlNotification] ━━━ START ━━━ | event_type=${data?.type || 'unknown'} | user=${user_email || ''} | role=${role || ''} | urgence=${urgence}`);
 
+    // ── 🔒 GUARD 1 : channel_id interdit ─────────────────────────────────────
+    // Si l'appelant tente de forcer un autre canal → rejet immédiat
+    const requestedChannel = body?.channel_id || body?.data?.channel_id || null;
+    if (requestedChannel && requestedChannel !== CDL_CHANNEL) {
+      console.error(`[sendCdlNotification] 🔴 GUARD VIOLATION — channel_id interdit: "${requestedChannel}" (attendu: "${CDL_CHANNEL}")`);
+      return Response.json({ error: `channel_id interdit: ${requestedChannel} — utiliser uniquement ${CDL_CHANNEL}`, guard: 'CHANNEL_LOCK' }, { status: 400 });
+    }
+
+    // ── 🔒 GUARD 2 : title + body obligatoires ────────────────────────────────
     if (!title || !msgBody) {
-      console.warn('[sendCdlNotification] ⚠️ title ou body manquant');
-      return Response.json({ error: 'title et body requis' }, { status: 400 });
+      console.error(`[sendCdlNotification] 🔴 GUARD VIOLATION — title ou body manquant | title="${title || ''}" body="${msgBody || ''}"`);
+      return Response.json({ error: 'title et body requis — payload incomplet', guard: 'PAYLOAD_REQUIRED' }, { status: 400 });
     }
     if (!user_email && !role) {
       console.warn('[sendCdlNotification] ⚠️ user_email ou role manquant');
@@ -347,7 +356,15 @@ Deno.serve(async (req) => {
       let tokenRecords = [];
       for (const r of tokenResults) {
         if (r.status === 'fulfilled') {
-          tokenRecords.push(...(r.value || []).filter(t => !isTestToken(t.token)));
+          // ── 🔒 GUARD 3 : token vide → log erreur mais ne jamais écraser/supprimer l'ancien token
+          const validTokens = (r.value || []).filter(t => {
+            if (!t.token || String(t.token).trim() === '') {
+              console.error(`[sendCdlNotification] 🔴 GUARD VIOLATION — token FCM vide détecté pour user=${t.user_email} id=${t.id} — ignoré sans suppression`);
+              return false;
+            }
+            return !isTestToken(t.token);
+          });
+          tokenRecords.push(...validTokens);
         }
       }
       tokensCount = tokenRecords.length;
@@ -403,8 +420,16 @@ Deno.serve(async (req) => {
 
     const elapsed = Date.now() - t0;
 
-    // LOG OBLIGATOIRE : fcm_sent, fcm_failed, execution_time
-    console.log(`[sendCdlNotification] ━━━ DONE ━━━ | event_type=${data?.type || 'unknown'} | tokens_count=${tokensCount} | fcm_sent=${sent} | fcm_failed=${failed} | bdd=${bddCreated} | execution_time=${elapsed}ms`);
+    // LOG OBLIGATOIRE : fcm_sent, fcm_failed, execution_time, notification_client_sent, delay_ms
+    const notification_client_sent = sent > 0;
+    console.log(`[sendCdlNotification] ━━━ DONE ━━━ | event_type=${data?.type || 'unknown'} | tokens_count=${tokensCount} | fcm_sent=${sent} | fcm_failed=${failed} | bdd=${bddCreated} | notification_client_sent=${notification_client_sent} | delay_ms=${elapsed} | execution_time=${elapsed}ms`);
+
+    // ── MONITORING : alerte si failed > 0 ────────────────────────────────────
+    if (failed > 0 && sent === 0) {
+      console.error(`[sendCdlNotification] 🔴 MONITORING ALERT — fcm_sent=0 failed=${failed} total=${tokensCount} | event_type=${data?.type} | BDD fallback=${bddCreated > 0 ? 'OK' : 'ÉCHEC'}`);
+    } else if (failed > 0) {
+      console.warn(`[sendCdlNotification] ⚠️ MONITORING — échecs partiels: sent=${sent} failed=${failed} | event_type=${data?.type}`);
+    }
 
     return Response.json({
       sent,
@@ -412,6 +437,8 @@ Deno.serve(async (req) => {
       total: tokensCount,
       bdd: bddCreated,
       elapsed_ms: elapsed,
+      notification_client_sent,
+      channel_id: CDL_CHANNEL,
     });
 
   } catch (criticalErr) {
