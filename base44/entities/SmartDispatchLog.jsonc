@@ -1,0 +1,71 @@
+{
+  "name": "SmartDispatchLog",
+  "type": "object",
+  "properties": {
+    "course_id": {
+      "type": "string",
+      "title": "ID de la course",
+      "index": true
+    },
+    "driver_email": {
+      "type": "string",
+      "title": "Email du livreur",
+      "index": true
+    },
+    "driver_name": {
+      "type": "string",
+      "title": "Nom du livreur"
+    },
+    "score": {
+      "type": "number",
+      "title": "Score calcul\u00e9 (0-100)"
+    },
+    "position": {
+      "type": "number",
+      "title": "Position dans le classement (1, 2, 3)"
+    },
+    "distance_km": {
+      "type": "number",
+      "title": "Distance calcul\u00e9e (km)"
+    },
+    "sent_at": {
+      "type": "string",
+      "title": "Date d'envoi"
+    },
+    "accepted": {
+      "type": "boolean",
+      "title": "Course accept\u00e9e",
+      "default": false
+    },
+    "refused": {
+      "type": "boolean",
+      "title": "Course refus\u00e9e",
+      "default": false
+    },
+    "response_time_ms": {
+      "type": "number",
+      "title": "Temps de r\u00e9ponse (ms)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "accepted",
+        "refused",
+        "timeout",
+        "skipped"
+      ],
+      "title": "Statut",
+      "default": "sent"
+    },
+    "fallback_used": {
+      "type": "boolean",
+      "title": "Fallback dispatch classique utilis\u00e9",
+      "default": false
+    }
+  },
+  "required": [
+    "course_id",
+    "driver_email"
+  ]
+}
