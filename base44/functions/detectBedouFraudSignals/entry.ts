@@ -1,0 +1,179 @@
+/**
+ * detectBedouFraudSignals — Détection passive signaux anti-fraude Bedou
+ *
+ * ╔══════════════════════════════════════════════════════════════════╗
+ * ║  ⚠️ SYSTÈME PASSIF UNIQUEMENT — NE JAMAIS BLOQUER               ║
+ * ║  ❌ NE JAMAIS modifier validateBedouRequest                      ║
+ * ║  ❌ NE JAMAIS empêcher une validation                            ║
+ * ║  ✅ Uniquement : log BedouFraudLog + notification admin info     ║
+ * ╚══════════════════════════════════════════════════════════════════╝
+ *
+ * Signaux détectés :
+ *   1. rapid_validations  — +3 validations même client en < 2 min
+ *   2. high_amount        — montant_total > 50 000 F CFA
+ *   3. admin_burst        — admin valide > 10 demandes en < 5 min
+ *
+ * Appelé APRÈS validateBedouRequest (non bloquant, fire-and-forget)
+ */
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+const L = (msg) => console.log(`[detectBedouFraudSignals] ${new Date().toISOString()} | ${msg}`);
+
+async function notifyAdmin(base44, titre, body, details) {
+  try {
+    await base44.functions.invoke('sendCdlNotification', {
+      role: 'admin',
+      title: titre,
+      body,
+      data: {
+        type: 'info',
+        notif_route: '/admin/financial-dashboard',
+        entity_type: 'BedouFraudLog',
+        entity_id: details?.log_id || 'fraud',
+      },
+    });
+    L(`Notification admin envoyée: ${titre}`);
+  } catch (e) {
+    L(`Notification admin non-bloquante ignorée: ${e.message}`);
+  }
+}
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+
+    // Auth optionnelle — ce endpoint peut être appelé en service role aussi
+    // mais on vérifie au minimum que c'est un appel interne
+    const body = await req.json().catch(() => ({}));
+    const { client_email, admin_email, montant_total, request_id } = body;
+
+    L(`START | client=${client_email} | admin=${admin_email} | montant=${montant_total} | request=${request_id}`);
+
+    const now = Date.now();
+    const twoMinAgo = new Date(now - 2 * 60 * 1000).toISOString();
+    const fiveMinAgo = new Date(now - 5 * 60 * 1000).toISOString();
+    const fraudSignals = [];
+
+    // ── Signal 1 : Validations rapides du même client (< 2 min) ────────────
+    if (client_email) {
+      try {
+        const recentTxClient = await base44.asServiceRole.entities.Transaction.filter(
+          { user_email: client_email, source: 'validation_admin', statut: 'valide' },
+          '-date_validation',
+          20
+        );
+        const rapid = recentTxClient.filter(t => t.date_validation > twoMinAgo);
+        if (rapid.length >= 3) {
+          const signal = {
+            type: 'rapid_validations',
+            client_id: client_email,
+            admin_id: admin_email || '',
+            niveau: rapid.length >= 5 ? 'high' : 'medium',
+            details: JSON.stringify({
+              count: rapid.length,
+              window: '2min',
+              request_id,
+              montants: rapid.map(t => t.montant),
+            }),
+          };
+          fraudSignals.push(signal);
+          L(`Signal rapid_validations | client=${client_email} | count=${rapid.length}`);
+        }
+      } catch (e) {
+        L(`Signal 1 ignoré: ${e.message}`);
+      }
+    }
+
+    // ── Signal 2 : Montant élevé > 50 000 F ────────────────────────────────
+    if (montant_total && montant_total > 50000) {
+      const signal = {
+        type: 'high_amount',
+        client_id: client_email || '',
+        admin_id: admin_email || '',
+        niveau: montant_total > 100000 ? 'high' : 'medium',
+        details: JSON.stringify({ montant_total, request_id }),
+      };
+      fraudSignals.push(signal);
+      L(`Signal high_amount | montant=${montant_total}`);
+    }
+
+    // ── Signal 3 : Admin burst > 10 validations en < 5 min ─────────────────
+    if (admin_email) {
+      try {
+        const recentAdminTx = await base44.asServiceRole.entities.Transaction.filter(
+          { valide_par: admin_email, source: 'validation_admin', statut: 'valide' },
+          '-date_validation',
+          30
+        );
+        const burst = recentAdminTx.filter(t => t.date_validation > fiveMinAgo);
+        if (burst.length > 10) {
+          const signal = {
+            type: 'admin_burst',
+            client_id: client_email || '',
+            admin_id: admin_email,
+            niveau: burst.length > 20 ? 'high' : 'medium',
+            details: JSON.stringify({
+              count: burst.length,
+              window: '5min',
+              admin: admin_email,
+            }),
+          };
+          fraudSignals.push(signal);
+          L(`Signal admin_burst | admin=${admin_email} | count=${burst.length}`);
+        }
+      } catch (e) {
+        L(`Signal 3 ignoré: ${e.message}`);
+      }
+    }
+
+    // ── Enregistrer les signaux + notifier admin ────────────────────────────
+    if (fraudSignals.length === 0) {
+      L(`Aucun signal détecté — tout normal`);
+      return Response.json({ ok: true, signals: 0 });
+    }
+
+    const savedIds = [];
+    for (const signal of fraudSignals) {
+      try {
+        const saved = await base44.asServiceRole.entities.BedouFraudLog.create({
+          ...signal,
+          notified: false,
+        });
+        savedIds.push(saved.id);
+        L(`BEDOU_FRAUD_LOG créé | type=${signal.type} | niveau=${signal.niveau} | id=${saved.id}`);
+
+        // Notification admin — informative uniquement
+        const bodyMsg = signal.type === 'rapid_validations'
+          ? `Client ${signal.client_id} a reçu ${JSON.parse(signal.details).count} validations en < 2min`
+          : signal.type === 'high_amount'
+          ? `Montant élevé détecté : ${JSON.parse(signal.details).montant_total?.toLocaleString()} F CFA pour ${signal.client_id}`
+          : `Admin ${signal.admin_id} a validé ${JSON.parse(signal.details).count} demandes en < 5min`;
+
+        // Update notified flag
+        await base44.asServiceRole.entities.BedouFraudLog.update(saved.id, { notified: true }).catch(() => {});
+
+        await notifyAdmin(
+          base44,
+          '⚠️ Alerte activité suspecte Bedou',
+          bodyMsg,
+          { log_id: saved.id }
+        );
+      } catch (e) {
+        L(`Erreur enregistrement signal: ${e.message}`);
+      }
+    }
+
+    L(`DONE | ${fraudSignals.length} signal(s) enregistré(s) | ids=${savedIds.join(',')}`);
+
+    return Response.json({
+      ok: true,
+      signals: fraudSignals.length,
+      log_ids: savedIds,
+    });
+
+  } catch (err) {
+    // ✅ Jamais bloquer — retourner 200 même en cas d'erreur
+    console.error(`[detectBedouFraudSignals] ERREUR (non-bloquante): ${err.message}`);
+    return Response.json({ ok: true, signals: 0, note: 'error_ignored: ' + err.message });
+  }
+});

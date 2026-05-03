@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2, Activity, ClipboardCheck, FlaskConical } from "lucide-react";
+import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2, Activity, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -611,6 +611,25 @@ export default function AdminDashboard() {
             Alertes WhatsApp
           </Button>
         </Link>
+
+        {/* ── NOUVEAUX MODULES BEDOU ── */}
+        <div className="pt-1">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">📊 Intelligence Bedou</p>
+          <div className="space-y-2">
+            <Link to="/admin/financial-dashboard">
+              <Button className="w-full justify-start gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold">
+                <TrendingUp className="h-4 w-4" />
+                💹 Dashboard Financier Bedou
+              </Button>
+            </Link>
+            <Link to="/admin/bedou-history">
+              <Button className="w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold">
+                <Clock className="h-4 w-4" />
+                📋 Historique Transactions
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* GRILLE 2 : Suppression + PUBLICITÉS ADMIN */}

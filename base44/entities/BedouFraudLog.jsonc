@@ -1,0 +1,46 @@
+{
+  "name": "BedouFraudLog",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "title": "Type de signal",
+      "enum": [
+        "rapid_validations",
+        "high_amount",
+        "admin_burst"
+      ]
+    },
+    "client_id": {
+      "type": "string",
+      "title": "ID / Email client"
+    },
+    "admin_id": {
+      "type": "string",
+      "title": "ID / Email admin"
+    },
+    "niveau": {
+      "type": "string",
+      "title": "Niveau de risque",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "low"
+    },
+    "details": {
+      "type": "string",
+      "title": "D\u00e9tails JSON"
+    },
+    "notified": {
+      "type": "boolean",
+      "title": "Admin notifi\u00e9",
+      "default": false
+    }
+  },
+  "required": [
+    "type",
+    "niveau"
+  ]
+}
