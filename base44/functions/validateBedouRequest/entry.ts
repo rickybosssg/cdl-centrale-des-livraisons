@@ -88,10 +88,11 @@ async function sendFcmToToken(accessToken, projectId, token, title, body, dataPa
   return { ok: res.ok, result, token, errCode: !res.ok ? (result?.error?.details?.[0]?.errorCode || result?.error?.status || 'FCM_ERROR') : null };
 }
 
-async function sendFcmDirect(base44, userEmail, title, body, data = {}) {
+// ── sendFcmDirect avec retry automatique 1x si échec ────────────────────────
+async function sendFcmDirect(base44, userEmail, title, body, data = {}, validationTimestamp = null) {
   if (!SA_JSON) {
     L('FCM skip — FIREBASE_SERVICE_ACCOUNT_JSON absent');
-    return { sent: 0, failed: 0, total: 0 };
+    return { sent: 0, failed: 0, total: 0, retry_used: false };
   }
 
   const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({
@@ -99,39 +100,92 @@ async function sendFcmDirect(base44, userEmail, title, body, data = {}) {
   });
 
   if (!tokenRecords || tokenRecords.length === 0) {
-    L(`FCM skip — aucun token pour ${userEmail}`);
-    return { sent: 0, failed: 0, total: 0 };
+    L(`FCM skip — aucun token actif pour ${userEmail}`);
+    return { sent: 0, failed: 0, total: 0, retry_used: false };
   }
+
+  // Injecter timestamps pour calcul delay_ms côté client
+  const enrichedData = {
+    ...data,
+    validation_timestamp: validationTimestamp || new Date().toISOString(),
+    notification_sent_at: new Date().toISOString(),
+  };
 
   const sa = JSON.parse(SA_JSON);
   const accessToken = await getFcmAccessToken(sa);
 
-  let sent = 0, failed = 0;
   const FATAL = ['UNREGISTERED', 'INVALID_ARGUMENT'];
+  let sent = 0, failed = 0, retryUsed = false;
 
-  const results = await Promise.allSettled(
-    tokenRecords.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, title, body, data))
+  // ── Tentative 1 ──────────────────────────────────────────────────────────
+  const results1 = await Promise.allSettled(
+    tokenRecords.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, title, body, enrichedData))
   );
 
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i];
+  const failedTokens = [];
+  for (let i = 0; i < results1.length; i++) {
+    const r = results1[i];
     if (r.status === 'fulfilled' && r.value.ok) {
       sent++;
       base44.asServiceRole.entities.FcmToken.update(tokenRecords[i].id, {
         last_used: new Date().toISOString(),
       }).catch(() => {});
     } else {
-      failed++;
       const errCode = r.status === 'fulfilled' ? r.value.errCode : 'EXCEPTION';
+      L(`FCM tentative 1 ÉCHEC | token=${tokenRecords[i].token.slice(0, 20)}... | errCode=${errCode}`);
       if (FATAL.includes(errCode)) {
+        // Token mort — désactiver immédiatement, pas de retry
         base44.asServiceRole.entities.FcmToken.update(tokenRecords[i].id, {
           is_active: false, deactivation_reason: errCode, deactivated_at: new Date().toISOString(),
         }).catch(() => {});
+        failed++;
+      } else {
+        // Erreur transitoire — éligible au retry
+        failedTokens.push({ record: tokenRecords[i], index: i });
       }
     }
   }
 
-  return { sent, failed, total: tokenRecords.length, channel_id: CDL_CHANNEL };
+  // ── Retry automatique 1x pour erreurs transitoires (après 1.5s) ──────────
+  if (failedTokens.length > 0) {
+    retryUsed = true;
+    L(`FCM RETRY (1/1) — ${failedTokens.length} token(s) en échec transitoire — attente 1.5s...`);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Nouveau access token pour le retry (évite expiration courte)
+    const retryAccessToken = await getFcmAccessToken(sa).catch(() => accessToken);
+    enrichedData.notification_sent_at = new Date().toISOString(); // refresh timestamp
+
+    const results2 = await Promise.allSettled(
+      failedTokens.map(({ record }) =>
+        sendFcmToToken(retryAccessToken, sa.project_id, record.token, title, body, enrichedData)
+      )
+    );
+
+    for (let i = 0; i < results2.length; i++) {
+      const r = results2[i];
+      const record = failedTokens[i].record;
+      if (r.status === 'fulfilled' && r.value.ok) {
+        sent++;
+        L(`FCM RETRY OK | token=${record.token.slice(0, 20)}...`);
+        base44.asServiceRole.entities.FcmToken.update(record.id, {
+          last_used: new Date().toISOString(),
+        }).catch(() => {});
+      } else {
+        failed++;
+        const errCode = r.status === 'fulfilled' ? r.value.errCode : 'EXCEPTION';
+        L(`FCM RETRY ÉCHEC | token=${record.token.slice(0, 20)}... | errCode=${errCode}`);
+        if (FATAL.includes(errCode)) {
+          base44.asServiceRole.entities.FcmToken.update(record.id, {
+            is_active: false, deactivation_reason: errCode, deactivated_at: new Date().toISOString(),
+          }).catch(() => {});
+        }
+      }
+    }
+  }
+
+  L(`FCM FINAL | sent=${sent} failed=${failed} total=${tokenRecords.length} retry_used=${retryUsed} channel=${CDL_CHANNEL}`);
+  return { sent, failed, total: tokenRecords.length, channel_id: CDL_CHANNEL, retry_used: retryUsed };
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────
@@ -161,9 +215,10 @@ Deno.serve(async (req) => {
   // ── 1. Charger la demande ─────────────────────────────────────────────────
   let demande;
   try {
-    demande = await base44.asServiceRole.entities[table].get(request_id);
+    const demandeList = await base44.asServiceRole.entities[table].filter({ id: request_id }, null, 1);
+    demande = demandeList?.[0] || null;
   } catch (e) {
-    L(`Demande introuvable: ${e.message}`);
+    L(`Erreur chargement demande: ${e.message}`);
     return Response.json({ error: 'Demande introuvable' }, { status: 404 });
   }
 
@@ -315,8 +370,9 @@ Deno.serve(async (req) => {
   });
   L(`✅ Notification BDD créée`);
 
-  // ── 7. FCM push direct Firebase (cdl_critical_alerts_v2) ─────────────────
-  let fcmResult = { sent: 0, failed: 0, total: 0, channel_id: CDL_CHANNEL };
+  // ── 7. FCM push direct Firebase (cdl_critical_alerts_v2) + retry 1x ─────
+  const validationTs = new Date().toISOString();
+  let fcmResult = { sent: 0, failed: 0, total: 0, channel_id: CDL_CHANNEL, retry_used: false };
   try {
     fcmResult = await sendFcmDirect(base44, demande.user_email, notifTitle, notifMsg, {
       type: type === 'recharge' ? 'bedou_recharge_approved' : 'bedou_withdrawal_approved',
@@ -326,8 +382,7 @@ Deno.serve(async (req) => {
       screen: '/mon-bedou',
       amount: String(montantCredite),
       user_id: demande.user_id || demande.user_email,
-    });
-    L(`FCM résultat: sent=${fcmResult.sent} failed=${fcmResult.failed} total=${fcmResult.total} channel=${CDL_CHANNEL}`);
+    }, validationTs);
   } catch (fcmErr) {
     L(`FCM erreur non-bloquante: ${fcmErr.message}`);
   }
@@ -335,7 +390,15 @@ Deno.serve(async (req) => {
   const fcmSent = fcmResult.sent > 0;
   const elapsed = Date.now() - t0;
 
-  L(`=== DONE === | recharge_id=${request_id} | client_id=${demande.user_id || demande.user_email} | user_email=${demande.user_email} | ancien_solde=${ancienSolde} | montant=${montantCredite} | nouveau_solde=${nouveauSolde} | fcm_sent=${fcmResult.sent} | fcm_failed=${fcmResult.failed} | channel_id=${CDL_CHANNEL} | notification_client_sent=${fcmSent} | +${elapsed}ms`);
+  // Log final structuré — tous les champs de diagnostic
+  L(`=== DONE === | recharge_id=${request_id} | user_email=${demande.user_email} | ancien_solde=${ancienSolde} | montant_credite=${montantCredite} | nouveau_solde=${nouveauSolde} | notification_client_sent=${fcmSent} | fcm_sent=${fcmResult.sent} | fcm_failed=${fcmResult.failed} | fcm_total=${fcmResult.total} | retry_used=${fcmResult.retry_used} | channel_id=${CDL_CHANNEL} | delay_ms=${elapsed}`);
+
+  // Alerte si zéro notification envoyée malgré des tokens disponibles
+  if (!fcmSent && fcmResult.total > 0) {
+    L(`⚠️ ALERTE ZÉRO NOTIF — ${fcmResult.total} token(s) présent(s) mais 0 envoi réussi après retry`);
+  } else if (!fcmSent && fcmResult.total === 0) {
+    L(`ℹ️ Aucun token FCM enregistré pour ${demande.user_email} — notification BDD créée (fallback)`);
+  }
 
   return Response.json({
     success: true,
@@ -347,10 +410,14 @@ Deno.serve(async (req) => {
     nouveau_solde: nouveauSolde,
     montant_credite: montantCredite,
     bonus: bonusAmount,
+    // Notification push
+    notification_client_sent: fcmSent,
     fcm_sent: fcmResult.sent,
     fcm_failed: fcmResult.failed,
+    fcm_total: fcmResult.total,
+    fcm_retry_used: fcmResult.retry_used,
     channel_id: CDL_CHANNEL,
-    notification_client_sent: fcmSent,
-    elapsed_ms: elapsed,
+    validation_timestamp: validationTs,
+    delay_ms: elapsed,
   });
 });
