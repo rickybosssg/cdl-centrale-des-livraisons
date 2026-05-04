@@ -101,7 +101,17 @@ export default function MonBedou() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // Abonnement temps réel : recharger dès que le wallet Bedou change (validation admin)
+    const unsub = base44.entities.Bedou.subscribe((event) => {
+      if (event.type === "update") {
+        console.log("[MonBedou] Bedou wallet updated — rechargement solde");
+        load();
+      }
+    });
+    return () => unsub?.();
+  }, []);
 
   // ── FLUX RECHARGE ─────────────────────────────────────────────────────────────
   const handleRecharge = async () => {

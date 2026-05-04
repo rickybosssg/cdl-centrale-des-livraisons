@@ -20,12 +20,18 @@ export default function GestionBedou() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [rechargeListe, retraitListe] = await Promise.all([
-        base44.entities.DemandeRecharge.list("-created_date", 500),
-        base44.entities.DemandeRetrait.list("-created_date", 500),
-      ]);
+      // Chargement séparé pour éviter qu'une erreur sur DemandeRetrait bloque tout
+      const rechargeListe = await base44.entities.DemandeRecharge.list("-created_date", 500).catch(e => {
+        console.error("[GestionBedou] Erreur chargement recharges:", e.message);
+        return [];
+      });
+      const retraitListe = await base44.entities.DemandeRetrait.list("-created_date", 500).catch(e => {
+        console.warn("[GestionBedou] DemandeRetrait non disponible:", e.message);
+        return [];
+      });
       setRecharges(rechargeListe || []);
       setRetraits(retraitListe || []);
+      console.log(`[GestionBedou] Chargé: ${rechargeListe?.length} recharges, ${retraitListe?.length} retraits`);
     } finally {
       setLoading(false);
     }
@@ -81,7 +87,8 @@ export default function GestionBedou() {
 
   const handleValidationSuccess = () => {
     handleDialogClose();
-    loadData();
+    // Petit délai pour laisser le temps au backend de finaliser avant rechargement
+    setTimeout(() => loadData(), 500);
   };
 
   const RequestCard = ({ request, type }) => {
