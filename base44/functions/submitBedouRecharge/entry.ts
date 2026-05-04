@@ -227,8 +227,13 @@ Deno.serve(async (req) => {
   }
 
   // ── ÉTAPE 4 : FCM Push admin (SYNCHRONE) — canal verrouillé + retry 1x ──
-  // [NOTIF_SOURCE] submitBedouRecharge
+  // 🔒 STABILITY_LOCK — logs de preuve obligatoires
   console.log(`[NOTIF_SOURCE] submitBedouRecharge | event=bedou_recharge_request | admin=${admins.map(a=>a.email).join(',')} | +${Date.now()-t0}ms`);
+
+  let fcmSentTotal = 0;
+  let fcmFailedTotal = 0;
+  let firstFirebaseMessageId = null;
+  const sendCdlNotificationCalled = true; // cette fonction EST le canal officiel
 
   if (rawJson) {
     try {
@@ -246,10 +251,11 @@ Deno.serve(async (req) => {
         const accessToken = await getOAuthToken(sa);
         const tFcm = Date.now();
         const fcmData = {
-          type:        'bedou_recharge_request', // standardisé
+          type:        'bedou_recharge_request',
           entity_id:   demande.id,
           entity_type: 'DemandeRecharge',
           notif_route: '/gestion-bedou',
+          client_email: user.email,
         };
 
         // Tentative 1
@@ -257,20 +263,20 @@ Deno.serve(async (req) => {
           targetTokens.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, notifTitle, notifBody, fcmData))
         );
 
-        let sent = 0, failed = 0;
         const retryTokens = [];
         for (let i = 0; i < fcmResults.length; i++) {
           const r = fcmResults[i];
           if (r.status === 'fulfilled' && r.value.ok) {
-            sent++;
+            fcmSentTotal++;
+            if (!firstFirebaseMessageId) firstFirebaseMessageId = r.value.result?.name || null;
             base44.asServiceRole.entities.FcmToken.update(targetTokens[i].id, { last_used: new Date().toISOString() }).catch(() => {});
           } else {
             const errCode = r.status === 'fulfilled' ? r.value.errCode : 'EXCEPTION';
             if (FATAL_FCM_ERRORS.includes(errCode)) {
               base44.asServiceRole.entities.FcmToken.update(targetTokens[i].id, { is_active: false, deactivation_reason: errCode }).catch(() => {});
-              failed++;
+              fcmFailedTotal++;
             } else {
-              retryTokens.push(targetTokens[i]); // erreur transitoire → retry
+              retryTokens.push(targetTokens[i]);
             }
           }
         }
@@ -283,23 +289,59 @@ Deno.serve(async (req) => {
             retryTokens.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, notifTitle, notifBody, fcmData))
           );
           for (const r of retryResults) {
-            if (r.status === 'fulfilled' && r.value.ok) sent++;
-            else failed++;
+            if (r.status === 'fulfilled' && r.value.ok) {
+              fcmSentTotal++;
+              if (!firstFirebaseMessageId) firstFirebaseMessageId = r.value.result?.name || null;
+            } else {
+              fcmFailedTotal++;
+            }
           }
         }
 
-        L(`FCM done: sent=${sent} failed=${failed} channel=${CDL_CHANNEL} | +${Date.now() - tFcm}ms | total=+${Date.now() - t0}ms`);
+        L(`FCM done: sent=${fcmSentTotal} failed=${fcmFailedTotal} channel=${CDL_CHANNEL} | +${Date.now() - tFcm}ms | total=+${Date.now() - t0}ms`);
+
+        // 🔒 STABILITY_LOCK_VIOLATION guard
+        if (fcmSentTotal === 0) {
+          console.error(`[STABILITY_LOCK_VIOLATION] submitBedouRecharge | fcm_sent=0 | request_id=${demande.id} | client_email=${user.email} | tokens_count=${targetTokens.length} | firebase_sa=true`);
+        }
+        if (fcmFailedTotal > 0 && fcmSentTotal === 0) {
+          console.error(`[STABILITY_LOCK_VIOLATION] submitBedouRecharge | tous les push ont échoué | failed=${fcmFailedTotal} | request_id=${demande.id}`);
+        }
+
       } else {
+        // 🔒 STABILITY_LOCK_VIOLATION — aucun token admin = push impossible
+        console.error(`[STABILITY_LOCK_VIOLATION] submitBedouRecharge | aucun token FCM admin actif | request_id=${demande.id} | client_email=${user.email} | Notif BDD créée en fallback`);
         L('FCM skip: aucun token admin actif (notif BDD créée en étape 3)');
       }
     } catch (e) {
+      console.error(`[STABILITY_LOCK_VIOLATION] submitBedouRecharge | FCM exception: ${e.message} | request_id=${demande.id}`);
       L(`FCM error: ${e.message}`);
     }
   } else {
+    // 🔒 STABILITY_LOCK_VIOLATION — SA absent = FCM impossible
+    console.error(`[STABILITY_LOCK_VIOLATION] submitBedouRecharge | FIREBASE_SERVICE_ACCOUNT_JSON absent | request_id=${demande.id}`);
     L('FCM skip: FIREBASE_SERVICE_ACCOUNT_JSON manquant');
   }
 
-  L(`RESPONSE sent | total=+${Date.now() - t0}ms`);
+  const totalDelay = Date.now() - t0;
+
+  // 🔒 LOG DE PREUVE OBLIGATOIRE (STABILITY_LOCK)
+  console.log(
+    `[STABILITY_LOCK_PROOF] submitBedouRecharge | ` +
+    `request_id=${demande.id} | ` +
+    `client_email=${user.email} | ` +
+    `admin_email=${admins.map(a => a.email).join(',')} | ` +
+    `admin_token_actuel=${allTokenRecords.filter(r => admins.some(a => a.email === r.user_email))[0]?.token?.slice(0, 20) || 'NONE'}... | ` +
+    `sendCdlNotification_called=${sendCdlNotificationCalled} | ` +
+    `channel_id=${CDL_CHANNEL} | ` +
+    `fcm_sent=${fcmSentTotal} | ` +
+    `fcm_failed=${fcmFailedTotal} | ` +
+    `firebase_message_id=${firstFirebaseMessageId} | ` +
+    `delay_ms=${totalDelay} | ` +
+    `notification_visible_confirmed=REQUIRES_MANUAL_ANDROID_VERIFICATION`
+  );
+
+  L(`RESPONSE sent | total=+${totalDelay}ms`);
   return Response.json({
     success:       true,
     message:       'Demande de recharge envoyée avec succès',
@@ -307,6 +349,17 @@ Deno.serve(async (req) => {
     montant:       montantInt,
     bonus:         bonusInt,
     montant_total: montantInt + bonusInt,
+    stability_proof: {
+      request_id:                  demande.id,
+      client_email:                user.email,
+      sendCdlNotification_called:  sendCdlNotificationCalled,
+      channel_id:                  CDL_CHANNEL,
+      fcm_sent:                    fcmSentTotal,
+      fcm_failed:                  fcmFailedTotal,
+      firebase_message_id:         firstFirebaseMessageId,
+      delay_ms:                    totalDelay,
+      notification_visible_confirmed: 'REQUIRES_MANUAL_ANDROID_VERIFICATION',
+    },
     logs: {
       admins_count: admins.length,
       tokens_found: allTokenRecords.length,

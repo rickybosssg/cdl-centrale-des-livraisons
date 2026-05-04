@@ -1,8 +1,36 @@
-# 🔒 CDL_STABLE_BEDOU_PUSH_V1 — VERROUILLAGE GLOBAL NOTIFICATIONS
+# 🔒 CDL_STABLE_BEDOU_PUSH_V2 — VERROUILLAGE RÉEL + GATE OBLIGATOIRE
 
-**Version :** CDL_STABLE_BEDOU_PUSH_V1  
+**Version :** CDL_STABLE_BEDOU_PUSH_V2  
 **Date freeze :** 2026-05-04  
-**Statut :** ✅ PRODUCTION STABLE — PRÊT POUR REBUILD APK  
+**Statut :** 🔒 FREEZE RÉEL — GATE OBLIGATOIRE AVANT TOUTE MODIFICATION  
+
+---
+
+## 🚨 RÈGLE ABSOLUE — VERROUILLAGE RÉEL (pas théorique)
+
+**Aucune correction n'est validée tant que :**
+1. `verifyBedouStabilityGate` → `passed: true` (tous critères)
+2. `testAllPushNotifications` → `all_passed: true` (5/5)
+3. Un **vrai client différent de l'admin** crée une vraie recharge Bedou
+4. L'admin reçoit **physiquement** le push sur Android (`notification_visible_confirmed = true`)
+
+**Ne jamais dire "corrigé" tant que `notification_visible_confirmed` n'est pas confirmé manuellement.**
+
+### Guards actifs dans le code
+- `[STABILITY_LOCK_VIOLATION]` loggé automatiquement si :
+  - `fcm_sent = 0` après push
+  - `fcm_failed > 0` et `fcm_sent = 0`
+  - Aucun token FCM admin actif en BDD
+  - `FIREBASE_SERVICE_ACCOUNT_JSON` absent
+- `[STABILITY_LOCK_PROOF]` loggé à chaque vraie recharge avec tous les champs de preuve
+
+### Champs de preuve obligatoires (loggés à chaque recharge réelle)
+```
+request_id | client_email | admin_email | admin_token_actuel
+sendCdlNotification_called=true | channel_id=cdl_critical_alerts_v2
+fcm_sent=N | fcm_failed=0 | firebase_message_id | delay_ms
+notification_visible_confirmed=REQUIRES_MANUAL_ANDROID_VERIFICATION
+```
 
 ---
 
@@ -60,9 +88,10 @@ Commande acceptée/livrée/annulée → notifyCommandeEvents    →  sendCdlNoti
 | Fichier | Statut | Canal |
 |---|---|---|
 | `functions/sendCdlNotification` | 🔒 SOURCE UNIQUE | `cdl_critical_alerts_v2` |
-| `functions/validateBedouRequest` | 🔒 VERROUILLÉ | via `sendCdlNotification` |
+| `functions/validateBedouRequest` | 🔒 VERROUILLÉ | via `sendCdlNotification` + `[STABILITY_LOCK_PROOF]` |
 | `functions/notifyBedouEvents` | 🔒 VERROUILLÉ | via `sendCdlNotification` |
-| `functions/submitBedouRecharge` | 🔒 VERROUILLÉ | FCM direct admins (synchrone) |
+| `functions/submitBedouRecharge` | 🔒 VERROUILLÉ | FCM direct admins + `[STABILITY_LOCK_PROOF]` + guards `[STABILITY_LOCK_VIOLATION]` |
+| `functions/verifyBedouStabilityGate` | 🔒 GATE OBLIGATOIRE | à lancer avant toute livraison |
 | `functions/notifyRetraitEvents` | 🔒 VERROUILLÉ | via `sendCdlNotification` |
 | `functions/notifyCourseEvents` | 🔒 VERROUILLÉ | via `sendCdlNotification` |
 | `functions/notifyNewCourse` | 🔒 VERROUILLÉ | via `sendCdlNotification` |
@@ -98,30 +127,56 @@ Commande acceptée/livrée/annulée → notifyCommandeEvents    →  sendCdlNoti
 
 ## 🧪 GATE DE NON-RÉGRESSION OBLIGATOIRE
 
-Avant toute future modification d'un module verrouillé, exécuter **OBLIGATOIREMENT** :
+Avant toute future modification d'un module verrouillé, exécuter **DANS CET ORDRE** :
 
-### Test global (5 en 1)
+### 1. Gate de stabilité principal (NOUVEAU — obligatoire)
+```
+Fonction : verifyBedouStabilityGate
+Payload  : {}
+Critère  : passed = true + tous les critères à true
+```
+
+### 2. Test global (5 en 1)
 ```
 Fonction : testAllPushNotifications
 Payload  : {}
+Critère  : all_passed = true (5/5)
 ```
 
-### Test Bedou dédié
+### 3. Test Bedou dédié
 ```
 Fonction : realBedouRechargeTest
 Payload  : {}
+Critère  : passed = true
+```
+
+### 4. Test réel sur appareil physique (OBLIGATOIRE — ne peut pas être automatisé)
+```
+- Un compte client DIFFÉRENT de l'admin crée une vraie recharge Bedou
+- L'admin reçoit le push sur Android (vérification visuelle)
+- notification_visible_confirmed = true (confirmé manuellement)
 ```
 
 **Critères de succès (TOUS requis) :**
 ```
-all_passed     = true
-fcm_sent       > 0     (pour chaque test)
-fcm_failed     = 0     (pour chaque test)
-delay_ms       < 5000  (pour chaque test)
-channel_id     = cdl_critical_alerts_v2
+verifyBedouStabilityGate.passed         = true
+verifyBedouStabilityGate.fcm_sent       ≥ 1
+verifyBedouStabilityGate.fcm_failed     = 0
+verifyBedouStabilityGate.channel_id     = cdl_critical_alerts_v2
+verifyBedouStabilityGate.firebase_message_id  présent
+testAllPushNotifications.all_passed     = true
+realBedouRechargeTest.passed            = true
+notification_visible_confirmed          = true (manuel)
 ```
 
 **Si UN critère échoue → rollback immédiat, NE PAS déployer l'APK.**
+
+### Logs à vérifier obligatoirement
+```
+[STABILITY_LOCK_PROOF]   → présent dans chaque vraie recharge
+[STABILITY_LOCK_VIOLATION] → absent = bon signe (présent = problème bloquant)
+[STABILITY_GATE_PROOF]   → présent dans verifyBedouStabilityGate
+```
 
 ---
 
@@ -140,17 +195,29 @@ Ces modules ne doivent PAS être modifiés pendant la stabilisation APK :
 
 ## 📋 CHECKLIST REBUILD APK PRODUCTION
 
+### Gates automatiques (dans l'ordre)
+- [ ] `verifyBedouStabilityGate` → `passed: true` + `firebase_message_id` présent
 - [ ] `testAllPushNotifications` → `all_passed: true` (5/5)
 - [ ] `realBedouRechargeTest` → `passed: true`
+- [ ] Logs `[STABILITY_LOCK_PROOF]` présents — aucun `[STABILITY_LOCK_VIOLATION]`
+
+### Infrastructure
 - [ ] Token admin FCM actif en BDD (`is_active: true`, `device_type: android_native`)
 - [ ] Canal `cdl_critical_alerts_v2` enregistré sur l'appareil test
 - [ ] `google-services.json` présent dans `android/app/`
 - [ ] `npx cap sync android` exécuté
 - [ ] Build Android Studio → APK signé
-- [ ] Test manuel : recharge → push admin reçu < 5s ✓
+
+### Test réel obligatoire (humain)
+- [ ] Compte client DIFFÉRENT de l'admin crée une vraie recharge
+- [ ] Log `[STABILITY_LOCK_PROOF]` confirmé avec `fcm_sent≥1` et `firebase_message_id`
+- [ ] Push reçu visiblement sur Android admin < 5s → `notification_visible_confirmed = true`
 - [ ] Test manuel : validation admin → push client reçu ✓
 - [ ] Test manuel : nouvelle course → push livreur reçu ✓
 - [ ] Test manuel : nouveau profil → push admin reçu ✓
+
+### Règle de livraison
+**Ne dire "corrigé" et ne livrer l'APK QUE SI les 4 gates + le test physique sont validés.**
 
 ---
 
