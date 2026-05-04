@@ -82,21 +82,20 @@ export default function GestionBedou() {
   };
 
   const handleValider = async (request, type) => {
-    console.log('[BEDOU_VALIDATE] clic_valider=true | request_id:', request?.id, '| type:', type, '| statut:', request?.statut);
-
-    // ANTI-DOUBLE-CLIC
-    if (request.statut !== "en_attente") {
-      toast.error("Cette demande a déjà été traitée.");
-      setDialogOpen(false);
-      return;
-    }
-
     const montant = request.montant || 0;
     const bonus = request.bonus || 0;
     const totalCredit = request.montant_total || (montant + bonus);
     const clientId = request.user_id || request.user_email;
 
-    console.log('[BEDOU_VALIDATE] validation_started=true | recharge_id:', request.id, '| client_id:', clientId, '| amount:', montant, '| bonus:', bonus, '| total_credit:', totalCredit);
+    console.log('[BEDOU_ADMIN_VALIDATE] click | request_id:', request?.id, '| type:', type, '| statut:', request?.statut);
+    console.log('[BEDOU_ADMIN_VALIDATE] client_user_id:', clientId, '| amount:', montant, '| bonus:', bonus, '| total_credit:', totalCredit);
+
+    // ANTI-DOUBLE-CLIC : vérifier le statut local ET re-vérifier en BDD
+    if (request.statut !== "en_attente") {
+      toast.error("Cette demande a déjà été traitée.");
+      setDialogOpen(false);
+      return;
+    }
 
     setProcessing(true);
 
@@ -108,26 +107,53 @@ export default function GestionBedou() {
       });
 
       const d = res?.data;
-      console.log('[BEDOU_VALIDATE] success=true | recharge_id:', d?.recharge_id, '| client_id:', d?.user_id, '| montant_credite:', d?.montant_credite, '| nouveau_solde:', d?.nouveau_solde, '| notification_client_sent:', d?.notification_client_sent, '| fcm_sent:', d?.fcm_sent, '| channel_id:', d?.channel_id);
 
+      // Cas : déjà traitée côté backend (409 transformé en 200 avec already_processed)
       if (d?.already_processed) {
+        console.log('[BEDOU_ADMIN_VALIDATE] already_processed=true | request_id:', request?.id);
         toast.warning("⚠️ Demande déjà traitée — aucun double crédit.");
+        setDialogOpen(false);
+        setComment("");
+        loadData();
+        return;
+      }
+
+      const montantCredite = d?.montant_credite || totalCredit;
+      const nouveauSolde = d?.nouveau_solde;
+      const ancienSolde = d?.ancien_solde;
+
+      console.log('[BEDOU_ADMIN_VALIDATE] success=true');
+      console.log('[BEDOU_ADMIN_VALIDATE] request_id:', d?.recharge_id);
+      console.log('[BEDOU_ADMIN_VALIDATE] old_balance:', ancienSolde, '| new_balance:', nouveauSolde);
+      console.log('[BEDOU_ADMIN_VALIDATE] transaction_created=true | montant_credite:', montantCredite);
+      console.log('[BEDOU_ADMIN_VALIDATE] request_status_updated=valide');
+      console.log('[BEDOU_ADMIN_VALIDATE] notification_client_sent:', d?.notification_client_sent, '| fcm_sent:', d?.fcm_sent, '| fcm_failed:', d?.fcm_failed);
+
+      const notifStatus = d?.notification_client_sent
+        ? `push ✅ (${d.fcm_sent}/${(d.fcm_sent || 0) + (d.fcm_failed || 0)})`
+        : '⚠️ token absent';
+
+      toast.success(`✅ Recharge validée — Client crédité de ${montantCredite.toLocaleString()} F CFA — ${notifStatus}`);
+      setDialogOpen(false);
+      setComment("");
+      loadData();
+    } catch (err) {
+      console.error('[BEDOU_ADMIN_VALIDATE] error=true | message:', err?.message, '| request_id:', request?.id);
+
+      // Gérer 409 already_processed retourné comme erreur Axios
+      if (err?.response?.status === 409 || err?.message?.includes('409') || err?.message?.includes('already')) {
+        toast.warning("⚠️ Demande déjà traitée.");
         setDialogOpen(false);
         loadData();
         return;
       }
 
-      const notifStatus = d?.notification_client_sent
-        ? `push ✅ (${d.fcm_sent}/${(d.fcm_sent || 0) + (d.fcm_failed || 0)})`
-        : '⚠️ token absent';
-      toast.success(
-        `✅ Crédité ${(d?.montant_credite || totalCredit)?.toLocaleString()} F CFA — Notif: ${notifStatus}`
-      );
-      setDialogOpen(false);
-      setComment("");
-      loadData();
-    } catch (err) {
-      console.error('[BEDOU_VALIDATE] error=true | message:', err?.message, '| request_id:', request?.id);
+      // Gérer 403 — l'admin doit se reconnecter
+      if (err?.response?.status === 403 || err?.message?.includes('403')) {
+        toast.error("❌ Session expirée ou droits insuffisants — reconnectez-vous en tant qu'admin.");
+        return;
+      }
+
       toast.error("❌ Erreur validation : " + (err?.message || "Erreur inconnue"));
     } finally {
       setProcessing(false);

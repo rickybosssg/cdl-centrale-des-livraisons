@@ -210,7 +210,12 @@ Deno.serve(async (req) => {
   // Auth admin obligatoire
   const user = await base44.auth.me();
   if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
-  if (user.role !== 'admin') return Response.json({ error: 'Admin requis' }, { status: 403 });
+
+  // Vérifier admin : soit via rôle base44 auth, soit via profil CDL (user_type/current_role)
+  const isAdmin = user.role === 'admin'
+    || user.user_type === 'admin'
+    || user.current_role === 'admin';
+  if (!isAdmin) return Response.json({ error: 'Admin requis' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
   const { request_id, type, action, motif_refus } = body;
