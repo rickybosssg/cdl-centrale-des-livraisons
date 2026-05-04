@@ -79,11 +79,13 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
               channel_id: CDL_CHANNEL,
               sound: 'default',
               visibility: 'PUBLIC',
-              notification_priority: 'PRIORITY_MAX',
+              notification_priority: 'PRIORITY_HIGH',
               default_sound: true,
               default_vibrate_timings: true,
               default_light_settings: true,
               notification_count: 1,
+              // CRITIQUE : tag unique évite que Android groupe/écrase les notifs
+              tag: `cdl_${data?.type || 'notif'}_${data?.entity_id || Date.now()}`,
             },
           },
           webpush: {
