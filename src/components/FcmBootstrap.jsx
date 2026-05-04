@@ -62,13 +62,14 @@ async function resolveEmail(propEmail) {
 }
 
 export default function FcmBootstrap({ userEmail }) {
-  const didRun = useRef(false);
+  const registeredEmail = useRef(null);
 
   useEffect(() => {
-    // Ne lancer qu'une fois ET seulement quand on a un email
-    if (didRun.current) return;
-    if (!userEmail) return; // attendre que l'email soit résolu
-    didRun.current = true;
+    // Attendre que l'email soit disponible
+    if (!userEmail) return;
+    // Ne relancer que si l'email a changé (connexion tardive ou changement de compte)
+    if (registeredEmail.current === userEmail) return;
+    registeredEmail.current = userEmail;
 
     const native = isNativePlatform();
     console.log('[FCM] Bootstrap | native:', native, '| email:', userEmail);
@@ -80,6 +81,13 @@ export default function FcmBootstrap({ userEmail }) {
         } else {
           await runWebFcm(userEmail);
         }
+        // Vérification post-enregistrement pour les admins : loguer si aucun token actif
+        try {
+          const isAdminUser = await checkIfAdminHasToken(userEmail);
+          if (isAdminUser === false) {
+            console.warn('[FCM] ⚠️ ADMIN SANS TOKEN — Aucun appareil admin connecté pour recevoir les notifications push');
+          }
+        } catch (_) {}
       } catch (err) {
         console.error('[FCM] Bootstrap error (non-fatal):', err?.message);
       }
@@ -89,6 +97,26 @@ export default function FcmBootstrap({ userEmail }) {
   }, [userEmail]); // relancer si email change (connexion tardive)
 
   return null;
+}
+
+// ─── Vérification token admin ─────────────────────────────────────────────────
+// Retourne true si admin avec token, false si admin sans token, null si pas admin
+async function checkIfAdminHasToken(email) {
+  try {
+    const res = await fetch(`${APP_BASE_URL}/functions/getFcmTokens`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    const tokens = data?.tokens || [];
+    const activeTokens = tokens.filter(t => t.is_active);
+    const hasToken = activeTokens.length > 0;
+    console.log(`[FCM] Admin token check | email=${email} | active_tokens=${activeTokens.length} | has_token=${hasToken}`);
+    return hasToken;
+  } catch (_) {
+    return null;
+  }
 }
 
 // ─── NATIVE FCM ───────────────────────────────────────────────────────────────

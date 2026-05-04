@@ -192,6 +192,9 @@ export default function FcmDiagnostic() {
 
     // Infos natives
     await loadNativeInfo();
+
+    // Auto-check statut token (pour tous les utilisateurs)
+    await checkAdminTokenStatus(me.email);
   };
 
   useEffect(() => {
@@ -409,6 +412,64 @@ export default function FcmDiagnostic() {
   };
 
   // ── Test interne (BDD seulement) ────────────────────────────────────────────
+  // ── Statut token admin ──────────────────────────────────────────────────────
+  const [adminTokenStatus, setAdminTokenStatus] = useState(null);
+  const [adminTokenLoading, setAdminTokenLoading] = useState(false);
+
+  const checkAdminTokenStatus = async (emailOverride) => {
+    const targetEmail = emailOverride || user?.email;
+    if (!targetEmail) return;
+    setAdminTokenLoading(true);
+    setAdminTokenStatus(null);
+    addLog('Vérification tokens admin FCM...');
+    try {
+      const tokenRes = await base44.functions.invoke('getFcmTokens', { user_email: targetEmail });
+      const tokens = tokenRes?.data?.tokens || [];
+      const activeTokens = tokens.filter(t => t.is_active);
+      const androidTokens = activeTokens.filter(t => t.device_type === 'android_native');
+      const latestToken = [...activeTokens].sort((a, b) =>
+        new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0)
+      )[0] || null;
+
+      // Détecter les doublons (même token value)
+      const tokenValues = tokens.map(t => t.token);
+      const uniqueTokenValues = new Set(tokenValues);
+      const hasDuplicates = tokenValues.length !== uniqueTokenValues.size;
+
+      const status = {
+        is_admin: user?.role === 'admin',
+        email: targetEmail,
+        tokens_total: tokens.length,
+        tokens_active: activeTokens.length,
+        tokens_android: androidTokens.length,
+        can_receive_push: activeTokens.length > 0,
+        has_duplicates: hasDuplicates,
+        duplicates_count: tokenValues.length - uniqueTokenValues.size,
+        latest_token_prefix: latestToken?.token?.slice(0, 30) || null,
+        latest_token_device: latestToken?.device_type || null,
+        latest_token_last_used: latestToken?.last_used || null,
+        latest_token_registered_at: latestToken?.registered_at || null,
+      };
+      setAdminTokenStatus(status);
+      addLog(`Tokens actifs: ${activeTokens.length} (android: ${androidTokens.length})${hasDuplicates ? ` — ⚠️ ${tokenValues.length - uniqueTokenValues.size} doublon(s)` : ''}`, activeTokens.length > 0 ? 'info' : 'error');
+    } catch (e) {
+      addLog('Erreur vérif tokens: ' + e.message, 'error');
+    } finally {
+      setAdminTokenLoading(false);
+    }
+  };
+
+  const forceRefreshAdminToken = async () => {
+    if (!isNative) {
+      toast.error('Force refresh uniquement sur APK natif Android');
+      return;
+    }
+    addLog('Force refresh token FCM admin...');
+    await registerNative();
+    // Après enregistrement, re-vérifier le statut
+    setTimeout(() => checkAdminTokenStatus(), 2000);
+  };
+
   const [sendingInternal, setSendingInternal] = useState(false);
   const [internalResult, setInternalResult] = useState(null);
 
@@ -532,6 +593,114 @@ export default function FcmDiagnostic() {
       <div className="bg-emerald-600 text-white text-center py-2 px-3 rounded-xl font-bold text-sm tracking-wide">
         🔒 FCM V9 LOCKED — cdl_critical_alerts_v2 — importance=5 heads-up garanti
       </div>
+
+      {/* ── Section Admin FCM Token Status ── */}
+      {user && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-amber-900 flex items-center justify-between">
+              <span>🔑 Statut Token Admin FCM</span>
+              <Button variant="ghost" size="sm" onClick={checkAdminTokenStatus} disabled={adminTokenLoading} className="text-amber-800 h-7 px-2">
+                {adminTokenLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-2">
+            {!adminTokenStatus && !adminTokenLoading && (
+              <Button onClick={checkAdminTokenStatus} variant="outline" className="w-full border-amber-400 text-amber-900 text-xs">
+                🔍 Vérifier statut token admin
+              </Button>
+            )}
+            {adminTokenLoading && (
+              <div className="flex items-center gap-2 text-xs text-amber-700">
+                <Loader2 className="h-3 w-3 animate-spin" /> Vérification en cours...
+              </div>
+            )}
+            {adminTokenStatus && (
+              <div className="space-y-2">
+                <div className={`flex items-center gap-2 p-2 rounded-lg text-xs font-bold ${adminTokenStatus.can_receive_push ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+                  {adminTokenStatus.can_receive_push
+                    ? <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    : <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                  }
+                  <span>{adminTokenStatus.can_receive_push ? '✅ Token admin actif — push possible' : '❌ Aucun token actif — push IMPOSSIBLE'}</span>
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between py-1 border-b border-amber-200">
+                    <span className="text-amber-800 font-medium">Admin connecté</span>
+                    <span className={`font-bold ${adminTokenStatus.is_admin ? 'text-green-700' : 'text-amber-700'}`}>
+                      {adminTokenStatus.is_admin ? '✅ Oui (rôle admin)' : `⚠️ Non (rôle: ${user?.role || '?'})`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-amber-200">
+                    <span className="text-amber-800 font-medium">Email lié</span>
+                    <span className="font-mono text-amber-900">{adminTokenStatus.email || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-amber-200">
+                    <span className="text-amber-800 font-medium">Token FCM actuel</span>
+                    <span className={`font-bold ${adminTokenStatus.tokens_active > 0 ? 'text-green-700' : 'text-red-600'}`}>
+                      {adminTokenStatus.tokens_active > 0 ? `✅ Oui (${adminTokenStatus.tokens_active} actif)` : '❌ Non'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-amber-200">
+                    <span className="text-amber-800 font-medium">Token en base</span>
+                    <span className={`font-bold ${adminTokenStatus.tokens_total > 0 ? 'text-green-700' : 'text-red-600'}`}>
+                      {adminTokenStatus.tokens_total > 0 ? `✅ Oui (${adminTokenStatus.tokens_total} total)` : '❌ Non'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-amber-200">
+                    <span className="text-amber-800 font-medium">Type appareil</span>
+                    <span className="font-bold text-amber-900">
+                      {adminTokenStatus.tokens_android > 0 ? `📱 Android (${adminTokenStatus.tokens_android})` : adminTokenStatus.tokens_active > 0 ? '🌐 Web' : '—'}
+                    </span>
+                  </div>
+                  {adminTokenStatus.latest_token_prefix && (
+                    <div className="py-1 border-b border-amber-200">
+                      <span className="text-amber-800 font-medium block">Token (prefix)</span>
+                      <span className="font-mono text-[10px] text-amber-900 break-all">{adminTokenStatus.latest_token_prefix}...</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between py-1 border-b border-amber-200">
+                    <span className="text-amber-800 font-medium">Dernière mise à jour</span>
+                    <span className="text-amber-900 text-[10px]">
+                      {adminTokenStatus.latest_token_last_used
+                        ? new Date(adminTokenStatus.latest_token_last_used).toLocaleString('fr-FR')
+                        : adminTokenStatus.latest_token_registered_at
+                          ? new Date(adminTokenStatus.latest_token_registered_at).toLocaleString('fr-FR')
+                          : '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {adminTokenStatus.has_duplicates && (
+                  <div className="p-2 rounded bg-amber-100 border border-amber-300 text-xs text-amber-800">
+                    ⚠️ {adminTokenStatus.duplicates_count} doublon(s) de token détecté(s) en BDD.
+                    Utilisez "Forcer refresh" pour nettoyer.
+                  </div>
+                )}
+
+                {!adminTokenStatus.can_receive_push && (
+                  <div className="p-2 rounded bg-red-100 border border-red-300 text-xs text-red-800 font-semibold">
+                    ⚠️ Aucun appareil admin connecté pour recevoir les notifications.<br />
+                    Les push admin (nouvelles recharges, courses, profils) ne seront PAS reçus.
+                  </div>
+                )}
+
+                <Button
+                  onClick={forceRefreshAdminToken}
+                  disabled={registering}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs"
+                >
+                  {registering
+                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Enregistrement...</>
+                    : '🔄 Forcer refresh token admin'}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Panneau de statut verrouillé */}
       <FcmStatusPanel

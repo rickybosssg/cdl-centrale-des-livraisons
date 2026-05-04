@@ -50,7 +50,15 @@ Deno.serve(async (req) => {
     const existing = await base44.asServiceRole.entities.FcmToken.filter({ token: cleanToken });
 
     if (existing.length > 0) {
+      // Garder uniquement le premier enregistrement, supprimer les doublons exacts
       const record = existing[0];
+      if (existing.length > 1) {
+        console.warn(`[saveFcmTokenPublic] ${existing.length - 1} doublon(s) du même token détecté(s) — nettoyage`);
+        for (let i = 1; i < existing.length; i++) {
+          await base44.asServiceRole.entities.FcmToken.update(existing[i].id, { is_active: false }).catch(() => {});
+        }
+      }
+
       // Token connu → réactiver immédiatement (jamais recréer)
       await base44.asServiceRole.entities.FcmToken.update(record.id, {
         user_email: cleanEmail,
@@ -60,7 +68,7 @@ Deno.serve(async (req) => {
       });
       console.log('[saveFcmTokenPublic] ✅ UPSERT (update) token existant pour', cleanEmail, '— id:', record.id);
 
-      // Désactiver les AUTRES tokens du même user/device
+      // Désactiver les AUTRES tokens du même user/device (tokens différents)
       try {
         const others = await base44.asServiceRole.entities.FcmToken.filter({
           user_email: cleanEmail,
