@@ -208,23 +208,26 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     }
   };
 
-  // ── RENDU — overlay modal natif (pas Dialog shadcn) ───────────────────────
+  // ── RENDU — overlay modal natif centré (pas Dialog shadcn) ─────────────────
   // Style inline forcé pour APK natif Capacitor où fixed peut être affecté par le scroll WebView
+  // 🔒 Centrage global avec overflow désactivé
   return (
     <div
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 9999,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 99999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         background: 'rgba(0,0,0,0.6)',
         padding: '16px',
+        overflowY: 'auto',
       }}
+      onScroll={(e) => e.preventDefault()}
     >
       {/* Backdrop — fermer si pas en processing */}
       {!processing && (
@@ -246,6 +249,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
           maxHeight: '90vh',
           overflowY: 'auto',
           zIndex: 10,
+          flexShrink: 0,
         }}
         onClick={e => e.stopPropagation()}
       >

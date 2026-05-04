@@ -49,24 +49,27 @@ Deno.serve(async (req) => {
   console.log(`[BEDOU_VALIDATE_AUTH] token_received=true | user_email=${user.email} | role=${user.role} | user_type=${user.user_type || 'N/A'} | current_role=${user.current_role || 'N/A'} | role_actuel=${user.role_actuel || 'N/A'}`);
 
   // Vérifier admin : tous les champs possibles (base44 auth + CDL profile fields)
-  const isAdminByRole = user.role === 'admin';
-  const isAdminByUserType = user.user_type === 'admin';
-  const isAdminByCurrentRole = user.current_role === 'admin' || user.role_actuel === 'admin';
+   const isAdminByRole = user.role === 'admin';
+   const isAdminByUserType = user.user_type === 'admin';
+   const isAdminByCurrentRole = user.current_role === 'admin' || user.role_actuel === 'admin';
 
-  // Vérification supplémentaire via StaffPermission en BDD
-  let isAdminByStaff = false;
-  try {
-    const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
-    isAdminByStaff = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
-  } catch(_) {}
+   // Vérification supplémentaire via StaffPermission en BDD
+   let isAdminByStaff = false;
+   try {
+     const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
+     isAdminByStaff = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
+   } catch(_) {}
 
-  const isAdmin = isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByStaff;
-  console.log(`[BEDOU_VALIDATE_AUTH] is_admin=${isAdmin} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byStaff=${isAdminByStaff}`);
+   // 🔓 DÉBLOCAGE : accepter email spécifique en tant qu'admin
+   const isAdminByEmail = user.email === 'weezyh2@gmail.com';
 
-  if (!isAdmin) {
-    L(`AUTH REFUSÉ — user=${user.email} role=${user.role} user_type=${user.user_type} current_role=${user.current_role}`);
-    return Response.json({ error: 'Admin requis', user_role: user.role, user_type: user.user_type, current_role: user.current_role, is_admin: false }, { status: 403 });
-  }
+   const isAdmin = isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByStaff || isAdminByEmail;
+   console.log(`[ADMIN_ACCESS_CHECK] email=${user.email} | role=${user.role} | user_type=${user.user_type} | role_actuel=${user.role_actuel || user.current_role || 'N/A'} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byStaff=${isAdminByStaff} | byEmail=${isAdminByEmail} | isAllowed=${isAdmin}`);
+
+   if (!isAdmin) {
+     L(`AUTH REFUSÉ — user=${user.email} role=${user.role} user_type=${user.user_type} current_role=${user.current_role}`);
+     return Response.json({ error: 'Admin requis', user_role: user.role, user_type: user.user_type, current_role: user.current_role, is_admin: false }, { status: 403 });
+   }
 
   const body = await req.json().catch(() => ({}));
   const { request_id, type, action, motif_refus } = body;
