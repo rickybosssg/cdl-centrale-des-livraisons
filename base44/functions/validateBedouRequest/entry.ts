@@ -83,11 +83,25 @@ Deno.serve(async (req) => {
   console.log(`[BEDOU_AUDIT] timestamp=${auditTs} | action=${action} | type=${type} | request_id=${request_id} | admin_id=${user.id || user.email} | admin_email=${user.email} | client_id=${demande.user_id || demande.user_email} | client_email=${demande.user_email} | montant=${demande.montant} | bonus=${demande.bonus || 0} | montant_total=${demande.montant_total || demande.montant} | methode=${demande.methode_paiement || 'N/A'}`);
 
   // Helper : envoyer via sendCdlNotification (source unique — BDD + FCM)
+  // On passe le header Authorization de la requête admin originale pour propager le contexte.
+  // createClientFromRequest dans sendCdlNotification recevra ainsi un token valide.
+  const APP_ID = Deno.env.get('BASE44_APP_ID') || '69c3c74fc4b62396dca61751';
+  const CDL_NOTIF_URL = `https://cdl.base44.app/api/apps/${APP_ID}/functions/sendCdlNotification`;
+  const originalAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
   const notify = async (payload) => {
-    L(`→ sendCdlNotification | to=${payload.user_email || payload.role} | type=${payload.data?.type}`);
-    return base44.asServiceRole.functions.invoke('sendCdlNotification', payload).catch(e =>
-      L(`sendCdlNotification non-bloquant: ${e.message}`)
-    );
+    L(`→ sendCdlNotification (forwarded auth) | to=${payload.user_email || payload.role} | type=${payload.data?.type}`);
+    const res = await fetch(CDL_NOTIF_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(originalAuth ? { 'Authorization': originalAuth } : {}),
+      },
+      body: JSON.stringify(payload),
+    }).catch(e => { L(`fetch sendCdlNotification error: ${e.message}`); return null; });
+    if (!res) return { data: {} };
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) L(`sendCdlNotification HTTP ${res.status} — non-bloquant`);
+    return { data: d };
   };
 
   // ── REFUS ─────────────────────────────────────────────────────────────────
