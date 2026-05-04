@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
         role: 'admin',
         title: '📢 Nouvelle publicité soumise',
         body: `${pub.nom_annonceur || annonceurEmail} a soumis une pub : "${pub.titre}"`,
-        data: { type: 'new_ad_submitted', entity_id: pubId, role: 'admin', notif_route: '/gerer-publicites' },
+        data: { type: 'new_ad_submitted', entity_id: pubId, entity_type: 'Publicite', target_role: 'admin', deep_link: '/gerer-publicites', notif_route: '/gerer-publicites' },
       });
     }
 
@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
           user_email: annonceurEmail,
           title: '✅ Publicité validée !',
           body: `Votre publicité "${pub.titre}" est maintenant en ligne.`,
-          data: { type: 'ad_validated', entity_id: pubId, role: 'annonceur', notif_route: '/mes-publicites-annonceur' },
+          data: { type: 'ad_validated', entity_id: pubId, entity_type: 'Publicite', target_role: 'annonceur', deep_link: '/mes-publicites-annonceur', notif_route: '/mes-publicites-annonceur' },
         });
       }
 
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
           user_email: annonceurEmail,
           title: '⚠️ Publicité suspendue',
           body: `Votre publicité "${pub.titre}" a été suspendue. Contactez l'équipe CDL.`,
-          data: { type: 'ad_suspended', entity_id: pubId, role: 'annonceur', notif_route: '/mes-publicites-annonceur' },
+          data: { type: 'ad_suspended', entity_id: pubId, entity_type: 'Publicite', target_role: 'annonceur', deep_link: '/mes-publicites-annonceur', notif_route: '/mes-publicites-annonceur' },
         });
       }
 
@@ -62,17 +62,16 @@ Deno.serve(async (req) => {
           user_email: annonceurEmail,
           title: '📢 Publicité désactivée',
           body: `Votre publicité "${pub.titre}" a été désactivée.`,
-          data: { type: 'ad_deactivated', entity_id: pubId, role: 'annonceur', notif_route: '/mes-publicites-annonceur' },
+          data: { type: 'ad_deactivated', entity_id: pubId, entity_type: 'Publicite', target_role: 'annonceur', deep_link: '/mes-publicites-annonceur', notif_route: '/mes-publicites-annonceur' },
         });
       }
 
-      // Publicité refusée (deleted=true ET jamais active) → annonceur
       if (pub.deleted === true && old_data?.deleted !== true && !pub.active && annonceurEmail) {
         await notify({
           user_email: annonceurEmail,
           title: '❌ Publicité refusée',
           body: `Votre publicité "${pub.titre}" a été refusée. Contactez l'équipe CDL pour plus d'informations.`,
-          data: { type: 'ad_refused', entity_id: pubId, role: 'annonceur', notif_route: '/mes-publicites-annonceur' },
+          data: { type: 'ad_refused', entity_id: pubId, entity_type: 'Publicite', target_role: 'annonceur', deep_link: '/mes-publicites-annonceur', notif_route: '/mes-publicites-annonceur' },
         });
       }
     }

@@ -53,10 +53,37 @@ REAL_ADMIN_ALERT_PUSH_TEST     ✅  sent=1  failed=0  delay=433ms
 
 ---
 
-## 🏗️ ARCHITECTURE NOTIFICATIONS — SOURCE UNIQUE
+## 🏗️ ARCHITECTURE NOTIFICATIONS — SOURCE UNIQUE v4.0
 
 **Règle absolue :** 100% des push CDL passent par `sendCdlNotification`.  
 Aucune logique FCM directe n'est autorisée dans les fonctions métier.
+
+### Champs obligatoires dans chaque payload `data` (v4.0)
+```json
+{
+  "type": "event_type_snake_case",
+  "entity_id": "id_de_l_entite",
+  "entity_type": "NomEntite",
+  "target_role": "admin|client|livreur|partenaire|commercial|annonceur",
+  "deep_link": "/route-cible",
+  "notif_route": "/route-cible"
+}
+```
+
+### Log obligatoire [CDL_PUSH_SENT] (émis automatiquement par sendCdlNotification)
+```
+[CDL_PUSH_SENT] event_type | entity_type | entity_id | recipient_email
+                token_used | channel_id | fcm_sent | fcm_failed | firebase_message_id
+```
+
+### Anti-doublon actif (60s)
+Clé : `recipient_email + event_type + entity_id + title`
+→ Aucun doublon push possible dans une fenêtre de 60 secondes.
+
+### FCM_TOKEN_LOCK actif
+→ 1 seul token par `user_email`, le plus récent sélectionné automatiquement.
+→ Tokens UNREGISTERED supprimés automatiquement.
+→ Doublons nettoyés avant chaque envoi.
 
 ```
 Événement                         Fonction source              Via

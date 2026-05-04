@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
           user_email: course.client_email,
           title: '✅ Course créée !',
           body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${course.prix || 0} F. Recherche d'un livreur en cours...`,
-          data: { type: 'course_created', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
+          data: { type: 'course_created', entity_id: courseId, entity_type: 'Course', target_role: 'client', deep_link: `/course/${courseId}/track`, notif_route: `/course/${courseId}/track` },
         }));
       }
 
@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
         role: 'admin',
         title: '🛵 Nouvelle course',
         body: `${course.client_name || course.client_email || '?'} : ${course.quartier_depart} → ${course.quartier_arrivee} (${course.prix || 0} F)`,
-        data: { type: 'new_course', entity_id: courseId, entity_type: 'Course', notif_route: '/gerer-courses' },
+        data: { type: 'new_course', entity_id: courseId, entity_type: 'Course', target_role: 'admin', deep_link: '/gerer-courses', notif_route: '/gerer-courses' },
       }));
 
       await Promise.allSettled(tasks);
@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
         title: `${emoji} Nouvelle course${urgence !== 'normal' ? ' URGENTE' : ''} !`,
         body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${course.prix || 0} F. Répondez en 60s !`,
         urgence,
-        data: { type: 'course_assigned', entity_id: courseId, entity_type: 'Course', notif_route: `/course-livreur/${courseId}` },
+        data: { type: 'course_assigned', entity_id: courseId, entity_type: 'Course', target_role: 'livreur', deep_link: `/course-livreur/${courseId}`, notif_route: `/course-livreur/${courseId}` },
       }));
     }
 
