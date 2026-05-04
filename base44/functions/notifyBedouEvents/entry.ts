@@ -62,45 +62,12 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true });
     }
 
-    // Changement de statut
+    // Changement de statut valide/refuse :
+    // ⚠️ NE PAS renvoyer ici — validateBedouRequest appelle déjà sendCdlNotification directement.
+    // Réactiver uniquement si validateBedouRequest ne gère plus ces cas.
     if (event?.type === 'update' && statut !== oldStatut) {
-
-      // Validée → utilisateur
-      if (statut === 'valide') {
-        const bonus = demande.bonus || 0;
-        const total = demande.montant_total || montant;
-        await notify({
-          user_email: demande.user_email,
-          title: '✅ Recharge Bedou validée !',
-          body: bonus > 0
-            ? `${montant.toLocaleString()} F + ${bonus.toLocaleString()} F bonus = ${total.toLocaleString()} F crédités sur votre Bedou !`
-            : `Votre recharge de ${montant.toLocaleString()} F CFA a été créditée sur votre Bedou.`,
-          data: {
-            type: 'bedou_recharge_approved',
-            entity_id: demandeId,
-            entity_type: 'DemandeRecharge',
-            amount: String(total),
-            notif_route: '/mon-bedou',
-          },
-        });
-      }
-
-      // Refusée → utilisateur
-      if (statut === 'refuse') {
-        await notify({
-          user_email: demande.user_email,
-          title: '❌ Recharge Bedou refusée',
-          body: demande.motif_refus
-            ? `Motif : ${demande.motif_refus}`
-            : `Votre demande de recharge de ${montant.toLocaleString()} F CFA a été refusée. Contactez le support.`,
-          data: {
-            type: 'bedou_recharge_rejected',
-            entity_id: demandeId,
-            entity_type: 'DemandeRecharge',
-            amount: String(montant),
-            notif_route: '/mon-bedou',
-          },
-        });
+      if (statut === 'valide' || statut === 'refuse') {
+        console.log(`[notifyBedouEvents] skip statut=${statut} — géré par validateBedouRequest (évite doublon)`);
       }
     }
 
