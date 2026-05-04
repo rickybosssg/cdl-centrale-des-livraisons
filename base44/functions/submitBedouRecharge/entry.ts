@@ -77,7 +77,7 @@ async function sendFcmToToken(accessToken, projectId, token, title, body, dataPa
           priority: 'HIGH',
           ttl: '86400s',
           notification: {
-            channel_id: 'default',
+            channel_id: 'cdl_critical_alerts_v2',
             sound: 'default',
             notification_priority: 'PRIORITY_MAX',
             visibility: 'PUBLIC',
