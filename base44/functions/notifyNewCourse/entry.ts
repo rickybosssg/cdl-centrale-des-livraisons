@@ -1,211 +1,82 @@
 /**
- * notifyNewCourse — Automation entity Course (create)
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║  notifyNewCourse — VERROUILLÉ v2.0                          ║
+ * ║  NOTIFICATIONS_SYSTEM_LOCKED = true                         ║
+ * ║  ✅ 100% via sendCdlNotification (source unique)            ║
+ * ║  ❌ NE PAS remettre de FCM direct ici                       ║
+ * ║  ❌ NE PAS changer le channel_id (géré par sendCdlNotif)    ║
+ * ║  ✅ Toujours retourner { ok: true }                         ║
+ * ╚══════════════════════════════════════════════════════════════╝
  *
- * RÔLE : Notifier le client que sa demande est reçue + notifier les admins.
- * 
- * ⚠️ Ce handler NE notifie PAS les livreurs directement.
- * La notification au livreur ciblé est gérée par autoDispatch (dispatch ciblé).
- * 
- * Aligné sur l'architecture multi-profils CDL :
- *   - driver_online + current_role + profil_valide (jamais disponible/user_type)
+ * notifyNewCourse — Automation entity Course (create)
+ * - Notifie le client : confirmation de réception
+ * - Notifie les admins : nouvelle course à dispatcher
+ *
+ * NE notifie PAS les livreurs directement.
+ * La notification livreur est gérée par autoDispatch.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const PROJECT_ID = "cdl-app-4743c";
-const FCM_URL = `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`;
-
-async function getAccessToken(serviceAccount) {
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    iss: serviceAccount.client_email,
-    sub: serviceAccount.client_email,
-    aud: "https://oauth2.googleapis.com/token",
-    iat: now,
-    exp: now + 3600,
-    scope: "https://www.googleapis.com/auth/firebase.messaging",
-  };
-  const header = { alg: "RS256", typ: "JWT" };
-  const enc = (obj) => btoa(JSON.stringify(obj)).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
-  const signingInput = `${enc(header)}.${enc(payload)}`;
-  const pemContents = serviceAccount.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g,"");
-  const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey("pkcs8", binaryKey, { name:"RSASSA-PKCS1-v1_5", hash:"SHA-256" }, false, ["sign"]);
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, new TextEncoder().encode(signingInput));
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
-  const jwt = `${signingInput}.${sigB64}`;
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  });
-  const tokenData = await tokenRes.json();
-  if (!tokenData.access_token) throw new Error("Token OAuth manquant");
-  return tokenData.access_token;
-}
-
-async function sendFcmPush(accessToken, fcmToken, title, body, route, isHigh = false) {
-  const tag = `cdl-new-course-${route}`;
-  const res = await fetch(FCM_URL, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: {
-        token: fcmToken,
-        // OBLIGATOIRE pour affichage Android app fermée
-        notification: { title, body },
-        data: { route, notif_route: route },
-        android: {
-          priority: 'HIGH',
-          ttl: '86400s',
-          notification: {
-            channel_id: 'default',
-            color: '#1a73e8',
-            sound: 'default',
-            vibrate_timings_millis: isHigh ? [0, 300, 100, 300, 100, 300] : [0, 200, 100, 200],
-            notification_priority: isHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
-            visibility: 'PUBLIC',
-            tag,
-          },
-        },
-        webpush: {
-          headers: { Urgency: isHigh ? 'high' : 'normal' },
-          notification: {
-            icon: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-            badge: "https://media.base44.com/images/public/69c3c74fc4b62396dca61751/a4649c33e_CDLLOGOOFFICIEL.jpeg",
-            vibrate: isHigh ? [300, 100, 300, 100, 300] : [200, 100, 200],
-            requireInteraction: isHigh,
-            renotify: true,
-            tag,
-          },
-          fcm_options: { link: route },
-        },
-        apns: {
-          headers: { 'apns-priority': isHigh ? '10' : '5' },
-          payload: { aps: { sound: 'default', badge: 1, 'content-available': 1 } },
-        },
-      },
-    }),
-  });
-  const result = await res.json();
-  const invalidToken = !res.ok && (result?.error?.code === 404 || result?.error?.details?.[0]?.errorCode === 'UNREGISTERED');
-  return { ok: res.ok, invalidToken };
-}
-
-// Déduplication : retourne true si déjà envoyé dans les 30 dernières secondes
-async function isDuplicate(base44, email, notifKey) {
-  const since30s = new Date(Date.now() - 30000).toISOString();
-  const existing = await base44.asServiceRole.entities.Notification.filter({
-    destinataire_email: email,
-    notification_key: notifKey,
-  }).catch(() => []);
-  if (!existing || existing.length === 0) return false;
-  return existing.some(n => n.created_date && n.created_date > since30s);
-}
-
-async function notifyAndPush(base44, accessToken, { email, role, titre, message, type, route, courseId, isHigh = false }) {
-  const notifKey = `${email}__${type}__${courseId || 'none'}__${titre.slice(0, 20)}`;
-
-  // Guard déduplication 30s
-  const alreadySent = await isDuplicate(base44, email, notifKey);
-  if (alreadySent) {
-    console.log(`[notifyNewCourse] SKIP duplicate: ${notifKey}`);
-    return;
-  }
-
-  // 1. Notification DB (in-app fallback)
-  await base44.asServiceRole.entities.Notification.create({
-    destinataire_email: email,
-    destinataire_role: role,
-    titre,
-    message,
-    type,
-    lue: false,
-    notification_key: notifKey,
-    ...(courseId ? { course_id: courseId, target_entity_id: courseId, target_entity_type: 'course' } : {}),
-    ...(route ? { target_screen: route } : {}),
-  }).catch(() => {});
-
-  // 2. FCM push
-  if (!accessToken) return;
-  const tokenRecords = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true });
-  // Dédupliquer les tokens
-  const seenTokens = new Set();
-  const uniqueTokenRecords = tokenRecords.filter(r => {
-    if (!r.token || seenTokens.has(r.token)) return false;
-    seenTokens.add(r.token);
-    return true;
-  });
-  if (uniqueTokenRecords.length === 0) return;
-
-  const results = await Promise.allSettled(
-    uniqueTokenRecords.map(r => sendFcmPush(accessToken, r.token, titre, message, route, isHigh))
-  );
-
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i];
-    if (r.status === 'fulfilled' && r.value?.invalidToken && uniqueTokenRecords[i]?.id) {
-      await base44.asServiceRole.entities.FcmToken.delete(uniqueTokenRecords[i].id).catch(() => {});
-    }
-  }
-}
-
 Deno.serve(async (req) => {
+  const t0 = Date.now();
   try {
     const base44 = createClientFromRequest(req);
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const course = body.data;
 
-    if (!course) return Response.json({ skipped: true, reason: 'no_data' });
+    if (!course) return Response.json({ ok: true, skipped: 'no_data' });
+
     // Ne traiter que les nouvelles courses en attente
     if (!['en_attente', 'en_attente_dispatch'].includes(course.statut)) {
-      return Response.json({ skipped: true, reason: 'not_en_attente' });
+      return Response.json({ ok: true, skipped: 'not_en_attente' });
     }
 
-    let accessToken = null;
-    const rawJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON") || '';
-    if (rawJson) {
-      const serviceAccount = JSON.parse(rawJson);
-      accessToken = await getAccessToken(serviceAccount).catch(() => null);
-    }
+    console.log(`[notifyNewCourse] START | course=${course.id} | ${course.quartier_depart} → ${course.quartier_arrivee} | prix=${course.prix}`);
+    console.log(`[NOTIF_SOURCE] notifyNewCourse | event=course_created | course_id=${course.id}`);
 
-    const courseRoute = `/course/${course.id}`;
+    const notify = (payload) => {
+      console.log(`[notifyNewCourse] → sendCdlNotification | to=${payload.user_email || payload.role} | type=${payload.data?.type}`);
+      return base44.asServiceRole.functions.invoke('sendCdlNotification', payload).catch(e =>
+        console.warn('[notifyNewCourse] notify non-fatal:', e.message)
+      );
+    };
+
     const tasks = [];
 
-    // ── 1. Notifier le CLIENT : confirmation de réception ────────────────────
+    // ── 1. Client : confirmation de réception ────────────────────────────────
     if (course.client_email) {
-      tasks.push(notifyAndPush(base44, accessToken, {
-        email: course.client_email,
-        role: 'client',
-        titre: '📦 Demande reçue !',
-        message: `Votre demande a été envoyée. Recherche d'un livreur en cours pour ${course.quartier_depart} → ${course.quartier_arrivee}.`,
-        type: 'info',
-        route: courseRoute,
-        courseId: course.id,
-        isHigh: false,
+      tasks.push(notify({
+        user_email: course.client_email,
+        title: '📦 Demande reçue !',
+        body: `Votre demande a été envoyée. Recherche d'un livreur en cours pour ${course.quartier_depart} → ${course.quartier_arrivee}.`,
+        data: {
+          type: 'course_created',
+          entity_id: course.id,
+          entity_type: 'Course',
+          notif_route: `/course/${course.id}/track`,
+        },
       }));
     }
 
-    // ── 2. Notifier les ADMINS : nouvelle course à dispatcher ────────────────
-    const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' }).catch(() => []);
-    for (const admin of admins.slice(0, 3)) {
-      tasks.push(notifyAndPush(base44, accessToken, {
-        email: admin.email,
-        role: 'admin',
-        titre: '📋 Nouvelle course en attente',
-        message: `${course.quartier_depart} → ${course.quartier_arrivee} · ${course.type_colis} · ${course.prix} FCFA`,
-        type: 'info',
-        route: '/dispatch-monitor',
-        courseId: course.id,
-        isHigh: false,
-      }));
-    }
+    // ── 2. Admins : nouvelle course à dispatcher ─────────────────────────────
+    tasks.push(notify({
+      role: 'admin',
+      title: '📋 Nouvelle course en attente',
+      body: `${course.quartier_depart} → ${course.quartier_arrivee} · ${course.type_colis || '?'} · ${course.prix || 0} F`,
+      data: {
+        type: 'new_course',
+        entity_id: course.id,
+        entity_type: 'Course',
+        notif_route: '/dispatch-monitor',
+      },
+    }));
 
     await Promise.allSettled(tasks);
-    console.log(`[notifyNewCourse] Course ${course.id} — client + ${admins.length} admins notifiés`);
-    return Response.json({ success: true, sent: tasks.length });
+    console.log(`[notifyNewCourse] DONE | tasks=${tasks.length} | +${Date.now() - t0}ms`);
+    return Response.json({ ok: true, sent: tasks.length });
 
-  } catch (error) {
-    console.error('[notifyNewCourse] ERROR:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+  } catch (err) {
+    console.error(`[notifyNewCourse] 🔴 ERREUR CRITIQUE | ${err.message} | +${Date.now() - t0}ms`);
+    return Response.json({ ok: true });
   }
 });
