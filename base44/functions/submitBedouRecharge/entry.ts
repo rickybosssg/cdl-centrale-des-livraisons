@@ -3,7 +3,10 @@
  * 1. Créer recharge BDD
  * 2. Notifications internes admin (SYNCHRONE — avant réponse HTTP)
  * 3. FCM push admin (SYNCHRONE — avant réponse HTTP)
- * Tout s'exécute en < 3 secondes avant de répondre au client.
+ *
+ * 🔒 FCM VERROUILLÉ : channel_id=cdl_critical_alerts_v2, priority=HIGH, retry 1x
+ * 🔒 NOTIF_SOURCE: submitBedouRecharge — log obligatoire
+ * ❌ NE PAS modifier le channel_id, le priority, ni le fallback tokens
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
@@ -57,15 +60,19 @@ async function getOAuthToken(sa) {
   return data.access_token;
 }
 
+const CDL_CHANNEL = 'cdl_critical_alerts_v2'; // 🔒 VERROUILLÉ
+const FATAL_FCM_ERRORS = ['UNREGISTERED', 'INVALID_ARGUMENT'];
+
 async function sendFcmToToken(accessToken, projectId, token, title, body, dataPayload) {
-  const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
-
+  const sentAt = new Date().toISOString();
   const strData = {};
-  for (const [k, v] of Object.entries(dataPayload)) strData[k] = String(v);
+  for (const [k, v] of Object.entries(dataPayload)) strData[k] = v == null ? '' : String(v);
   strData.title = title;
-  strData.body  = body;
+  strData.body = body;
+  strData.notification_sent_at = sentAt;
+  if (!strData.screen && strData.notif_route) strData.screen = strData.notif_route;
 
-  const res = await fetch(url, {
+  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -77,7 +84,7 @@ async function sendFcmToToken(accessToken, projectId, token, title, body, dataPa
           priority: 'HIGH',
           ttl: '86400s',
           notification: {
-            channel_id: 'cdl_critical_alerts_v2',
+            channel_id: CDL_CHANNEL, // 🔒 VERROUILLÉ
             sound: 'default',
             notification_priority: 'PRIORITY_MAX',
             visibility: 'PUBLIC',
@@ -91,8 +98,9 @@ async function sendFcmToToken(accessToken, projectId, token, title, body, dataPa
   });
 
   const result = await res.json().catch(() => ({}));
-  L(`FCM token=${token.slice(0, 20)}... status=${res.status} ok=${res.ok} msgId=${result?.name || result?.error?.status || 'N/A'}`);
-  return { ok: res.ok, status: res.status, result, token, id: null };
+  const errCode = !res.ok ? (result?.error?.details?.[0]?.errorCode || result?.error?.status || 'FCM_ERROR') : null;
+  L(`FCM token=${token.slice(0, 20)}... status=${res.status} ok=${res.ok} msgId=${result?.name || errCode || 'N/A'} channel=${CDL_CHANNEL}`);
+  return { ok: res.ok, result, token, errCode };
 }
 
 // ── Handler principal ────────────────────────────────────────────────────────
@@ -218,54 +226,71 @@ Deno.serve(async (req) => {
     L(`notif interne error: ${e.message}`);
   }
 
-  // ── ÉTAPE 4 : FCM Push (SYNCHRONE) ──────────────────────────────────────
+  // ── ÉTAPE 4 : FCM Push admin (SYNCHRONE) — canal verrouillé + retry 1x ──
+  // [NOTIF_SOURCE] submitBedouRecharge
+  console.log(`[NOTIF_SOURCE] submitBedouRecharge | event=bedou_recharge_request | admin=${admins.map(a=>a.email).join(',')} | +${Date.now()-t0}ms`);
+
   if (rawJson) {
     try {
       const sa = JSON.parse(rawJson);
       const adminEmails = admins.map(a => a.email.toLowerCase());
 
-      // Tokens des admins connus
-      let targetTokens = allTokenRecords.filter(r => adminEmails.includes((r.user_email || '').toLowerCase()) && r.token);
+      // Tokens des admins uniquement — pas de fallback tous-tokens (risque notifier clients)
+      const targetTokens = allTokenRecords.filter(r =>
+        adminEmails.includes((r.user_email || '').toLowerCase()) && r.token
+      );
 
-      // FALLBACK : si aucun token admin trouvé, envoyer à TOUS les tokens actifs
-      // (utile quand l'admin ne s'est pas encore connecté sur l'APK)
-      if (targetTokens.length === 0 && allTokenRecords.length > 0) {
-        L(`FALLBACK: aucun token admin — envoi à tous les ${allTokenRecords.length} tokens actifs`);
-        targetTokens = allTokenRecords.filter(r => r.token);
-      }
-
-      L(`FCM cibles: ${targetTokens.length} token(s) | emails: ${[...new Set(targetTokens.map(r => r.user_email))].join(', ')}`);
+      L(`FCM cibles: ${targetTokens.length} token(s) admin | emails: ${[...new Set(targetTokens.map(r => r.user_email))].join(', ')}`);
 
       if (targetTokens.length > 0) {
         const accessToken = await getOAuthToken(sa);
         const tFcm = Date.now();
+        const fcmData = {
+          type:        'bedou_recharge_request', // standardisé
+          entity_id:   demande.id,
+          entity_type: 'DemandeRecharge',
+          notif_route: '/gestion-bedou',
+        };
 
+        // Tentative 1
         const fcmResults = await Promise.allSettled(
-          targetTokens.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, notifTitle, notifBody, {
-            type:        'bedou_recharge',
-            recharge_id: demande.id,
-            notif_route: '/gestion-bedou',
-          }))
+          targetTokens.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, notifTitle, notifBody, fcmData))
         );
 
         let sent = 0, failed = 0;
+        const retryTokens = [];
         for (let i = 0; i < fcmResults.length; i++) {
           const r = fcmResults[i];
           if (r.status === 'fulfilled' && r.value.ok) {
             sent++;
+            base44.asServiceRole.entities.FcmToken.update(targetTokens[i].id, { last_used: new Date().toISOString() }).catch(() => {});
           } else {
-            failed++;
-            const errStatus = r.status === 'fulfilled' ? r.value?.result?.error?.status : null;
-            if (errStatus === 'NOT_FOUND' || errStatus === 'INVALID_ARGUMENT') {
-              base44.asServiceRole.entities.FcmToken.update(targetTokens[i].id, { is_active: false }).catch(() => {});
-              L(`token désactivé (${errStatus}): ${targetTokens[i].token.slice(0, 20)}...`);
+            const errCode = r.status === 'fulfilled' ? r.value.errCode : 'EXCEPTION';
+            if (FATAL_FCM_ERRORS.includes(errCode)) {
+              base44.asServiceRole.entities.FcmToken.update(targetTokens[i].id, { is_active: false, deactivation_reason: errCode }).catch(() => {});
+              failed++;
+            } else {
+              retryTokens.push(targetTokens[i]); // erreur transitoire → retry
             }
           }
         }
 
-        L(`FCM done: sent=${sent} failed=${failed} | +${Date.now() - tFcm}ms | total=+${Date.now() - t0}ms`);
+        // Retry 1x pour erreurs transitoires
+        if (retryTokens.length > 0) {
+          L(`FCM RETRY 1x — ${retryTokens.length} token(s)`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const retryResults = await Promise.allSettled(
+            retryTokens.map(r => sendFcmToToken(accessToken, sa.project_id, r.token, notifTitle, notifBody, fcmData))
+          );
+          for (const r of retryResults) {
+            if (r.status === 'fulfilled' && r.value.ok) sent++;
+            else failed++;
+          }
+        }
+
+        L(`FCM done: sent=${sent} failed=${failed} channel=${CDL_CHANNEL} | +${Date.now() - tFcm}ms | total=+${Date.now() - t0}ms`);
       } else {
-        L('FCM skip: aucun token disponible');
+        L('FCM skip: aucun token admin actif (notif BDD créée en étape 3)');
       }
     } catch (e) {
       L(`FCM error: ${e.message}`);

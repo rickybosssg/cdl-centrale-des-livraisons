@@ -225,6 +225,7 @@ Deno.serve(async (req) => {
   }
 
   L(`action=${action} type=${type} request_id=${request_id} admin=${user.email}`);
+  console.log(`[NOTIF_SOURCE] validateBedouRequest | action=${action} | type=${type}`);
 
   const table = type === 'recharge' ? 'DemandeRecharge' : 'DemandeRetrait';
 

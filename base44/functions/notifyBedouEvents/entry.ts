@@ -34,6 +34,7 @@ Deno.serve(async (req) => {
     const nom = demande.user_nom || demande.user_email || 'Un utilisateur';
 
     console.log(`[notifyBedouEvents] START | event=${event?.type} | statut=${statut} | montant=${montant} | user=${demande.user_email} | +${Date.now() - t0}ms`);
+    console.log(`[NOTIF_SOURCE] notifyBedouEvents | event=${event?.type} | statut=${statut}`);
 
     const notify = (payload) => {
       console.log(`[notifyBedouEvents] → notify | user=${payload.user_email || ''} role=${payload.role || ''} type=${payload.data?.type || ''}`);
