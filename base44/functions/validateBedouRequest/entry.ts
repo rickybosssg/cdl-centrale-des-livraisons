@@ -36,14 +36,37 @@ Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
 
   // Auth admin obligatoire
-  const user = await base44.auth.me();
+  let user = null;
+  try {
+    user = await base44.auth.me();
+  } catch(e) {
+    L(`auth.me() error: ${e.message}`);
+    return Response.json({ error: 'Non authentifié', detail: e.message }, { status: 401 });
+  }
   if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
 
-  // Vérifier admin : soit via rôle base44 auth, soit via profil CDL (user_type/current_role)
-  const isAdmin = user.role === 'admin'
-    || user.user_type === 'admin'
-    || user.current_role === 'admin';
-  if (!isAdmin) return Response.json({ error: 'Admin requis' }, { status: 403 });
+  // Logs d'auth complets pour diagnostic APK
+  console.log(`[BEDOU_VALIDATE_AUTH] token_received=true | user_email=${user.email} | role=${user.role} | user_type=${user.user_type || 'N/A'} | current_role=${user.current_role || 'N/A'} | role_actuel=${user.role_actuel || 'N/A'}`);
+
+  // Vérifier admin : tous les champs possibles (base44 auth + CDL profile fields)
+  const isAdminByRole = user.role === 'admin';
+  const isAdminByUserType = user.user_type === 'admin';
+  const isAdminByCurrentRole = user.current_role === 'admin' || user.role_actuel === 'admin';
+
+  // Vérification supplémentaire via StaffPermission en BDD
+  let isAdminByStaff = false;
+  try {
+    const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
+    isAdminByStaff = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
+  } catch(_) {}
+
+  const isAdmin = isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByStaff;
+  console.log(`[BEDOU_VALIDATE_AUTH] is_admin=${isAdmin} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byStaff=${isAdminByStaff}`);
+
+  if (!isAdmin) {
+    L(`AUTH REFUSÉ — user=${user.email} role=${user.role} user_type=${user.user_type} current_role=${user.current_role}`);
+    return Response.json({ error: 'Admin requis', user_role: user.role, user_type: user.user_type, current_role: user.current_role, is_admin: false }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const { request_id, type, action, motif_refus } = body;

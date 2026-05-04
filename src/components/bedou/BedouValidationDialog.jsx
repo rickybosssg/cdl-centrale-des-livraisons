@@ -13,6 +13,41 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 
+// Helper : appel HTTP direct avec token explicite depuis localStorage
+// Contourne les bugs Axios/SDK sur APK Capacitor où le token n'est pas envoyé
+async function invokeWithToken(fnName, payload) {
+  const APP_ID = import.meta.env.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
+  // Lire le token depuis localStorage (toujours disponible dans WebView)
+  let token = null;
+  try { token = localStorage.getItem('base44_access_token'); } catch(_) {}
+
+  // URL adaptée selon protocole (capacitor: → serveur externe)
+  const baseUrl = (window.location?.protocol === 'capacitor:' || window.location?.protocol === 'file:')
+    ? 'https://cdl.base44.app'
+    : '';
+  const url = `${baseUrl}/api/apps/${APP_ID}/functions/${fnName}`;
+
+  console.log(`[BEDOU_VALIDATE_AUTH] token_received=${!!token} | fn=${fnName} | protocol=${window.location?.protocol} | url=${url}`);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data?.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return { data };
+}
+
 const L = (tag, msg, data) => {
   const line = `[${tag}] ${msg}`;
   if (data !== undefined) console.log(line, data);
@@ -34,7 +69,8 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
 
   // ── VALIDER ───────────────────────────────────────────────────────────────
   const handleValider = async () => {
-    L("BEDOU_VALIDATE_CLICK", `request_id=${request.id} | type=${type} | statut=${request.statut}`);
+    // Log auth complet pour diagnostic APK
+    L("BEDOU_VALIDATE_AUTH", `token_received=true | request_id=${request.id} | type=${type} | statut=${request.statut}`);
 
     // Guard anti-double-clic
     if (processing) {
@@ -59,7 +95,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     try {
       setStep("💳 Crédit du solde en cours...");
 
-      const res = await base44.functions.invoke("validateBedouRequest", {
+      const res = await invokeWithToken("validateBedouRequest", {
         request_id: request.id,
         type,
         action: "valider",
@@ -105,20 +141,25 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
 
       let msg = err?.message || "Erreur inconnue";
 
+      const errStatus = err?.status || err?.response?.status;
+
       // 409 — déjà traitée
-      if (err?.response?.status === 409 || msg.includes("déjà") || msg.includes("already")) {
+      if (errStatus === 409 || msg.includes("déjà") || msg.includes("already")) {
         toast.warning("⚠️ Demande déjà traitée.");
         onSuccess();
         return;
       }
 
       // 403 — droits insuffisants
-      if (err?.response?.status === 403 || msg.includes("403") || msg.includes("Admin requis")) {
-        msg = "Session expirée ou droits insuffisants — reconnectez-vous.";
+      if (errStatus === 403 || msg.includes("403") || msg.includes("Admin requis")) {
+        const detail = err?.data;
+        console.log(`[BEDOU_VALIDATE_AUTH] is_admin=false | user_role=${detail?.user_role} | user_type=${detail?.user_type} | current_role=${detail?.current_role}`);
+        msg = `Droits insuffisants — rôle: ${detail?.user_role || 'inconnu'} | type: ${detail?.user_type || 'N/A'}. Reconnectez-vous.`;
       }
 
       // 401 — non authentifié
-      if (err?.response?.status === 401 || msg.includes("401") || msg.includes("authentifi")) {
+      if (errStatus === 401 || msg.includes("401") || msg.includes("authentifi")) {
+        console.log(`[BEDOU_VALIDATE_AUTH] token_received=false — session expirée`);
         msg = "Session expirée — reconnectez-vous à l'application.";
       }
 
@@ -142,7 +183,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     setStep("⏳ Refus en cours...");
 
     try {
-      const res = await base44.functions.invoke("validateBedouRequest", {
+      const res = await invokeWithToken("validateBedouRequest", {
         request_id: request.id,
         type,
         action: "refuser",
@@ -168,23 +209,44 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
   };
 
   // ── RENDU — overlay modal natif (pas Dialog shadcn) ───────────────────────
-  // On utilise un overlay React pur pour éviter les fermetures accidentelles sur APK
+  // Style inline forcé pour APK natif Capacitor où fixed peut être affecté par le scroll WebView
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.55)" }}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(0,0,0,0.6)',
+        padding: '16px',
+      }}
     >
-      {/* Bloquer les clics sur l'overlay pendant processing */}
+      {/* Backdrop — fermer si pas en processing */}
       {!processing && (
         <div
-          className="absolute inset-0"
+          style={{ position: 'absolute', inset: 0 }}
           onClick={onClose}
           aria-label="Fermer"
         />
       )}
 
       <div
-        className="relative w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl z-10 max-h-[90vh] overflow-y-auto"
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: '448px',
+          background: '#fff',
+          borderRadius: '20px',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          zIndex: 10,
+        }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
