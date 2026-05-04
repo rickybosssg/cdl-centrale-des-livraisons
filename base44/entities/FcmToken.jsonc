@@ -56,5 +56,28 @@
   "required": [
     "user_email",
     "token"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "user_email": "{{user.email}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_email": "{{user.email}}"
+    },
+    "delete": {
+      "user_email": "{{user.email}}"
+    }
+  }
 }
