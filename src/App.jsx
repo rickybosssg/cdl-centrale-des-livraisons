@@ -72,7 +72,7 @@ import CompleteProfile from './pages/CompleteProfile';
 import GestionTransactions from './pages/dispatcher/GestionTransactions';
 import GestionProfils from './pages/dispatcher/GestionProfils';
 import GestionAcces from './pages/dispatcher/GestionAcces';
-import GestionBedou from './pages/dispatcher/GestionBedou';
+import GestionBedou from './pages/dispatcher/GestionBedou.jsx';
 import DiffusionGlobale from './pages/dispatcher/DiffusionGlobale';
 import PendingProfileRequests from './pages/dispatcher/PendingProfileRequests';
 import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
