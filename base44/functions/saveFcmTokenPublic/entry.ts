@@ -1,21 +1,24 @@
 /**
- * saveFcmTokenPublic — UPSERT token FCM (endpoint PUBLIC, sans auth)
+ * saveFcmTokenPublic — 1 TOKEN UNIQUE PAR UTILISATEUR (endpoint PUBLIC, sans auth)
  *
- * LOGIQUE DÉFINITIVE (NE PAS MODIFIER) :
- * 1. Ignorer les tokens de test (blacklist)
- * 2. Si token existe → UPDATE is_active=true (jamais recréer)
- * 3. Désactiver les AUTRES tokens android_native actifs du même user (1 seul actif)
- * 4. Si token inconnu → CREATE is_active=true
+ * RÈGLE ABSOLUE : 1 user_email = 1 seul token actif en base, jamais plus.
  *
- * SÉCURITÉ : requiert user_email + token FCM Firebase (non forgeables)
+ * LOGIQUE :
+ * 1. Rejeter tokens vides/test
+ * 2. Charger TOUS les tokens existants de cet user (actifs + inactifs)
+ * 3. Si ce token exact existe déjà → réactiver + supprimer TOUS les autres → retourner
+ * 4. Si token nouveau → supprimer PHYSIQUEMENT tous les anciens → créer l'unique nouveau
+ * 5. Log [FCM_TOKEN_CLEAN] avec avant/après
+ *
+ * GARANTIE : après chaque appel, cet user n'a qu'UN SEUL token en base.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const BLACKLISTED_TOKENS = ['test_diagnostic_token', 'test_public_endpoint'];
+const BLACKLISTED_TOKENS = ['test_diagnostic_token', 'test_public_endpoint', 'test_check_only'];
 function isTestToken(token) {
   if (!token) return true;
   const t = String(token).toLowerCase();
-  return BLACKLISTED_TOKENS.some(b => t.includes(b)) || t.includes('_test_');
+  return BLACKLISTED_TOKENS.some(b => t.includes(b)) || t.startsWith('test_') || t.includes('_test_');
 }
 
 Deno.serve(async (req) => {
@@ -30,75 +33,80 @@ Deno.serve(async (req) => {
     const cleanToken = String(token).trim();
     const cleanEmail = String(user_email).toLowerCase().trim();
 
-    // ── 🔒 GUARD : token vide → rejet sans toucher aux anciens tokens ─────────
+    // ── GUARD : token invalide ────────────────────────────────────────────────
     if (!cleanToken || cleanToken.length < 10) {
-      console.error(`[saveFcmTokenPublic] 🔴 GUARD — token vide ou trop court (len=${cleanToken.length}) pour ${cleanEmail} — anciens tokens PRÉSERVÉS`);
+      console.error(`[saveFcmTokenPublic] 🔴 GUARD — token vide/court (len=${cleanToken.length}) pour ${cleanEmail} — anciens tokens PRÉSERVÉS`);
       return Response.json({ success: false, error: 'token invalide — anciens tokens préservés', guard: 'TOKEN_EMPTY' }, { status: 400 });
     }
 
-    // ── Bloquer les tokens de test ───────────────────────────────────────────
     if (isTestToken(cleanToken)) {
-      console.warn('[saveFcmTokenPublic] Token de test ignoré:', cleanToken.substring(0, 30));
+      console.warn(`[saveFcmTokenPublic] Token de test ignoré: ${cleanToken.substring(0, 30)}`);
       return Response.json({ success: true, action: 'ignored_test_token' });
     }
 
-    console.log('[saveFcmTokenPublic] user_email:', cleanEmail, '| token:', cleanToken.substring(0, 25) + '...');
+    console.log(`[saveFcmTokenPublic] START | user=${cleanEmail} | token=${cleanToken.substring(0, 25)}... | device=${device_type}`);
 
     const base44 = createClientFromRequest(req);
 
-    // ── UPSERT : vérifier si ce token exact existe déjà ─────────────────────
-    const existing = await base44.asServiceRole.entities.FcmToken.filter({ token: cleanToken });
+    // ── Charger TOUS les tokens de cet utilisateur (actifs + inactifs) ────────
+    const allUserTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: cleanEmail }, null, 200);
+    const tokensAvant = allUserTokens.length;
 
-    if (existing.length > 0) {
-      // Garder uniquement le premier enregistrement, supprimer les doublons exacts
-      const record = existing[0];
-      if (existing.length > 1) {
-        console.warn(`[saveFcmTokenPublic] ${existing.length - 1} doublon(s) du même token détecté(s) — nettoyage`);
-        for (let i = 1; i < existing.length; i++) {
-          await base44.asServiceRole.entities.FcmToken.update(existing[i].id, { is_active: false }).catch(() => {});
-        }
-      }
+    console.log(`[FCM_TOKEN_CLEAN] tokens_avant=${tokensAvant} | user=${cleanEmail}`);
 
-      // Token connu → réactiver immédiatement (jamais recréer)
-      await base44.asServiceRole.entities.FcmToken.update(record.id, {
-        user_email: cleanEmail,
+    // ── CAS 1 : ce token exact existe déjà ───────────────────────────────────
+    const exactMatch = allUserTokens.find(t => t.token === cleanToken);
+
+    if (exactMatch) {
+      // Réactiver ce token
+      await base44.asServiceRole.entities.FcmToken.update(exactMatch.id, {
         is_active: true,
         last_used: new Date().toISOString(),
         device_type,
+        user_email: cleanEmail,
       });
-      console.log('[saveFcmTokenPublic] ✅ UPSERT (update) token existant pour', cleanEmail, '— id:', record.id);
 
-      // Désactiver les AUTRES tokens du même user/device (tokens différents)
-      try {
-        const others = await base44.asServiceRole.entities.FcmToken.filter({
-          user_email: cleanEmail,
-          device_type,
-          is_active: true,
-        });
-        for (const old of others) {
-          if (old.id !== record.id && old.token !== cleanToken) {
-            await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
-            console.log('[saveFcmTokenPublic] Ancien token désactivé:', old.token.substring(0, 20) + '...');
-          }
+      // Supprimer PHYSIQUEMENT tous les autres tokens de cet user
+      const toDelete = allUserTokens.filter(t => t.id !== exactMatch.id);
+      let supprimés = 0;
+      for (const old of toDelete) {
+        try {
+          await base44.asServiceRole.entities.FcmToken.delete(old.id);
+          supprimés++;
+        } catch (_) {
+          // Fallback : désactiver si delete échoue
+          await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false }).catch(() => {});
         }
-      } catch (_) {}
+      }
 
-      return Response.json({ success: true, action: 'updated', token_id: record.id, user_email: cleanEmail });
+      console.log(`[FCM_TOKEN_CLEAN] tokens_avant=${tokensAvant} | tokens_supprimés=${supprimés} | token_final=${cleanToken.substring(0, 25)}... | action=reactivated | user=${cleanEmail}`);
+      console.log(`[saveFcmTokenPublic] ✅ Token existant réactivé, ${supprimés} ancien(s) supprimé(s) | user=${cleanEmail} | id=${exactMatch.id}`);
+
+      return Response.json({
+        success: true,
+        action: 'reactivated',
+        token_id: exactMatch.id,
+        user_email: cleanEmail,
+        tokens_avant: tokensAvant,
+        tokens_supprimés: supprimés,
+        token_final: cleanToken.substring(0, 25) + '...',
+      });
     }
 
-    // ── Token inconnu → désactiver les anciens, créer le nouveau ────────────
-    try {
-      const oldTokens = await base44.asServiceRole.entities.FcmToken.filter({
-        user_email: cleanEmail,
-        device_type,
-        is_active: true,
-      });
-      for (const old of oldTokens) {
-        await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
-        console.log('[saveFcmTokenPublic] Ancien token désactivé avant création:', old.token.substring(0, 20) + '...');
+    // ── CAS 2 : token nouveau → supprimer TOUS les anciens, créer l'unique ──
+    let supprimés = 0;
+    for (const old of allUserTokens) {
+      try {
+        await base44.asServiceRole.entities.FcmToken.delete(old.id);
+        supprimés++;
+        console.log(`[FCM_TOKEN_CLEAN] Supprimé: id=${old.id} | token=${old.token?.substring(0, 20)}...`);
+      } catch (_) {
+        await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false }).catch(() => {});
+        supprimés++;
       }
-    } catch (_) {}
+    }
 
+    // Créer l'unique nouveau token
     const result = await base44.asServiceRole.entities.FcmToken.create({
       user_email: cleanEmail,
       token: cleanToken,
@@ -108,11 +116,21 @@ Deno.serve(async (req) => {
       is_active: true,
     });
 
-    console.log('[saveFcmTokenPublic] ✅ Nouveau token créé — id:', result.id, '| user:', cleanEmail);
-    return Response.json({ success: true, action: 'created', token_id: result.id, user_email: cleanEmail });
+    console.log(`[FCM_TOKEN_CLEAN] tokens_avant=${tokensAvant} | tokens_supprimés=${supprimés} | token_final=${cleanToken.substring(0, 25)}... | action=created | user=${cleanEmail}`);
+    console.log(`[saveFcmTokenPublic] ✅ Nouveau token unique créé | id=${result.id} | user=${cleanEmail} | ${tokensAvant} anciens supprimés`);
+
+    return Response.json({
+      success: true,
+      action: 'created',
+      token_id: result.id,
+      user_email: cleanEmail,
+      tokens_avant: tokensAvant,
+      tokens_supprimés: supprimés,
+      token_final: cleanToken.substring(0, 25) + '...',
+    });
 
   } catch (error) {
-    console.error('[saveFcmTokenPublic] ❌ ERROR:', error?.message);
+    console.error(`[saveFcmTokenPublic] ❌ ERROR: ${error?.message}`);
     return Response.json({ success: false, error: error?.message }, { status: 500 });
   }
 });

@@ -16,6 +16,23 @@ import { base44 } from '@/api/base44Client';
 const APP_BASE_URL = 'https://cdl.base44.app';
 const FCM_DELAY_MS = 2000;
 
+// ── Debounce : 1 seul enregistrement FCM par session (évite appels multiples) ─
+const _fcmSaveInProgress = new Set();
+async function saveFcmTokenOnce({ user_email, token, device_type }) {
+  const key = `${user_email}__${device_type}`;
+  if (_fcmSaveInProgress.has(key)) {
+    console.log(`[FCM] saveFcmToken DEBOUNCED — déjà en cours pour ${key}`);
+    return { success: false, action: 'debounced' };
+  }
+  _fcmSaveInProgress.add(key);
+  try {
+    return await saveFcmTokenRemote({ user_email, token, device_type });
+  } finally {
+    // Libérer après 30s (session window)
+    setTimeout(() => _fcmSaveInProgress.delete(key), 30000);
+  }
+}
+
 function isNativePlatform() {
   try {
     if (typeof window === 'undefined') return false;
