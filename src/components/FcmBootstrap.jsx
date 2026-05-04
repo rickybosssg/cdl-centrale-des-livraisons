@@ -217,7 +217,7 @@ async function runNativeFcm(propEmail) {
         console.log('[FCM] ✅ Token reçu (len=' + token.length + '):', token.slice(0, 40) + '...');
         resolveEmail(propEmail).then(email => {
           if (!email) { console.error('[FCM] Pas d\'email pour sauvegarder le token'); return; }
-          saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
+          saveFcmTokenOnce({ user_email: email, token, device_type: 'android_native' });
         }).catch(e => console.error('[FCM] resolveEmail error:', e?.message));
       } catch (e) {
         console.error('[FCM] registration callback error:', e?.message);
@@ -301,7 +301,7 @@ async function runWebFcm(propEmail) {
     if (!token) return;
     const email = await resolveEmail(propEmail);
     if (!email) return;
-    await saveFcmTokenRemote({ user_email: email, token, device_type: 'web' });
+    await saveFcmTokenOnce({ user_email: email, token, device_type: 'web' });
     onForegroundMessage((payload) => {
       import('sonner').then(({ toast }) => {
         const n = payload?.notification || {};
