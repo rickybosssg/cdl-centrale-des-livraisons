@@ -1,100 +1,144 @@
-# 🔒 CDL NOTIFICATION SYSTEM — STABILITY LOCK
+# 🔒 CDL_STABLE_BEDOU_PUSH_V1 — STABILITY LOCK
 
-**Date de verrouillage : 2026-05-04**
-**Statut : PRODUCTION STABLE**
-
----
-
-## ✅ PREUVE DE FONCTIONNEMENT (vraie recharge 2026-05-04 11:54)
-
-```
-[RECHARGE] BDD OK: id=69f88901... | +579ms
-[RECHARGE] admins: 1 (weezyh2@gmail.com) | tokens actifs total: 3
-[RECHARGE] FCM cibles: 1 token(s) | emails: weezyh2@gmail.com
-[RECHARGE] FCM done: sent=1 failed=0 | +1255ms ✅
-[sendCdlNotification] fcm_sent=1 fcm_failed=0 | channel=cdl_critical_alerts_v2 ✅
-```
+**Version :** CDL_STABLE_BEDOU_PUSH_V1  
+**Date freeze :** 2026-05-04  
+**Statut :** ✅ PRODUCTION STABLE — PRÊT POUR REBUILD APK  
 
 ---
 
-## 🔒 MODULES VERROUILLÉS — NE JAMAIS MODIFIER
+## ✅ CERTIFICATION DE NON-RÉGRESSION
 
-| Module | Raison |
-|--------|--------|
-| `functions/sendCdlNotification` | Canal unique, payload FCM v1 standard |
-| `functions/notifyBedouEvents` | Déclencheurs validés en production |
-| `functions/submitBedouRecharge` | FCM synchrone + notif BDD OK |
-| `functions/validateBedouRequest` | Anti-doublon + FCM direct validé |
-| `public/firebase-messaging-sw.js` | SW FCM background/killed |
-| `lib/firebaseConfig.js` | Config Firebase production |
-| `capacitor.config.json` | Config Capacitor Android |
+```
+REAL_BEDOU_RECHARGE_PUSH_TEST — PASSED
+────────────────────────────────────────
+timestamp     : 2026-05-04T12:44:58.516Z
+admin_email   : weezyh2@gmail.com
+delay_ms      : 2582ms (< 5000ms ✅)
+fcm_sent      : 1
+fcm_failed    : 0
+channel_id    : cdl_critical_alerts_v2 ✅
+demande_créée : ✅
+notif_admin   : ✅
+cleanup       : ✅
+msgId FCM     : projects/cdl-app-4743c/messages/0:1777898699543326%...
+```
 
 ---
 
-## 🔒 CANAL FCM UNIQUE ET DÉFINITIF
+## 🔒 MODULES VERROUILLÉS — NE PAS MODIFIER
 
-```
-channel_id = cdl_critical_alerts_v2
-priority   = HIGH (obligatoire app fermée)
-importance = 5    (heads-up garanti Android)
-```
+### Notifications (FREEZE TOTAL)
 
-**INTERDICTIONS ABSOLUES :**
-- ❌ Ne jamais changer `channel_id` vers `default`, `CDL_ALERTS_HIGH` ou autre
-- ❌ Ne jamais supprimer `notification: { title, body }` (obligatoire background)
-- ❌ Ne jamais changer `android.priority` → doit rester `HIGH`
-- ❌ Ne jamais créer une 2ème fonction de notification parallèle
+| Fichier | Statut | Raison |
+|---|---|---|
+| `functions/sendCdlNotification` | 🔒 VERROUILLÉ | Source unique FCM — toute modif casse le canal |
+| `functions/validateBedouRequest` | 🔒 VERROUILLÉ | Utilise sendCdlNotification — testé en prod |
+| `functions/notifyBedouEvents` | 🔒 VERROUILLÉ | Délégation sendCdlNotification — doublon évité |
+| `functions/submitBedouRecharge` | 🔒 VERROUILLÉ | FCM admin direct + retry 1x — validé |
 
----
+**Règles absolues :**
+- ❌ NE JAMAIS modifier `channel_id` — doit rester `cdl_critical_alerts_v2`
+- ❌ NE JAMAIS supprimer `notification: { title, body }` du payload FCM
+- ❌ NE JAMAIS changer `android.priority` — doit rester `HIGH`
+- ❌ NE JAMAIS créer une fonction FCM parallèle — tout passe par `sendCdlNotification`
+- ❌ NE JAMAIS supprimer le retry 1x dans `validateBedouRequest` / `submitBedouRecharge`
+- ✅ Extensions autorisées par ajout uniquement — jamais par remplacement
 
-## 📋 TEST OBLIGATOIRE AVANT TOUTE LIVRAISON
+### Bedou (FREEZE TOTAL)
 
-### REAL_BEDOU_RECHARGE_PUSH_TEST
+| Fichier | Statut | Raison |
+|---|---|---|
+| `functions/bedouEngine` | 🔒 VERROUILLÉ | Crédit/débit client — logique financière critique |
+| `functions/validateBedouRequest` | 🔒 VERROUILLÉ | Anti-double-crédit + ordre étapes 1→6 |
+| `functions/submitBedouRecharge` | 🔒 VERROUILLÉ | Création demande + notif admin synchrone |
+| `entities/DemandeRecharge` | 🔒 VERROUILLÉ | Schéma financier — ne pas supprimer de champs |
+| `entities/Bedou` | 🔒 VERROUILLÉ | Wallet client — ne pas modifier les champs solde |
+| `entities/Transaction` | 🔒 VERROUILLÉ | Historique immuable |
 
-Avant de livrer toute modification, exécuter :
-
-```
-base44.functions.invoke('realBedouRechargeTest', {})
-```
-
-**Critères de succès (tous obligatoires) :**
-- ✅ `demande_created: true`
-- ✅ `notif_admin_created: true`
-- ✅ `fcm_sent > 0`
-- ✅ `fcm_failed = 0`
-- ✅ `delay_ms < 5000`
-- ✅ `channel_id = cdl_critical_alerts_v2`
-
-**❌ Ne pas livrer si un seul critère échoue.**
-
----
-
-## 🏗️ RÈGLES D'ISOLATION DES MODIFICATIONS FUTURES
-
-Chaque modification doit être isolée dans son module :
-
-| Zone | Fichiers autorisés | Impact notifications |
-|------|--------------------|----------------------|
-| Bedou UI | `pages/MonBedou`, `pages/GestionBedou`, `components/bedou/*` | ❌ Aucun |
-| Dispatch | `functions/autoDispatch`, `pages/dispatcher/DispatchMonitor` | ❌ Aucun |
-| UI général | `pages/*`, `components/*` | ❌ Aucun |
-| Notifications | `functions/sendCdlNotification` uniquement | Après test REAL_BEDOU obligatoire |
+**Règles absolues :**
+- ❌ NE JAMAIS modifier l'ordre des étapes dans `validateBedouRequest` (1→6)
+- ❌ NE JAMAIS supprimer l'anti-double-crédit (guard `statut !== 'en_attente'`)
+- ❌ NE JAMAIS supprimer le log `[BEDOU_AUDIT]`
+- ❌ NE JAMAIS hardcoder email, user_id ou wallet dans les fonctions Bedou
 
 ---
 
-## 🚦 FLUX NOTIFICATION BEDOU VÉRIFIÉ
+## 🏗️ ARCHITECTURE NOTIFICATIONS (ÉTAT STABLE)
 
 ```
-Client → submitBedouRecharge
-    └─► Crée DemandeRecharge en BDD
-    └─► Envoie notif interne admin (BDD)
-    └─► Envoie FCM direct admin (synchrone, < 1.5s)
-
-Entity automation DemandeRecharge.create → notifyBedouEvents
-    └─► sendCdlNotification (role=admin)
-        └─► Crée notif BDD admin
-        └─► Envoie FCM admin (channel=cdl_critical_alerts_v2)
+Événement                    Fonction source              Canal FCM
+─────────────────────────────────────────────────────────────────────
+Nouvelle recharge client  →  submitBedouRecharge      →  cdl_critical_alerts_v2 (admins)
+Validation admin          →  validateBedouRequest     →  sendCdlNotification → cdl_critical_alerts_v2 (client)
+Refus admin               →  validateBedouRequest     →  sendCdlNotification → cdl_critical_alerts_v2 (client)
+Automation BDD            →  notifyBedouEvents        →  sendCdlNotification (create uniquement)
+Toutes autres notifs      →  sendCdlNotification      →  cdl_critical_alerts_v2
 ```
 
-**Double push = normal** : submitBedouRecharge ET notifyBedouEvents envoient tous les deux.
-Le 2ème est géré par l'anti-doublon 60s côté BDD.
+**Règle d'or :** `notifyBedouEvents` NE renvoie PAS les cas `valide`/`refuse` (géré par `validateBedouRequest`).
+
+---
+
+## 🧪 GATE DE NON-RÉGRESSION OBLIGATOIRE
+
+Avant toute future modification des modules ci-dessus, exécuter **OBLIGATOIREMENT** :
+
+```bash
+# Via dashboard Base44 → Code → Functions → realBedouRechargeTest → Test
+# Payload : {}
+```
+
+**Critères de succès (tous requis) :**
+- `passed: true`
+- `fcm_sent > 0`
+- `fcm_failed = 0`
+- `channel_id = cdl_critical_alerts_v2`
+- `delay_ms < 5000`
+- `demande_created: true`
+- `notif_admin_created: true`
+
+**Si UN critère échoue → rollback immédiat, ne pas déployer l'APK.**
+
+---
+
+## 🚫 PÉRIMÈTRE GELÉ — ZÉRO MODIFICATION PARALLÈLE
+
+Les modules suivants ne doivent PAS être modifiés pendant la période de stabilisation APK :
+
+- `dispatch` / `autoDispatch` / `dispatchProgressif`
+- `UserProfile` / validation livreurs / profils
+- Marketplace / commandes partenaire
+- Firebase config (`firebaseConfig.js`, `firebase-messaging-sw.js`)
+- Android config (`capacitor.config.json`, `google-services.json`)
+- UI globale (`AppLayout`, `AppLayoutWrapper`, `App.jsx` routes)
+
+---
+
+## 📋 CHECKLIST REBUILD APK
+
+Avant de générer l'APK production :
+
+- [ ] `realBedouRechargeTest` → PASSED
+- [ ] Token admin FCM actif en BDD (`is_active: true`)
+- [ ] `channel_id = cdl_critical_alerts_v2` créé sur l'appareil test
+- [ ] `google-services.json` présent dans `android/app/`
+- [ ] `npx cap sync android` exécuté
+- [ ] Build Android Studio → APK signé
+- [ ] Test manuel : recharge → push admin reçu < 5s
+- [ ] Test manuel : validation admin → push client reçu
+
+---
+
+## 📌 MODULES AUTORISÉS À ÉVOLUER (hors freeze)
+
+Ces modules peuvent être modifiés sans risque pour la stabilité Bedou/Push :
+
+- Pages UI (dashboard, profils, statistiques)
+- WhatsApp notifications (`triggerWhatsAppNotification`)
+- Dispatch manuel (assignation admin)
+- Publicités / annonceurs
+- Parrainage / referral
+
+---
+
+*Document généré automatiquement le 2026-05-04 — CDL_STABLE_BEDOU_PUSH_V1*
