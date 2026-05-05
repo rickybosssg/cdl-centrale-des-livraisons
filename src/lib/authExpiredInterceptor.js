@@ -2,24 +2,39 @@
  * authExpiredInterceptor — Intercepteur global fetch
  *
  * Détecte les 403 "auth_required" sur tous les appels réseau.
- * Si session expirée → logout + redirect login automatique.
+ * Stratégie :
+ *   1. Tenter re-login silencieux via sessionManager
+ *   2. Seulement si ça échoue → logout + redirect /connexion
  *
- * RÈGLE : ne déclencher qu'une seule fois (anti-boucle).
+ * ⚠️ NE PAS TOUCHER AUX NOTIFICATIONS PUSH
  */
 
 let _isHandlingExpiry = false;
 
-function handleSessionExpired() {
+async function handleSessionExpired() {
   if (_isHandlingExpiry) return;
   _isHandlingExpiry = true;
 
-  console.warn('[AUTH_INTERCEPTOR] 🔴 Session expirée détectée — logout automatique');
+  console.warn('[AUTH_INTERCEPTOR] 🔴 Session expirée — tentative refresh silencieux...');
 
-  // Nettoyer le token
+  try {
+    const { silentRefresh } = await import('@/lib/sessionManager');
+    const refreshed = await silentRefresh();
+
+    if (refreshed) {
+      console.log('[AUTH_INTERCEPTOR] ✅ Session restaurée silencieusement');
+      _isHandlingExpiry = false;
+      return; // Session OK — pas de redirect
+    }
+  } catch (e) {
+    console.warn('[AUTH_INTERCEPTOR] silentRefresh import error:', e.message);
+  }
+
+  // Refresh impossible → logout propre
+  console.warn('[AUTH_INTERCEPTOR] ❌ Refresh impossible — logout + redirect connexion');
   try { localStorage.removeItem('base44_access_token'); } catch (_) {}
   try { localStorage.removeItem('base44_token'); } catch (_) {}
 
-  // Redirection vers login après un court délai (laisser le log s'afficher)
   setTimeout(() => {
     window.location.href = '/connexion';
   }, 500);
@@ -31,17 +46,22 @@ export function installAuthExpiredInterceptor() {
   window.fetch = async function (...args) {
     const response = await originalFetch.apply(this, args);
 
-    // Cloner pour lire le body sans consommer le stream
     if (response.status === 403) {
       try {
+        const url = typeof args[0] === 'string' ? args[0] : '';
+        // Ne pas intercepter les appels auth/login eux-mêmes (évite boucle infinie)
+        if (url.includes('/auth/login') || url.includes('/auth/register')) {
+          return response;
+        }
+
         const cloned = response.clone();
         const data = await cloned.json().catch(() => ({}));
         const reason = data?.extra_data?.reason || data?.reason || '';
         const message = data?.message || '';
 
         if (reason === 'auth_required' || message.includes('logged in')) {
-          console.warn('[AUTH_INTERCEPTOR] 403 auth_required détecté | url:', args[0]);
-          handleSessionExpired();
+          console.warn('[AUTH_INTERCEPTOR] 403 auth_required | url:', url);
+          handleSessionExpired(); // async — non-bloquant
         }
       } catch (_) {}
     }
@@ -49,5 +69,5 @@ export function installAuthExpiredInterceptor() {
     return response;
   };
 
-  console.log('[AUTH_INTERCEPTOR] ✅ Installé — surveillance 403 auth_required active');
+  console.log('[AUTH_INTERCEPTOR] ✅ Installé — refresh silencieux actif');
 }

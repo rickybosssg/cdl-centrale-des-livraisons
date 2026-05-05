@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, Eye, EyeOff, Mail, Lock, ArrowRight, User, Phone } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
+import { saveCredentials, startSessionPing } from "@/lib/sessionManager";
 
 const BLUE = "#1E6BFF";
 const DARK = "#0F2A5C";
@@ -87,6 +88,9 @@ export default function EmailLogin() {
       if (ok && token) {
         console.log("[LOGIN] SUCCESS");
         saveToken(token);
+        // Sauvegarder credentials pour re-login silencieux + démarrer ping session
+        saveCredentials(email.trim().toLowerCase(), password);
+        startSessionPing();
         console.log("[LOGIN] SET LOGGED IN");
         setLoggedIn({ email: email.trim().toLowerCase() });
         console.log("[LOGIN] NAVIGATE TRIGGERED");

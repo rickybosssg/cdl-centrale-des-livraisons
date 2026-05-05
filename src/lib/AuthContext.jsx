@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { installAuthExpiredInterceptor } from '@/lib/authExpiredInterceptor';
+import { startSessionPing } from '@/lib/sessionManager';
 
 const AuthContext = createContext(null);
 
@@ -46,6 +47,7 @@ export const AuthProvider = ({ children }) => {
       clearTimeout(timeoutId);
       setUser(currentUser);
       setIsAuthenticated(true);
+      startSessionPing(); // démarrer ping même si déjà connecté au démarrage
       console.log('[AUTH] INIT SUCCESS | user:', currentUser?.email);
     } catch (error) {
       if (settled) return;
@@ -73,6 +75,8 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
     try { localStorage.removeItem('base44_access_token'); } catch (_) {}
     try { base44.auth.setToken(null); } catch (_) {}
+    // Nettoyer les credentials sauvegardés
+    try { localStorage.removeItem('cdl_session_creds'); } catch (_) {}
     window.location.href = '/connexion';
   };
 
