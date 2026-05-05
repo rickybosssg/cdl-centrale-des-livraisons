@@ -21,25 +21,48 @@ Deno.serve(async (req) => {
   const { request_id, action, comment } = body;
   console.log('[ADMIN_VALIDATE_START]', { request_id, action, comment: comment?.slice(0, 40) });
 
-  // ── 2. Auth — email-only, aucune vérification de rôle ──────────────────────
+  // ── 2. Auth — lecture manuelle du token + email-only ──────────────────────
+  // Sur APK Capacitor, le header Authorization doit être lu AVANT createClientFromRequest
+  const rawAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
+  const tokenFromHeader = rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+
+  console.log('[ADMIN_VALIDATE_AUTH]', {
+    header_present: !!rawAuth,
+    token_length: tokenFromHeader.length,
+    token_prefix: tokenFromHeader.slice(0, 20) || 'EMPTY',
+  });
+
   const base44 = createClientFromRequest(req);
   let user = null;
   try {
     user = await base44.auth.me();
   } catch(e) {
-    console.error('[ADMIN_VALIDATE_AUTH_ERROR]', e.message);
-    return Response.json({ error: 'Non authentifié', detail: e.message }, { status: 401 });
+    console.error('[ADMIN_VALIDATE_AUTH_ERROR]', {
+      message: e.message,
+      token_present: !!tokenFromHeader,
+      reason_403: 'auth.me() threw — token invalide ou absent',
+    });
+    return Response.json({ error: 'Non authentifié', detail: e.message, token_present: !!tokenFromHeader }, { status: 401 });
   }
+
+  console.log('[ADMIN_VALIDATE_AUTH]', {
+    auth_user: user ? 'found' : 'null',
+    auth_email: user?.email || 'null',
+    token_valid: !!user,
+    request_id,
+    reason_403: user ? 'none' : 'user null après auth.me()',
+  });
 
   if (!user) {
-    return Response.json({ error: 'Non authentifié' }, { status: 401 });
+    return Response.json({ error: 'Non authentifié', token_present: !!tokenFromHeader }, { status: 401 });
   }
 
-  console.log('[ADMIN_VALIDATE_USER]', { email: user.email, role: user.role || 'null' });
-
-  // ── Vérification email uniquement — indépendant du rôle JWT ───────────────
-  if (user.email !== ADMIN_EMAIL) {
-    console.error('[ADMIN_VALIDATE_DENIED]', { email: user.email });
+  // ── Vérification email uniquement — COURT-CIRCUIT ABSOLU pour ADMIN_EMAIL ─
+  if (user.email === ADMIN_EMAIL) {
+    console.log('[ADMIN_VALIDATE_AUTH] ✅ Court-circuit admin email — accès autorisé immédiatement');
+    // Continuer sans aucune vérification supplémentaire
+  } else {
+    console.error('[ADMIN_VALIDATE_DENIED]', { auth_email: user.email, expected: ADMIN_EMAIL, reason_403: 'email ne correspond pas à ADMIN_EMAIL' });
     return Response.json({ error: 'Accès refusé — admin principal requis', user_email: user.email }, { status: 403 });
   }
 
