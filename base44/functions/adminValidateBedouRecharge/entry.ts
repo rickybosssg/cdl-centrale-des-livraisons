@@ -6,7 +6,7 @@
  *
  * ⚠️ NE PAS MODIFIER le système push — sendCdlNotification appelé tel quel
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest, createClient } from 'npm:@base44/sdk@0.8.25';
 
 const ADMIN_EMAIL = 'weezyh2@gmail.com';
 const APP_ID = Deno.env.get('BASE44_APP_ID') || '69c3c74fc4b62396dca61751';
@@ -21,8 +21,7 @@ Deno.serve(async (req) => {
   const { request_id, action, comment } = body;
   console.log('[ADMIN_VALIDATE_START]', { request_id, action, comment: comment?.slice(0, 40) });
 
-  // ── 2. Auth — lecture manuelle du token + email-only ──────────────────────
-  // Sur APK Capacitor, le header Authorization doit être lu AVANT createClientFromRequest
+  // ── 2. Auth — extraction manuelle du token + injection dans le SDK ────────
   const rawAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
   const tokenFromHeader = rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
 
@@ -30,19 +29,31 @@ Deno.serve(async (req) => {
     header_present: !!rawAuth,
     token_length: tokenFromHeader.length,
     token_prefix: tokenFromHeader.slice(0, 20) || 'EMPTY',
+    request_id,
   });
 
-  const base44 = createClientFromRequest(req);
+  if (!tokenFromHeader) {
+    console.error('[ADMIN_VALIDATE_AUTH_ERROR]', { reason_403: 'Aucun token dans Authorization header' });
+    return Response.json({ error: 'Non authentifié — token manquant', token_present: false }, { status: 401 });
+  }
+
+  // Créer le client en injectant le token manuellement (fiable sur APK Capacitor)
+  const APP_ID_ENV = Deno.env.get('BASE44_APP_ID') || APP_ID;
+  const base44 = createClient({
+    appId: APP_ID_ENV,
+    token: tokenFromHeader,
+  });
+
   let user = null;
   try {
     user = await base44.auth.me();
   } catch(e) {
     console.error('[ADMIN_VALIDATE_AUTH_ERROR]', {
       message: e.message,
-      token_present: !!tokenFromHeader,
-      reason_403: 'auth.me() threw — token invalide ou absent',
+      token_prefix: tokenFromHeader.slice(0, 20),
+      reason: 'auth.me() threw — token invalide ou expiré',
     });
-    return Response.json({ error: 'Non authentifié', detail: e.message, token_present: !!tokenFromHeader }, { status: 401 });
+    return Response.json({ error: 'Non authentifié', detail: e.message }, { status: 401 });
   }
 
   console.log('[ADMIN_VALIDATE_AUTH]', {
@@ -50,21 +61,19 @@ Deno.serve(async (req) => {
     auth_email: user?.email || 'null',
     token_valid: !!user,
     request_id,
-    reason_403: user ? 'none' : 'user null après auth.me()',
+    reason_403: user ? 'none' : 'user null',
   });
 
   if (!user) {
-    return Response.json({ error: 'Non authentifié', token_present: !!tokenFromHeader }, { status: 401 });
+    return Response.json({ error: 'Non authentifié — user null' }, { status: 401 });
   }
 
-  // ── Vérification email uniquement — COURT-CIRCUIT ABSOLU pour ADMIN_EMAIL ─
-  if (user.email === ADMIN_EMAIL) {
-    console.log('[ADMIN_VALIDATE_AUTH] ✅ Court-circuit admin email — accès autorisé immédiatement');
-    // Continuer sans aucune vérification supplémentaire
-  } else {
-    console.error('[ADMIN_VALIDATE_DENIED]', { auth_email: user.email, expected: ADMIN_EMAIL, reason_403: 'email ne correspond pas à ADMIN_EMAIL' });
-    return Response.json({ error: 'Accès refusé — admin principal requis', user_email: user.email }, { status: 403 });
+  // ── Vérification email uniquement — COURT-CIRCUIT ABSOLU ─────────────────
+  if (user.email !== ADMIN_EMAIL) {
+    console.error('[ADMIN_VALIDATE_DENIED]', { auth_email: user.email, expected: ADMIN_EMAIL });
+    return Response.json({ error: 'Accès refusé', user_email: user.email }, { status: 403 });
   }
+  console.log('[ADMIN_VALIDATE_AUTH] ✅ Admin autorisé —', user.email);
 
   // ── 3. Validation des paramètres ──────────────────────────────────────────
   if (!request_id || !action) {
