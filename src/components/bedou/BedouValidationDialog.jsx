@@ -187,15 +187,16 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
         return;
       }
 
-      // 403 — droits insuffisants
-      if (errStatus === 403 || msg.includes("403") || msg.includes("Admin requis")) {
+      // 403 — session expirée OU droits insuffisants
+      if (errStatus === 403 || msg.includes("403") || msg.includes("Admin requis") || msg.includes("logged in")) {
         const detail = err?.data;
         const tokenFound = !!getAuthToken();
-        console.log(`[BEDOU_VALIDATE_AUTH] is_admin=false | user_role=${detail?.user_role} | user_type=${detail?.user_type} | current_role=${detail?.current_role} | token_found=${tokenFound}`);
-        if (!tokenFound) {
-          msg = "Session expirée — veuillez vous reconnecter.";
+        const isAuthExpired = detail?.extra_data?.reason === 'auth_required' || msg.includes('logged in') || msg.includes('authentifi');
+        console.log(`[BEDOU_VALIDATE_AUTH] is_admin=false | auth_expired=${isAuthExpired} | reason=${detail?.extra_data?.reason || 'N/A'} | token_found=${tokenFound} | user_role=${detail?.user_role || 'N/A'}`);
+        if (isAuthExpired || !tokenFound) {
+          msg = "⚠️ Session expirée — fermez et relancez l'application, puis reconnectez-vous.";
         } else {
-          msg = `Accès refusé (403) — token présent mais rôle non reconnu. Relancez l'app ou contactez le support. role=${detail?.user_role || 'null'}`;
+          msg = `Accès refusé — rôle non reconnu côté serveur. Relancez l'app. (role=${detail?.user_role || 'null'})`;
         }
       }
 
