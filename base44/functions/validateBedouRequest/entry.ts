@@ -55,13 +55,13 @@ Deno.serve(async (req) => {
   console.log(`[ADMIN_CHECK] email=${user.email} | role=${user.role || 'null'} | user_type=${user.user_type || 'null'} | current_role=${user.current_role || 'null'} | role_actuel=${user.role_actuel || 'null'} | id=${user.id || 'null'}`);
 
   // 🔓 OVERRIDE ABSOLU : email admin principal — bypass tous les checks de rôle défaillants
-  // Confirmé en BDD : weezyh2@gmail.com a role='admin' mais le token JWT peut ne pas le refléter
   const isAdminByEmail = user.email === 'weezyh2@gmail.com';
 
-  // Checks standard sur le token JWT (peuvent être absents selon le contexte APK)
+  // Checks standard sur le token JWT
   const isAdminByRole = user.role === 'admin';
   const isAdminByUserType = user.user_type === 'admin';
   const isAdminByCurrentRole = user.current_role === 'admin' || user.role_actuel === 'admin';
+  const isAdminByProfils = Array.isArray(user.profils) && user.profils.includes('admin');
 
   // Vérification autoritaire via User BDD — source de vérité
   let isAdminByUserBDD = false;
@@ -77,9 +77,11 @@ Deno.serve(async (req) => {
     isAdminByStaff = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
   } catch(_) {}
 
-  const isAdmin = isAdminByEmail || isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByUserBDD || isAdminByStaff;
+  const isAdmin = isAdminByEmail || isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByProfils || isAdminByUserBDD || isAdminByStaff;
 
-  console.log(`[ADMIN_ACCESS_CHECK] email=${user.email} | byEmail=${isAdminByEmail} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byUserBDD=${isAdminByUserBDD} | byStaff=${isAdminByStaff} | RESULT=${isAdmin}`);
+  // Log debug complet — toutes les sources
+  console.log(`[ADMIN_DEBUG] role_actuel=${user.role_actuel || 'null'} | profils=${JSON.stringify(user.profils) || 'null'} | user_type=${user.user_type || 'null'}`);
+  console.log(`[ADMIN_ACCESS_CHECK] email=${user.email} | byEmail=${isAdminByEmail} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byProfils=${isAdminByProfils} | byUserBDD=${isAdminByUserBDD} | byStaff=${isAdminByStaff} | RESULT=${isAdmin}`);
 
   if (!isAdmin) {
     console.error(`[ADMIN_ACCESS_DENIED] email=${user.email} | role=${user.role} | user_type=${user.user_type} | current_role=${user.current_role} — aucun check admin valide`);
