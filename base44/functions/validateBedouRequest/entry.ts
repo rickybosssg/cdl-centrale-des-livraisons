@@ -54,33 +54,37 @@ Deno.serve(async (req) => {
   // ── Logs d'auth détaillés pour diagnostic ───────────────────────────────────
   console.log(`[ADMIN_CHECK] email=${user.email} | role=${user.role || 'null'} | user_type=${user.user_type || 'null'} | current_role=${user.current_role || 'null'} | role_actuel=${user.role_actuel || 'null'} | id=${user.id || 'null'}`);
 
-  // 🔓 OVERRIDE ABSOLU : email admin principal — bypass tous les checks de rôle défaillants
+  // 🔓 OVERRIDE ABSOLU : email admin principal — court-circuit immédiat (avant tout appel BDD)
   const isAdminByEmail = user.email === 'weezyh2@gmail.com';
 
-  // Checks standard sur le token JWT
+  // Checks rapides sur le token JWT
   const isAdminByRole = user.role === 'admin';
   const isAdminByUserType = user.user_type === 'admin';
   const isAdminByCurrentRole = user.current_role === 'admin' || user.role_actuel === 'admin';
   const isAdminByProfils = Array.isArray(user.profils) && user.profils.includes('admin');
 
-  // Vérification autoritaire via User BDD — source de vérité
-  let isAdminByUserBDD = false;
-  try {
-    const usersBDD = await base44.asServiceRole.entities.User.filter({ email: user.email });
-    isAdminByUserBDD = usersBDD?.some(u => u.role === 'admin') || false;
-  } catch(_) {}
-
-  // Vérification via StaffPermission (non-bloquant)
-  let isAdminByStaff = false;
-  try {
-    const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
-    isAdminByStaff = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
-  } catch(_) {}
-
-  const isAdmin = isAdminByEmail || isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByProfils || isAdminByUserBDD || isAdminByStaff;
+  // Court-circuit immédiat si byEmail ou byRole — évite les appels BDD lents sur APK réseau lent
+  const isAdminFast = isAdminByEmail || isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByProfils;
 
   // Log debug complet — toutes les sources
   console.log(`[ADMIN_DEBUG] role_actuel=${user.role_actuel || 'null'} | profils=${JSON.stringify(user.profils) || 'null'} | user_type=${user.user_type || 'null'}`);
+
+  // Vérifications BDD seulement si les checks rapides ont échoué
+  let isAdminByUserBDD = false;
+  let isAdminByStaff = false;
+  if (!isAdminFast) {
+    try {
+      const usersBDD = await base44.asServiceRole.entities.User.filter({ email: user.email });
+      isAdminByUserBDD = usersBDD?.some(u => u.role === 'admin') || false;
+    } catch(_) {}
+    try {
+      const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
+      isAdminByStaff = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
+    } catch(_) {}
+  }
+
+  const isAdmin = isAdminFast || isAdminByUserBDD || isAdminByStaff;
+
   console.log(`[ADMIN_ACCESS_CHECK] email=${user.email} | byEmail=${isAdminByEmail} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byProfils=${isAdminByProfils} | byUserBDD=${isAdminByUserBDD} | byStaff=${isAdminByStaff} | RESULT=${isAdmin}`);
 
   if (!isAdmin) {
