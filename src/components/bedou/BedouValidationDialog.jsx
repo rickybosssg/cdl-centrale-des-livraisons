@@ -98,6 +98,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
   const [processing, setProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [step, setStep] = useState(null);
+  const [diag, setDiag] = useState(null);
 
   const montant = request.montant || 0;
   const bonus = request.bonus || 0;
@@ -125,12 +126,26 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     setErrorMsg(null);
     setStep("⏳ Traitement en cours...");
 
+    const diagState = {
+      request_id: request.id || 'UNDEFINED',
+      token_present: !!getTokenFromStorage(),
+      api_called: false,
+      backend_status: null,
+      backend_response: null,
+    };
+    setDiag({ ...diagState });
+
     try {
+      diagState.api_called = true;
+      setDiag({ ...diagState });
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'validate',
         comment: comment.trim() || '',
       });
+      diagState.backend_status = 200;
+      diagState.backend_response = JSON.stringify(data).slice(0, 200);
+      setDiag({ ...diagState });
 
       if (data?.already_processed) {
         toast.warning("⚠️ Demande déjà traitée.");
@@ -144,6 +159,9 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       setTimeout(() => onSuccess(), 400);
 
     } catch (err) {
+      diagState.backend_status = err?.status || 'ERR';
+      diagState.backend_response = err?.message || 'Erreur inconnue';
+      setDiag({ ...diagState });
       console.log('[VALIDATE_ERROR]', { message: err?.message, status: err?.status, data: err?.data });
       const status = err?.status;
       let msg = err?.message || "Erreur inconnue";
@@ -295,6 +313,18 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
               disabled={processing}
             />
           </div>
+
+          {/* ── BLOC DIAGNOSTIC TEMPORAIRE ── */}
+          {diag && (
+            <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px 12px', fontSize: '11px', fontFamily: 'monospace', color: '#94a3b8', lineHeight: '1.8' }}>
+              <p style={{ color: '#f8fafc', fontWeight: 'bold', marginBottom: '4px' }}>🔍 DIAGNOSTIC</p>
+              <p><span style={{ color: '#64748b' }}>request_id = </span><span style={{ color: diag.request_id === 'UNDEFINED' ? '#ef4444' : '#4ade80' }}>{diag.request_id}</span></p>
+              <p><span style={{ color: '#64748b' }}>token_present = </span><span style={{ color: diag.token_present ? '#4ade80' : '#ef4444' }}>{String(diag.token_present)}</span></p>
+              <p><span style={{ color: '#64748b' }}>api_called = </span><span style={{ color: diag.api_called ? '#4ade80' : '#f59e0b' }}>{String(diag.api_called)}</span></p>
+              <p><span style={{ color: '#64748b' }}>backend_status = </span><span style={{ color: diag.backend_status === 200 ? '#4ade80' : '#ef4444' }}>{diag.backend_status ?? '...'}</span></p>
+              <p style={{ wordBreak: 'break-all' }}><span style={{ color: '#64748b' }}>backend_response = </span><span style={{ color: '#e2e8f0' }}>{diag.backend_response ?? '...'}</span></p>
+            </div>
+          )}
 
           {/* Boutons */}
           <div className="flex gap-2 pt-1">
