@@ -94,16 +94,23 @@ Deno.serve(async (req) => {
   const table = type === 'recharge' ? 'DemandeRecharge' : 'DemandeRetrait';
 
   // ── 1. Charger la demande ─────────────────────────────────────────────────
+  console.log(`[RECHARGE_LOOKUP] table=${table} | request_id_received=${request_id} | request_id_type=${typeof request_id} | request_id_length=${String(request_id).length}`);
   let demande;
   try {
-    const demandeList = await base44.asServiceRole.entities[table].filter({ id: request_id }, null, 1);
-    demande = demandeList?.[0] || null;
+    // Utiliser get() par ID primaire — plus fiable que filter({id:...})
+    demande = await base44.asServiceRole.entities[table].get(request_id);
   } catch (e) {
-    L(`Erreur chargement demande: ${e.message}`);
-    return Response.json({ error: 'Demande introuvable' }, { status: 404 });
+    L(`get() échoué: ${e.message} — tentative filter fallback`);
+    try {
+      const demandeList = await base44.asServiceRole.entities[table].filter({ user_email: body.user_email || '' }, null, 100);
+      demande = demandeList?.find(d => d.id === request_id) || null;
+    } catch (e2) {
+      L(`filter fallback échoué: ${e2.message}`);
+    }
   }
+  console.log(`[RECHARGE_LOOKUP] found=${!!demande} | demande_id=${demande?.id || 'null'} | statut=${demande?.statut || 'null'} | user_email=${demande?.user_email || 'null'}`);
 
-  if (!demande) return Response.json({ error: 'Demande introuvable' }, { status: 404 });
+  if (!demande) return Response.json({ error: 'Demande introuvable', request_id_received: request_id, table }, { status: 404 });
 
   // ANTI-DOUBLE-CRÉDIT : bloquer si déjà traitée
   if (demande.statut !== 'en_attente') {

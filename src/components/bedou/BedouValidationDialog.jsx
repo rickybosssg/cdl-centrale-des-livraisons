@@ -71,6 +71,8 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
   const handleValider = async () => {
     // Log auth complet pour diagnostic APK
     L("BEDOU_VALIDATE_AUTH", `token_received=true | request_id=${request.id} | type=${type} | statut=${request.statut}`);
+    console.log(`[VALIDATION_ID_CHECK] request.id=${request.id} | typeof=${typeof request.id} | request_keys=${Object.keys(request).join(',')}`);
+    console.log("VALIDATION ID:", request.id);
 
     // Guard anti-double-clic
     if (processing) {
