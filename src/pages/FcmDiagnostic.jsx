@@ -789,7 +789,46 @@ export default function FcmDiagnostic() {
         </CardContent>
       </Card>
 
-      {/* Bouton enregistrer — Android natif uniquement */}
+      {/* Bouton Rafraîchir token push — toujours visible sur natif */}
+      {isNative && (
+        <Card className="border-green-300 bg-green-50">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-sm font-semibold text-green-900">
+              🔄 Rafraîchir mon token push
+            </p>
+            <p className="text-xs text-green-700">
+              Force Firebase à générer un nouveau token, supprime l'ancien de la BDD et enregistre le nouveau.
+              À utiliser si les notifications ne arrivent plus.
+            </p>
+            <Button
+              onClick={async () => {
+                addLog('🔄 Rafraîchissement token FCM demandé...');
+                // Supprimer tous les tokens actifs actuels avant de re-register
+                if (user?.email) {
+                  try {
+                    const tokensRes = await base44.functions.invoke('getFcmTokens', { user_email: user.email });
+                    const activeTokens = (tokensRes?.data?.tokens || []).filter(t => t.is_active);
+                    for (const t of activeTokens) {
+                      await base44.functions.invoke('markFcmTokenInactive', { user_email: user.email, token: t.token, reason: 'FORCE_REFRESH' });
+                      addLog(`🗑️ Ancien token invalidé: ${t.token.slice(0, 20)}...`);
+                    }
+                  } catch (e) { addLog('Erreur suppression anciens tokens: ' + e.message, 'warn'); }
+                }
+                await registerNative();
+                setTimeout(() => { checkAdminTokenStatus(); load(); }, 2000);
+              }}
+              disabled={registering}
+              className="w-full bg-green-600 hover:bg-green-700 text-white"
+            >
+              {registering
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Rafraîchissement...</>
+                : '🔄 Rafraîchir mon token push'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bouton enregistrer — Android natif uniquement, si pas encore de token */}
       {isNative && chain.db !== 'ok' && (
         <Card className="border-amber-300 bg-amber-50">
           <CardContent className="p-4 space-y-3">

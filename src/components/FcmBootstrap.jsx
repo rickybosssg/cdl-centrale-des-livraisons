@@ -33,6 +33,36 @@ async function saveFcmTokenOnce({ user_email, token, device_type }) {
   }
 }
 
+// ── Vérification token BDD vs token Firebase actuel ──────────────────────────
+// Récupère le token actif en BDD pour cet email, retourne null si aucun
+async function getStoredActiveToken(user_email) {
+  try {
+    const res = await fetch(`${APP_BASE_URL}/functions/getFcmTokens`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    const tokens = (data?.tokens || []).filter(t => t.is_active);
+    if (!tokens.length) return null;
+    // Retourner le plus récent
+    tokens.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0));
+    return tokens[0]?.token || null;
+  } catch (_) { return null; }
+}
+
+// ── Supprimer token invalide (UNREGISTERED / 400) de la BDD ─────────────────
+async function removeInvalidToken(user_email, token) {
+  try {
+    await fetch(`${APP_BASE_URL}/functions/markFcmTokenInactive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email, token, reason: 'INVALID_TOKEN_DETECTED' }),
+    });
+    console.log('[FCM] 🗑️ Token invalide supprimé de la BDD');
+  } catch (_) {}
+}
+
 function isNativePlatform() {
   try {
     if (typeof window === 'undefined') return false;
@@ -215,8 +245,18 @@ async function runNativeFcm(propEmail) {
         const token = tokenData?.value;
         if (!token) { console.error('[FCM] registration: token vide'); return; }
         console.log('[FCM] ✅ Token reçu (len=' + token.length + '):', token.slice(0, 40) + '...');
-        resolveEmail(propEmail).then(email => {
+        resolveEmail(propEmail).then(async (email) => {
           if (!email) { console.error('[FCM] Pas d\'email pour sauvegarder le token'); return; }
+          // ── Vérifier si le token a changé vs BDD ──────────────────────────
+          const storedToken = await getStoredActiveToken(email);
+          if (storedToken && storedToken === token) {
+            console.log('[FCM] Token inchangé — pas de mise à jour BDD nécessaire');
+            return;
+          }
+          if (storedToken && storedToken !== token) {
+            console.log('[FCM] 🔄 Token changé — suppression ancien + enregistrement nouveau');
+            await removeInvalidToken(email, storedToken);
+          }
           saveFcmTokenOnce({ user_email: email, token, device_type: 'android_native' });
         }).catch(e => console.error('[FCM] resolveEmail error:', e?.message));
       } catch (e) {
