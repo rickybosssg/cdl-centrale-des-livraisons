@@ -51,35 +51,39 @@ Deno.serve(async (req) => {
   // Logs d'auth complets pour diagnostic APK
   console.log(`[BEDOU_VALIDATE_AUTH] token_received=true | user_email=${user.email} | role=${user.role} | user_type=${user.user_type || 'N/A'} | current_role=${user.current_role || 'N/A'} | role_actuel=${user.role_actuel || 'N/A'} | id=${user.id || 'N/A'}`);
 
-  // Vérifier admin : tous les champs possibles (base44 auth + CDL profile fields)
+  // ── Logs d'auth détaillés pour diagnostic ───────────────────────────────────
+  console.log(`[ADMIN_CHECK] email=${user.email} | role=${user.role || 'null'} | user_type=${user.user_type || 'null'} | current_role=${user.current_role || 'null'} | role_actuel=${user.role_actuel || 'null'} | id=${user.id || 'null'}`);
+
+  // 🔓 OVERRIDE ABSOLU : email admin principal — bypass tous les checks de rôle défaillants
+  // Confirmé en BDD : weezyh2@gmail.com a role='admin' mais le token JWT peut ne pas le refléter
+  const isAdminByEmail = user.email === 'weezyh2@gmail.com';
+
+  // Checks standard sur le token JWT (peuvent être absents selon le contexte APK)
   const isAdminByRole = user.role === 'admin';
   const isAdminByUserType = user.user_type === 'admin';
   const isAdminByCurrentRole = user.current_role === 'admin' || user.role_actuel === 'admin';
 
-  // 🔓 OVERRIDE ABSOLU : email admin principal — bypass tout check défaillant
-  const isAdminByEmail = user.email === 'weezyh2@gmail.com';
+  // Vérification autoritaire via User BDD — source de vérité
+  let isAdminByUserBDD = false;
+  try {
+    const usersBDD = await base44.asServiceRole.entities.User.filter({ email: user.email });
+    isAdminByUserBDD = usersBDD?.some(u => u.role === 'admin') || false;
+  } catch(_) {}
 
-  // Vérification supplémentaire via StaffPermission en BDD (non-bloquant)
+  // Vérification via StaffPermission (non-bloquant)
   let isAdminByStaff = false;
   try {
     const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
     isAdminByStaff = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
   } catch(_) {}
 
-  // Vérification via User BDD (non-bloquant) — au cas où role n'est pas dans le token
-  let isAdminByUserBDD = false;
-  try {
-    const usersBDD = await base44.asServiceRole.entities.User.filter({ email: user.email });
-    isAdminByUserBDD = usersBDD?.some(u => u.role === 'admin') || false;
-    if (isAdminByUserBDD) L(`admin confirmé via User BDD | email=${user.email}`);
-  } catch(_) {}
+  const isAdmin = isAdminByEmail || isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByUserBDD || isAdminByStaff;
 
-  const isAdmin = isAdminByEmail || isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByStaff || isAdminByUserBDD;
-  console.log(`[ADMIN_ACCESS_CHECK] email=${user.email} | role=${user.role || 'null'} | user_type=${user.user_type || 'null'} | role_actuel=${user.role_actuel || user.current_role || 'null'} | byEmail=${isAdminByEmail} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byStaff=${isAdminByStaff} | byUserBDD=${isAdminByUserBDD} | isAllowed=${isAdmin}`);
+  console.log(`[ADMIN_ACCESS_CHECK] email=${user.email} | byEmail=${isAdminByEmail} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byUserBDD=${isAdminByUserBDD} | byStaff=${isAdminByStaff} | RESULT=${isAdmin}`);
 
   if (!isAdmin) {
-    L(`AUTH REFUSÉ — user=${user.email} role=${user.role} user_type=${user.user_type} current_role=${user.current_role}`);
-    return Response.json({ error: 'Admin requis', user_role: user.role, user_type: user.user_type, current_role: user.current_role, is_admin: false }, { status: 403 });
+    console.error(`[ADMIN_ACCESS_DENIED] email=${user.email} | role=${user.role} | user_type=${user.user_type} | current_role=${user.current_role} — aucun check admin valide`);
+    return Response.json({ error: 'Admin requis', user_email: user.email, user_role: user.role, user_type: user.user_type, current_role: user.current_role, is_admin: false }, { status: 403 });
   }
 
   const { request_id, type, action, motif_refus } = body;
