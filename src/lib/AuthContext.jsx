@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import { installAuthExpiredInterceptor } from '@/lib/authExpiredInterceptor';
 
 const AuthContext = createContext(null);
 
@@ -63,6 +64,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    installAuthExpiredInterceptor();
     checkAppState();
   }, []);
 
