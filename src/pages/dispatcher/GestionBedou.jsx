@@ -76,6 +76,12 @@ export default function GestionBedou() {
   };
 
   const ouvrirDemande = (request, type) => {
+    console.log(`[GESTION_BEDOU] ouvrirDemande | id=${request?.id} | typeof=${typeof request?.id} | statut=${request?.statut} | type=${type} | user=${request?.user_email}`);
+    if (!request?.id) {
+      console.error('[GESTION_BEDOU] ❌ request.id manquant — demande non ouverte');
+      toast.error("Erreur : ID de demande introuvable");
+      return;
+    }
     setSelectedRequest({ ...request, type });
     setDialogOpen(true);
   };
