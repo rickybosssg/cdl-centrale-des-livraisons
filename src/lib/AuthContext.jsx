@@ -1,11 +1,10 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { installAuthExpiredInterceptor } from '@/lib/authExpiredInterceptor';
-import { startSessionPing } from '@/lib/sessionManager';
+import { startSessionPing, silentRefresh, hasCredentials } from '@/lib/sessionManager';
 
 const AuthContext = createContext(null);
 
-// Helper : injecter le token localStorage dans le SDK avant chaque appel auth
 function syncTokenToSDK() {
   try {
     const stored = localStorage.getItem('base44_access_token');
@@ -29,7 +28,7 @@ export const AuthProvider = ({ children }) => {
 
     let settled = false;
 
-    // Timeout de sécurité : jamais bloquer l'APK indéfiniment
+    // Timeout de sécurité — jamais bloquer l'APK indéfiniment
     const timeoutId = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -41,13 +40,39 @@ export const AuthProvider = ({ children }) => {
 
     try {
       syncTokenToSDK();
-      const currentUser = await base44.auth.me();
-      if (settled) return; // Timeout déjà déclenché
+      let currentUser = null;
+
+      try {
+        currentUser = await base44.auth.me();
+      } catch (firstErr) {
+        // Premier échec — si on a des credentials, tenter refresh silencieux avant d'abandonner
+        const errReason = firstErr?.data?.extra_data?.reason || '';
+        const isAuthError = firstErr?.status === 403 || firstErr?.status === 401
+          || errReason === 'auth_required'
+          || firstErr?.message?.includes('logged in');
+
+        if (isAuthError && hasCredentials()) {
+          console.warn('[AUTH] auth.me() échoué — tentative refresh silencieux...');
+          const refreshed = await silentRefresh();
+          if (refreshed) {
+            syncTokenToSDK();
+            currentUser = await base44.auth.me(); // Réessayer après refresh
+            console.log('[AUTH] Re-auth réussie après refresh silencieux');
+          } else {
+            console.warn('[AUTH] Refresh silencieux échoué — session non récupérable');
+            throw firstErr; // Laisser le catch principal gérer
+          }
+        } else {
+          throw firstErr;
+        }
+      }
+
+      if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
       setUser(currentUser);
       setIsAuthenticated(true);
-      startSessionPing(); // démarrer ping même si déjà connecté au démarrage
+      startSessionPing();
       console.log('[AUTH] INIT SUCCESS | user:', currentUser?.email);
     } catch (error) {
       if (settled) return;
@@ -60,7 +85,6 @@ export const AuthProvider = ({ children }) => {
       }
       console.warn('[AUTH] INIT ERROR:', error?.message || 'unknown');
     } finally {
-      // TOUJOURS débloquer le loading — jamais laisser l'app bloquée
       setIsLoadingAuth(false);
     }
   }, []);
@@ -75,7 +99,6 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
     try { localStorage.removeItem('base44_access_token'); } catch (_) {}
     try { base44.auth.setToken(null); } catch (_) {}
-    // Nettoyer les credentials sauvegardés
     try { localStorage.removeItem('cdl_session_creds'); } catch (_) {}
     window.location.href = '/connexion';
   };
@@ -85,13 +108,11 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // Forcer l'état connecté immédiatement après login (sans appel réseau)
   const setLoggedIn = useCallback((userData) => {
     setUser(userData);
     setIsAuthenticated(true);
     setIsLoadingAuth(false);
     setAuthError(null);
-    // Hard reload vers / pour bypasser tout état bloqué (hardUnblock, etc.)
     window.location.replace('/');
   }, []);
 
