@@ -53,6 +53,13 @@ function getAuthToken() {
 // Contourne les bugs Axios/SDK sur APK Capacitor où le token n'est pas envoyé
 async function invokeWithToken(fnName, payload) {
   const APP_ID = import.meta.env.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
+
+  // Toujours re-synchroniser le token SDK avant appel
+  try {
+    const stored = localStorage.getItem('base44_access_token');
+    if (stored) base44.auth.setToken(stored);
+  } catch(_) {}
+
   const token = getAuthToken();
 
   // URL adaptée selon protocole (capacitor: → serveur externe)
@@ -61,13 +68,17 @@ async function invokeWithToken(fnName, payload) {
     : '';
   const url = `${baseUrl}/api/apps/${APP_ID}/functions/${fnName}`;
 
-  console.log(`[BEDOU_VALIDATE_AUTH] token_found=${!!token} | token_len=${token?.length || 0} | fn=${fnName} | protocol=${window.location?.protocol} | url=${url}`);
+  console.log(`[BEDOU_VALIDATE_AUTH] token_found=${!!token} | token_len=${token?.length || 0} | fn=${fnName} | protocol=${window.location?.protocol}`);
+
+  if (!token) {
+    throw Object.assign(new Error('Session expirée — reconnectez-vous'), { status: 401 });
+  }
 
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
   });
@@ -120,10 +131,18 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       return;
     }
 
-    L("BEDOU_VALIDATE_START", `request_id=${request.id}`);
-    L("BEDOU_VALIDATE_REQUEST_ID", request.id);
-    L("BEDOU_VALIDATE_CLIENT_ID", clientId);
-    L("BEDOU_VALIDATE_TOTAL_CREDIT", `montant=${montant} | bonus=${bonus} | total=${totalCredit}`);
+    // ── LOGS DIAGNOSTIC ──────────────────────────────────────────────────────
+    console.log('[VALIDATE_START]', {
+      requestId: request.id,
+      requestIdType: typeof request.id,
+      requestIdDefined: request.id !== undefined && request.id !== null && request.id !== '',
+      userEmail: request.user_email,
+      statut: request.statut,
+      type,
+      token_found: !!getAuthToken(),
+      token_len: getAuthToken()?.length || 0,
+      protocol: window.location?.protocol,
+    });
 
     setProcessing(true);
     setErrorMsg(null);
@@ -132,12 +151,12 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     try {
       setStep("💳 Crédit du solde en cours...");
 
-      const res = await invokeWithToken("validateBedouRequest", {
-        request_id: request.id,
-        type,
-        action: "valider",
-      });
+      const payload = { request_id: request.id, type, action: "valider" };
+      console.log('[VALIDATE_PAYLOAD]', payload);
 
+      const res = await invokeWithToken("validateBedouRequest", payload);
+
+      console.log('[VALIDATE_RESPONSE]', res?.data);
       const d = res?.data;
 
       // Cas : déjà traitée (409 renvoyé en 200 avec already_processed=true)
@@ -174,7 +193,12 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       setTimeout(() => onSuccess(), 400);
 
     } catch (err) {
-      L("BEDOU_VALIDATE_ERROR", `exception | message=${err?.message} | request_id=${request.id}`);
+      console.log('[VALIDATE_ERROR]', {
+        message: err?.message,
+        status: err?.status,
+        data: err?.data,
+        requestId: request.id,
+      });
 
       let msg = err?.message || "Erreur inconnue";
 
