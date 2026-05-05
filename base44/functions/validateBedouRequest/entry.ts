@@ -48,48 +48,44 @@ Deno.serve(async (req) => {
   }
   if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
 
-  // Logs d'auth complets pour diagnostic APK
-  console.log(`[BEDOU_VALIDATE_AUTH] token_received=true | user_email=${user.email} | role=${user.role} | user_type=${user.user_type || 'N/A'} | current_role=${user.current_role || 'N/A'} | role_actuel=${user.role_actuel || 'N/A'} | id=${user.id || 'N/A'}`);
+  console.log(`[BEDOU_VALIDATE_AUTH] token_received=true | user_email=${user.email} | role=${user.role || 'null'} | id=${user.id || 'N/A'}`);
 
-  // ── Logs d'auth détaillés pour diagnostic ───────────────────────────────────
-  console.log(`[ADMIN_CHECK] email=${user.email} | role=${user.role || 'null'} | user_type=${user.user_type || 'null'} | current_role=${user.current_role || 'null'} | role_actuel=${user.role_actuel || 'null'} | id=${user.id || 'null'}`);
+  // ── ADMIN PRINCIPAL : court-circuit absolu, indépendant du rôle JWT ──────
+  const ADMIN_EMAIL = 'weezyh2@gmail.com';
+  const isAdminByEmail = user.email === ADMIN_EMAIL;
 
-  // 🔓 OVERRIDE ABSOLU : email admin principal — court-circuit immédiat (avant tout appel BDD)
-  const isAdminByEmail = user.email === 'weezyh2@gmail.com';
+  // ── Autres admins : checks standards JWT + BDD (pour futurs admins) ──────
+  let isAdmin = isAdminByEmail; // court-circuit immédiat si email principal
 
-  // Checks rapides sur le token JWT
-  const isAdminByRole = user.role === 'admin';
-  const isAdminByUserType = user.user_type === 'admin';
-  const isAdminByCurrentRole = user.current_role === 'admin' || user.role_actuel === 'admin';
-  const isAdminByProfils = Array.isArray(user.profils) && user.profils.includes('admin');
+  if (!isAdmin) {
+    // Checks rapides JWT
+    isAdmin = user.role === 'admin'
+      || user.user_type === 'admin'
+      || user.current_role === 'admin'
+      || user.role_actuel === 'admin'
+      || (Array.isArray(user.profils) && user.profils.includes('admin'));
+  }
 
-  // Court-circuit immédiat si byEmail ou byRole — évite les appels BDD lents sur APK réseau lent
-  const isAdminFast = isAdminByEmail || isAdminByRole || isAdminByUserType || isAdminByCurrentRole || isAdminByProfils;
-
-  // Log debug complet — toutes les sources
-  console.log(`[ADMIN_DEBUG] role_actuel=${user.role_actuel || 'null'} | profils=${JSON.stringify(user.profils) || 'null'} | user_type=${user.user_type || 'null'}`);
-
-  // Vérifications BDD seulement si les checks rapides ont échoué
-  let isAdminByUserBDD = false;
-  let isAdminByStaff = false;
-  if (!isAdminFast) {
+  if (!isAdmin) {
+    // Fallback BDD — seulement si JWT insuffisant
     try {
       const usersBDD = await base44.asServiceRole.entities.User.filter({ email: user.email });
-      isAdminByUserBDD = usersBDD?.some(u => u.role === 'admin') || false;
-    } catch(_) {}
-    try {
-      const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
-      isAdminByStaff = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
+      isAdmin = usersBDD?.some(u => u.role === 'admin') || false;
     } catch(_) {}
   }
 
-  const isAdmin = isAdminFast || isAdminByUserBDD || isAdminByStaff;
+  if (!isAdmin) {
+    try {
+      const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
+      isAdmin = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
+    } catch(_) {}
+  }
 
-  console.log(`[ADMIN_ACCESS_CHECK] email=${user.email} | byEmail=${isAdminByEmail} | byRole=${isAdminByRole} | byUserType=${isAdminByUserType} | byCurrentRole=${isAdminByCurrentRole} | byProfils=${isAdminByProfils} | byUserBDD=${isAdminByUserBDD} | byStaff=${isAdminByStaff} | RESULT=${isAdmin}`);
+  console.log(`[ADMIN_ACCESS_CHECK] email=${user.email} | byEmail=${isAdminByEmail} | RESULT=${isAdmin}`);
 
   if (!isAdmin) {
-    console.error(`[ADMIN_ACCESS_DENIED] email=${user.email} | role=${user.role} | user_type=${user.user_type} | current_role=${user.current_role} — aucun check admin valide`);
-    return Response.json({ error: 'Admin requis', user_email: user.email, user_role: user.role, user_type: user.user_type, current_role: user.current_role, is_admin: false }, { status: 403 });
+    console.error(`[ADMIN_ACCESS_DENIED] email=${user.email} | role=${user.role || 'null'}`);
+    return Response.json({ error: 'Admin requis', user_email: user.email, user_role: user.role || null, is_admin: false }, { status: 403 });
   }
 
   const { request_id, type, action, motif_refus } = body;
