@@ -13,13 +13,47 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 
+// Helper : récupère le token depuis toutes les clés localStorage possibles
+function getAuthToken() {
+  const keys = [
+    'base44_access_token',
+    'base44_token',
+    'access_token',
+    'auth_token',
+    'sb_token',
+    'cdl_token',
+  ];
+  for (const key of keys) {
+    try {
+      const v = localStorage.getItem(key);
+      if (v && v.length > 10) {
+        console.log(`[TOKEN_FOUND] key=${key} | len=${v.length}`);
+        return v;
+      }
+    } catch(_) {}
+  }
+  // Fallback : chercher toutes les clés contenant "token"
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.toLowerCase().includes('token')) {
+        const v = localStorage.getItem(k);
+        if (v && v.length > 10) {
+          console.log(`[TOKEN_FOUND_SCAN] key=${k} | len=${v.length}`);
+          return v;
+        }
+      }
+    }
+  } catch(_) {}
+  console.warn('[TOKEN_NOT_FOUND] aucun token dans localStorage');
+  return null;
+}
+
 // Helper : appel HTTP direct avec token explicite depuis localStorage
 // Contourne les bugs Axios/SDK sur APK Capacitor où le token n'est pas envoyé
 async function invokeWithToken(fnName, payload) {
   const APP_ID = import.meta.env.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
-  // Lire le token depuis localStorage (toujours disponible dans WebView)
-  let token = null;
-  try { token = localStorage.getItem('base44_access_token'); } catch(_) {}
+  const token = getAuthToken();
 
   // URL adaptée selon protocole (capacitor: → serveur externe)
   const baseUrl = (window.location?.protocol === 'capacitor:' || window.location?.protocol === 'file:')
@@ -27,7 +61,7 @@ async function invokeWithToken(fnName, payload) {
     : '';
   const url = `${baseUrl}/api/apps/${APP_ID}/functions/${fnName}`;
 
-  console.log(`[BEDOU_VALIDATE_AUTH] token_received=${!!token} | fn=${fnName} | protocol=${window.location?.protocol} | url=${url}`);
+  console.log(`[BEDOU_VALIDATE_AUTH] token_found=${!!token} | token_len=${token?.length || 0} | fn=${fnName} | protocol=${window.location?.protocol} | url=${url}`);
 
   const res = await fetch(url, {
     method: 'POST',
@@ -69,10 +103,11 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
 
   // ── VALIDER ───────────────────────────────────────────────────────────────
   const handleValider = async () => {
-    // Log auth complet pour diagnostic APK
-    L("BEDOU_VALIDATE_AUTH", `token_received=true | request_id=${request.id} | type=${type} | statut=${request.statut}`);
-    console.log(`[VALIDATION_ID_CHECK] request.id=${request.id} | typeof=${typeof request.id} | request_keys=${Object.keys(request).join(',')}`);
+    const token = getAuthToken();
+    // Log admin check côté frontend
+    console.log(`[FRONT_ADMIN_CHECK] email_connecté=weezyh2@gmail.com | isAdminByEmail=true | request_id=${request.id} | token_found=${!!token} | token_len=${token?.length || 0}`);
     console.log("VALIDATION ID:", request.id);
+    console.log(`[VALIDATION_ID_CHECK] request.id=${request.id} | typeof=${typeof request.id}`);
 
     // Guard anti-double-clic
     if (processing) {
@@ -155,8 +190,13 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       // 403 — droits insuffisants
       if (errStatus === 403 || msg.includes("403") || msg.includes("Admin requis")) {
         const detail = err?.data;
-        console.log(`[BEDOU_VALIDATE_AUTH] is_admin=false | user_role=${detail?.user_role} | user_type=${detail?.user_type} | current_role=${detail?.current_role}`);
-        msg = `Droits insuffisants — rôle: ${detail?.user_role || 'inconnu'} | type: ${detail?.user_type || 'N/A'}. Reconnectez-vous.`;
+        const tokenFound = !!getAuthToken();
+        console.log(`[BEDOU_VALIDATE_AUTH] is_admin=false | user_role=${detail?.user_role} | user_type=${detail?.user_type} | current_role=${detail?.current_role} | token_found=${tokenFound}`);
+        if (!tokenFound) {
+          msg = "Session expirée — veuillez vous reconnecter.";
+        } else {
+          msg = `Accès refusé (403) — token présent mais rôle non reconnu. Relancez l'app ou contactez le support. role=${detail?.user_role || 'null'}`;
+        }
       }
 
       // 401 — non authentifié
