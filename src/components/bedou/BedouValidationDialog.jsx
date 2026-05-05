@@ -3,6 +3,7 @@
  * Utilise adminValidateBedouRecharge — auth email-only, sans dépendance au rôle JWT
  */
 import { useState } from "react";
+import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,8 @@ import moment from "moment";
 
 const APP_ID = import.meta.env.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
 
-function getToken() {
+// Récupère le token depuis localStorage (toutes clés possibles)
+function getTokenFromStorage() {
   const keys = ['base44_access_token', 'base44_token', 'access_token', 'auth_token'];
   for (const key of keys) {
     try {
@@ -18,7 +20,6 @@ function getToken() {
       if (v && v.length > 10) return v;
     } catch(_) {}
   }
-  // Scan fallback
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -31,13 +32,41 @@ function getToken() {
   return null;
 }
 
+// Résout le token : localStorage d'abord, puis SDK base44 en fallback
+async function resolveToken() {
+  // 1. Essayer localStorage directement
+  const fromStorage = getTokenFromStorage();
+  if (fromStorage) return fromStorage;
+
+  // 2. Fallback : demander au SDK (parfois le token est en mémoire SDK uniquement sur APK)
+  try {
+    const me = await Promise.race([
+      base44.auth.me(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+    ]);
+    if (me) {
+      // me() réussi = session valide — re-tenter localStorage (le SDK a peut-être re-injecté)
+      const retry = getTokenFromStorage();
+      if (retry) return retry;
+    }
+  } catch(_) {}
+
+  return null;
+}
+
 async function callAdminValidate(payload) {
-  const token = getToken();
   const isNative = window.location?.protocol === 'capacitor:' || window.location?.protocol === 'file:';
   const baseUrl = isNative ? 'https://cdl.base44.app' : '';
   const url = `${baseUrl}/api/apps/${APP_ID}/functions/adminValidateBedouRecharge`;
 
-  console.log('[ADMIN_VALIDATE_CALL]', { url, token_found: !!token, token_len: token?.length || 0, payload });
+  const token = await resolveToken();
+
+  console.log('[ADMIN_VALIDATE_CALL]', {
+    token_found: !!token,
+    token_len: token?.length || 0,
+    protocol: window.location?.protocol,
+    payload,
+  });
 
   if (!token) {
     throw Object.assign(new Error('Session expirée — reconnectez-vous'), { status: 401 });
@@ -89,7 +118,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       idDefined: !!request.id,
       userEmail: request.user_email,
       statut: request.statut,
-      token_found: !!getToken(),
+      token_found: !!getTokenFromStorage(),
     });
 
     setProcessing(true);
