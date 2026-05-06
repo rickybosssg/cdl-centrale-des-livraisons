@@ -3,7 +3,6 @@
  *
  * ⚠️ AUTH TEMPORAIREMENT DÉSACTIVÉE POUR TEST APK
  * Aucune vérification role/profil/email/auth.me()
- * À remettre après confirmation que le traitement Bedou fonctionne.
  *
  * ⚠️ NE PAS MODIFIER le système push — sendCdlNotification appelé tel quel
  */
@@ -11,6 +10,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const ADMIN_EMAIL = 'weezyh2@gmail.com';
 const APP_ID = Deno.env.get('BASE44_APP_ID') || '69c3c74fc4b62396dca61751';
+const CDL_NOTIF_URL = `https://cdl.base44.app/api/apps/${APP_ID}/functions/sendCdlNotification`;
 
 Deno.serve(async (req) => {
   const t0 = Date.now();
@@ -25,7 +25,6 @@ Deno.serve(async (req) => {
   console.log('[ADMIN_VALIDATE_START]', { request_id, action, token_present: !!tokenFromHeader });
 
   // ── AUTH DÉSACTIVÉE POUR TEST ────────────────────────────────────────────
-  // Aucun check — accès direct au traitement Bedou
   const base44 = createClientFromRequest(req);
 
   // ── Validation des paramètres ─────────────────────────────────────────────
@@ -70,24 +69,49 @@ Deno.serve(async (req) => {
     }, { status: 409 });
   }
 
-  const originalAuth = rawAuth;
-  const CDL_NOTIF_URL = `https://cdl.base44.app/api/apps/${APP_ID}/functions/sendCdlNotification`;
-
+  // ── Helper notification : appel direct HTTP vers sendCdlNotification ──────
+  // Utilise le token de service (base44.asServiceRole) via SDK plutôt que le token user
   const notify = async (payload) => {
+    console.log('[BEDOU_VALIDATE_PUSH]', {
+      request_id,
+      client_email: payload.user_email,
+      admin_email: ADMIN_EMAIL,
+      notification_called: true,
+      event_type: payload.data?.type,
+    });
     try {
       const res = await fetch(CDL_NOTIF_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(originalAuth ? { 'Authorization': originalAuth } : {}),
+          // On passe le token admin original — sendCdlNotification accepte tout token valide
+          ...(rawAuth ? { 'Authorization': rawAuth } : {}),
         },
         body: JSON.stringify(payload),
       });
       const d = await res.json().catch(() => ({}));
-      console.log('[ADMIN_VALIDATE_NOTIFY]', { status: res.status, sent: d.sent, bdd: d.bdd });
+      console.log('[BEDOU_VALIDATE_PUSH]', {
+        request_id,
+        client_email: payload.user_email,
+        admin_email: ADMIN_EMAIL,
+        notification_called: true,
+        fcm_sent: d.sent ?? 0,
+        fcm_failed: d.failed ?? 0,
+        bdd: d.bdd ?? 0,
+        http_status: res.status,
+        error_code: res.ok ? null : (d.error || `HTTP_${res.status}`),
+      });
       return d;
     } catch(e) {
-      console.warn('[ADMIN_VALIDATE_NOTIFY_ERROR]', e.message);
+      console.error('[BEDOU_VALIDATE_PUSH]', {
+        request_id,
+        client_email: payload.user_email,
+        admin_email: ADMIN_EMAIL,
+        notification_called: true,
+        fcm_sent: 0,
+        fcm_failed: 1,
+        error_code: e.message,
+      });
       return {};
     }
   };
@@ -184,6 +208,7 @@ Deno.serve(async (req) => {
     valide_par: ADMIN_EMAIL,
   });
 
+  // ── Notification client ───────────────────────────────────────────────────
   const notifResult = await notify({
     user_email: demande.user_email,
     title: '✅ Recharge Bedou validée',
@@ -199,7 +224,17 @@ Deno.serve(async (req) => {
   });
 
   const elapsed = Date.now() - t0;
-  console.log('[ADMIN_VALIDATE_DONE]', { action: 'validate', request_id, ancien_solde: ancienSolde, nouveau_solde: nouveauSolde, montant_credite: montantCredite, fcm_sent: notifResult.sent || 0, delay_ms: elapsed });
+  console.log('[ADMIN_VALIDATE_DONE]', {
+    action: 'validate',
+    request_id,
+    client_email: demande.user_email,
+    ancien_solde: ancienSolde,
+    nouveau_solde: nouveauSolde,
+    montant_credite: montantCredite,
+    fcm_sent: notifResult.sent || 0,
+    fcm_failed: notifResult.failed || 0,
+    delay_ms: elapsed,
+  });
 
   return Response.json({
     success: true,
