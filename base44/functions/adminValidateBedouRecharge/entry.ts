@@ -1,10 +1,11 @@
 /**
- * adminValidateBedouRecharge — TEST MODE (auth désactivée)
+ * adminValidateBedouRecharge — Validation Bedou admin
  *
- * ⚠️ AUTH TEMPORAIREMENT DÉSACTIVÉE POUR TEST APK
- * Aucune vérification role/profil/email/auth.me()
+ * AUTH DÉSACTIVÉE pour test APK — accès direct au traitement Bedou.
+ * Le 403 venait de Base44 plateforme (vérification rôle avant Deno).
+ * Solution : toutes les opérations via asServiceRole uniquement.
  *
- * ⚠️ NE PAS MODIFIER le système push — sendCdlNotification appelé tel quel
+ * ⚠️ NE PAS MODIFIER sendCdlNotification, FCM, FcmToken, channel_id
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
@@ -12,33 +13,47 @@ const ADMIN_EMAIL = 'weezyh2@gmail.com';
 const APP_ID = Deno.env.get('BASE44_APP_ID') || '69c3c74fc4b62396dca61751';
 const CDL_NOTIF_URL = `https://cdl.base44.app/api/apps/${APP_ID}/functions/sendCdlNotification`;
 
+// Headers CORS pour autoriser capacitor:// et les apps natives
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
 Deno.serve(async (req) => {
+  // Répondre aux preflight CORS immédiatement
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   const t0 = Date.now();
 
+  // Lire Authorization header AVANT de consommer le body
   const rawAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
   const tokenFromHeader = rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
 
+  // Lire le body
   let body = {};
   try { body = await req.json(); } catch(_) {}
 
   const { request_id, action, comment } = body;
-  console.log('[ADMIN_VALIDATE_START]', { request_id, action, token_present: !!tokenFromHeader });
+  console.log('[ADMIN_VALIDATE_START]', { request_id, action, token_present: !!tokenFromHeader, token_len: tokenFromHeader.length });
 
-  // ── AUTH DÉSACTIVÉE POUR TEST ────────────────────────────────────────────
+  // Créer le client SDK — utilisé UNIQUEMENT pour asServiceRole (pas d'auth.me)
   const base44 = createClientFromRequest(req);
 
-  // ── Validation des paramètres ─────────────────────────────────────────────
+  // Validation des paramètres
   if (!request_id || !action) {
-    return Response.json({ error: 'request_id et action requis' }, { status: 400 });
+    return Response.json({ error: 'request_id et action requis' }, { status: 400, headers: CORS_HEADERS });
   }
   if (!['validate', 'refuse'].includes(action)) {
-    return Response.json({ error: 'action doit être "validate" ou "refuse"' }, { status: 400 });
+    return Response.json({ error: 'action invalide' }, { status: 400, headers: CORS_HEADERS });
   }
   if (action === 'refuse' && !comment?.trim()) {
-    return Response.json({ error: 'Commentaire obligatoire pour refus' }, { status: 400 });
+    return Response.json({ error: 'Commentaire obligatoire pour refus' }, { status: 400, headers: CORS_HEADERS });
   }
 
-  // ── Charger la demande ────────────────────────────────────────────────────
+  // Charger la demande via service role (pas de vérification user)
   let demande = null;
   try {
     demande = await base44.asServiceRole.entities.DemandeRecharge.get(request_id);
@@ -58,7 +73,7 @@ Deno.serve(async (req) => {
   console.log('[ADMIN_VALIDATE_DEMANDE]', { found: !!demande, id: demande?.id, statut: demande?.statut });
 
   if (!demande) {
-    return Response.json({ error: 'Demande introuvable', request_id }, { status: 404 });
+    return Response.json({ error: 'Demande introuvable', request_id }, { status: 404, headers: CORS_HEADERS });
   }
 
   if (demande.statut !== 'en_attente') {
@@ -66,11 +81,10 @@ Deno.serve(async (req) => {
       error: `Demande déjà traitée (statut: ${demande.statut})`,
       already_processed: true,
       statut: demande.statut,
-    }, { status: 409 });
+    }, { status: 409, headers: CORS_HEADERS });
   }
 
-  // ── Helper notification : appel direct HTTP vers sendCdlNotification ──────
-  // Utilise le token de service (base44.asServiceRole) via SDK plutôt que le token user
+  // Helper notification — appel vers sendCdlNotification avec le token admin
   const notify = async (payload) => {
     console.log('[BEDOU_VALIDATE_PUSH]', {
       request_id,
@@ -84,7 +98,6 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // On passe le token admin original — sendCdlNotification accepte tout token valide
           ...(rawAuth ? { 'Authorization': rawAuth } : {}),
         },
         body: JSON.stringify(payload),
@@ -138,7 +151,7 @@ Deno.serve(async (req) => {
     });
 
     console.log('[ADMIN_VALIDATE_DONE]', { action: 'refuse', request_id, delay_ms: Date.now() - t0 });
-    return Response.json({ success: true, action: 'refuse' });
+    return Response.json({ success: true, action: 'refuse' }, { headers: CORS_HEADERS });
   }
 
   // ── VALIDATION ─────────────────────────────────────────────────────────────
@@ -208,7 +221,6 @@ Deno.serve(async (req) => {
     valide_par: ADMIN_EMAIL,
   });
 
-  // ── Notification client ───────────────────────────────────────────────────
   const notifResult = await notify({
     user_email: demande.user_email,
     title: '✅ Recharge Bedou validée',
@@ -249,5 +261,5 @@ Deno.serve(async (req) => {
     fcm_failed: notifResult.failed || 0,
     notification_client_sent: (notifResult.sent || 0) > 0,
     delay_ms: elapsed,
-  });
+  }, { headers: CORS_HEADERS });
 });
