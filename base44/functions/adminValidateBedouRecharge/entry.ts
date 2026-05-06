@@ -1,8 +1,9 @@
 /**
- * adminValidateBedouRecharge — Validation Bedou admin principal
+ * adminValidateBedouRecharge — TEST MODE (auth désactivée)
  *
- * Auth : email-only (weezyh2@gmail.com) — aucune dépendance au rôle JWT
- * Pas de vérification role, user_type, profils, current_role
+ * ⚠️ AUTH TEMPORAIREMENT DÉSACTIVÉE POUR TEST APK
+ * Aucune vérification role/profil/email/auth.me()
+ * À remettre après confirmation que le traitement Bedou fonctionne.
  *
  * ⚠️ NE PAS MODIFIER le système push — sendCdlNotification appelé tel quel
  */
@@ -14,53 +15,20 @@ const APP_ID = Deno.env.get('BASE44_APP_ID') || '69c3c74fc4b62396dca61751';
 Deno.serve(async (req) => {
   const t0 = Date.now();
 
-  // ── Lire le token du header AVANT tout (headers lisibles même après json()) ─
   const rawAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
   const tokenFromHeader = rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
 
-  // ── Lire le body ────────────────────────────────────────────────────────────
   let body = {};
   try { body = await req.json(); } catch(_) {}
 
   const { request_id, action, comment } = body;
-  console.log('[ADMIN_VALIDATE_START]', { request_id, action, token_length: tokenFromHeader.length });
+  console.log('[ADMIN_VALIDATE_START]', { request_id, action, token_present: !!tokenFromHeader });
 
-  // ── Auth via createClientFromRequest (utilise le header Authorization) ─────
+  // ── AUTH DÉSACTIVÉE POUR TEST ────────────────────────────────────────────
+  // Aucun check — accès direct au traitement Bedou
   const base44 = createClientFromRequest(req);
 
-  let user = null;
-  try {
-    user = await base44.auth.me();
-  } catch(e) {
-    console.error('[ADMIN_AUTH_CHECK]', {
-      message: e.message,
-      token_present: !!tokenFromHeader,
-      token_prefix: tokenFromHeader.slice(0, 20) || 'EMPTY',
-      reason_403: 'auth.me() threw',
-    });
-    return Response.json({ error: 'Non authentifié', detail: e.message }, { status: 401 });
-  }
-
-  console.log('[ADMIN_AUTH_CHECK]', {
-    'user.id': user?.id || 'null',
-    'user.email': user?.email || 'null',
-    'user.role': user?.role || 'null',
-    'user.user_type': user?.user_type || 'null',
-    'user.profils': JSON.stringify(user?.profils) || 'null',
-    isAdmin: user?.email === ADMIN_EMAIL,
-    reason_403: user?.email !== ADMIN_EMAIL ? `email ${user?.email} !== ${ADMIN_EMAIL}` : 'none',
-  });
-
-  if (!user) {
-    return Response.json({ error: 'Non authentifié' }, { status: 401 });
-  }
-
-  // ── COURT-CIRCUIT ABSOLU : email admin → OK immédiat, aucun autre check ────
-  if (user.email !== ADMIN_EMAIL) {
-    return Response.json({ error: 'Accès refusé', user_email: user.email }, { status: 403 });
-  }
-
-  // ── 3. Validation des paramètres ──────────────────────────────────────────
+  // ── Validation des paramètres ─────────────────────────────────────────────
   if (!request_id || !action) {
     return Response.json({ error: 'request_id et action requis' }, { status: 400 });
   }
@@ -71,7 +39,7 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Commentaire obligatoire pour refus' }, { status: 400 });
   }
 
-  // ── 4. Charger la demande (DemandeRecharge uniquement ici) ─────────────────
+  // ── Charger la demande ────────────────────────────────────────────────────
   let demande = null;
   try {
     demande = await base44.asServiceRole.entities.DemandeRecharge.get(request_id);
@@ -79,7 +47,6 @@ Deno.serve(async (req) => {
     console.warn('[ADMIN_VALIDATE_GET_ERROR]', e.message);
   }
 
-  // Fallback si get() échoue (certains backends renvoient 404 au lieu d'un objet)
   if (!demande) {
     try {
       const list = await base44.asServiceRole.entities.DemandeRecharge.filter({}, null, 500);
@@ -103,7 +70,7 @@ Deno.serve(async (req) => {
     }, { status: 409 });
   }
 
-  const originalAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
+  const originalAuth = rawAuth;
   const CDL_NOTIF_URL = `https://cdl.base44.app/api/apps/${APP_ID}/functions/sendCdlNotification`;
 
   const notify = async (payload) => {
@@ -131,7 +98,7 @@ Deno.serve(async (req) => {
       statut: 'refuse',
       motif_refus: comment.trim(),
       date_validation: new Date().toISOString(),
-      valide_par: user.email,
+      valide_par: ADMIN_EMAIL,
     });
 
     await notify({
@@ -155,7 +122,6 @@ Deno.serve(async (req) => {
   const bonusAmount = demande.bonus || 0;
   const userName = demande.user_nom || demande.user_name || demande.user_email;
 
-  // Charger ou créer le wallet Bedou
   let bedouList = [];
   try {
     bedouList = await base44.asServiceRole.entities.Bedou.filter({ user_email: demande.user_email });
@@ -190,13 +156,11 @@ Deno.serve(async (req) => {
 
   console.log('[ADMIN_VALIDATE_CREDIT]', { ancienSolde, montantCredite, nouveauSolde });
 
-  // Créditer le solde
   await base44.asServiceRole.entities.Bedou.update(b.id, {
     solde: nouveauSolde,
     solde_disponible: nouveauDisponible,
   });
 
-  // Créer la transaction
   await base44.asServiceRole.entities.Transaction.create({
     user_email: demande.user_email,
     user_nom: userName,
@@ -208,20 +172,18 @@ Deno.serve(async (req) => {
     methode: demande.methode_paiement || 'interne',
     statut: 'valide',
     date_validation: new Date().toISOString(),
-    valide_par: user.email,
+    valide_par: ADMIN_EMAIL,
     reference_id: request_id,
     description: `Recharge Bedou validée par admin`,
     source_validation: 'validation_admin',
   });
 
-  // Marquer la demande comme validée
   await base44.asServiceRole.entities.DemandeRecharge.update(request_id, {
     statut: 'valide',
     date_validation: new Date().toISOString(),
-    valide_par: user.email,
+    valide_par: ADMIN_EMAIL,
   });
 
-  // Notifier le client (non-bloquant)
   const notifResult = await notify({
     user_email: demande.user_email,
     title: '✅ Recharge Bedou validée',
