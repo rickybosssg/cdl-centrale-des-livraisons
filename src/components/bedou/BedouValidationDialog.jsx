@@ -55,10 +55,6 @@ async function resolveToken() {
 }
 
 async function callAdminValidate(payload) {
-  const isNative = window.location?.protocol === 'capacitor:' || window.location?.protocol === 'file:';
-  const baseUrl = isNative ? 'https://cdl.base44.app' : '';
-  const url = `${baseUrl}/api/apps/${APP_ID}/functions/adminValidateBedouRecharge`;
-
   const token = await resolveToken();
 
   console.log('[ADMIN_VALIDATE_CALL]', {
@@ -68,29 +64,44 @@ async function callAdminValidate(payload) {
     payload,
   });
 
-  if (!token) {
-    throw Object.assign(new Error('Session expirée — reconnectez-vous'), { status: 401 });
+  // Utiliser le SDK base44 qui gère nativement l'auth APK/web
+  try {
+    const res = await base44.functions.invoke('adminValidateBedouRecharge', payload);
+    const data = res?.data ?? res;
+    console.log('[ADMIN_VALIDATE_RESPONSE]', { status: 200, data });
+    return data;
+  } catch (sdkErr) {
+    // Fallback fetch manuel si SDK échoue (compatibilité)
+    console.warn('[ADMIN_VALIDATE_SDK_FALLBACK]', sdkErr?.message);
+
+    if (!token) {
+      throw Object.assign(new Error('Session expirée — reconnectez-vous'), { status: 401 });
+    }
+
+    const isNative = window.location?.protocol === 'capacitor:' || window.location?.protocol === 'file:';
+    const baseUrl = isNative ? 'https://cdl.base44.app' : '';
+    const url = `${baseUrl}/api/apps/${APP_ID}/functions/adminValidateBedouRecharge`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    console.log('[ADMIN_VALIDATE_RESPONSE]', { status: res.status, data });
+
+    if (!res.ok) {
+      const err = new Error(data?.error || `Erreur HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
   }
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const data = await res.json().catch(() => ({}));
-  console.log('[ADMIN_VALIDATE_RESPONSE]', { status: res.status, data });
-
-  if (!res.ok) {
-    const err = new Error(data?.error || `Erreur HTTP ${res.status}`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-  return data;
 }
 
 export default function BedouValidationDialog({ request, onClose, onSuccess }) {
