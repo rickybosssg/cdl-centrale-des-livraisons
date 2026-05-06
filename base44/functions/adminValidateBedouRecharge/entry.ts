@@ -155,8 +155,10 @@ Deno.serve(async (req) => {
   }
 
   // ── VALIDATION ─────────────────────────────────────────────────────────────
-  const montantCredite = demande.montant_total || demande.montant || 0;
+  const montantBase = demande.montant || 0;
   const bonusAmount = demande.bonus || 0;
+  // Toujours calculer montant + bonus explicitement pour éviter un montant_total manquant
+  const montantCredite = montantBase + bonusAmount;
   const userName = demande.user_nom || demande.user_name || demande.user_email;
 
   let bedouList = [];
@@ -191,7 +193,15 @@ Deno.serve(async (req) => {
   const nouveauSolde = ancienSolde + montantCredite;
   const nouveauDisponible = ancienDisponible + montantCredite;
 
-  console.log('[ADMIN_VALIDATE_CREDIT]', { ancienSolde, montantCredite, nouveauSolde });
+  // Log de vérification solde demandé
+  console.log('[BEDOU_BALANCE_CHECK]', {
+    client_email: demande.user_email,
+    solde_avant: ancienSolde,
+    montant_recharge: montantBase,
+    bonus: bonusAmount,
+    montant_total_credit: montantCredite,
+    solde_apres: nouveauSolde,
+  });
 
   await base44.asServiceRole.entities.Bedou.update(b.id, {
     solde: nouveauSolde,
