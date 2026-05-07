@@ -101,6 +101,10 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       diagState.api_called = true;
       setDiag({ ...diagState });
       const adminPwd = getAdminSecret();
+      console.log('[ADMIN_SECRET_FRONTEND]', { pwd_length: adminPwd?.length || 0, pwd_present: !!adminPwd, pwd_prefix: adminPwd?.slice(0, 3) || 'VIDE' });
+      diagState.secret_length = adminPwd?.length || 0;
+      diagState.secret_present = !!adminPwd;
+      setDiag({ ...diagState });
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'validate',
@@ -299,6 +303,8 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
               <p><span style={{ color: '#64748b' }}>function_called = </span><span style={{ color: '#4ade80' }}>{diag.function_called}</span></p>
               <p><span style={{ color: '#64748b' }}>request_id = </span><span style={{ color: diag.request_id === 'UNDEFINED' ? '#ef4444' : '#4ade80' }}>{diag.request_id}</span></p>
               <p><span style={{ color: '#64748b' }}>api_called = </span><span style={{ color: diag.api_called ? '#4ade80' : '#f59e0b' }}>{String(diag.api_called)}</span></p>
+              <p><span style={{ color: '#64748b' }}>secret_present = </span><span style={{ color: diag.secret_present ? '#4ade80' : '#ef4444' }}>{diag.secret_present == null ? '...' : String(diag.secret_present)}</span></p>
+              <p><span style={{ color: '#64748b' }}>secret_length = </span><span style={{ color: (diag.secret_length > 0) ? '#4ade80' : '#ef4444' }}>{diag.secret_length ?? '...'}</span></p>
               <p><span style={{ color: '#64748b' }}>backend_status = </span><span style={{ color: diag.backend_status === 200 ? '#4ade80' : '#ef4444' }}>{diag.backend_status ?? '...'}</span></p>
               <p><span style={{ color: '#64748b' }}>notification_sent = </span><span style={{ color: diag.notification_sent ? '#4ade80' : '#f59e0b' }}>{diag.notification_sent == null ? '...' : String(diag.notification_sent)}</span></p>
               <p style={{ wordBreak: 'break-all' }}><span style={{ color: '#64748b' }}>backend_response = </span><span style={{ color: '#e2e8f0' }}>{diag.backend_response ?? '...'}</span></p>
