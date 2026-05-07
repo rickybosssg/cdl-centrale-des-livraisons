@@ -100,6 +100,14 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       const notifIcon = data.notification_client_sent ? `✅ push` : "⚠️ sans push";
       toast.success(`✅ Recharge validée ! ${(data.montant_credite || totalCredit).toLocaleString()} F CFA crédités — ${notifIcon}`, { duration: 5000 });
       setStep("✅ Validée !");
+      // Log diagnostic refresh
+      console.log('[BEDOU_REFRESH_CHECK]', {
+        solde_bdd: data.nouveau_solde,
+        montant_credite: data.montant_credite,
+        refresh_forced: true,
+        subscription_triggered: 'pending',
+        note: 'onSuccess() forcera un reload bedouEngine.get_bedou dans MonBedou',
+      });
       setTimeout(() => onSuccess(), 400);
 
     } catch (err) {

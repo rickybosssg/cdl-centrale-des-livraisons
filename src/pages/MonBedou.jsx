@@ -106,11 +106,22 @@ export default function MonBedou() {
     // Abonnement temps réel : recharger dès que le wallet Bedou change (validation admin)
     const unsub = base44.entities.Bedou.subscribe((event) => {
       if (event.type === "update") {
-        console.log("[MonBedou] Bedou wallet updated — rechargement solde");
+        console.log("[MonBedou] [BEDOU_REFRESH_CHECK] subscription_triggered=true — rechargement forcé");
         load();
       }
     });
-    return () => unsub?.();
+    // Refresh forcé quand l'utilisateur revient sur l'onglet / la page (visibilité)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        console.log("[MonBedou] [BEDOU_REFRESH_CHECK] refresh_forced=true — page redevenue visible");
+        load();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      unsub?.();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   // ── FLUX RECHARGE ─────────────────────────────────────────────────────────────

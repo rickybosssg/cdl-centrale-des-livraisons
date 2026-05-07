@@ -190,10 +190,20 @@ Deno.serve(async (req) => {
 
   const ancienSolde = b.solde || 0;
   const ancienDisponible = b.solde_disponible || 0;
-  const nouveauSolde = ancienSolde + montantCredite;
-  const nouveauDisponible = ancienDisponible + montantCredite;
+  const ancienSoldeBonus = b.solde_bonus || 0;
+  const ancienBonus = b.bonus || 0;
+  const ancienBonusCount = b.bonus_recharge_count || 0;
 
-  // Log de vérification solde demandé
+  // Même logique que bedouEngine.valider_recharge :
+  // - montantBase crédité dans solde_disponible (retirable)
+  // - bonusAmount crédité dans solde_bonus (non retirable, courses uniquement)
+  const nouveauSolde = ancienSolde + montantCredite;
+  const nouveauDisponible = ancienDisponible + montantBase;       // montant seul, sans bonus
+  const nouveauSoldeBonus = ancienSoldeBonus + bonusAmount;
+  const nouveauBonus = ancienBonus + bonusAmount;
+  const nouveauBonusCount = bonusAmount > 0 ? ancienBonusCount + 1 : ancienBonusCount;
+
+  // Log de vérification solde
   console.log('[BEDOU_BALANCE_CHECK]', {
     client_email: demande.user_email,
     solde_avant: ancienSolde,
@@ -201,11 +211,31 @@ Deno.serve(async (req) => {
     bonus: bonusAmount,
     montant_total_credit: montantCredite,
     solde_apres: nouveauSolde,
+    solde_disponible_apres: nouveauDisponible,
+    solde_bonus_apres: nouveauSoldeBonus,
   });
 
-  await base44.asServiceRole.entities.Bedou.update(b.id, {
+  // Mise à jour wallet — mêmes champs que bedouEngine.valider_recharge
+  const walletUpdates = {
     solde: nouveauSolde,
     solde_disponible: nouveauDisponible,
+    solde_bonus: nouveauSoldeBonus,
+    bonus: nouveauBonus,
+    bonus_recharge_count: nouveauBonusCount,
+  };
+
+  await base44.asServiceRole.entities.Bedou.update(b.id, walletUpdates);
+
+  console.log('[BEDOU_DISPLAY_CHECK]', {
+    client_email: demande.user_email,
+    client_user_id: demande.user_id || 'N/A',
+    solde_bdd_avant: ancienSolde,
+    montant_credite: montantCredite,
+    solde_bdd_apres: nouveauSolde,
+    solde_disponible_apres: nouveauDisponible,
+    solde_bonus_apres: nouveauSoldeBonus,
+    champ_solde_mis_a_jour: 'Bedou.solde + Bedou.solde_disponible + Bedou.solde_bonus + Bedou.bonus + Bedou.bonus_recharge_count',
+    champ_solde_lu_par_client: 'bedouEngine.get_bedou → Bedou.filter({user_email}) → solde / solde_disponible',
   });
 
   await base44.asServiceRole.entities.Transaction.create({
