@@ -42,6 +42,39 @@ Deno.serve(async (req) => {
   // Créer le client SDK — utilisé UNIQUEMENT pour asServiceRole (pas d'auth.me)
   const base44 = createClientFromRequest(req);
 
+  // ── DIAGNOSTIC AUTH — identifier la source exacte du 403 ──────────────────
+  let diagUser = null;
+  try {
+    diagUser = await base44.auth.me();
+  } catch(diagErr) {
+    console.log('[ADMIN_403_REASON]', {
+      source: 'auth.me() threw exception',
+      error_message: diagErr?.message,
+      error_status: diagErr?.status,
+      token_present: !!tokenFromHeader,
+      token_len: tokenFromHeader.length,
+      token_prefix: tokenFromHeader ? tokenFromHeader.slice(0, 20) + '...' : 'EMPTY',
+      conclusion: 'TOKEN INVALIDE OU EXPIRÉ — la plateforme Base44 retourne 403 avant Deno',
+    });
+  }
+  if (diagUser) {
+    console.log('[ADMIN_AUTH_DEBUG]', {
+      user_id: diagUser?.id,
+      email: diagUser?.email,
+      profils: diagUser?.profils,
+      role: diagUser?.role,
+      user_type: diagUser?.user_type,
+      is_admin: diagUser?.is_admin,
+      current_role: diagUser?.current_role,
+      token_prefix: tokenFromHeader ? tokenFromHeader.slice(0, 20) + '...' : 'EMPTY',
+    });
+    const reason403 =
+      diagUser?.role !== 'admin' ? `role="${diagUser?.role}" (expected "admin")` :
+      !diagUser?.email ? 'email vide' :
+      'AUCUNE — user OK, 403 vient d\'ailleurs';
+    console.log('[ADMIN_403_REASON]', { reason: reason403, user_email: diagUser?.email, user_role: diagUser?.role });
+  }
+
   // Validation des paramètres
   if (!request_id || !action) {
     return Response.json({ error: 'request_id et action requis' }, { status: 400, headers: CORS_HEADERS });
