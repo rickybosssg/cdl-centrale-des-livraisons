@@ -9,99 +9,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 
-const APP_ID = import.meta.env.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
-
-// Récupère le token depuis localStorage (toutes clés possibles)
-function getTokenFromStorage() {
-  const keys = ['base44_access_token', 'base44_token', 'access_token', 'auth_token'];
-  for (const key of keys) {
-    try {
-      const v = localStorage.getItem(key);
-      if (v && v.length > 10) return v;
-    } catch(_) {}
-  }
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k?.toLowerCase().includes('token')) {
-        const v = localStorage.getItem(k);
-        if (v && v.length > 10) return v;
-      }
-    }
-  } catch(_) {}
-  return null;
-}
-
-// Résout le token : localStorage d'abord, puis SDK base44 en fallback
-async function resolveToken() {
-  // 1. Essayer localStorage directement
-  const fromStorage = getTokenFromStorage();
-  if (fromStorage) return fromStorage;
-
-  // 2. Fallback : demander au SDK (parfois le token est en mémoire SDK uniquement sur APK)
-  try {
-    const me = await Promise.race([
-      base44.auth.me(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
-    ]);
-    if (me) {
-      // me() réussi = session valide — re-tenter localStorage (le SDK a peut-être re-injecté)
-      const retry = getTokenFromStorage();
-      if (retry) return retry;
-    }
-  } catch(_) {}
-
-  return null;
-}
-
+// Appel unique via SDK — aucun fallback fetch, aucun passage par validateBedouRequest
 async function callAdminValidate(payload) {
-  const token = await resolveToken();
-
   console.log('[ADMIN_VALIDATE_CALL]', {
-    token_found: !!token,
-    token_len: token?.length || 0,
-    protocol: window.location?.protocol,
+    method_used: 'base44.functions.invoke',
+    fallback_fetch_used: false,
+    function_called: 'adminValidateBedouRecharge',
     payload,
   });
 
-  // Utiliser le SDK base44 qui gère nativement l'auth APK/web
-  try {
-    const res = await base44.functions.invoke('adminValidateBedouRecharge', payload);
-    const data = res?.data ?? res;
-    console.log('[ADMIN_VALIDATE_RESPONSE]', { status: 200, data });
-    return data;
-  } catch (sdkErr) {
-    // Fallback fetch manuel si SDK échoue (compatibilité)
-    console.warn('[ADMIN_VALIDATE_SDK_FALLBACK]', sdkErr?.message);
+  const res = await base44.functions.invoke('adminValidateBedouRecharge', payload);
+  const data = res?.data ?? res;
 
-    if (!token) {
-      throw Object.assign(new Error('Session expirée — reconnectez-vous'), { status: 401 });
-    }
+  console.log('[ADMIN_VALIDATE_RESPONSE]', {
+    method_used: 'base44.functions.invoke',
+    fallback_fetch_used: false,
+    function_called: 'adminValidateBedouRecharge',
+    backend_status: 200,
+    notification_sent: data?.notification_client_sent ?? false,
+    data,
+  });
 
-    const isNative = window.location?.protocol === 'capacitor:' || window.location?.protocol === 'file:';
-    const baseUrl = isNative ? 'https://cdl.base44.app' : '';
-    const url = `${baseUrl}/api/apps/${APP_ID}/functions/adminValidateBedouRecharge`;
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    console.log('[ADMIN_VALIDATE_RESPONSE]', { status: res.status, data });
-
-    if (!res.ok) {
-      const err = new Error(data?.error || `Erreur HTTP ${res.status}`);
-      err.status = res.status;
-      err.data = data;
-      throw err;
-    }
-    return data;
-  }
+  return data;
 }
 
 export default function BedouValidationDialog({ request, onClose, onSuccess }) {
@@ -109,7 +38,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
   const [processing, setProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [step, setStep] = useState(null);
-  const [diag, setDiag] = useState(null);
+  const [diag, setDiag] = useState(null); // diagnostic affiché dans l'UI
 
   const montant = request.montant || 0;
   const bonus = request.bonus || 0;
@@ -130,7 +59,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       idDefined: !!request.id,
       userEmail: request.user_email,
       statut: request.statut,
-      token_found: !!getTokenFromStorage(),
+      method_used: 'base44.functions.invoke',
     });
 
     setProcessing(true);
@@ -138,11 +67,14 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     setStep("⏳ Traitement en cours...");
 
     const diagState = {
+      method_used: 'base44.functions.invoke',
+      fallback_fetch_used: false,
+      function_called: 'adminValidateBedouRecharge',
       request_id: request.id || 'UNDEFINED',
-      token_present: !!getTokenFromStorage(),
       api_called: false,
       backend_status: null,
       backend_response: null,
+      notification_sent: null,
     };
     setDiag({ ...diagState });
 
@@ -156,6 +88,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       });
       diagState.backend_status = 200;
       diagState.backend_response = JSON.stringify(data).slice(0, 200);
+      diagState.notification_sent = data?.notification_client_sent ?? false;
       setDiag({ ...diagState });
 
       if (data?.already_processed) {
@@ -172,8 +105,9 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     } catch (err) {
       diagState.backend_status = err?.status || 'ERR';
       diagState.backend_response = err?.message || 'Erreur inconnue';
+      diagState.notification_sent = false;
       setDiag({ ...diagState });
-      console.log('[VALIDATE_ERROR]', { message: err?.message, status: err?.status, data: err?.data });
+      console.log('[VALIDATE_ERROR]', { message: err?.message, status: err?.status });
       const status = err?.status;
       let msg = err?.message || "Erreur inconnue";
 
@@ -325,14 +259,17 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
             />
           </div>
 
-          {/* ── BLOC DIAGNOSTIC TEMPORAIRE ── */}
+          {/* ── BLOC DIAGNOSTIC ── */}
           {diag && (
             <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px 12px', fontSize: '11px', fontFamily: 'monospace', color: '#94a3b8', lineHeight: '1.8' }}>
               <p style={{ color: '#f8fafc', fontWeight: 'bold', marginBottom: '4px' }}>🔍 DIAGNOSTIC</p>
+              <p><span style={{ color: '#64748b' }}>method_used = </span><span style={{ color: '#4ade80' }}>{diag.method_used}</span></p>
+              <p><span style={{ color: '#64748b' }}>fallback_fetch_used = </span><span style={{ color: diag.fallback_fetch_used ? '#ef4444' : '#4ade80' }}>{String(diag.fallback_fetch_used)}</span></p>
+              <p><span style={{ color: '#64748b' }}>function_called = </span><span style={{ color: '#4ade80' }}>{diag.function_called}</span></p>
               <p><span style={{ color: '#64748b' }}>request_id = </span><span style={{ color: diag.request_id === 'UNDEFINED' ? '#ef4444' : '#4ade80' }}>{diag.request_id}</span></p>
-              <p><span style={{ color: '#64748b' }}>token_present = </span><span style={{ color: diag.token_present ? '#4ade80' : '#ef4444' }}>{String(diag.token_present)}</span></p>
               <p><span style={{ color: '#64748b' }}>api_called = </span><span style={{ color: diag.api_called ? '#4ade80' : '#f59e0b' }}>{String(diag.api_called)}</span></p>
               <p><span style={{ color: '#64748b' }}>backend_status = </span><span style={{ color: diag.backend_status === 200 ? '#4ade80' : '#ef4444' }}>{diag.backend_status ?? '...'}</span></p>
+              <p><span style={{ color: '#64748b' }}>notification_sent = </span><span style={{ color: diag.notification_sent ? '#4ade80' : '#f59e0b' }}>{diag.notification_sent == null ? '...' : String(diag.notification_sent)}</span></p>
               <p style={{ wordBreak: 'break-all' }}><span style={{ color: '#64748b' }}>backend_response = </span><span style={{ color: '#e2e8f0' }}>{diag.backend_response ?? '...'}</span></p>
             </div>
           )}
