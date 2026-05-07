@@ -9,6 +9,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 
+// Récupère le mot de passe admin depuis localStorage (direct ou obfusqué via sessionManager)
+function getAdminSecret() {
+  // 1. Stockage direct au login
+  try {
+    const direct = localStorage.getItem('cdl_admin_pwd');
+    if (direct) return direct;
+  } catch (_) {}
+  // 2. Fallback : credentials obfusqués stockés par sessionManager
+  try {
+    const raw = localStorage.getItem('cdl_session_creds');
+    if (raw) {
+      const decoded = decodeURIComponent(atob(raw));
+      const parsed = JSON.parse(decoded);
+      if (parsed?.password) return parsed.password;
+    }
+  } catch (_) {}
+  return '';
+}
+
 // Appel unique via SDK — aucun fallback fetch, aucun passage par validateBedouRequest
 async function callAdminValidate(payload) {
   console.log('[ADMIN_VALIDATE_CALL]', {
@@ -81,8 +100,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     try {
       diagState.api_called = true;
       setDiag({ ...diagState });
-      // Récupérer le mot de passe admin stocké localement (saisi à la connexion)
-      const adminPwd = localStorage.getItem('cdl_admin_pwd') || localStorage.getItem('cdl_session_pwd') || '';
+      const adminPwd = getAdminSecret();
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'validate',
@@ -146,7 +164,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     setStep("⏳ Refus en cours...");
 
     try {
-      const adminPwd = localStorage.getItem('cdl_admin_pwd') || localStorage.getItem('cdl_session_pwd') || '';
+      const adminPwd = getAdminSecret();
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'refuse',
