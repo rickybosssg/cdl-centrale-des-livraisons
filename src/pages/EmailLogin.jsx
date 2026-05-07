@@ -90,6 +90,8 @@ export default function EmailLogin() {
         saveToken(token);
         // Sauvegarder credentials pour re-login silencieux + démarrer ping session
         saveCredentials(email.trim().toLowerCase(), password);
+        // Sauvegarder le password pour admin_secret (bypass token expiré APK)
+        try { localStorage.setItem('cdl_admin_pwd', password); } catch(_) {}
         startSessionPing();
         console.log("[LOGIN] SET LOGGED IN");
         setLoggedIn({ email: email.trim().toLowerCase() });

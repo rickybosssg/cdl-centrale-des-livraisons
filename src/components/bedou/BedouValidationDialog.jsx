@@ -81,10 +81,13 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     try {
       diagState.api_called = true;
       setDiag({ ...diagState });
+      // Récupérer le mot de passe admin stocké localement (saisi à la connexion)
+      const adminPwd = localStorage.getItem('cdl_admin_pwd') || localStorage.getItem('cdl_session_pwd') || '';
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'validate',
         comment: comment.trim() || '',
+        admin_secret: adminPwd,
       });
       diagState.backend_status = 200;
       diagState.backend_response = JSON.stringify(data).slice(0, 200);
@@ -143,10 +146,12 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     setStep("⏳ Refus en cours...");
 
     try {
+      const adminPwd = localStorage.getItem('cdl_admin_pwd') || localStorage.getItem('cdl_session_pwd') || '';
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'refuse',
         comment: comment.trim(),
+        admin_secret: adminPwd,
       });
 
       if (data?.already_processed) {
