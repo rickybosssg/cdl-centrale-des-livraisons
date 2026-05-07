@@ -100,16 +100,10 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     try {
       diagState.api_called = true;
       setDiag({ ...diagState });
-      const adminPwd = getAdminSecret();
-      console.log('[ADMIN_SECRET_FRONTEND]', { pwd_length: adminPwd?.length || 0, pwd_present: !!adminPwd, pwd_prefix: adminPwd?.slice(0, 3) || 'VIDE' });
-      diagState.secret_length = adminPwd?.length || 0;
-      diagState.secret_present = !!adminPwd;
-      setDiag({ ...diagState });
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'validate',
         comment: comment.trim() || '',
-        admin_secret: adminPwd,
       });
       diagState.backend_status = 200;
       diagState.backend_response = JSON.stringify(data).slice(0, 200);
@@ -168,12 +162,10 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
     setStep("⏳ Refus en cours...");
 
     try {
-      const adminPwd = getAdminSecret();
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'refuse',
         comment: comment.trim(),
-        admin_secret: adminPwd,
       });
 
       if (data?.already_processed) {

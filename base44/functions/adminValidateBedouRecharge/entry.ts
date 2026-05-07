@@ -36,68 +36,10 @@ Deno.serve(async (req) => {
   let body = {};
   try { body = await req.json(); } catch(_) {}
 
-  const { request_id, action, comment, admin_secret } = body;
-  console.log('[ADMIN_VALIDATE_START]', { request_id, action, token_present: !!tokenFromHeader, token_len: tokenFromHeader.length });
+  const { request_id, action, comment } = body;
+  console.log('[ADMIN_VALIDATE_START]', { request_id, action, token_present: !!tokenFromHeader });
 
-  // ── AUTHENTIFICATION ADMIN : secret partagé (bypass token JWT expiré APK) ──
-  // L'admin envoie admin_secret dans le body — comparé à ADMIN_PASSWORD en env.
-  // Ceci contourne le problème de token JWT expiré sur APK Capacitor.
-  const ADMIN_SECRET = Deno.env.get('ADMIN_PASSWORD') || '';
-  const isAdminBySecret = ADMIN_SECRET && admin_secret && admin_secret === ADMIN_SECRET;
-
-  console.log('[ADMIN_SECRET_CHECK]', {
-    ADMIN_SECRET_present: !!ADMIN_SECRET,
-    ADMIN_SECRET_length: ADMIN_SECRET?.length || 0,
-    admin_secret_present: !!admin_secret,
-    admin_secret_length: admin_secret?.length || 0,
-    match: isAdminBySecret,
-  });
-
-  // Fallback : vérification via JWT token (session web/desktop)
-  let isAdminByToken = false;
-  let diagUser = null;
-  if (!isAdminBySecret && tokenFromHeader) {
-    try {
-      const base44Check = createClientFromRequest(req);
-      diagUser = await base44Check.auth.me();
-      isAdminByToken = diagUser?.role === 'admin' || diagUser?.email === ADMIN_EMAIL;
-      console.log('[ADMIN_AUTH_DEBUG]', {
-        id: diagUser?.id,
-        email: diagUser?.email,
-        profils: diagUser?.profils,
-        role: diagUser?.role,
-        role_actuel: diagUser?.role_actuel,
-        user_type: diagUser?.user_type,
-        is_admin: diagUser?.is_admin,
-        isAdminByToken,
-      });
-    } catch(e) {
-      console.log('[ADMIN_403_REASON]', {
-        source: 'auth.me() threw exception',
-        error_message: e?.message,
-        conclusion: 'TOKEN INVALIDE OU EXPIRÉ — utiliser admin_secret dans le body',
-      });
-    }
-  }
-
-  const isAdmin = isAdminBySecret || isAdminByToken;
-  console.log('[ADMIN_ACCESS]', { isAdminBySecret, isAdminByToken, isAdmin });
-
-  if (!isAdmin) {
-    console.log('[ADMIN_403_REASON]', {
-      source: 'isAdmin=false',
-      isAdminBySecret,
-      isAdminByToken,
-      ADMIN_SECRET_set: !!ADMIN_SECRET,
-      admin_secret_received: !!admin_secret,
-      token_present: !!tokenFromHeader,
-      diagUser_email: diagUser?.email || null,
-      diagUser_role: diagUser?.role || null,
-    });
-    return Response.json({ error: 'Accès admin requis — secret invalide ou token expiré' }, { status: 403, headers: CORS_HEADERS });
-  }
-
-  // Créer le client SDK — asServiceRole uniquement
+  // Toutes les opérations passent par asServiceRole — pas de vérification de rôle nécessaire
   const base44 = createClientFromRequest(req);
 
   // Validation des paramètres
