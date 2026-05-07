@@ -45,17 +45,28 @@ Deno.serve(async (req) => {
   const ADMIN_SECRET = Deno.env.get('ADMIN_PASSWORD') || '';
   const isAdminBySecret = ADMIN_SECRET && admin_secret && admin_secret === ADMIN_SECRET;
 
+  console.log('[ADMIN_SECRET_CHECK]', {
+    ADMIN_SECRET_present: !!ADMIN_SECRET,
+    ADMIN_SECRET_length: ADMIN_SECRET?.length || 0,
+    admin_secret_present: !!admin_secret,
+    admin_secret_length: admin_secret?.length || 0,
+    match: isAdminBySecret,
+  });
+
   // Fallback : vérification via JWT token (session web/desktop)
   let isAdminByToken = false;
+  let diagUser = null;
   if (!isAdminBySecret && tokenFromHeader) {
     try {
       const base44Check = createClientFromRequest(req);
-      const diagUser = await base44Check.auth.me();
+      diagUser = await base44Check.auth.me();
       isAdminByToken = diagUser?.role === 'admin' || diagUser?.email === ADMIN_EMAIL;
       console.log('[ADMIN_AUTH_DEBUG]', {
-        user_id: diagUser?.id,
+        id: diagUser?.id,
         email: diagUser?.email,
+        profils: diagUser?.profils,
         role: diagUser?.role,
+        role_actuel: diagUser?.role_actuel,
         user_type: diagUser?.user_type,
         is_admin: diagUser?.is_admin,
         isAdminByToken,
@@ -73,7 +84,16 @@ Deno.serve(async (req) => {
   console.log('[ADMIN_ACCESS]', { isAdminBySecret, isAdminByToken, isAdmin });
 
   if (!isAdmin) {
-    console.error('[ADMIN_ACCESS_DENIED]', { token_present: !!tokenFromHeader, secret_present: !!admin_secret });
+    console.log('[ADMIN_403_REASON]', {
+      source: 'isAdmin=false',
+      isAdminBySecret,
+      isAdminByToken,
+      ADMIN_SECRET_set: !!ADMIN_SECRET,
+      admin_secret_received: !!admin_secret,
+      token_present: !!tokenFromHeader,
+      diagUser_email: diagUser?.email || null,
+      diagUser_role: diagUser?.role || null,
+    });
     return Response.json({ error: 'Accès admin requis — secret invalide ou token expiré' }, { status: 403, headers: CORS_HEADERS });
   }
 
