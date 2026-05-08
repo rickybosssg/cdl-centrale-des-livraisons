@@ -500,7 +500,7 @@ export default function MonBedou() {
                   <div className="mt-1.5 grid grid-cols-2 gap-2">
                     <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors">
                       <span className="text-2xl">📷</span>
-                      <span className="text-xs font-semibold text-primary">Prendre une capture</span>
+                      <span className="text-xs font-semibold text-primary">Prendre une photo</span>
                       <input type="file" accept="image/*" capture="environment" className="hidden"
                         onChange={e => { const f = e.target.files?.[0]; if (f) setForm(p => ({ ...p, preuve: f })); }} />
                     </label>
