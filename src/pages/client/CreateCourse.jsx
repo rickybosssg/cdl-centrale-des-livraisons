@@ -30,8 +30,19 @@ export default function CreateCourse() {
           setGpsDepart({ lat: me.gps_latitude, lng: me.gps_longitude });
         }
         try {
-          const res = await base44.functions.invoke('bedouEngine', { action: 'get_bedou' });
-          setSoldeBedou(res.data.bedou?.solde_disponible || 0);
+          // Lire directement l'entité Bedou — même source que Dashboard/BedouWidget
+          const bedouList = await base44.entities.Bedou.filter({ user_email: me.email });
+          const b = bedouList?.[0];
+          const solde = b?.solde_disponible ?? b?.solde ?? 0;
+          console.log('[BEDOU_SYNC_CHECK]', {
+            page: 'CreateCourse',
+            client_email: me.email,
+            solde_lu: b?.solde ?? 'N/A',
+            solde_disponible_lu: b?.solde_disponible ?? 'N/A',
+            source_utilisee: 'base44.entities.Bedou.filter',
+            cache_used: false,
+          });
+          setSoldeBedou(solde);
         } catch (_) {
           setSoldeBedou(0);
         }
