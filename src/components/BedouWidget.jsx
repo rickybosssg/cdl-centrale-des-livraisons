@@ -13,24 +13,25 @@ export default function BedouWidget({ user, compact = false }) {
     if (!user?.email) { setLoading(false); return; }
     setLoading(true);
     setError(null);
-    // Timeout de sécurité 8s
-    const timeout = setTimeout(() => {
-      setLoading(false);
-      setError('timeout');
-    }, 8000);
+    const timeout = setTimeout(() => { setLoading(false); setError('timeout'); }, 8000);
     try {
-      const res = await base44.functions.invoke('bedouEngine', { action: 'get_bedou' });
+      // Lire directement l'entité Bedou — bypass bedouEngine pour éviter le cache
+      const list = await base44.entities.Bedou.filter({ user_email: user.email });
       clearTimeout(timeout);
-      setBedou(res?.data?.bedou || null);
-      // Si aucun wallet retourné, en créer un vide
-      if (!res?.data?.bedou) {
-        setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
-      }
+      const b = list?.[0] || null;
+      console.log('[BEDOU_DISPLAY_FINAL]', {
+        client_email: user.email,
+        bedou_id: b?.id || 'INTROUVABLE',
+        solde_bdd: b?.solde ?? 'N/A',
+        solde_disponible_bdd: b?.solde_disponible ?? 'N/A',
+        solde_bonus_bdd: b?.solde_bonus ?? 'N/A',
+        solde_affiche_dashboard: b?.solde ?? 0,
+      });
+      setBedou(b || { solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
     } catch (err) {
       clearTimeout(timeout);
       console.warn('[BedouWidget] Erreur:', err);
       setError(err?.message || 'error');
-      // Afficher 0 plutôt que "indisponible"
       setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
     } finally {
       setLoading(false);
@@ -39,11 +40,12 @@ export default function BedouWidget({ user, compact = false }) {
 
   useEffect(() => {
     loadBedou();
-    // Souscrire aux mises à jour temps réel
     if (!user?.email) return;
+    // Temps réel : recharger dès que le wallet change (validation admin)
     const unsub = base44.entities.Bedou.subscribe(ev => {
       if (ev.data?.user_email === user.email) {
-        setBedou(ev.data);
+        console.log('[BedouWidget] Bedou mis à jour en temps réel — rechargement');
+        loadBedou();
       }
     });
     return unsub;
