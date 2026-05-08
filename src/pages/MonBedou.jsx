@@ -139,24 +139,46 @@ export default function MonBedou() {
 
   useEffect(() => {
     load();
-    // Abonnement temps réel : recharger dès que le wallet Bedou change (validation admin)
+    // 1. Temps réel entity Bedou
     const unsub = base44.entities.Bedou.subscribe((event) => {
       if (event.type === "update") {
-        console.log("[MonBedou] [BEDOU_REFRESH_CHECK] subscription_triggered=true — rechargement forcé");
+        console.log('[BEDOU_REALTIME_SYNC]', { page: 'MonBedou', event_received: 'Bedou.update', reload_source: 'realtime_entity', reload_triggered: true });
         load();
       }
     });
-    // Refresh forcé quand l'utilisateur revient sur l'onglet / la page (visibilité)
+
+    // 2. Notification interne recharge approuvée
+    const unsubNotif = base44.entities.Notification.subscribe((event) => {
+      const n = event.data;
+      if (event.type === 'create') {
+        const isRecharge = n?.titre?.includes('Recharge') || n?.message?.includes('crédité');
+        if (isRecharge) {
+          console.log('[BEDOU_REALTIME_SYNC]', { page: 'MonBedou', event_received: 'Notification.create', reload_source: 'internal_notification', reload_triggered: true });
+          setTimeout(() => load(), 500);
+          setTimeout(() => load(), 3000);
+        }
+      }
+    });
+
+    // 3. Retour focus
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        console.log("[MonBedou] [BEDOU_REFRESH_CHECK] refresh_forced=true — page redevenue visible");
+        console.log('[BEDOU_REALTIME_SYNC]', { page: 'MonBedou', event_received: 'visibilitychange', reload_source: 'page_focus', reload_triggered: true });
         load();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
+
+    // 4. Reloads de sécurité
+    const t2 = setTimeout(() => load(), 2000);
+    const t5 = setTimeout(() => load(), 5000);
+
     return () => {
       unsub?.();
+      unsubNotif?.();
       document.removeEventListener('visibilitychange', onVisible);
+      clearTimeout(t2);
+      clearTimeout(t5);
     };
   }, []);
 

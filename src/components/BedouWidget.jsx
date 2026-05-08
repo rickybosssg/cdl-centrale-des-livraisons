@@ -39,16 +39,50 @@ export default function BedouWidget({ user, compact = false }) {
   };
 
   useEffect(() => {
-    loadBedou();
     if (!user?.email) return;
-    // Temps réel : recharger dès que le wallet change (validation admin)
+    loadBedou();
+
+    // 1. Temps réel : event Bedou entity
     const unsub = base44.entities.Bedou.subscribe(ev => {
-      if (ev.data?.user_email === user.email) {
-        console.log('[BedouWidget] Bedou mis à jour en temps réel — rechargement');
+      if (ev.data?.user_email === user.email && ev.type === 'update') {
+        console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'Bedou.update', reload_source: 'realtime_entity', reload_triggered: true });
         loadBedou();
       }
     });
-    return unsub;
+
+    // 2. Notifications interne : recharge approuvée → reload
+    const unsubNotif = base44.entities.Notification.subscribe(ev => {
+      const n = ev.data;
+      if (n?.destinataire_email === user.email && ev.type === 'create') {
+        const isRecharge = n?.titre?.includes('Recharge') || n?.message?.includes('crédité');
+        if (isRecharge) {
+          console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'Notification.create', reload_source: 'internal_notification', reload_triggered: true });
+          setTimeout(() => loadBedou(), 500);
+          setTimeout(() => loadBedou(), 3000);
+        }
+      }
+    });
+
+    // 3. Retour focus page
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'visibilitychange', reload_source: 'page_focus', reload_triggered: true });
+        loadBedou();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    // 4. Reloads de sécurité après mount
+    const t2 = setTimeout(() => loadBedou(), 2000);
+    const t5 = setTimeout(() => loadBedou(), 5000);
+
+    return () => {
+      unsub?.();
+      unsubNotif?.();
+      document.removeEventListener('visibilitychange', onVisible);
+      clearTimeout(t2);
+      clearTimeout(t5);
+    };
   }, [user?.email]);
 
   if (loading) {
@@ -63,7 +97,9 @@ export default function BedouWidget({ user, compact = false }) {
 
   if (!user?.email) return null;
 
-  const safeBedou = bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 };
+  const safeBedou = bedou || { solde: 0, solde_disponible: 0, solde_bonus: 0, solde_bloque: 0 };
+  // Même calcul que MonBedou : total = disponible + bonus
+  const soldeTotal = (safeBedou.solde_disponible || 0) + (safeBedou.solde_bonus || 0);
   const role = user?.active_profile_type || user?.current_role || user?.user_type;
   const canRetrait = ['livreur', 'partenaire', 'commercial'].includes(role);
 
@@ -75,7 +111,7 @@ export default function BedouWidget({ user, compact = false }) {
             <Wallet className="h-4 w-4 text-white" />
             <div>
               <p className="text-[10px] text-white/60">Solde Bedou</p>
-              <p className="text-sm font-extrabold text-white">{fmt(safeBedou.solde_disponible || 0)}</p>
+              <p className="text-sm font-extrabold text-white">{fmt(soldeTotal)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -111,7 +147,7 @@ export default function BedouWidget({ user, compact = false }) {
         </div>
 
         <p className="text-3xl font-extrabold tracking-tight text-white">
-          {fmt(safeBedou.solde || 0)}
+          {fmt(soldeTotal)}
         </p>
 
         {error && (
@@ -123,6 +159,12 @@ export default function BedouWidget({ user, compact = false }) {
             <TrendingUp className="h-3.5 w-3.5 text-green-300" />
             <span className="text-xs text-white/90 font-medium">Dispo : {fmt(safeBedou.solde_disponible || 0)}</span>
           </div>
+          {(safeBedou.solde_bonus || 0) > 0 && (
+            <div className="flex items-center gap-1">
+              <span className="text-amber-300 text-xs">🎁</span>
+              <span className="text-xs text-white/90 font-medium">Bonus : {fmt(safeBedou.solde_bonus || 0)}</span>
+            </div>
+          )}
           {(safeBedou.solde_bloque || 0) > 0 && (
             <div className="flex items-center gap-1">
               <Lock className="h-3.5 w-3.5 text-amber-300" />
