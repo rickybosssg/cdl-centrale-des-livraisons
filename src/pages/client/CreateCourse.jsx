@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { vibrateSuccess } from "@/lib/vibration";
 import { lancerDispatch } from "@/lib/dispatch";
 import { triggerWhatsAppNotification, waMsgCourseCreatedClient } from "@/lib/whatsappNotifications";
+import { useBedouSync } from "@/lib/useBedouSync";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -15,11 +16,14 @@ export default function CreateCourse() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
-  const [soldeBedou, setSoldeBedou] = useState(null);
   const [gpsDepart, setGpsDepart] = useState(null);
   const [searchingCourse, setSearchingCourse] = useState(null);
   const [livreurTrouve, setLivreurTrouve] = useState(null);
   const [aucunLivreur, setAucunLivreur] = useState(false);
+
+  // Hook centralisé Bedou — se met à jour automatiquement après validation recharge
+  const { bedou } = useBedouSync(user?.email);
+  const soldeBedou = bedou ? (bedou.solde_disponible || 0) + (bedou.solde_bonus || 0) : null;
 
   useEffect(() => {
     const load = async () => {
@@ -28,23 +32,6 @@ export default function CreateCourse() {
         setUser(me);
         if (me.gps_latitude && me.gps_longitude) {
           setGpsDepart({ lat: me.gps_latitude, lng: me.gps_longitude });
-        }
-        try {
-          const bedouList = await base44.entities.Bedou.filter({ user_email: me.email });
-          const b = bedouList?.[0];
-          // Même calcul que MonBedou : total = disponible + bonus
-          const solde = (b?.solde_disponible ?? 0) + (b?.solde_bonus ?? 0);
-          console.log('[BEDOU_REALTIME_SYNC]', {
-            page: 'CreateCourse',
-            client_email: me.email,
-            solde_disponible_lu: b?.solde_disponible ?? 'N/A',
-            solde_bonus_lu: b?.solde_bonus ?? 'N/A',
-            solde_total_affiche: solde,
-            reload_source: 'initial_load',
-          });
-          setSoldeBedou(solde);
-        } catch (_) {
-          setSoldeBedou(0);
         }
       } catch (err) {
         toast.error("Erreur authentification — reconnectez-vous");

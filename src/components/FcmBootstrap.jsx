@@ -276,11 +276,15 @@ async function runNativeFcm(propEmail) {
         const route = notif?.data?.notif_route || notif?.data?.route || null;
         const sentAt = notif?.data?.notification_sent_at || null;
         const delayMs = sentAt ? Date.now() - new Date(sentAt).getTime() : null;
-        console.log(`[FCM] 📬 Foreground | title="${title}" | channel=${notif?.data?.channel_id || '?'} | delay=${delayMs != null ? delayMs + 'ms' : 'N/A'} | received_at=${receivedAt}`);
+        const notifType = notif?.data?.type || '';
+        console.log(`[FCM] 📬 Foreground | title="${title}" | type=${notifType} | channel=${notif?.data?.channel_id || '?'} | delay=${delayMs != null ? delayMs + 'ms' : 'N/A'} | received_at=${receivedAt}`);
         try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
-        // NOTE : Sur Android, FCM affiche automatiquement la notification dans la barre système
-        // même si l'app est au premier plan (depuis Android 13+ avec notification block = false).
-        // Le toast Sonner est un affichage IN-APP supplémentaire, pas un remplacement.
+
+        // 🔔 Émettre l'événement Bedou si c'est une recharge approuvée
+        if (notifType === 'bedou_recharge_approved') {
+          try { window.dispatchEvent(new CustomEvent('bedou_recharge_approved')); } catch (_) {}
+        }
+
         import('sonner').then(({ toast }) => {
           toast(title, {
             description: body,
@@ -298,7 +302,12 @@ async function runNativeFcm(propEmail) {
       try {
         const data = action?.notification?.data || {};
         const route = data.notif_route || data.route || data.target_screen || null;
-        console.log('[FCM] 👆 Tap → route:', route);
+        const notifType = data.type || '';
+        console.log('[FCM] 👆 Tap → route:', route, '| type:', notifType);
+        // Émettre événement Bedou si recharge approuvée (app revenue au premier plan)
+        if (notifType === 'bedou_recharge_approved') {
+          try { window.dispatchEvent(new CustomEvent('bedou_recharge_approved')); } catch (_) {}
+        }
         if (route?.startsWith('/')) {
           try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
           window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));

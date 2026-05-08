@@ -1,89 +1,11 @@
-import { useState, useEffect } from "react";
 import { Wallet, TrendingUp, Lock, Plus, ArrowDownCircle, RefreshCw } from "lucide-react";
 import { fmt } from "@/lib/formatMoney";
-import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
+import { useBedouSync } from "@/lib/useBedouSync";
 
 export default function BedouWidget({ user, compact = false }) {
-  const [bedou, setBedou] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const loadBedou = async () => {
-    if (!user?.email) { setLoading(false); return; }
-    setLoading(true);
-    setError(null);
-    const timeout = setTimeout(() => { setLoading(false); setError('timeout'); }, 8000);
-    try {
-      // Lire directement l'entité Bedou — bypass bedouEngine pour éviter le cache
-      const list = await base44.entities.Bedou.filter({ user_email: user.email });
-      clearTimeout(timeout);
-      const b = list?.[0] || null;
-      console.log('[BEDOU_DISPLAY_FINAL]', {
-        client_email: user.email,
-        bedou_id: b?.id || 'INTROUVABLE',
-        solde_bdd: b?.solde ?? 'N/A',
-        solde_disponible_bdd: b?.solde_disponible ?? 'N/A',
-        solde_bonus_bdd: b?.solde_bonus ?? 'N/A',
-        solde_affiche_dashboard: b?.solde ?? 0,
-      });
-      setBedou(b || { solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
-    } catch (err) {
-      clearTimeout(timeout);
-      console.warn('[BedouWidget] Erreur:', err);
-      setError(err?.message || 'error');
-      setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!user?.email) return;
-    loadBedou();
-
-    // 1. Temps réel : event Bedou entity
-    const unsub = base44.entities.Bedou.subscribe(ev => {
-      if (ev.data?.user_email === user.email && ev.type === 'update') {
-        console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'Bedou.update', reload_source: 'realtime_entity', reload_triggered: true });
-        loadBedou();
-      }
-    });
-
-    // 2. Notifications interne : recharge approuvée → reload
-    const unsubNotif = base44.entities.Notification.subscribe(ev => {
-      const n = ev.data;
-      if (n?.destinataire_email === user.email && ev.type === 'create') {
-        const isRecharge = n?.titre?.includes('Recharge') || n?.message?.includes('crédité');
-        if (isRecharge) {
-          console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'Notification.create', reload_source: 'internal_notification', reload_triggered: true });
-          setTimeout(() => loadBedou(), 500);
-          setTimeout(() => loadBedou(), 3000);
-        }
-      }
-    });
-
-    // 3. Retour focus page
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'visibilitychange', reload_source: 'page_focus', reload_triggered: true });
-        loadBedou();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-
-    // 4. Reloads de sécurité après mount
-    const t2 = setTimeout(() => loadBedou(), 2000);
-    const t5 = setTimeout(() => loadBedou(), 5000);
-
-    return () => {
-      unsub?.();
-      unsubNotif?.();
-      document.removeEventListener('visibilitychange', onVisible);
-      clearTimeout(t2);
-      clearTimeout(t5);
-    };
-  }, [user?.email]);
+  const { bedou, loading, reload: loadBedou } = useBedouSync(user?.email);
+  const error = null;
 
   if (loading) {
     if (compact) return (

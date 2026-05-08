@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import moment from "moment";
 import BeDouHistory from "@/components/BeDouHistory";
 import { triggerWhatsAppNotification, waMsgBedouWithdrawRequested } from "@/lib/whatsappNotifications";
+import { useBedouSync } from "@/lib/useBedouSync";
 
 const METHODES = [
   { value: "orange_money",  label: "Orange Money",  icon: "🟠" },
@@ -65,16 +66,18 @@ async function uploadFileRobust(file) {
 export default function MonBedou() {
   const navigate = useNavigate();
   const [user, setUser]                 = useState(null);
-  const [bedou, setBedou]               = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading]           = useState(true);
+  const [userLoading, setUserLoading]   = useState(true);
   const [tab, setTab]                   = useState("solde");
   const [filterStatut, setFilterStatut] = useState("tous");
   const [form, setForm]                 = useState({ montant: "", methode: "orange_money", preuve: null });
   const [submitting, setSubmitting]     = useState(false);
   const [successData, setSuccessData]   = useState(null);
-  const [debugLogs, setDebugLogs]       = useState([]); // logs visibles sur APK
+  const [debugLogs, setDebugLogs]       = useState([]);
   const [retraitForm, setRetraitForm]   = useState({ montant: "", methode: "orange_money", numero_reception: "" });
+
+  // Hook centralisé Bedou — remplace toute la logique de sync manuelle
+  const { bedou, loading: bedouLoading, reload: reloadBedou } = useBedouSync(user?.email);
 
   const addLog = (msg) => {
     const line = `${new Date().toLocaleTimeString('fr')} ${msg}`;
@@ -82,104 +85,28 @@ export default function MonBedou() {
     setDebugLogs(prev => [...prev.slice(-10), line]);
   };
 
-  const load = async () => {
-    setLoading(true);
-    const t = setTimeout(() => setLoading(false), 12000);
-    try {
-      const me = await base44.auth.me();
-      setUser(me);
-
-      // Lire directement l'entité Bedou — bypass bedouEngine pour éviter le cache
-      const [bedouList, txList] = await Promise.all([
-        base44.entities.Bedou.filter({ user_email: me.email }),
-        base44.entities.Transaction.filter({ user_email: me.email }, '-created_date', 50),
-      ]);
-
-      const b = bedouList?.[0] || null;
-
-      // DIAGNOSTIC — [BEDOU_DISPLAY_FINAL] + [BEDOU_SYNC_CHECK]
-      const diagData = {
-        client_email: me.email,
-        bedou_id: b?.id || 'INTROUVABLE',
-        solde_bdd: b?.solde ?? 'N/A',
-        solde_disponible_bdd: b?.solde_disponible ?? 'N/A',
-        solde_bonus_bdd: b?.solde_bonus ?? 'N/A',
-        solde_affiche_monbedou: b?.solde ?? 0,
-      };
-      console.log('[BEDOU_DISPLAY_FINAL]', diagData);
-      console.log('[BEDOU_SYNC_CHECK]', {
-        page: 'MonBedou',
-        client_email: me.email,
-        solde_lu: b?.solde ?? 'N/A',
-        solde_disponible_lu: b?.solde_disponible ?? 'N/A',
-        source_utilisee: 'base44.entities.Bedou.filter',
-        cache_used: false,
-      });
-      setDebugLogs([
-        `[BEDOU_SYNC_CHECK] MonBedou`,
-        `  email: ${diagData.client_email}`,
-        `  bedou_id: ${diagData.bedou_id}`,
-        `  solde_bdd: ${diagData.solde_bdd} F`,
-        `  disponible_bdd: ${diagData.solde_disponible_bdd} F`,
-        `  bonus_bdd: ${diagData.solde_bonus_bdd} F`,
-        `  affiché: ${diagData.solde_affiche_monbedou} F`,
-        `  source: entities.Bedou.filter | cache=false`,
-      ]);
-
-      setBedou(b || { solde: 0, solde_disponible: 0, solde_bloque: 0, solde_bonus: 0 });
-      setTransactions(txList || []);
-    } catch (e) {
-      console.error('[MonBedou] load error:', e.message);
-      setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, solde_bonus: 0 });
-    } finally {
-      clearTimeout(t);
-      setLoading(false);
-    }
-  };
-
+  // Chargement user + transactions seulement
   useEffect(() => {
-    load();
-    // 1. Temps réel entity Bedou
-    const unsub = base44.entities.Bedou.subscribe((event) => {
-      if (event.type === "update") {
-        console.log('[BEDOU_REALTIME_SYNC]', { page: 'MonBedou', event_received: 'Bedou.update', reload_source: 'realtime_entity', reload_triggered: true });
-        load();
-      }
-    });
-
-    // 2. Notification interne recharge approuvée
-    const unsubNotif = base44.entities.Notification.subscribe((event) => {
-      const n = event.data;
-      if (event.type === 'create') {
-        const isRecharge = n?.titre?.includes('Recharge') || n?.message?.includes('crédité');
-        if (isRecharge) {
-          console.log('[BEDOU_REALTIME_SYNC]', { page: 'MonBedou', event_received: 'Notification.create', reload_source: 'internal_notification', reload_triggered: true });
-          setTimeout(() => load(), 500);
-          setTimeout(() => load(), 3000);
-        }
-      }
-    });
-
-    // 3. Retour focus
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[BEDOU_REALTIME_SYNC]', { page: 'MonBedou', event_received: 'visibilitychange', reload_source: 'page_focus', reload_triggered: true });
-        load();
+    const init = async () => {
+      try {
+        const me = await base44.auth.me();
+        setUser(me);
+        const txList = await base44.entities.Transaction.filter({ user_email: me.email }, '-created_date', 50);
+        setTransactions(txList || []);
+      } catch (e) {
+        console.error('[MonBedou] init error:', e.message);
+      } finally {
+        setUserLoading(false);
       }
     };
-    document.addEventListener('visibilitychange', onVisible);
+    init();
 
-    // 4. Reloads de sécurité
-    const t2 = setTimeout(() => load(), 2000);
-    const t5 = setTimeout(() => load(), 5000);
-
-    return () => {
-      unsub?.();
-      unsubNotif?.();
-      document.removeEventListener('visibilitychange', onVisible);
-      clearTimeout(t2);
-      clearTimeout(t5);
-    };
+    // Écouter les nouvelles transactions en temps réel
+    const unsubTx = base44.entities.Transaction.subscribe((ev) => {
+      if (ev.type === 'create') setTransactions(prev => [ev.data, ...prev]);
+      if (ev.type === 'update') setTransactions(prev => prev.map(t => t.id === ev.id ? ev.data : t));
+    });
+    return () => unsubTx?.();
   }, []);
 
   // ── FLUX RECHARGE ─────────────────────────────────────────────────────────────
@@ -292,7 +219,7 @@ export default function MonBedou() {
         toast.success("Demande de retrait envoyée !");
         try { triggerWhatsAppNotification({ eventType: "bedou_withdraw_requested", recipientRole: "driver", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouWithdrawRequested(), entityId: user?.id, entityType: "bedou", priority: "high" }); } catch (_) {}
         setRetraitForm({ montant: "", methode: "orange_money", numero_reception: "" });
-        load();
+        reloadBedou('retrait_success');
         setTab("historique");
       } else {
         toast.error(rd?.message || rd?.error || "Erreur");
@@ -307,6 +234,7 @@ export default function MonBedou() {
   const canRetrait   = user && ["livreur", "partenaire", "commercial"].includes(user.user_type);
   const bonusPreview = parseInt(form.montant) >= 100 ? getBonus(parseInt(form.montant)) : 0;
   const txFiltrees   = transactions.filter(tx => filterStatut === "tous" || tx.statut === filterStatut);
+  const loading      = userLoading || bedouLoading;
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
