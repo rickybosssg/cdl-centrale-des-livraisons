@@ -261,6 +261,27 @@ Deno.serve(async (req) => {
     valide_par: ADMIN_EMAIL,
   });
 
+  // Notification interne client — créée immédiatement (pas de cron)
+  const notifTs = new Date().toISOString();
+  let internalNotifCreated = false;
+  try {
+    await base44.asServiceRole.entities.Notification.create({
+      destinataire_email: demande.user_email,
+      destinataire_role: 'client',
+      titre: '✅ Recharge Bedou validée',
+      message: `Votre compte a été crédité de ${montantCredite.toLocaleString()} F CFA.${bonusAmount > 0 ? ` (dont ${bonusAmount.toLocaleString()} F bonus)` : ''}`,
+      type: 'success',
+      lue: false,
+      target_entity_id: request_id,
+      target_entity_type: 'DemandeRecharge',
+      target_screen: '/mon-bedou',
+    });
+    internalNotifCreated = true;
+  } catch(e) {
+    console.warn('[CLIENT_RECHARGE_NOTIFY_CHECK] internal_notification_error:', e.message);
+  }
+
+  // Push client via sendCdlNotification
   const notifResult = await notify({
     user_email: demande.user_email,
     title: '✅ Recharge Bedou validée',
@@ -273,6 +294,17 @@ Deno.serve(async (req) => {
       amount: String(montantCredite),
       user_id: demande.user_id || demande.user_email,
     },
+  });
+
+  console.log('[CLIENT_RECHARGE_NOTIFY_CHECK]', {
+    client_email: demande.user_email,
+    internal_notification_created_at: notifTs,
+    internal_notification_sent: internalNotifCreated,
+    push_called: true,
+    push_sent: (notifResult.sent || 0) > 0,
+    fcm_token_found: (notifResult.sent || 0) + (notifResult.failed || 0) > 0,
+    fcm_failed: notifResult.failed || 0,
+    delay_ms: Date.now() - t0,
   });
 
   const elapsed = Date.now() - t0;

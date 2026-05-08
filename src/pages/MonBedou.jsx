@@ -493,14 +493,14 @@ export default function MonBedou() {
                 </div>
               </div>
 
-              {/* Preuve */}
+              {/* Capture d'écran */}
               <div>
-                <label className="text-xs font-semibold text-muted-foreground">Preuve de paiement <span className="text-red-500">*</span></label>
+                <label className="text-xs font-semibold text-muted-foreground">Capture d'écran du dépôt <span className="text-red-500">*</span></label>
                 {!form.preuve ? (
                   <div className="mt-1.5 grid grid-cols-2 gap-2">
                     <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors">
                       <span className="text-2xl">📷</span>
-                      <span className="text-xs font-semibold text-primary">Prendre une photo</span>
+                      <span className="text-xs font-semibold text-primary">Prendre une capture</span>
                       <input type="file" accept="image/*" capture="environment" className="hidden"
                         onChange={e => { const f = e.target.files?.[0]; if (f) setForm(p => ({ ...p, preuve: f })); }} />
                     </label>
@@ -520,7 +520,7 @@ export default function MonBedou() {
                     </div>
                     <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                      <span className="text-sm font-semibold text-emerald-700">Preuve ajoutée ✅</span>
+                      <span className="text-sm font-semibold text-emerald-700">Capture ajoutée ✅</span>
                     </div>
                   </div>
                 )}
