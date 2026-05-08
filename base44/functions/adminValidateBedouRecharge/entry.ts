@@ -11,7 +11,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const ADMIN_EMAIL = 'weezyh2@gmail.com';
 const APP_ID = Deno.env.get('BASE44_APP_ID') || '69c3c74fc4b62396dca61751';
-const CDL_NOTIF_URL = `https://cdl.base44.app/api/apps/${APP_ID}/functions/sendCdlNotification`;
+// URL directe inter-fonctions (pas via /api/apps/)
+const CDL_NOTIF_URL = `https://cdl.base44.app/functions/sendCdlNotification`;
 
 // Headers CORS pour autoriser capacitor:// et les apps natives
 const CORS_HEADERS = {
@@ -261,51 +262,97 @@ Deno.serve(async (req) => {
     valide_par: ADMIN_EMAIL,
   });
 
-  // Notification interne client — créée immédiatement (pas de cron)
-  const notifTs = new Date().toISOString();
-  let internalNotifCreated = false;
+  // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+  const clientEmail = demande.user_email;
+  const adminEmail  = ADMIN_EMAIL;
+  const notifMsg    = `Recharge de ${montantCredite.toLocaleString()} F CFA${bonusAmount > 0 ? ` (dont ${bonusAmount.toLocaleString()} F bonus)` : ''}`;
+
+  // 1. Notification interne CLIENT
+  let internalClientCreated = false;
   try {
     await base44.asServiceRole.entities.Notification.create({
-      destinataire_email: demande.user_email,
+      destinataire_email: clientEmail,
       destinataire_role: 'client',
       titre: '✅ Recharge Bedou validée',
-      message: `Votre compte a été crédité de ${montantCredite.toLocaleString()} F CFA.${bonusAmount > 0 ? ` (dont ${bonusAmount.toLocaleString()} F bonus)` : ''}`,
+      message: `Votre compte a été crédité de ${notifMsg}.`,
       type: 'success',
       lue: false,
       target_entity_id: request_id,
       target_entity_type: 'DemandeRecharge',
       target_screen: '/mon-bedou',
     });
-    internalNotifCreated = true;
+    internalClientCreated = true;
   } catch(e) {
-    console.warn('[CLIENT_RECHARGE_NOTIFY_CHECK] internal_notification_error:', e.message);
+    console.warn('[RECHARGE_NOTIFY_PIPELINE] internal_client_error:', e.message);
   }
 
-  // Push client via sendCdlNotification
-  const notifResult = await notify({
-    user_email: demande.user_email,
+  // 2. Notification interne ADMIN
+  let internalAdminCreated = false;
+  try {
+    await base44.asServiceRole.entities.Notification.create({
+      destinataire_email: adminEmail,
+      destinataire_role: 'admin',
+      titre: '✅ Recharge Bedou validée',
+      message: `${userName} — ${notifMsg} validé avec succès.`,
+      type: 'success',
+      lue: false,
+      target_entity_id: request_id,
+      target_entity_type: 'DemandeRecharge',
+      target_screen: '/gestion-bedou',
+    });
+    internalAdminCreated = true;
+  } catch(e) {
+    console.warn('[RECHARGE_NOTIFY_PIPELINE] internal_admin_error:', e.message);
+  }
+
+  // 3. Push FCM CLIENT
+  const notifClientResult = await notify({
+    user_email: clientEmail,
     title: '✅ Recharge Bedou validée',
-    body: `Votre compte a été crédité de ${montantCredite.toLocaleString()} F CFA.${bonusAmount > 0 ? ` (dont ${bonusAmount.toLocaleString()} F bonus)` : ''}`,
+    body: `Votre compte a été crédité de ${notifMsg}.`,
     data: {
       type: 'bedou_recharge_approved',
       entity_id: request_id,
       entity_type: 'DemandeRecharge',
       notif_route: '/mon-bedou',
       amount: String(montantCredite),
-      user_id: demande.user_id || demande.user_email,
+      user_id: demande.user_id || clientEmail,
     },
   });
 
-  console.log('[CLIENT_RECHARGE_NOTIFY_CHECK]', {
-    client_email: demande.user_email,
-    internal_notification_created_at: notifTs,
-    internal_notification_sent: internalNotifCreated,
-    push_called: true,
-    push_sent: (notifResult.sent || 0) > 0,
-    fcm_token_found: (notifResult.sent || 0) + (notifResult.failed || 0) > 0,
-    fcm_failed: notifResult.failed || 0,
+  // 4. Push FCM ADMIN
+  const notifAdminResult = await notify({
+    user_email: adminEmail,
+    title: '💰 Recharge validée',
+    body: `${userName} — ${notifMsg}`,
+    data: {
+      type: 'bedou_recharge_approved_admin',
+      entity_id: request_id,
+      entity_type: 'DemandeRecharge',
+      notif_route: '/gestion-bedou',
+    },
+  });
+
+  // Log pipeline complet
+  console.log('[RECHARGE_NOTIFY_PIPELINE]', {
+    recharge_id: request_id,
+    client_email: clientEmail,
+    admin_email: adminEmail,
+    bedou_updated: true,
+    internal_client_created: internalClientCreated,
+    internal_admin_created: internalAdminCreated,
+    push_client_called: true,
+    push_client_sent: (notifClientResult.sent || 0) > 0,
+    push_admin_called: true,
+    push_admin_sent: (notifAdminResult.sent || 0) > 0,
+    fcm_client_token_found: (notifClientResult.sent || 0) + (notifClientResult.failed || 0) > 0,
+    fcm_admin_token_found: (notifAdminResult.sent || 0) + (notifAdminResult.failed || 0) > 0,
+    error: null,
     delay_ms: Date.now() - t0,
   });
+
+  // Alias pour compatibilité logs existants
+  const notifResult = notifClientResult;
 
   const elapsed = Date.now() - t0;
   console.log('[ADMIN_VALIDATE_DONE]', {
