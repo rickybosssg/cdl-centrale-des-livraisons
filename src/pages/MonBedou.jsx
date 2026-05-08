@@ -88,10 +88,37 @@ export default function MonBedou() {
     try {
       const me = await base44.auth.me();
       setUser(me);
-      const res = await base44.functions.invoke("bedouEngine", { action: "get_bedou" });
-      const d = res?.data ?? res;
-      setBedou(d.bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0, solde_bonus: 0 });
-      setTransactions(d.transactions || []);
+
+      // Lire directement l'entité Bedou — bypass bedouEngine pour éviter le cache
+      const [bedouList, txList] = await Promise.all([
+        base44.entities.Bedou.filter({ user_email: me.email }),
+        base44.entities.Transaction.filter({ user_email: me.email }, '-created_date', 50),
+      ]);
+
+      const b = bedouList?.[0] || null;
+
+      // DIAGNOSTIC VISIBLE — [BEDOU_DISPLAY_FINAL]
+      const diagData = {
+        client_email: me.email,
+        bedou_id: b?.id || 'INTROUVABLE',
+        solde_bdd: b?.solde ?? 'N/A',
+        solde_disponible_bdd: b?.solde_disponible ?? 'N/A',
+        solde_bonus_bdd: b?.solde_bonus ?? 'N/A',
+        solde_affiche_monbedou: b?.solde ?? 0,
+      };
+      console.log('[BEDOU_DISPLAY_FINAL]', diagData);
+      setDebugLogs([
+        `[BEDOU_DISPLAY_FINAL]`,
+        `  email: ${diagData.client_email}`,
+        `  bedou_id: ${diagData.bedou_id}`,
+        `  solde_bdd: ${diagData.solde_bdd} F`,
+        `  disponible_bdd: ${diagData.solde_disponible_bdd} F`,
+        `  bonus_bdd: ${diagData.solde_bonus_bdd} F`,
+        `  affiché: ${diagData.solde_affiche_monbedou} F`,
+      ]);
+
+      setBedou(b || { solde: 0, solde_disponible: 0, solde_bloque: 0, solde_bonus: 0 });
+      setTransactions(txList || []);
     } catch (e) {
       console.error('[MonBedou] load error:', e.message);
       setBedou({ solde: 0, solde_disponible: 0, solde_bloque: 0, solde_bonus: 0 });
