@@ -382,7 +382,7 @@ Deno.serve(async (req) => {
     client_email: demande.user_email,
     recharge_id: request_id,
     bedou_updated: true,
-    internal_notification_created: internalNotifCreated,
+    internal_notification_created: internalClientCreated,
     push_called: true,
     push_sent: (notifResult.sent || 0) > 0,
     fcm_token_found: (notifResult.sent || 0) + (notifResult.failed || 0) > 0,
