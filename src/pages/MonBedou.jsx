@@ -97,7 +97,7 @@ export default function MonBedou() {
 
       const b = bedouList?.[0] || null;
 
-      // DIAGNOSTIC VISIBLE — [BEDOU_DISPLAY_FINAL]
+      // DIAGNOSTIC — [BEDOU_DISPLAY_FINAL] + [BEDOU_SYNC_CHECK]
       const diagData = {
         client_email: me.email,
         bedou_id: b?.id || 'INTROUVABLE',
@@ -107,14 +107,23 @@ export default function MonBedou() {
         solde_affiche_monbedou: b?.solde ?? 0,
       };
       console.log('[BEDOU_DISPLAY_FINAL]', diagData);
+      console.log('[BEDOU_SYNC_CHECK]', {
+        page: 'MonBedou',
+        client_email: me.email,
+        solde_lu: b?.solde ?? 'N/A',
+        solde_disponible_lu: b?.solde_disponible ?? 'N/A',
+        source_utilisee: 'base44.entities.Bedou.filter',
+        cache_used: false,
+      });
       setDebugLogs([
-        `[BEDOU_DISPLAY_FINAL]`,
+        `[BEDOU_SYNC_CHECK] MonBedou`,
         `  email: ${diagData.client_email}`,
         `  bedou_id: ${diagData.bedou_id}`,
         `  solde_bdd: ${diagData.solde_bdd} F`,
         `  disponible_bdd: ${diagData.solde_disponible_bdd} F`,
         `  bonus_bdd: ${diagData.solde_bonus_bdd} F`,
         `  affiché: ${diagData.solde_affiche_monbedou} F`,
+        `  source: entities.Bedou.filter | cache=false`,
       ]);
 
       setBedou(b || { solde: 0, solde_disponible: 0, solde_bloque: 0, solde_bonus: 0 });
@@ -347,6 +356,21 @@ export default function MonBedou() {
         </div>
       </div>
 
+      {/* DIAGNOSTIC BEDOU — toujours visible après chargement */}
+      {debugLogs.length > 0 && (
+        <div className="px-4 mt-3">
+          <div className="rounded-xl border border-blue-400 bg-blue-950 p-3 space-y-0.5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-bold text-blue-300">🔍 BEDOU SYNC</p>
+              <button onClick={() => setDebugLogs([])} className="text-[10px] text-blue-400 underline">Fermer</button>
+            </div>
+            {debugLogs.map((l, i) => (
+              <p key={i} className={`text-[10px] font-mono ${l.includes('❌') ? 'text-red-300' : l.includes('✅') ? 'text-green-300' : 'text-blue-100'}`}>{l}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* TABS */}
       <div className="px-4 mt-4">
         <div className="flex gap-1 p-1 bg-muted/50 rounded-2xl border border-border">
@@ -377,18 +401,7 @@ export default function MonBedou() {
       {tab === "recharge" && (
         <div className="px-4 mt-4 space-y-4">
 
-          {/* Panneau DEBUG visible à l'écran — s'affiche dès qu'on clique Recharger */}
-          {debugLogs.length > 0 && (
-            <div className="rounded-xl border-2 border-blue-400 bg-blue-950 p-3 space-y-0.5">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-bold text-blue-300">🔍 DEBUG LOG</p>
-                <button onClick={() => setDebugLogs([])} className="text-[10px] text-blue-400 underline">Effacer</button>
-              </div>
-              {debugLogs.map((l, i) => (
-                <p key={i} className={`text-[10px] font-mono ${l.includes('❌') ? 'text-red-300' : l.includes('✅') ? 'text-green-300' : 'text-blue-100'}`}>{l}</p>
-              ))}
-            </div>
-          )}
+          {/* (diagnostic déplacé en haut de page) */}
 
           {/* Écran succès */}
           {successData ? (
