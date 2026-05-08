@@ -287,6 +287,17 @@ Deno.serve(async (req) => {
     fcm_failed: notifResult.failed || 0,
     delay_ms: elapsed,
   });
+  console.log('[BEDOU_REALTIME_SYNC]', {
+    client_email: demande.user_email,
+    event_received: 'admin_validate',
+    push_client_sent: (notifResult.sent || 0) > 0,
+    internal_notification_sent: true,
+    reload_triggered: true,
+    reload_source: 'push_bedou_realtime',
+    solde_avant: ancienSolde,
+    solde_apres: nouveauSolde,
+    delay_ms: elapsed,
+  });
 
   return Response.json({
     success: true,

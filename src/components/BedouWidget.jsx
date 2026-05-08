@@ -39,16 +39,50 @@ export default function BedouWidget({ user, compact = false }) {
   };
 
   useEffect(() => {
-    loadBedou();
     if (!user?.email) return;
-    // Temps réel : recharger dès que le wallet change (validation admin)
+    loadBedou();
+
+    // 1. Temps réel : event Bedou entity
     const unsub = base44.entities.Bedou.subscribe(ev => {
-      if (ev.data?.user_email === user.email) {
-        console.log('[BedouWidget] Bedou mis à jour en temps réel — rechargement');
+      if (ev.data?.user_email === user.email && ev.type === 'update') {
+        console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'Bedou.update', reload_source: 'realtime_entity', reload_triggered: true });
         loadBedou();
       }
     });
-    return unsub;
+
+    // 2. Notifications interne : recharge approuvée → reload
+    const unsubNotif = base44.entities.Notification.subscribe(ev => {
+      const n = ev.data;
+      if (n?.destinataire_email === user.email && ev.type === 'create') {
+        const isRecharge = n?.titre?.includes('Recharge') || n?.message?.includes('crédité');
+        if (isRecharge) {
+          console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'Notification.create', reload_source: 'internal_notification', reload_triggered: true });
+          setTimeout(() => loadBedou(), 500);
+          setTimeout(() => loadBedou(), 3000);
+        }
+      }
+    });
+
+    // 3. Retour focus page
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[BEDOU_REALTIME_SYNC]', { client_email: user.email, event_received: 'visibilitychange', reload_source: 'page_focus', reload_triggered: true });
+        loadBedou();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    // 4. Reloads de sécurité après mount
+    const t2 = setTimeout(() => loadBedou(), 2000);
+    const t5 = setTimeout(() => loadBedou(), 5000);
+
+    return () => {
+      unsub?.();
+      unsubNotif?.();
+      document.removeEventListener('visibilitychange', onVisible);
+      clearTimeout(t2);
+      clearTimeout(t5);
+    };
   }, [user?.email]);
 
   if (loading) {
