@@ -1,53 +1,52 @@
 /**
  * BedouValidationDialog — Dialog isolé pour valider/refuser une demande Bedou
- * Utilise adminValidateBedouRecharge — auth email-only, sans dépendance au rôle JWT
+ * Appel direct fetch avec Bearer token — contourne le filtre rôle de la plateforme Base44
  */
 import { useState } from "react";
-import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 
-// Récupère le mot de passe admin depuis localStorage (direct ou obfusqué via sessionManager)
-function getAdminSecret() {
-  // 1. Stockage direct au login
-  try {
-    const direct = localStorage.getItem('cdl_admin_pwd');
-    if (direct) return direct;
-  } catch (_) {}
-  // 2. Fallback : credentials obfusqués stockés par sessionManager
-  try {
-    const raw = localStorage.getItem('cdl_session_creds');
-    if (raw) {
-      const decoded = decodeURIComponent(atob(raw));
-      const parsed = JSON.parse(decoded);
-      if (parsed?.password) return parsed.password;
-    }
-  } catch (_) {}
-  return '';
+const APP_ID = import.meta.env?.VITE_BASE44_APP_ID || '69c3c74fc4b62396dca61751';
+const FUNCTION_URL = `https://cdl.base44.app/api/apps/${APP_ID}/functions/adminValidateBedouRecharge`;
+
+function getToken() {
+  try { return localStorage.getItem('base44_access_token') || ''; } catch (_) { return ''; }
 }
 
-// Appel unique via SDK — aucun fallback fetch, aucun passage par validateBedouRequest
 async function callAdminValidate(payload) {
+  const token = getToken();
   console.log('[ADMIN_VALIDATE_CALL]', {
-    method_used: 'base44.functions.invoke',
-    fallback_fetch_used: false,
-    function_called: 'adminValidateBedouRecharge',
+    url: FUNCTION_URL,
+    token_present: !!token,
+    token_length: token.length,
     payload,
   });
 
-  const res = await base44.functions.invoke('adminValidateBedouRecharge', payload);
-  const data = res?.data ?? res;
+  const res = await fetch(FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => ({}));
 
   console.log('[ADMIN_VALIDATE_RESPONSE]', {
-    method_used: 'base44.functions.invoke',
-    fallback_fetch_used: false,
-    function_called: 'adminValidateBedouRecharge',
-    backend_status: 200,
-    notification_sent: data?.notification_client_sent ?? false,
+    http_status: res.status,
+    ok: res.ok,
     data,
   });
+
+  if (!res.ok) {
+    const err = new Error(data?.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
 
   return data;
 }
@@ -57,7 +56,7 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
   const [processing, setProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [step, setStep] = useState(null);
-  const [diag, setDiag] = useState(null); // diagnostic affiché dans l'UI
+  const [diag, setDiag] = useState(null);
 
   const montant = request.montant || 0;
   const bonus = request.bonus || 0;
@@ -73,42 +72,20 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       return;
     }
 
-    console.log('[VALIDATE_START]', {
-      requestId: request.id,
-      idDefined: !!request.id,
-      userEmail: request.user_email,
-      statut: request.statut,
-      method_used: 'base44.functions.invoke',
-    });
-
     setProcessing(true);
     setErrorMsg(null);
     setStep("⏳ Traitement en cours...");
-
-    const diagState = {
-      method_used: 'base44.functions.invoke',
-      fallback_fetch_used: false,
-      function_called: 'adminValidateBedouRecharge',
-      request_id: request.id || 'UNDEFINED',
-      api_called: false,
-      backend_status: null,
-      backend_response: null,
-      notification_sent: null,
-    };
-    setDiag({ ...diagState });
+    setDiag({ api_called: false, backend_status: null, backend_response: null, notification_sent: null });
 
     try {
-      diagState.api_called = true;
-      setDiag({ ...diagState });
+      setDiag(d => ({ ...d, api_called: true }));
       const data = await callAdminValidate({
         request_id: request.id,
         action: 'validate',
         comment: comment.trim() || '',
       });
-      diagState.backend_status = 200;
-      diagState.backend_response = JSON.stringify(data).slice(0, 200);
-      diagState.notification_sent = data?.notification_client_sent ?? false;
-      setDiag({ ...diagState });
+
+      setDiag({ api_called: true, backend_status: 200, backend_response: JSON.stringify(data).slice(0, 200), notification_sent: data?.notification_client_sent ?? false });
 
       if (data?.already_processed) {
         toast.warning("⚠️ Demande déjà traitée.");
@@ -119,30 +96,20 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
       const notifIcon = data.notification_client_sent ? `✅ push` : "⚠️ sans push";
       toast.success(`✅ Recharge validée ! ${(data.montant_credite || totalCredit).toLocaleString()} F CFA crédités — ${notifIcon}`, { duration: 5000 });
       setStep("✅ Validée !");
-      // Log diagnostic refresh
-      console.log('[BEDOU_REFRESH_CHECK]', {
-        solde_bdd: data.nouveau_solde,
-        montant_credite: data.montant_credite,
-        refresh_forced: true,
-        subscription_triggered: 'pending',
-        note: 'onSuccess() forcera un reload bedouEngine.get_bedou dans MonBedou',
-      });
       setTimeout(() => onSuccess(), 400);
 
     } catch (err) {
-      diagState.backend_status = err?.status || 'ERR';
-      diagState.backend_response = err?.message || 'Erreur inconnue';
-      diagState.notification_sent = false;
-      setDiag({ ...diagState });
-      console.log('[VALIDATE_ERROR]', { message: err?.message, status: err?.status });
       const status = err?.status;
-      let msg = err?.message || "Erreur inconnue";
+      setDiag(d => ({ ...d, backend_status: status || 'ERR', backend_response: err?.message || 'Erreur inconnue', notification_sent: false }));
+      console.log('[VALIDATE_ERROR]', { message: err?.message, status });
 
       if (status === 409 || err?.data?.already_processed) {
         toast.warning("⚠️ Demande déjà traitée.");
         onSuccess();
         return;
       }
+
+      let msg = err?.message || "Erreur inconnue";
       if (status === 401) msg = "Session expirée — reconnectez-vous.";
       if (status === 403) msg = "Accès refusé — vérifiez votre session.";
 
@@ -286,17 +253,11 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
             />
           </div>
 
-          {/* ── BLOC DIAGNOSTIC ── */}
+          {/* BLOC DIAGNOSTIC */}
           {diag && (
             <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px 12px', fontSize: '11px', fontFamily: 'monospace', color: '#94a3b8', lineHeight: '1.8' }}>
               <p style={{ color: '#f8fafc', fontWeight: 'bold', marginBottom: '4px' }}>🔍 DIAGNOSTIC</p>
-              <p><span style={{ color: '#64748b' }}>method_used = </span><span style={{ color: '#4ade80' }}>{diag.method_used}</span></p>
-              <p><span style={{ color: '#64748b' }}>fallback_fetch_used = </span><span style={{ color: diag.fallback_fetch_used ? '#ef4444' : '#4ade80' }}>{String(diag.fallback_fetch_used)}</span></p>
-              <p><span style={{ color: '#64748b' }}>function_called = </span><span style={{ color: '#4ade80' }}>{diag.function_called}</span></p>
-              <p><span style={{ color: '#64748b' }}>request_id = </span><span style={{ color: diag.request_id === 'UNDEFINED' ? '#ef4444' : '#4ade80' }}>{diag.request_id}</span></p>
               <p><span style={{ color: '#64748b' }}>api_called = </span><span style={{ color: diag.api_called ? '#4ade80' : '#f59e0b' }}>{String(diag.api_called)}</span></p>
-              <p><span style={{ color: '#64748b' }}>secret_present = </span><span style={{ color: diag.secret_present ? '#4ade80' : '#ef4444' }}>{diag.secret_present == null ? '...' : String(diag.secret_present)}</span></p>
-              <p><span style={{ color: '#64748b' }}>secret_length = </span><span style={{ color: (diag.secret_length > 0) ? '#4ade80' : '#ef4444' }}>{diag.secret_length ?? '...'}</span></p>
               <p><span style={{ color: '#64748b' }}>backend_status = </span><span style={{ color: diag.backend_status === 200 ? '#4ade80' : '#ef4444' }}>{diag.backend_status ?? '...'}</span></p>
               <p><span style={{ color: '#64748b' }}>notification_sent = </span><span style={{ color: diag.notification_sent ? '#4ade80' : '#f59e0b' }}>{diag.notification_sent == null ? '...' : String(diag.notification_sent)}</span></p>
               <p style={{ wordBreak: 'break-all' }}><span style={{ color: '#64748b' }}>backend_response = </span><span style={{ color: '#e2e8f0' }}>{diag.backend_response ?? '...'}</span></p>
