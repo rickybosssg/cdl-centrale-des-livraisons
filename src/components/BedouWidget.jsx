@@ -63,7 +63,9 @@ export default function BedouWidget({ user, compact = false }) {
 
   if (!user?.email) return null;
 
-  const safeBedou = bedou || { solde: 0, solde_disponible: 0, solde_bloque: 0, bonus: 0 };
+  const safeBedou = bedou || { solde: 0, solde_disponible: 0, solde_bonus: 0, solde_bloque: 0 };
+  // Même calcul que MonBedou : total = disponible + bonus
+  const soldeTotal = (safeBedou.solde_disponible || 0) + (safeBedou.solde_bonus || 0);
   const role = user?.active_profile_type || user?.current_role || user?.user_type;
   const canRetrait = ['livreur', 'partenaire', 'commercial'].includes(role);
 
@@ -75,7 +77,7 @@ export default function BedouWidget({ user, compact = false }) {
             <Wallet className="h-4 w-4 text-white" />
             <div>
               <p className="text-[10px] text-white/60">Solde Bedou</p>
-              <p className="text-sm font-extrabold text-white">{fmt(safeBedou.solde_disponible || 0)}</p>
+              <p className="text-sm font-extrabold text-white">{fmt(soldeTotal)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -111,7 +113,7 @@ export default function BedouWidget({ user, compact = false }) {
         </div>
 
         <p className="text-3xl font-extrabold tracking-tight text-white">
-          {fmt(safeBedou.solde || 0)}
+          {fmt(soldeTotal)}
         </p>
 
         {error && (
@@ -123,6 +125,12 @@ export default function BedouWidget({ user, compact = false }) {
             <TrendingUp className="h-3.5 w-3.5 text-green-300" />
             <span className="text-xs text-white/90 font-medium">Dispo : {fmt(safeBedou.solde_disponible || 0)}</span>
           </div>
+          {(safeBedou.solde_bonus || 0) > 0 && (
+            <div className="flex items-center gap-1">
+              <span className="text-amber-300 text-xs">🎁</span>
+              <span className="text-xs text-white/90 font-medium">Bonus : {fmt(safeBedou.solde_bonus || 0)}</span>
+            </div>
+          )}
           {(safeBedou.solde_bloque || 0) > 0 && (
             <div className="flex items-center gap-1">
               <Lock className="h-3.5 w-3.5 text-amber-300" />
