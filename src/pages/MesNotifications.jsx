@@ -88,7 +88,8 @@ export default function MesNotifications() {
 
   useEffect(() => {
     let userEmail = null;
-    load().then(async () => { const me = await base44.auth.me(); userEmail = me?.email; });
+    base44.auth.me().then(me => { userEmail = me?.email; });
+    load();
     const unsub = base44.entities.Notification.subscribe((event) => {
       if (userEmail && event.data?.destinataire_email && event.data.destinataire_email !== userEmail) return;
       if (event.type === "create") setNotifs(prev => [event.data, ...prev]);

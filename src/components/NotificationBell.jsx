@@ -46,10 +46,9 @@ export default function NotificationBell({ userEmail }) {
       if (isMounted) loadNotifs();
     }, isNative ? 300000 : 120000);
 
-    // WebSocket uniquement sur web — sur APK natif on poll seulement
+    // WebSocket sur web ET natif — le polling reste en backup
     let unsub = null;
-    if (!isNative) {
-      try {
+    try {
         unsub = base44.entities.Notification.subscribe((event) => {
           try {
             if (!isMounted || event.data?.destinataire_email !== userEmail) return;
@@ -86,11 +85,8 @@ export default function NotificationBell({ userEmail }) {
             console.warn('[NOTIFICATIONS] event handler error (non-fatal):', err?.message);
           }
         });
-      } catch (err) {
-        console.warn('[NOTIFICATIONS] subscribe error (non-fatal):', err?.message);
-      }
-    } else {
-      console.log('[NOTIFICATIONS] WebSocket SKIPPED on native (polling only)');
+    } catch (err) {
+      console.warn('[NOTIFICATIONS] subscribe error (non-fatal):', err?.message);
     }
 
     return () => {
