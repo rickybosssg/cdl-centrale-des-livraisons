@@ -128,13 +128,18 @@ export default function FcmBootstrap({ userEmail }) {
         } else {
           await runWebFcm(userEmail);
         }
-        // Vérification post-enregistrement pour les admins : loguer si aucun token actif
-        try {
-          const isAdminUser = await checkIfAdminHasToken(userEmail);
-          if (isAdminUser === false) {
-            console.warn('[FCM] ⚠️ ADMIN SANS TOKEN — Aucun appareil admin connecté pour recevoir les notifications push');
-          }
-        } catch (_) {}
+        // Vérification post-enregistrement : si aucun token en BDD → re-register immédiatement
+        if (native) {
+          try {
+            const storedToken = await getStoredActiveToken(userEmail);
+            if (!storedToken) {
+              console.warn('[FCM_CLIENT_REGISTER] ⚠️ Aucun token en BDD après register — re-register forcé dans 3s');
+              setTimeout(() => runNativeFcm(userEmail).catch(() => {}), 3000);
+            } else {
+              console.log('[FCM_CLIENT_REGISTER] ✅ Token confirmé en BDD:', storedToken.slice(0, 30) + '...');
+            }
+          } catch (_) {}
+        }
       } catch (err) {
         console.error('[FCM] Bootstrap error (non-fatal):', err?.message);
       }
@@ -246,21 +251,20 @@ async function runNativeFcm(propEmail) {
         if (!token) { console.error('[FCM] registration: token vide'); return; }
         console.log('[FCM] ✅ Token reçu (len=' + token.length + '):', token.slice(0, 40) + '...');
         resolveEmail(propEmail).then(async (email) => {
-          if (!email) { console.error('[FCM] Pas d\'email pour sauvegarder le token'); return; }
-          // ── Vérifier si le token a changé vs BDD ──────────────────────────
-          const storedToken = await getStoredActiveToken(email);
-          if (storedToken && storedToken === token) {
-            console.log('[FCM] Token inchangé — pas de mise à jour BDD nécessaire');
-            return;
-          }
-          if (storedToken && storedToken !== token) {
-            console.log('[FCM] 🔄 Token changé — suppression ancien + enregistrement nouveau');
-            await removeInvalidToken(email, storedToken);
-          }
-          saveFcmTokenOnce({ user_email: email, token, device_type: 'android_native' });
-        }).catch(e => console.error('[FCM] resolveEmail error:', e?.message));
+          if (!email) { console.error('[FCM_CLIENT_REGISTER] Pas d\'email pour sauvegarder le token'); return; }
+          // ── TOUJOURS sauvegarder (update last_used même si token identique) ─
+          console.log('[FCM_CLIENT_REGISTER]', { email, token_preview: token.slice(0, 30) + '...', action: 'saving' });
+          const result = await saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
+          console.log('[FCM_CLIENT_REGISTER]', {
+            email,
+            token_preview: token.slice(0, 30) + '...',
+            saved: result?.success === true,
+            action: result?.action || 'unknown',
+            error: result?.error || null,
+          });
+        }).catch(e => console.error('[FCM_CLIENT_REGISTER] resolveEmail error:', e?.message));
       } catch (e) {
-        console.error('[FCM] registration callback error:', e?.message);
+        console.error('[FCM_CLIENT_REGISTER] callback error:', e?.message);
       }
     }));
 
