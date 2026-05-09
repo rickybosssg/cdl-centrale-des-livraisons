@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
   });
 
   // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
-  const clientEmail = demande.user_email;
+  const clientEmail = (demande.user_email || '').toLowerCase().trim();
   const adminEmail  = ADMIN_EMAIL;
   const notifMsg    = `Recharge de ${montantCredite.toLocaleString()} F CFA${bonusAmount > 0 ? ` (dont ${bonusAmount.toLocaleString()} F bonus)` : ''}`;
 
@@ -305,7 +305,25 @@ Deno.serve(async (req) => {
     console.warn('[RECHARGE_NOTIFY_PIPELINE] internal_admin_error:', e.message);
   }
 
-  // 3. Push FCM CLIENT
+  // 3. Push FCM CLIENT — vérification token avant envoi
+  let clientFcmTokens = [];
+  try {
+    clientFcmTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: clientEmail, is_active: true });
+  } catch(e) {
+    console.warn('[CLIENT_PUSH_ONLY_CHECK] token_fetch_error:', e.message);
+  }
+  const clientToken = clientFcmTokens?.[0];
+  console.log('[CLIENT_PUSH_ONLY_CHECK]', {
+    client_email: clientEmail,
+    client_user_id: demande.user_id || 'N/A',
+    fcm_token_found: clientFcmTokens.length > 0,
+    fcm_token_count: clientFcmTokens.length,
+    fcm_token_preview: clientToken ? clientToken.token.slice(0, 30) + '...' : 'AUCUN TOKEN',
+    token_device_type: clientToken?.device_type || 'N/A',
+    token_last_used: clientToken?.last_used || clientToken?.registered_at || 'N/A',
+    push_called: true,
+  });
+
   const notifClientResult = await notify({
     user_email: clientEmail,
     title: '✅ Recharge Bedou validée',
@@ -318,6 +336,14 @@ Deno.serve(async (req) => {
       amount: String(montantCredite),
       user_id: demande.user_id || clientEmail,
     },
+  });
+
+  console.log('[CLIENT_PUSH_ONLY_CHECK] push_response:', {
+    push_response: JSON.stringify(notifClientResult).slice(0, 200),
+    fcm_sent: notifClientResult.sent || 0,
+    fcm_failed: notifClientResult.failed || 0,
+    error_code: notifClientResult.error || null,
+    error_message: notifClientResult.note || null,
   });
 
   // 4. Push FCM ADMIN
