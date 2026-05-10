@@ -1,0 +1,60 @@
+{
+  "name": "PaiementCommission",
+  "type": "object",
+  "properties": {
+    "livreur_email": {
+      "type": "string",
+      "title": "Email livreur"
+    },
+    "livreur_nom": {
+      "type": "string",
+      "title": "Nom livreur"
+    },
+    "montant": {
+      "type": "number",
+      "title": "Montant pay\u00e9 (FCFA)"
+    },
+    "date_paiement": {
+      "type": "string",
+      "title": "Date de paiement"
+    },
+    "mode_paiement": {
+      "type": "string",
+      "enum": [
+        "Esp\u00e8ces",
+        "Orange Money",
+        "Moov Money",
+        "Telecel Money",
+        "Virement",
+        "Autre"
+      ],
+      "title": "Mode de paiement"
+    },
+    "reference": {
+      "type": "string",
+      "title": "R\u00e9f\u00e9rence"
+    },
+    "commentaire": {
+      "type": "string",
+      "title": "Commentaire"
+    },
+    "solde_avant": {
+      "type": "number",
+      "title": "Solde avant paiement"
+    },
+    "solde_apres": {
+      "type": "number",
+      "title": "Solde apr\u00e8s paiement"
+    },
+    "admin_email": {
+      "type": "string",
+      "title": "Admin ayant enregistr\u00e9"
+    }
+  },
+  "required": [
+    "livreur_email",
+    "montant",
+    "date_paiement",
+    "mode_paiement"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "name": "UserReferralBalance",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur"
+    },
+    "referral_balance": {
+      "type": "number",
+      "title": "Solde de parrainage (F)",
+      "default": 0
+    },
+    "total_referral_earned": {
+      "type": "number",
+      "title": "Total gagn\u00e9 par parrainage (F)",
+      "default": 0
+    },
+    "total_referral_withdrawn": {
+      "type": "number",
+      "title": "Total retir\u00e9 (F)",
+      "default": 0
+    },
+    "pending_withdrawal": {
+      "type": "number",
+      "title": "Retrait en attente (F)",
+      "default": 0
+    },
+    "referral_count": {
+      "type": "number",
+      "title": "Nombre de filleuls",
+      "default": 0
+    },
+    "signup_bonus_count": {
+      "type": "number",
+      "title": "Bonus inscriptions vers\u00e9s",
+      "default": 0
+    },
+    "first_course_bonus_count": {
+      "type": "number",
+      "title": "Bonus premi\u00e8res courses vers\u00e9s",
+      "default": 0
+    }
+  },
+  "required": [
+    "user_email"
+  ]
+}

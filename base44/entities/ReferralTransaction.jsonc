@@ -1,0 +1,54 @@
+{
+  "name": "ReferralTransaction",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "title": "Email utilisateur (parrain)"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "referral_signup_bonus",
+        "referral_first_course_bonus",
+        "referral_withdraw_request",
+        "referral_withdraw_approved",
+        "referral_withdraw_rejected",
+        "referral_adjustment_admin"
+      ],
+      "title": "Type de transaction"
+    },
+    "amount": {
+      "type": "number",
+      "title": "Montant (F)"
+    },
+    "source_user_email": {
+      "type": "string",
+      "title": "Email du filleul (si applicable)"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "completed"
+      ],
+      "title": "Statut",
+      "default": "completed"
+    },
+    "admin_notes": {
+      "type": "string",
+      "title": "Notes admin"
+    }
+  },
+  "required": [
+    "user_email",
+    "type",
+    "amount"
+  ]
+}

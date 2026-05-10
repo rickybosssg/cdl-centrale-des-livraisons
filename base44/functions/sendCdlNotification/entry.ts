@@ -285,6 +285,23 @@ Deno.serve(async (req) => {
       targetEmails.map(email => base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true }))
     );
 
+    // Log détaillé par destinataire : token_found, token_count, token_preview
+    for (let i = 0; i < targetEmails.length; i++) {
+      const email = targetEmails[i];
+      const r = tokenResults[i];
+      if (r.status !== 'fulfilled') {
+        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=FETCH_FAILED`);
+        continue;
+      }
+      const tokens = (r.value || []).filter(t => t.token && !isTestToken(t.token));
+      if (tokens.length === 0) {
+        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN | hint=user_must_reopen_app`);
+      } else {
+        const best = tokens.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0))[0];
+        console.log(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=true | token_count=${tokens.length} | token_preview=${best.token.slice(0, 30)}... | device_type=${best.device_type || 'unknown'} | last_used=${best.last_used || best.registered_at || 'N/A'}`);
+      }
+    }
+
     // 🔒 FCM_TOKEN_LOCK — 1 seul token par user_email (le plus récent)
     const tokensByEmail = new Map();
     for (const r of tokenResults) {
@@ -363,6 +380,7 @@ Deno.serve(async (req) => {
       } else {
         failed++;
         const errCode = r.status === 'fulfilled' ? r.value.errCode : 'EXCEPTION';
+        const errMsg = r.status === 'fulfilled' ? (r.value.result?.error?.message || errCode) : r.reason?.message || 'EXCEPTION';
         console.error(
           `[CDL_PUSH_SENT] ` +
           `event_type=${eventType} | ` +
@@ -374,8 +392,10 @@ Deno.serve(async (req) => {
           `fcm_sent=0 | ` +
           `fcm_failed=1 | ` +
           `firebase_message_id=N/A | ` +
-          `error=${errCode}`
+          `error_code=${errCode} | ` +
+          `error_message=${errMsg}`
         );
+        console.error(`[FCM_SEND_RESULT] recipient_email=${tokenRecord.user_email} | token_found=true | token_preview=${tokenRecord.token.slice(0, 30)}... | fcm_success=false | fcm_failure=true | error_code=${errCode} | error_message=${errMsg}`);
         if (FATAL_FCM_ERRORS.includes(errCode)) {
           console.error(`[FCM_TOKEN_LOCK] ❌ UNREGISTERED → suppression | user=${tokenRecord.user_email} | token=${tokenRecord.token.slice(0, 25)}...`);
           base44.asServiceRole.entities.FcmToken.delete(tokenRecord.id).catch(() =>
