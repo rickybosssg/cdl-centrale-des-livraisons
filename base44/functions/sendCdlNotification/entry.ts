@@ -272,7 +272,7 @@ Deno.serve(async (req) => {
       console.error(`[sendCdlNotification] ❌ BDD batch: ${e.message}`);
     }
 
-    // ── 3. FCM Push avec FCM_TOKEN_LOCK ──────────────────────────────────────
+    // ── 3. FCM Push — tous les tokens actifs par destinataire ───────────────
     let sent = 0, failed = 0, firstMsgId = null;
 
     if (!SA_JSON) {
@@ -280,12 +280,14 @@ Deno.serve(async (req) => {
       return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'FCM désactivé (SA manquant)' });
     }
 
-    // Récupérer tous les tokens actifs pour chaque email
+    // Récupérer TOUS les tokens actifs pour chaque email
     const tokenResults = await Promise.allSettled(
       targetEmails.map(email => base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true }))
     );
 
-    // Log détaillé par destinataire : token_found, token_count, token_preview
+    // Construire la liste complète : TOUS les tokens valides, pas de déduplication
+    // (envoyer à tous les appareils enregistrés — l'utilisateur peut avoir plusieurs)
+    const tokenRecords = [];
     for (let i = 0; i < targetEmails.length; i++) {
       const email = targetEmails[i];
       const r = tokenResults[i];
@@ -293,59 +295,25 @@ Deno.serve(async (req) => {
         console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=FETCH_FAILED`);
         continue;
       }
-      const tokens = (r.value || []).filter(t => t.token && !isTestToken(t.token));
-      if (tokens.length === 0) {
-        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN | hint=user_must_reopen_app`);
-      } else {
-        const best = tokens.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0))[0];
-        console.log(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=true | token_count=${tokens.length} | token_preview=${best.token.slice(0, 30)}... | device_type=${best.device_type || 'unknown'} | last_used=${best.last_used || best.registered_at || 'N/A'}`);
-      }
-    }
-
-    // 🔒 FCM_TOKEN_LOCK — 1 seul token par user_email (le plus récent)
-    const tokensByEmail = new Map();
-    for (const r of tokenResults) {
-      if (r.status !== 'fulfilled') continue;
       const validTokens = (r.value || []).filter(t => {
-        if (!t.token || String(t.token).trim() === '') {
-          console.error(`[FCM_TOKEN_LOCK] token vide user=${t.user_email} id=${t.id} — ignoré`);
-          return false;
-        }
+        if (!t.token || String(t.token).trim().length < 10) return false;
         return !isTestToken(t.token);
       });
-      for (const t of validTokens) {
-        const email = (t.user_email || '').toLowerCase();
-        const existing = tokensByEmail.get(email);
-        const tDate = new Date(t.last_used || t.registered_at || 0).getTime();
-        const eDate = existing ? new Date(existing.last_used || existing.registered_at || 0).getTime() : -1;
-        if (!existing || tDate > eDate) {
-          if (existing) {
-            base44.asServiceRole.entities.FcmToken.delete(existing.id).catch(() =>
-              base44.asServiceRole.entities.FcmToken.update(existing.id, { is_active: false }).catch(() => {})
-            );
-            console.log(`[FCM_TOKEN_LOCK] old_token_removed | user=${email} | removed_id=${existing.id} | kept_id=${t.id}`);
-          }
-          tokensByEmail.set(email, t);
-        } else {
-          base44.asServiceRole.entities.FcmToken.delete(t.id).catch(() =>
-            base44.asServiceRole.entities.FcmToken.update(t.id, { is_active: false }).catch(() => {})
-          );
-          console.log(`[FCM_TOKEN_LOCK] old_token_removed | user=${email} | removed_id=${t.id} | kept_id=${existing.id}`);
-        }
+      if (validTokens.length === 0) {
+        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN | hint=user_must_reopen_app`);
+      } else {
+        // Trier par last_used desc pour avoir le plus récent en premier
+        validTokens.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0));
+        console.log(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=true | token_count=${validTokens.length} | best_token_preview=${validTokens[0].token.slice(0, 30)}... | device_type=${validTokens[0].device_type || 'unknown'} | last_used=${validTokens[0].last_used || validTokens[0].registered_at || 'N/A'}`);
+        tokenRecords.push(...validTokens);
       }
-    }
-
-    const tokenRecords = [];
-    for (const [email, t] of tokensByEmail.entries()) {
-      console.log(`[FCM_TOKEN_LOCK] user_email=${email} | active_token_count=1 | selected_token=${t.token.slice(0, 25)}... | last_used_at=${t.last_used || t.registered_at || 'N/A'}`);
-      tokenRecords.push(t);
     }
 
     const tokensCount = tokenRecords.length;
-    console.log(`[sendCdlNotification] tokens_count=${tokensCount} | +${Date.now() - t0}ms`);
+    console.log(`[sendCdlNotification] tokens_count=${tokensCount} (tous appareils) | +${Date.now() - t0}ms`);
 
     if (tokensCount === 0) {
-      console.error(`[FCM_TOKEN_LOCK] ❌ AUCUN TOKEN ACTIF — [${targetEmails.join(', ')}] — BDD fallback: ${bddCreated}`);
+      console.error(`[FCM_SEND_RESULT] ❌ AUCUN TOKEN ACTIF — [${targetEmails.join(', ')}] — BDD fallback: ${bddCreated}`);
       return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'Aucun token FCM actif' });
     }
 
@@ -364,47 +332,46 @@ Deno.serve(async (req) => {
         if (!firstMsgId) firstMsgId = r.value.msgId;
         base44.asServiceRole.entities.FcmToken.update(tokenRecord.id, { last_used: new Date().toISOString() }).catch(() => {});
 
-        // 🔒 LOG OBLIGATOIRE [CDL_PUSH_SENT]
         console.log(
-          `[CDL_PUSH_SENT] ` +
-          `event_type=${eventType} | ` +
-          `entity_type=${entityType} | ` +
-          `entity_id=${entityId} | ` +
-          `recipient_email=${tokenRecord.user_email} | ` +
-          `token_used=${tokenRecord.token.slice(0, 25)}... | ` +
-          `channel_id=${CDL_CHANNEL} | ` +
-          `fcm_sent=1 | ` +
-          `fcm_failed=0 | ` +
-          `firebase_message_id=${r.value.msgId || 'N/A'}`
+          `[FCM_SEND_RESULT] recipient_email=${tokenRecord.user_email} | ` +
+          `token_preview=${tokenRecord.token.slice(0, 30)}... | ` +
+          `device_type=${tokenRecord.device_type || 'unknown'} | ` +
+          `fcm_success=true | fcm_failure=false | ` +
+          `firebase_message_id=${r.value.msgId || 'N/A'} | ` +
+          `event_type=${eventType}`
+        );
+        console.log(
+          `[CDL_PUSH_SENT] event_type=${eventType} | entity_type=${entityType} | entity_id=${entityId} | ` +
+          `recipient_email=${tokenRecord.user_email} | token_used=${tokenRecord.token.slice(0, 25)}... | ` +
+          `channel_id=${CDL_CHANNEL} | fcm_sent=1 | fcm_failed=0 | firebase_message_id=${r.value.msgId || 'N/A'}`
         );
       } else {
         failed++;
         const errCode = r.status === 'fulfilled' ? r.value.errCode : 'EXCEPTION';
-        const errMsg = r.status === 'fulfilled' ? (r.value.result?.error?.message || errCode) : r.reason?.message || 'EXCEPTION';
+        const errMsg = r.status === 'fulfilled' ? (r.value.result?.error?.message || errCode) : (r.reason?.message || 'EXCEPTION');
+
         console.error(
-          `[CDL_PUSH_SENT] ` +
-          `event_type=${eventType} | ` +
-          `entity_type=${entityType} | ` +
-          `entity_id=${entityId} | ` +
-          `recipient_email=${tokenRecord.user_email} | ` +
-          `token_used=${tokenRecord.token.slice(0, 25)}... | ` +
-          `channel_id=${CDL_CHANNEL} | ` +
-          `fcm_sent=0 | ` +
-          `fcm_failed=1 | ` +
-          `firebase_message_id=N/A | ` +
-          `error_code=${errCode} | ` +
-          `error_message=${errMsg}`
+          `[FCM_SEND_RESULT] recipient_email=${tokenRecord.user_email} | ` +
+          `token_preview=${tokenRecord.token.slice(0, 30)}... | ` +
+          `device_type=${tokenRecord.device_type || 'unknown'} | ` +
+          `fcm_success=false | fcm_failure=true | ` +
+          `error_code=${errCode} | error_message=${errMsg} | ` +
+          `event_type=${eventType}`
         );
-        console.error(`[FCM_SEND_RESULT] recipient_email=${tokenRecord.user_email} | token_found=true | token_preview=${tokenRecord.token.slice(0, 30)}... | fcm_success=false | fcm_failure=true | error_code=${errCode} | error_message=${errMsg}`);
+        console.error(
+          `[CDL_PUSH_SENT] event_type=${eventType} | entity_type=${entityType} | entity_id=${entityId} | ` +
+          `recipient_email=${tokenRecord.user_email} | token_used=${tokenRecord.token.slice(0, 25)}... | ` +
+          `channel_id=${CDL_CHANNEL} | fcm_sent=0 | fcm_failed=1 | error_code=${errCode} | error_message=${errMsg}`
+        );
+
+        // Token invalide/expiré → désactiver immédiatement
         if (FATAL_FCM_ERRORS.includes(errCode)) {
-          console.error(`[FCM_TOKEN_LOCK] ❌ UNREGISTERED → suppression | user=${tokenRecord.user_email} | token=${tokenRecord.token.slice(0, 25)}...`);
-          base44.asServiceRole.entities.FcmToken.delete(tokenRecord.id).catch(() =>
-            base44.asServiceRole.entities.FcmToken.update(tokenRecord.id, {
-              is_active: false,
-              deactivation_reason: errCode,
-              deactivated_at: new Date().toISOString(),
-            }).catch(() => {})
-          );
+          console.error(`[FCM_SEND_RESULT] ❌ TOKEN_FATAL_ERROR → désactivation | user=${tokenRecord.user_email} | token=${tokenRecord.token.slice(0, 25)}... | error_code=${errCode}`);
+          base44.asServiceRole.entities.FcmToken.update(tokenRecord.id, {
+            is_active: false,
+            deactivation_reason: errCode,
+            deactivated_at: new Date().toISOString(),
+          }).catch(() => {});
         }
       }
     }
