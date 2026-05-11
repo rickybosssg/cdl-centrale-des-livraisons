@@ -50,12 +50,14 @@ async function getPN() {
 // 🔒 CANAL VERROUILLÉ : doit correspondre exactement à sendCdlNotification
 const CDL_CHANNEL_ID = 'cdl_critical_alerts_v2';
 
+const LEGACY_CHANNEL_IDS = ['default', 'CDL_ALERTS_HIGH', 'urgent', 'cdl_default_v2'];
+
 async function ensureChannel(PN) {
   try {
-    // Supprimer l'ancien canal "default" s'il existe (ne correspond plus à ce qu'on envoie)
-    try { await PN.deleteChannel({ id: 'default' }); } catch (_) {}
+    // Supprimer tous les anciens canaux legacy
+    await Promise.allSettled(LEGACY_CHANNEL_IDS.map(id => PN.deleteChannel({ id })));
 
-    // 🔒 Canal unique v2 — importance: 5 = IMPORTANCE_MAX heads-up garanti
+    // 🔒 Canal unique — importance: 5 = IMPORTANCE_MAX, heads-up garanti
     await PN.createChannel({
       id: CDL_CHANNEL_ID,
       name: 'CDL Alertes Critiques',
@@ -65,10 +67,11 @@ async function ensureChannel(PN) {
       vibration: true,
       lights: true,
       lightColor: '#FF6B1E',
+      visibility: 1, // PUBLIC
     });
-    console.log('[NativePush] ✅ Canal', CDL_CHANNEL_ID, '(importance=5) créé/vérifié');
+    console.log(`[FCM_CHANNEL_CHECK] channel_used=${CDL_CHANNEL_ID} | channel_created=true | importance=5 | sound=true | vibration=true | legacy_cleaned=${LEGACY_CHANNEL_IDS.length}`);
   } catch (e) {
-    console.warn('[NativePush] ensureChannel error (non-fatal):', e?.message);
+    console.warn(`[FCM_CHANNEL_CHECK] channel_error=${e?.message} (non-fatal)`);
   }
 }
 

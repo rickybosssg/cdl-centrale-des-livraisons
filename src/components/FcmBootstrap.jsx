@@ -191,29 +191,29 @@ async function runNativeFcm(propEmail) {
   // Android interdit de modifier l'importance d'un canal existant.
   // Nouveaux IDs V2 = importance=5 heads-up garanti dès la première installation.
   // Les anciens canaux sont supprimés pour éviter confusion dans les paramètres.
-  const OLD_CHANNEL_IDS = ['default', 'CDL_ALERTS_HIGH', 'urgent', 'cdl_default_v2'];
-  const CHANNELS_V2 = [
-    {
-      // 🔒 CANAL PRINCIPAL VERROUILLÉ — utilisé pour TOUS les envois push CDL
-      id: 'cdl_critical_alerts_v2',
-      name: 'CDL Alertes Critiques',
-      description: 'Courses, recharges Bedou, profils — priorité maximale',
-      importance: 5,
-      sound: 'default',
-      vibration: true,
-      lights: true,
-      lightColor: '#FF6B1E',
-    },
-  ];
+  // 🔒 CANAL UNIQUE CDL — NE JAMAIS MODIFIER CET ID
+  const CDL_CHANNEL = {
+    id: 'cdl_critical_alerts_v2',
+    name: 'CDL Alertes Critiques',
+    description: 'Courses, recharges Bedou, profils — priorité maximale',
+    importance: 5,
+    sound: 'default',
+    vibration: true,
+    lights: true,
+    lightColor: '#FF6B1E',
+    visibility: 1, // PUBLIC
+  };
+  // Anciens canaux à supprimer (legacy)
+  const LEGACY_CHANNELS = ['default', 'CDL_ALERTS_HIGH', 'urgent', 'cdl_default_v2'];
 
   try {
-    // Supprimer anciens canaux (silencieux si déjà absents)
-    await Promise.allSettled(OLD_CHANNEL_IDS.map(id => PushNotifications.deleteChannel({ id })));
-    // Créer les nouveaux canaux V2 (ne pas delete/recreate → importance figée par Android)
-    await Promise.all(CHANNELS_V2.map(ch => PushNotifications.createChannel(ch)));
-    console.log('[FCM] ✅ Channels V2 created: cdl_default_v2 + cdl_critical_alerts_v2 (importance=5)');
+    // 1. Supprimer tous les anciens canaux
+    await Promise.allSettled(LEGACY_CHANNELS.map(id => PushNotifications.deleteChannel({ id })));
+    // 2. Créer/confirmer le canal unique (Android ignore si déjà existant avec même id)
+    await PushNotifications.createChannel(CDL_CHANNEL);
+    console.log(`[FCM_CHANNEL_CHECK] channel_used=${CDL_CHANNEL.id} | channel_created=true | importance=${CDL_CHANNEL.importance} | sound=true | vibration=true | legacy_cleaned=${LEGACY_CHANNELS.length}`);
   } catch (e) {
-    console.warn('[FCM] Channel error (non-fatal):', e?.message);
+    console.warn(`[FCM_CHANNEL_CHECK] channel_error=${e?.message} (non-fatal)`);
   }
 
   // ── Permission — demander si pas encore accordée ──────────────────────────
