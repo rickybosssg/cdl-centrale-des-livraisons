@@ -262,6 +262,11 @@ async function runNativeFcm(propEmail) {
             action: result?.action || 'unknown',
             error: result?.error || null,
           });
+          // Flag localStorage pour diagnostic APK_NOTIFICATION_RUNTIME_CHECK
+          try {
+            localStorage.setItem('cdl_fcm_token_saved', result?.success ? new Date().toISOString() : 'failed');
+            localStorage.setItem('cdl_fcm_token_preview', token.slice(0, 30));
+          } catch (_) {}
         }).catch(e => console.error('[FCM_CLIENT_REGISTER] resolveEmail error:', e?.message));
       } catch (e) {
         console.error('[FCM_CLIENT_REGISTER] callback error:', e?.message);
@@ -282,6 +287,8 @@ async function runNativeFcm(propEmail) {
         const delayMs = sentAt ? Date.now() - new Date(sentAt).getTime() : null;
         const notifType = notif?.data?.type || '';
         console.log(`[FCM] 📬 Foreground | title="${title}" | type=${notifType} | channel=${notif?.data?.channel_id || '?'} | delay=${delayMs != null ? delayMs + 'ms' : 'N/A'} | received_at=${receivedAt}`);
+        console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] last_push_event_received=${receivedAt} | push_type=${notifType} | fcm_token_present=true`);
+        try { localStorage.setItem('cdl_last_push_received', receivedAt); } catch (_) {}
         try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
 
         // 🔔 Émettre l'événement Bedou si c'est une recharge approuvée

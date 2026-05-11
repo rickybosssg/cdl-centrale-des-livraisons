@@ -31,62 +31,85 @@ export default function NotificationBell({ userEmail }) {
 
   useEffect(() => {
     if (!userEmail) return;
-    console.log('[NOTIFICATIONS] init start');
-    let isMounted = true;
 
-    // Détection APK natif
     const isNative = (() => { try { const p = window.location?.protocol; return p === 'capacitor:' || p === 'file:' || (typeof window.Capacitor !== 'undefined'); } catch(_) { return false; } })();
+
+    console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] platform=${isNative ? 'capacitor_android' : 'web'} | user=${userEmail} | subscribe_start=true`);
+
+    let isMounted = true;
+    let wsActive = false;
 
     const initialTimer = setTimeout(() => {
       if (isMounted) loadNotifs();
-    }, 3000);
+    }, 1500);
 
-    // Sur natif : poll 5min. Sur web : poll 2min
+    // Sur natif : poll 30s (WebSocket peut être tué par Android en arrière-plan)
+    // Sur web : poll 2min (WebSocket suffit)
+    const pollInterval = isNative ? 30000 : 120000;
     const interval = setInterval(() => {
       if (isMounted) loadNotifs();
-    }, isNative ? 300000 : 120000);
+    }, pollInterval);
 
-    // WebSocket sur web ET natif — le polling reste en backup
+    console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] poll_interval=${pollInterval}ms | websocket_subscribe_starting=true`);
+
+    // WebSocket — tenté sur web ET natif
     let unsub = null;
     try {
-        unsub = base44.entities.Notification.subscribe((event) => {
-          try {
-            if (!isMounted || event.data?.destinataire_email !== userEmail) return;
-            if (event.type === 'create') {
-              const newNotif = event.data;
-              setNotifs(prev => [newNotif, ...prev]);
-              // Son + vibration différenciés par priorité
-              const priority = resolveNotifPriority(newNotif);
-              if (priority === 'critical') {
-                try { vibrateCritical(); } catch (_) {}
-                try { playNotificationSoundCritical(); } catch (_) {}
-              } else {
-                try { vibrateNotif(); } catch (_) {}
-                try { playNotificationSound(); } catch (_) {}
-              }
-              // Toast in-app
-              try {
-                showNotification({
-                  title: newNotif.titre,
-                  message: newNotif.message,
-                  type: priority === 'critical' ? 'error' : (newNotif.type === 'success' ? 'success' : 'info'),
-                  autoCloseDuration: priority === 'critical' ? 12000 : 7000,
-                });
-              } catch (_) {}
-            } else if (event.type === 'update') {
-              setNotifs(prev => {
-                const updated = prev.map(n => n.id === event.id ? event.data : n);
-                const unreadCount = updated.filter(n => !n.lue).length;
-                try { if ('setAppBadge' in navigator) navigator.setAppBadge(unreadCount || 0); } catch (_) {}
-                return updated;
-              });
-            }
-          } catch (err) {
-            console.warn('[NOTIFICATIONS] event handler error (non-fatal):', err?.message);
+      unsub = base44.entities.Notification.subscribe((event) => {
+        try {
+          if (!wsActive) {
+            wsActive = true;
+            console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] websocket_connected=true | first_event_type=${event.type} | platform=${isNative ? 'capacitor' : 'web'}`);
           }
-        });
+          if (!isMounted || event.data?.destinataire_email !== userEmail) return;
+          if (event.type === 'create') {
+            const newNotif = event.data;
+            console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] last_notification_event_received=${new Date().toISOString()} | titre="${newNotif.titre}" | platform=${isNative ? 'capacitor' : 'web'}`);
+            setNotifs(prev => [newNotif, ...prev]);
+            const priority = resolveNotifPriority(newNotif);
+            if (priority === 'critical') {
+              try { vibrateCritical(); } catch (_) {}
+              try { playNotificationSoundCritical(); } catch (_) {}
+            } else {
+              try { vibrateNotif(); } catch (_) {}
+              try { playNotificationSound(); } catch (_) {}
+            }
+            try {
+              showNotification({
+                title: newNotif.titre,
+                message: newNotif.message,
+                type: priority === 'critical' ? 'error' : (newNotif.type === 'success' ? 'success' : 'info'),
+                autoCloseDuration: priority === 'critical' ? 12000 : 7000,
+              });
+            } catch (_) {}
+          } else if (event.type === 'update') {
+            setNotifs(prev => {
+              const updated = prev.map(n => n.id === event.id ? event.data : n);
+              const unreadCount = updated.filter(n => !n.lue).length;
+              try { if ('setAppBadge' in navigator) navigator.setAppBadge(unreadCount || 0); } catch (_) {}
+              return updated;
+            });
+          }
+        } catch (err) {
+          console.warn('[NOTIFICATIONS] event handler error (non-fatal):', err?.message);
+        }
+      });
+      console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] notification_subscribe_active=true | websocket_started=true`);
     } catch (err) {
-      console.warn('[NOTIFICATIONS] subscribe error (non-fatal):', err?.message);
+      console.warn(`[APK_NOTIFICATION_RUNTIME_CHECK] subscribe_error=${err?.message} | websocket_connected=false`);
+    }
+
+    // Sur natif : vérifier le token FCM après 5s
+    if (isNative) {
+      setTimeout(async () => {
+        try {
+          const { getFcmTokens } = await import('@/api/base44Client').then(m => ({ getFcmTokens: null }));
+          // Log diagnostic token FCM côté APK
+          const stored = localStorage.getItem('cdl_fcm_token_saved');
+          const lastPush = localStorage.getItem('cdl_last_push_received');
+          console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] fcm_token_saved=${!!stored} | last_push_event_received=${lastPush || 'never'} | platform=capacitor_android`);
+        } catch (_) {}
+      }, 5000);
     }
 
     return () => {

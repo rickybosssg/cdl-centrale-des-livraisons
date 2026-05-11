@@ -47,21 +47,29 @@ async function getPN() {
 }
 
 // ── Canal Android ─────────────────────────────────────────────────────────────
+// 🔒 CANAL VERROUILLÉ : doit correspondre exactement à sendCdlNotification
+const CDL_CHANNEL_ID = 'cdl_critical_alerts_v2';
+
 async function ensureChannel(PN) {
   try {
-    // importance: 4 = IMPORTANCE_HIGH (Android) — heads-up notification visible même app fermée
+    // Supprimer l'ancien canal "default" s'il existe (ne correspond plus à ce qu'on envoie)
+    try { await PN.deleteChannel({ id: 'default' }); } catch (_) {}
+
+    // 🔒 Canal unique v2 — importance: 5 = IMPORTANCE_MAX heads-up garanti
     await PN.createChannel({
-      id: 'default',
-      name: 'CDL Notifications',
-      description: 'Toutes les notifications CDL',
-      importance: 4,
+      id: CDL_CHANNEL_ID,
+      name: 'CDL Alertes Critiques',
+      description: 'Courses, recharges Bedou, profils — priorité maximale',
+      importance: 5,
       sound: 'default',
       vibration: true,
       lights: true,
-      lightColor: '#1E6BFF',
+      lightColor: '#FF6B1E',
     });
-    console.log('[NativePush] Canal "default" créé/vérifié');
-  } catch (_) {}
+    console.log('[NativePush] ✅ Canal', CDL_CHANNEL_ID, '(importance=5) créé/vérifié');
+  } catch (e) {
+    console.warn('[NativePush] ensureChannel error (non-fatal):', e?.message);
+  }
 }
 
 // ── Vérifier / demander la permission ────────────────────────────────────────
@@ -180,13 +188,16 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   // Étape 1 : Canal Android
   await ensureChannel(PN);
 
-  // Étape 2 : Permission — NE PAS demander ici (FcmBootstrap = contexte background)
-  // La demande de permission est gérée UNIQUEMENT par PermissionsOnboarding (geste utilisateur)
-  const perm = await ensurePermission(PN, false);
-  if (perm !== 'granted') {
-    console.warn('[NativePush] Permission non accordée:', perm, '→ FCM skip (normal au 1er lancement)');
+  // Étape 2 : Permission — demander si "prompt" (pas encore refusé)
+  // requestPermission=true pour ne pas manquer le 1er lancement
+  const perm = await ensurePermission(PN, true);
+  if (perm === 'denied') {
+    console.warn('[NativePush] Permission DENIED définitivement → FCM impossible');
     if (onPermissionDenied) onPermissionDenied(perm);
     return { permissionStatus: perm };
+  }
+  if (perm !== 'granted') {
+    console.warn('[NativePush] Permission non accordée:', perm, '→ on continue quand même (Android peut livrer)');
   }
 
   // Étape 3 : Installer les callbacks globaux
