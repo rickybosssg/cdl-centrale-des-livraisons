@@ -1,97 +1,36 @@
 /**
- * FcmBootstrap — Initialisation FCM unifiée via nativePush.js
+ * FcmBootstrap — SOURCE UNIQUE d'enregistrement FCM
  *
  * RÈGLES :
- * 1. Utilise nativePush.js comme couche unique (pas de duplication)
- * 2. register() est TOUJOURS appelé au démarrage (même si permission 'prompt')
- *    → Firebase demandera la permission si nécessaire
- * 3. Token sauvegardé via saveFcmTokenPublic à chaque démarrage (upsert)
- * 4. Listeners push permanents (pas de cleanup)
- * 5. Web FCM géré séparément (PWA)
+ * 1. FcmBootstrap est LA SEULE source qui sauvegarde le token en BDD
+ * 2. nativePush.js gère le plugin Capacitor et appelle onToken → FcmBootstrap sauve
+ * 3. Verrou anti-doublon : 1 seul save par (email+token) dans une fenêtre de 10s
+ * 4. Web FCM géré séparément (PWA)
  */
 
 import { useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
+import { initCapacitorPush, isNativeApp } from '@/lib/nativePush';
 
 const APP_BASE_URL = 'https://cdl.base44.app';
 const FCM_DELAY_MS = 2000;
 
-// ── Debounce : 1 seul enregistrement FCM par session (évite appels multiples) ─
-const _fcmSaveInProgress = new Set();
-async function saveFcmTokenOnce({ user_email, token, device_type }) {
-  const key = `${user_email}__${device_type}`;
-  if (_fcmSaveInProgress.has(key)) {
-    console.log(`[FCM] saveFcmToken DEBOUNCED — déjà en cours pour ${key}`);
-    return { success: false, action: 'debounced' };
+// ── Verrou anti-doublon : clé = email__token, TTL 10s ────────────────────────
+// Empêche la race condition si Firebase déclenche le callback 2x quasi-simultanément
+const _tokenSaveRecent = new Map(); // key → timestamp last save
+
+function shouldSkipSave(user_email, token) {
+  const key = `${user_email}__${token.slice(0, 20)}`;
+  const lastSave = _tokenSaveRecent.get(key) || 0;
+  const elapsed = Date.now() - lastSave;
+  if (elapsed < 10000) {
+    console.log(`[FCM] ⏭️ SKIP SAVE — token déjà sauvé il y a ${elapsed}ms (< 10s) pour ${user_email}`);
+    return true;
   }
-  _fcmSaveInProgress.add(key);
-  try {
-    return await saveFcmTokenRemote({ user_email, token, device_type });
-  } finally {
-    // Libérer après 30s (session window)
-    setTimeout(() => _fcmSaveInProgress.delete(key), 30000);
-  }
-}
-
-// ── Vérification token BDD vs token Firebase actuel ──────────────────────────
-// Récupère le token actif en BDD pour cet email, retourne null si aucun
-async function getStoredActiveToken(user_email) {
-  try {
-    const res = await fetch(`${APP_BASE_URL}/functions/getFcmTokens`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_email }),
-    });
-    const data = await res.json().catch(() => ({}));
-    const tokens = (data?.tokens || []).filter(t => t.is_active);
-    if (!tokens.length) return null;
-    // Retourner le plus récent
-    tokens.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0));
-    return tokens[0]?.token || null;
-  } catch (_) { return null; }
-}
-
-// ── Supprimer token invalide (UNREGISTERED / 400) de la BDD ─────────────────
-async function removeInvalidToken(user_email, token) {
-  try {
-    await fetch(`${APP_BASE_URL}/functions/markFcmTokenInactive`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_email, token, reason: 'INVALID_TOKEN_DETECTED' }),
-    });
-    console.log('[FCM] 🗑️ Token invalide supprimé de la BDD');
-  } catch (_) {}
-}
-
-function isNativePlatform() {
-  try {
-    if (typeof window === 'undefined') return false;
-    if (window.location?.protocol === 'capacitor:') return true;
-    if (window.location?.protocol === 'file:') return true;
-    if (typeof window.Capacitor !== 'undefined' && window.Capacitor?.getPlatform?.() === 'android') return true;
-  } catch (_) {}
+  _tokenSaveRecent.set(key, Date.now());
+  // Nettoyer après 30s
+  setTimeout(() => _tokenSaveRecent.delete(key), 30000);
   return false;
-}
-
-async function saveFcmTokenRemote({ user_email, token, device_type = 'android_native' }) {
-  if (!user_email || !token) return { success: false };
-  try {
-    const res = await fetch(`${APP_BASE_URL}/functions/saveFcmTokenPublic`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_email, token, device_type }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data?.success) {
-      console.log('[FCM] ✅ Token saved | action:', data.action, '| id:', data.token_id);
-      return data;
-    }
-    console.error('[FCM] ❌ Token save failed:', data?.error);
-    return { success: false };
-  } catch (err) {
-    console.error('[FCM] ❌ Token save error:', err?.message);
-    return { success: false };
-  }
 }
 
 async function resolveEmail(propEmail) {
@@ -108,17 +47,43 @@ async function resolveEmail(propEmail) {
   }
 }
 
+async function saveFcmTokenRemote({ user_email, token, device_type = 'android_native' }) {
+  if (!user_email || !token) return { success: false };
+  // ── Verrou anti-doublon 10s ───────────────────────────────────────────────
+  if (shouldSkipSave(user_email, token)) return { success: false, action: 'debounced_10s' };
+  try {
+    const res = await fetch(`${APP_BASE_URL}/functions/saveFcmTokenPublic`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email, token, device_type }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.success) {
+      console.log(`[FCM_CLIENT_REGISTER] ✅ Token saved | action=${data.action} | id=${data.token_id} | tokens_avant=${data.tokens_avant} | supprimés=${data.tokens_supprimés}`);
+      try {
+        localStorage.setItem('cdl_fcm_token_saved', new Date().toISOString());
+        localStorage.setItem('cdl_fcm_token_preview', token.slice(0, 30));
+      } catch (_) {}
+      return data;
+    }
+    console.error('[FCM_CLIENT_REGISTER] ❌ Token save failed:', data?.error);
+    return { success: false };
+  } catch (err) {
+    console.error('[FCM_CLIENT_REGISTER] ❌ Token save error:', err?.message);
+    return { success: false };
+  }
+}
+
 export default function FcmBootstrap({ userEmail }) {
   const registeredEmail = useRef(null);
 
   useEffect(() => {
-    // Attendre que l'email soit disponible
     if (!userEmail) return;
-    // Ne relancer que si l'email a changé (connexion tardive ou changement de compte)
+    // Ne relancer que si l'email a changé
     if (registeredEmail.current === userEmail) return;
     registeredEmail.current = userEmail;
 
-    const native = isNativePlatform();
+    const native = isNativeApp();
     console.log('[FCM] Bootstrap | native:', native, '| email:', userEmail);
 
     const timer = setTimeout(async () => {
@@ -128,156 +93,35 @@ export default function FcmBootstrap({ userEmail }) {
         } else {
           await runWebFcm(userEmail);
         }
-        // Vérification post-enregistrement : si aucun token en BDD → re-register immédiatement
-        if (native) {
-          try {
-            const storedToken = await getStoredActiveToken(userEmail);
-            if (!storedToken) {
-              console.warn('[FCM_CLIENT_REGISTER] ⚠️ Aucun token en BDD après register — re-register forcé dans 3s');
-              setTimeout(() => runNativeFcm(userEmail).catch(() => {}), 3000);
-            } else {
-              console.log('[FCM_CLIENT_REGISTER] ✅ Token confirmé en BDD:', storedToken.slice(0, 30) + '...');
-            }
-          } catch (_) {}
-        }
       } catch (err) {
         console.error('[FCM] Bootstrap error (non-fatal):', err?.message);
       }
     }, FCM_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [userEmail]); // relancer si email change (connexion tardive)
+  }, [userEmail]);
 
   return null;
 }
 
-// ─── Vérification token admin ─────────────────────────────────────────────────
-// Retourne true si admin avec token, false si admin sans token, null si pas admin
-async function checkIfAdminHasToken(email) {
-  try {
-    const res = await fetch(`${APP_BASE_URL}/functions/getFcmTokens`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_email: email }),
-    });
-    const data = await res.json().catch(() => ({}));
-    const tokens = data?.tokens || [];
-    const activeTokens = tokens.filter(t => t.is_active);
-    const hasToken = activeTokens.length > 0;
-    console.log(`[FCM] Admin token check | email=${email} | active_tokens=${activeTokens.length} | has_token=${hasToken}`);
-    return hasToken;
-  } catch (_) {
-    return null;
-  }
-}
-
-// ─── NATIVE FCM ───────────────────────────────────────────────────────────────
+// ─── NATIVE FCM — délègue ENTIÈREMENT à nativePush.initCapacitorPush ────────
+// FcmBootstrap est la seule source de save token. nativePush ne sauvegarde PAS.
 
 async function runNativeFcm(propEmail) {
-  console.log('[FCM] Native init start');
+  console.log('[FCM] Bootstrap native → initCapacitorPush | email:', propEmail);
 
-  let PushNotifications;
-  try {
-    const mod = await import('@capacitor/push-notifications');
-    PushNotifications = mod.PushNotifications;
-    if (!PushNotifications) throw new Error('null');
-  } catch (e) {
-    console.error('[FCM] Plugin unavailable:', e?.message);
-    return;
-  }
-
-  // ── Canaux Android ────────────────────────────────────────────────────────
-  // 🔒 CANAL VERROUILLÉ : cdl_critical_alerts_v2 — NE PAS MODIFIER
-  // Android interdit de modifier l'importance d'un canal existant.
-  // Nouveaux IDs V2 = importance=5 heads-up garanti dès la première installation.
-  // Les anciens canaux sont supprimés pour éviter confusion dans les paramètres.
-  // 🔒 CANAL UNIQUE CDL — NE JAMAIS MODIFIER CET ID
-  const CDL_CHANNEL = {
-    id: 'cdl_critical_alerts_v2',
-    name: 'CDL Alertes Critiques',
-    description: 'Courses, recharges Bedou, profils — priorité maximale',
-    importance: 5,
-    sound: 'default',
-    vibration: true,
-    lights: true,
-    lightColor: '#FF6B1E',
-    visibility: 1, // PUBLIC
-  };
-  // Anciens canaux à supprimer (legacy)
-  const LEGACY_CHANNELS = ['default', 'CDL_ALERTS_HIGH', 'urgent', 'cdl_default_v2'];
-
-  try {
-    // 1. Supprimer tous les anciens canaux
-    await Promise.allSettled(LEGACY_CHANNELS.map(id => PushNotifications.deleteChannel({ id })));
-    // 2. Créer/confirmer le canal unique (Android ignore si déjà existant avec même id)
-    await PushNotifications.createChannel(CDL_CHANNEL);
-    console.log(`[FCM_CHANNEL_CHECK] channel_used=${CDL_CHANNEL.id} | channel_created=true | importance=${CDL_CHANNEL.importance} | sound=true | vibration=true | legacy_cleaned=${LEGACY_CHANNELS.length}`);
-  } catch (e) {
-    console.warn(`[FCM_CHANNEL_CHECK] channel_error=${e?.message} (non-fatal)`);
-  }
-
-  // ── Permission — demander si pas encore accordée ──────────────────────────
-  let perm = 'unknown';
-  try {
-    const check = await PushNotifications.checkPermissions();
-    perm = check?.receive || 'unknown';
-    console.log('[FCM] Permission status:', perm);
-
-    if (perm === 'prompt' || perm === 'prompt-with-rationale') {
-      console.log('[FCM] Requesting permission...');
-      const req = await Promise.race([
-        PushNotifications.requestPermissions(),
-        new Promise((_, r) => setTimeout(() => r({ receive: 'timeout' }), 10000)),
-      ]);
-      perm = req?.receive || 'unknown';
-      console.log('[FCM] Permission after request:', perm);
-    }
-  } catch (e) {
-    console.warn('[FCM] Permission check error:', e?.message);
-    perm = 'unknown'; // continuer quand même
-  }
-
-  if (perm === 'denied') {
-    console.warn('[FCM] Permission DENIED — push non fonctionnel');
-    // On continue quand même pour register (cas où l'OS envoie quand même)
-  }
-
-  // ── Listeners AVANT register() ────────────────────────────────────────────
-  const listeners = [];
-  try {
-    listeners.push(await PushNotifications.addListener('registration', (tokenData) => {
+  await initCapacitorPush({
+    onToken: async (token) => {
       try {
-        const token = tokenData?.value;
-        if (!token) { console.error('[FCM] registration: token vide'); return; }
-        console.log('[FCM] ✅ Token reçu (len=' + token.length + '):', token.slice(0, 40) + '...');
-        resolveEmail(propEmail).then(async (email) => {
-          if (!email) { console.error('[FCM_CLIENT_REGISTER] Pas d\'email pour sauvegarder le token'); return; }
-          // ── TOUJOURS sauvegarder (update last_used même si token identique) ─
-          console.log('[FCM_CLIENT_REGISTER]', { email, token_preview: token.slice(0, 30) + '...', action: 'saving' });
-          const result = await saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
-          console.log('[FCM_CLIENT_REGISTER]', {
-            email,
-            token_preview: token.slice(0, 30) + '...',
-            saved: result?.success === true,
-            action: result?.action || 'unknown',
-            error: result?.error || null,
-          });
-          // Flag localStorage pour diagnostic APK_NOTIFICATION_RUNTIME_CHECK
-          try {
-            localStorage.setItem('cdl_fcm_token_saved', result?.success ? new Date().toISOString() : 'failed');
-            localStorage.setItem('cdl_fcm_token_preview', token.slice(0, 30));
-          } catch (_) {}
-        }).catch(e => console.error('[FCM_CLIENT_REGISTER] resolveEmail error:', e?.message));
+        const email = await resolveEmail(propEmail);
+        if (!email) { console.error('[FCM_CLIENT_REGISTER] ❌ Pas d\'email pour sauvegarder le token'); return; }
+        console.log('[FCM_CLIENT_REGISTER] token reçu | email:', email, '| preview:', token.slice(0, 30) + '...');
+        await saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
       } catch (e) {
-        console.error('[FCM_CLIENT_REGISTER] callback error:', e?.message);
+        console.error('[FCM_CLIENT_REGISTER] onToken error:', e?.message);
       }
-    }));
-
-    listeners.push(await PushNotifications.addListener('registrationError', (err) => {
-      console.error('[FCM] ❌ registrationError:', JSON.stringify(err));
-    }));
-
-    listeners.push(await PushNotifications.addListener('pushNotificationReceived', (notif) => {
+    },
+    onForegroundNotif: (notif) => {
       try {
         const receivedAt = new Date().toISOString();
         const title = notif?.title || notif?.data?.title || 'CDL';
@@ -286,16 +130,13 @@ async function runNativeFcm(propEmail) {
         const sentAt = notif?.data?.notification_sent_at || null;
         const delayMs = sentAt ? Date.now() - new Date(sentAt).getTime() : null;
         const notifType = notif?.data?.type || '';
-        console.log(`[FCM] 📬 Foreground | title="${title}" | type=${notifType} | channel=${notif?.data?.channel_id || '?'} | delay=${delayMs != null ? delayMs + 'ms' : 'N/A'} | received_at=${receivedAt}`);
+        console.log(`[FCM] 📬 Foreground | title="${title}" | type=${notifType} | delay=${delayMs != null ? delayMs + 'ms' : 'N/A'} | received_at=${receivedAt}`);
         console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] last_push_event_received=${receivedAt} | push_type=${notifType} | fcm_token_present=true`);
         try { localStorage.setItem('cdl_last_push_received', receivedAt); } catch (_) {}
         try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
-
-        // 🔔 Émettre l'événement Bedou si c'est une recharge approuvée
         if (notifType === 'bedou_recharge_approved') {
           try { window.dispatchEvent(new CustomEvent('bedou_recharge_approved')); } catch (_) {}
         }
-
         import('sonner').then(({ toast }) => {
           toast(title, {
             description: body,
@@ -307,15 +148,11 @@ async function runNativeFcm(propEmail) {
           });
         }).catch(() => {});
       } catch (_) {}
-    }));
-
-    listeners.push(await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+    },
+    onNotificationTap: ({ route, data }) => {
       try {
-        const data = action?.notification?.data || {};
-        const route = data.notif_route || data.route || data.target_screen || null;
-        const notifType = data.type || '';
+        const notifType = data?.type || '';
         console.log('[FCM] 👆 Tap → route:', route, '| type:', notifType);
-        // Émettre événement Bedou si recharge approuvée (app revenue au premier plan)
         if (notifType === 'bedou_recharge_approved') {
           try { window.dispatchEvent(new CustomEvent('bedou_recharge_approved')); } catch (_) {}
         }
@@ -324,25 +161,11 @@ async function runNativeFcm(propEmail) {
           window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));
         }
       } catch (_) {}
-    }));
-
-    console.log('[FCM] ✅', listeners.length, 'listeners attachés');
-  } catch (e) {
-    console.error('[FCM] addListener error:', e?.message);
-    return;
-  }
-
-  // ── register() — TOUJOURS appelé ─────────────────────────────────────────
-  try {
-    console.log('[FCM] Calling register()...');
-    await Promise.race([
-      PushNotifications.register(),
-      new Promise((_, r) => setTimeout(() => r(new Error('register timeout')), 15000)),
-    ]);
-    console.log('[FCM] ✅ register() OK — attente token callback');
-  } catch (e) {
-    console.error('[FCM] register() error:', e?.message);
-  }
+    },
+    onPermissionDenied: () => {
+      console.warn('[FCM_CLIENT_REGISTER] ⚠️ Permission Android refusée — push impossible');
+    },
+  });
 }
 
 // ─── WEB FCM (PWA) ────────────────────────────────────────────────────────────
@@ -361,7 +184,7 @@ async function runWebFcm(propEmail) {
     if (!token) return;
     const email = await resolveEmail(propEmail);
     if (!email) return;
-    await saveFcmTokenOnce({ user_email: email, token, device_type: 'web' });
+    await saveFcmTokenRemote({ user_email: email, token, device_type: 'web' });
     onForegroundMessage((payload) => {
       import('sonner').then(({ toast }) => {
         const n = payload?.notification || {};
