@@ -128,6 +128,7 @@ import AppPublicLink from './pages/AppPublicLink';
 import TrackingPublic from './pages/TrackingPublic';
 import DownloadApp from './pages/DownloadApp';
 import FcmBootstrap from './components/FcmBootstrap';
+import FcmPermissionBanner from './components/FcmPermissionBanner';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
 import FcmRegisterAudit from './pages/FcmRegisterAudit';
@@ -351,6 +352,7 @@ const AuthenticatedApp = () => {
   return (
     <>
       <FcmBootstrap userEmail={user?.email || ''} />
+      <FcmPermissionBanner />
       <KeyboardFeedbackProvider />
       <TopNotificationBanner notification={notification} onClose={closeNotification} />
       <FcmDeepLinkHandler />

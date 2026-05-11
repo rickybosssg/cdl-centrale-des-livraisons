@@ -1,36 +1,57 @@
 /**
  * sendTestPush — Envoyer un push test à soi-même ou à un email cible
- * Usage : admin ou client connecté, sans toucher au Bedou.
+ *
+ * Sécurité alignée sur sendCdlNotification :
+ * - Tente auth user (base44.auth.me)
+ * - Si pas d'auth ET target_email fourni → autorisé comme endpoint semi-public de diagnostic
+ * - Jamais de vérification admin — outil de diagnostic ouvert
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const CDL_NOTIF_URL = `https://cdl.base44.app/functions/sendCdlNotification`;
-const APP_BASE_URL  = `https://cdl.base44.app/functions`;
 
 Deno.serve(async (req) => {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Non authentifié' }, { status: 401 });
-
     const body = await req.json().catch(() => ({}));
-    // target_email : optionnel, si admin veut tester un autre email
-    const targetEmail = (body?.target_email || user.email || '').toLowerCase().trim();
-    if (!targetEmail) return Response.json({ error: 'email cible requis' }, { status: 400 });
 
+    // Auth souple : tenter de récupérer le user, sinon continuer avec target_email
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) {}
+
+    const targetEmail = (body?.target_email || user?.email || '').toLowerCase().trim();
+    if (!targetEmail) {
+      return Response.json({ error: 'email cible requis (target_email ou connecté)' }, { status: 400, headers: corsHeaders });
+    }
+
+    const senderEmail = user?.email || 'diagnostic_audit';
     const rawAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
 
-    // 1. Vérifier token en BDD
-    const tokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: targetEmail, is_active: true });
-    const tokenInfo = {
-      token_count: tokens.length,
-      token_found: tokens.length > 0,
-      token_preview: tokens.length > 0 ? tokens[0].token.slice(0, 35) + '...' : 'AUCUN',
-      device_type: tokens.length > 0 ? (tokens[0].device_type || 'unknown') : 'N/A',
-      last_used: tokens.length > 0 ? (tokens[0].last_used || tokens[0].registered_at || 'N/A') : 'N/A',
-    };
+    console.log(`[sendTestPush] START | sender=${senderEmail} | target=${targetEmail} | auth=${!!user}`);
 
-    console.log(`[sendTestPush] START | sender=${user.email} | target=${targetEmail} | token_found=${tokenInfo.token_found} | token_count=${tokenInfo.token_count}`);
+    // 1. Vérifier token en BDD
+    let tokenInfo = { token_count: 0, token_found: false, token_preview: 'AUCUN', device_type: 'N/A', last_used: 'N/A' };
+    try {
+      const tokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: targetEmail, is_active: true });
+      tokenInfo = {
+        token_count: tokens.length,
+        token_found: tokens.length > 0,
+        token_preview: tokens.length > 0 ? tokens[0].token.slice(0, 35) + '...' : 'AUCUN',
+        device_type: tokens.length > 0 ? (tokens[0].device_type || 'unknown') : 'N/A',
+        last_used: tokens.length > 0 ? (tokens[0].last_used || tokens[0].registered_at || 'N/A') : 'N/A',
+      };
+    } catch (tokenErr) {
+      console.warn(`[sendTestPush] token lookup error: ${tokenErr.message}`);
+    }
+
+    console.log(`[sendTestPush] token_found=${tokenInfo.token_found} | count=${tokenInfo.token_count} | device=${tokenInfo.device_type}`);
 
     // 2. Envoyer push via sendCdlNotification
     let pushResult = {};
@@ -44,7 +65,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           user_email: targetEmail,
           title: '🔔 Push test CDL',
-          body: `Test push envoyé à ${targetEmail} à ${new Date().toLocaleTimeString('fr')}`,
+          body: `Test push → ${targetEmail} à ${new Date().toLocaleTimeString('fr')}`,
           data: {
             type: 'test_push',
             notif_route: '/mes-notifications',
@@ -54,7 +75,7 @@ Deno.serve(async (req) => {
         }),
       });
       pushResult = await res.json().catch(() => ({}));
-      console.log(`[sendTestPush] result=${JSON.stringify(pushResult)}`);
+      console.log(`[sendTestPush] push result: sent=${pushResult.sent} failed=${pushResult.failed} note=${pushResult.note}`);
     } catch (e) {
       pushResult = { error: e.message, sent: 0, failed: 1 };
     }
@@ -62,7 +83,7 @@ Deno.serve(async (req) => {
     return Response.json({
       success: (pushResult.sent || 0) > 0,
       target_email: targetEmail,
-      sender_email: user.email,
+      sender_email: senderEmail,
       token_info: tokenInfo,
       fcm_sent: pushResult.sent || 0,
       fcm_failed: pushResult.failed || 0,
@@ -70,7 +91,7 @@ Deno.serve(async (req) => {
       firebase_message_id: pushResult.firebase_message_id || null,
       note: pushResult.note || null,
       error: pushResult.error || null,
-    });
+    }, { headers: corsHeaders });
 
   } catch (err) {
     console.error(`[sendTestPush] ❌ ${err.message}`);

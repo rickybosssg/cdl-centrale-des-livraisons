@@ -131,6 +131,34 @@ export default function FcmBootstrap({ userEmail }) {
 async function runNativeFcm(propEmail) {
   console.log(`[FCM_REGISTER_SUCCESS] runNativeFcm START | email=${propEmail}`);
 
+  // ── Vérifier/demander permission Android AVANT initCapacitorPush ─────────────
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+    const checkResult = await PushNotifications.checkPermissions();
+    const currentStatus = checkResult.receive;
+    console.log(`[FCM_PERMISSION_CHECK] permission_status=${currentStatus}`);
+
+    if (currentStatus === 'prompt' || currentStatus === 'prompt-with-rationale') {
+      console.log(`[FCM_PERMISSION_CHECK] request_triggered=true`);
+      const reqResult = await PushNotifications.requestPermissions();
+      console.log(`[FCM_PERMISSION_CHECK] request_result=${reqResult.receive}`);
+      if (reqResult.receive !== 'granted') {
+        console.warn(`[FCM_PERMISSION_CHECK] permission_status=${reqResult.receive} — push impossible, affichage bannière`);
+        // Dispatcher un event pour que l'UI puisse afficher la bannière
+        try { window.dispatchEvent(new CustomEvent('cdl_fcm_permission_denied', { detail: { status: reqResult.receive } })); } catch (_) {}
+        return;
+      }
+    } else if (currentStatus === 'denied') {
+      console.warn(`[FCM_PERMISSION_CHECK] permission_status=denied — push impossible, affichage bannière`);
+      try { window.dispatchEvent(new CustomEvent('cdl_fcm_permission_denied', { detail: { status: 'denied' } })); } catch (_) {}
+      return;
+    } else {
+      console.log(`[FCM_PERMISSION_CHECK] permission_status=${currentStatus} request_triggered=false`);
+    }
+  } catch (permErr) {
+    console.warn(`[FCM_PERMISSION_CHECK] checkPermissions error: ${permErr?.message} — on continue`);
+  }
+
   await initCapacitorPush({
     onToken: async (token) => {
       try {
