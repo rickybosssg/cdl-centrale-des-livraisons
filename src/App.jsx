@@ -130,6 +130,7 @@ import DownloadApp from './pages/DownloadApp';
 import FcmBootstrap from './components/FcmBootstrap';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
+import NotifCoverage from './pages/dispatcher/NotifCoverage';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -465,6 +466,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin-diagnostics" element={<AdminDiagnostics />} />
           <Route path="/admin-auth-diagnostics" element={<AdminAuthDiagnostics />} />
           <Route path="/test-notifications" element={<TestNotifications />} />
+          <Route path="/admin/notif-coverage" element={<NotifCoverage />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
