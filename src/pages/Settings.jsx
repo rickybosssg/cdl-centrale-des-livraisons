@@ -426,6 +426,14 @@ export default function Settings() {
 
       {/* Diagnostic notifications */}
       <div className="space-y-2">
+        <Link to="/fcm-register-audit" className="flex items-center gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors">
+          <span className="text-xl">🔍</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-900">Audit Register → Save → BDD</p>
+            <p className="text-xs text-amber-700">8 étapes : register() token email save BDD push</p>
+          </div>
+          <span className="text-amber-400 text-sm">›</span>
+        </Link>
         <Link to="/fcm-apk-audit" className="flex items-center gap-3 p-4 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors">
           <span className="text-xl">🔴</span>
           <div className="flex-1">

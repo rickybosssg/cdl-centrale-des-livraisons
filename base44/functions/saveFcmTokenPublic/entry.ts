@@ -1,136 +1,160 @@
 /**
- * saveFcmTokenPublic — 1 TOKEN UNIQUE PAR UTILISATEUR (endpoint PUBLIC, sans auth)
+ * saveFcmTokenPublic — Endpoint PUBLIC (sans auth) pour enregistrer un token FCM
  *
- * RÈGLE ABSOLUE : 1 user_email = 1 seul token actif en base, jamais plus.
+ * PIPELINE AUDIT LOGS :
+ * [FCM_SAVE_ATTEMPT]  — requête reçue
+ * [FCM_SAVE_SUCCESS]  — token créé/mis à jour en BDD
+ * [FCM_SAVE_FAILED]   — erreur BDD ou paramètre manquant
  *
- * LOGIQUE :
- * 1. Rejeter tokens vides/test
- * 2. Charger TOUS les tokens existants de cet user (actifs + inactifs)
- * 3. Si ce token exact existe déjà → réactiver + supprimer TOUS les autres → retourner
- * 4. Si token nouveau → supprimer PHYSIQUEMENT tous les anciens → créer l'unique nouveau
- * 5. Log [FCM_TOKEN_CLEAN] avec avant/après
- *
- * GARANTIE : après chaque appel, cet user n'a qu'UN SEUL token en base.
+ * RÈGLE : 1 user_email = 1 seul token actif en base.
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const BLACKLISTED_TOKENS = ['test_diagnostic_token', 'test_public_endpoint', 'test_check_only'];
+const APP_BASE_URL = 'https://cdl.base44.app';
+const APP_ID = Deno.env.get('BASE44_APP_ID') || '';
+
+// Tokens de test à ignorer
+const BLACKLISTED_PREFIXES = ['test_', 'diag_', 'check_'];
 function isTestToken(token) {
-  if (!token) return true;
+  if (!token || token.length < 20) return true;
   const t = String(token).toLowerCase();
-  return BLACKLISTED_TOKENS.some(b => t.includes(b)) || t.startsWith('test_') || t.includes('_test_');
+  return BLACKLISTED_PREFIXES.some(p => t.startsWith(p)) || t.includes('_test_') || t.includes('test_token');
+}
+
+async function callBase44Api(path, body) {
+  const url = `${APP_BASE_URL}${path}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-app-id': APP_ID,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API ${path} → HTTP ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res.json();
 }
 
 Deno.serve(async (req) => {
+  const t0 = Date.now();
+
+  // CORS
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+
   try {
     const body = await req.json().catch(() => ({}));
     const { user_email, token, device_type = 'android_native' } = body;
 
+    console.log(`[FCM_SAVE_ATTEMPT] user=${user_email || 'VIDE'} | token_len=${token?.length || 0} | device=${device_type} | app_id=${APP_ID ? APP_ID.slice(0, 8) + '...' : 'VIDE'}`);
+
+    // Validation
     if (!user_email || !token) {
-      return Response.json({ error: 'user_email et token requis' }, { status: 400 });
+      const missing = !user_email ? 'user_email' : 'token';
+      console.error(`[FCM_SAVE_FAILED] MISSING_PARAM: ${missing} | user=${user_email || 'VIDE'}`);
+      return Response.json({ success: false, error: `Paramètre manquant: ${missing}`, step: 'validation' }, { status: 400, headers: corsHeaders });
     }
 
     const cleanToken = String(token).trim();
     const cleanEmail = String(user_email).toLowerCase().trim();
 
-    // ── GUARD : token invalide ────────────────────────────────────────────────
-    if (!cleanToken || cleanToken.length < 10) {
-      console.error(`[saveFcmTokenPublic] 🔴 GUARD — token vide/court (len=${cleanToken.length}) pour ${cleanEmail} — anciens tokens PRÉSERVÉS`);
-      return Response.json({ success: false, error: 'token invalide — anciens tokens préservés', guard: 'TOKEN_EMPTY' }, { status: 400 });
-    }
-
     if (isTestToken(cleanToken)) {
-      console.warn(`[saveFcmTokenPublic] Token de test ignoré: ${cleanToken.substring(0, 30)}`);
-      return Response.json({ success: true, action: 'ignored_test_token' });
+      console.warn(`[FCM_SAVE_ATTEMPT] token de test ignoré: ${cleanToken.slice(0, 30)}`);
+      return Response.json({ success: true, action: 'ignored_test_token' }, { headers: corsHeaders });
     }
 
-    console.log(`[saveFcmTokenPublic] START | user=${cleanEmail} | token=${cleanToken.substring(0, 25)}... | device=${device_type}`);
+    if (!APP_ID) {
+      console.error('[FCM_SAVE_FAILED] BASE44_APP_ID non défini — impossible d\'accéder à la BDD');
+      return Response.json({ success: false, error: 'BASE44_APP_ID manquant', step: 'config' }, { status: 500, headers: corsHeaders });
+    }
 
-    const base44 = createClientFromRequest(req);
+    // Import SDK service role
+    let base44ServiceRole;
+    try {
+      const { createClient } = await import('npm:@base44/sdk@0.8.25');
+      const client = createClient({ appId: APP_ID, requiresAuth: false });
+      base44ServiceRole = client.asServiceRole;
+      console.log(`[FCM_SAVE_ATTEMPT] SDK service role initialisé | app_id=${APP_ID.slice(0, 8)}...`);
+    } catch (sdkErr) {
+      console.error(`[FCM_SAVE_FAILED] SDK init error: ${sdkErr.message}`);
+      return Response.json({ success: false, error: 'SDK init: ' + sdkErr.message, step: 'sdk_init' }, { status: 500, headers: corsHeaders });
+    }
 
-    // ── Charger TOUS les tokens de cet utilisateur (actifs + inactifs) ────────
-    const allUserTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: cleanEmail }, null, 200);
+    // Charger les tokens existants
+    let allUserTokens = [];
+    try {
+      allUserTokens = await base44ServiceRole.entities.FcmToken.filter({ user_email: cleanEmail }, null, 50);
+      console.log(`[FCM_SAVE_ATTEMPT] tokens_existants=${allUserTokens.length} | user=${cleanEmail}`);
+    } catch (fetchErr) {
+      console.error(`[FCM_SAVE_FAILED] Lecture BDD échouée: ${fetchErr.message} | user=${cleanEmail}`);
+      return Response.json({ success: false, error: 'Lecture BDD: ' + fetchErr.message, step: 'read_db' }, { status: 500, headers: corsHeaders });
+    }
+
     const tokensAvant = allUserTokens.length;
-
-    console.log(`[FCM_TOKEN_CLEAN] tokens_avant=${tokensAvant} | user=${cleanEmail}`);
-
-    // ── CAS 1 : ce token exact existe déjà ───────────────────────────────────
     const exactMatch = allUserTokens.find(t => t.token === cleanToken);
 
     if (exactMatch) {
-      // Réactiver ce token
-      await base44.asServiceRole.entities.FcmToken.update(exactMatch.id, {
+      // Réactiver token existant
+      await base44ServiceRole.entities.FcmToken.update(exactMatch.id, {
         is_active: true,
         last_used: new Date().toISOString(),
         device_type,
-        user_email: cleanEmail,
       });
 
-      // Supprimer PHYSIQUEMENT tous les autres tokens de cet user
+      // Supprimer les autres
       const toDelete = allUserTokens.filter(t => t.id !== exactMatch.id);
       let supprimés = 0;
       for (const old of toDelete) {
-        try {
-          await base44.asServiceRole.entities.FcmToken.delete(old.id);
-          supprimés++;
-        } catch (_) {
-          // Fallback : désactiver si delete échoue
-          await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false }).catch(() => {});
-        }
+        try { await base44ServiceRole.entities.FcmToken.delete(old.id); supprimés++; } catch (_) {}
       }
 
-      console.log(`[FCM_TOKEN_CLEAN] tokens_avant=${tokensAvant} | tokens_supprimés=${supprimés} | token_final=${cleanToken.substring(0, 25)}... | action=reactivated | user=${cleanEmail}`);
-      console.log(`[saveFcmTokenPublic] ✅ Token existant réactivé, ${supprimés} ancien(s) supprimé(s) | user=${cleanEmail} | id=${exactMatch.id}`);
-
+      console.log(`[FCM_SAVE_SUCCESS] action=reactivated | user=${cleanEmail} | token_id=${exactMatch.id} | supprimés=${supprimés} | delay=${Date.now() - t0}ms`);
       return Response.json({
-        success: true,
-        action: 'reactivated',
-        token_id: exactMatch.id,
-        user_email: cleanEmail,
-        tokens_avant: tokensAvant,
-        tokens_supprimés: supprimés,
-        token_final: cleanToken.substring(0, 25) + '...',
-      });
+        success: true, action: 'reactivated', token_id: exactMatch.id,
+        user_email: cleanEmail, tokens_avant: tokensAvant, tokens_supprimés: supprimés,
+      }, { headers: corsHeaders });
     }
 
-    // ── CAS 2 : token nouveau → supprimer TOUS les anciens, créer l'unique ──
+    // Nouveau token → supprimer tous les anciens
     let supprimés = 0;
     for (const old of allUserTokens) {
-      try {
-        await base44.asServiceRole.entities.FcmToken.delete(old.id);
-        supprimés++;
-        console.log(`[FCM_TOKEN_CLEAN] Supprimé: id=${old.id} | token=${old.token?.substring(0, 20)}...`);
-      } catch (_) {
-        await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false }).catch(() => {});
-        supprimés++;
+      try { await base44ServiceRole.entities.FcmToken.delete(old.id); supprimés++; } catch (_) {
+        try { await base44ServiceRole.entities.FcmToken.update(old.id, { is_active: false }); } catch (_) {}
       }
     }
 
-    // Créer l'unique nouveau token
-    const result = await base44.asServiceRole.entities.FcmToken.create({
-      user_email: cleanEmail,
-      token: cleanToken,
-      device_type,
-      registered_at: new Date().toISOString(),
-      last_used: new Date().toISOString(),
-      is_active: true,
-    });
+    // Créer le nouveau token
+    let result;
+    try {
+      result = await base44ServiceRole.entities.FcmToken.create({
+        user_email: cleanEmail,
+        token: cleanToken,
+        device_type,
+        registered_at: new Date().toISOString(),
+        last_used: new Date().toISOString(),
+        is_active: true,
+      });
+    } catch (createErr) {
+      console.error(`[FCM_SAVE_FAILED] CREATE BDD échoué: ${createErr.message} | user=${cleanEmail}`);
+      return Response.json({ success: false, error: 'Création BDD: ' + createErr.message, step: 'create_db' }, { status: 500, headers: corsHeaders });
+    }
 
-    console.log(`[FCM_TOKEN_CLEAN] tokens_avant=${tokensAvant} | tokens_supprimés=${supprimés} | token_final=${cleanToken.substring(0, 25)}... | action=created | user=${cleanEmail}`);
-    console.log(`[saveFcmTokenPublic] ✅ Nouveau token unique créé | id=${result.id} | user=${cleanEmail} | ${tokensAvant} anciens supprimés`);
+    console.log(`[FCM_SAVE_SUCCESS] action=created | user=${cleanEmail} | token_id=${result.id} | token_preview=${cleanToken.slice(0, 30)}... | supprimés=${supprimés} | delay=${Date.now() - t0}ms`);
 
     return Response.json({
-      success: true,
-      action: 'created',
-      token_id: result.id,
-      user_email: cleanEmail,
-      tokens_avant: tokensAvant,
-      tokens_supprimés: supprimés,
-      token_final: cleanToken.substring(0, 25) + '...',
-    });
+      success: true, action: 'created', token_id: result.id,
+      user_email: cleanEmail, tokens_avant: tokensAvant, tokens_supprimés: supprimés,
+      token_preview: cleanToken.slice(0, 30) + '...',
+    }, { headers: corsHeaders });
 
-  } catch (error) {
-    console.error(`[saveFcmTokenPublic] ❌ ERROR: ${error?.message}`);
-    return Response.json({ success: false, error: error?.message }, { status: 500 });
+  } catch (err) {
+    console.error(`[FCM_SAVE_FAILED] ERREUR GLOBALE: ${err.message} | delay=${Date.now() - t0}ms`);
+    return Response.json({ success: false, error: err.message, step: 'global' }, { status: 500, headers: corsHeaders });
   }
 });

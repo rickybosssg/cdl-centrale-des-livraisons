@@ -130,6 +130,7 @@ import DownloadApp from './pages/DownloadApp';
 import FcmBootstrap from './components/FcmBootstrap';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
+import FcmRegisterAudit from './pages/FcmRegisterAudit';
 import NotifCoverage from './pages/dispatcher/NotifCoverage';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
@@ -406,6 +407,7 @@ const AuthenticatedApp = () => {
         <Route path="/fcm-test-full" element={<FcmTestFull />} />
         <Route path="/fcm-token-refresh" element={<FcmTokenRefresh />} />
         <Route path="/fcm-apk-audit" element={<FcmApkAudit />} />
+        <Route path="/fcm-register-audit" element={<FcmRegisterAudit />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />
