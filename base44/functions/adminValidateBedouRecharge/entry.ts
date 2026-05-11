@@ -85,47 +85,29 @@ Deno.serve(async (req) => {
     }, { status: 409, headers: CORS_HEADERS });
   }
 
-  // Helper notification — appel vers sendCdlNotification avec le token admin
+  // Helper notification — via asServiceRole pour garantir l'accès BDD (FcmToken)
   const notify = async (payload) => {
-    console.log('[BEDOU_VALIDATE_PUSH]', {
-      request_id,
-      client_email: payload.user_email,
-      admin_email: ADMIN_EMAIL,
-      notification_called: true,
-      event_type: payload.data?.type,
-    });
+    const clientEmail = payload.user_email || '';
+    const eventType = payload.data?.type || '';
+    console.log('[BEDOU_VALIDATE_PUSH] START', { request_id, client_email: clientEmail, event_type: eventType });
     try {
-      const res = await fetch(CDL_NOTIF_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(rawAuth ? { 'Authorization': rawAuth } : {}),
-        },
-        body: JSON.stringify(payload),
-      });
-      const d = await res.json().catch(() => ({}));
-      console.log('[BEDOU_VALIDATE_PUSH]', {
+      const res = await base44.asServiceRole.functions.invoke('sendCdlNotification', payload);
+      const d = res?.data || {};
+      console.log('[BEDOU_VALIDATE_PUSH] RESULT', {
         request_id,
-        client_email: payload.user_email,
-        admin_email: ADMIN_EMAIL,
-        notification_called: true,
+        client_email: clientEmail,
+        event_type: eventType,
         fcm_sent: d.sent ?? 0,
         fcm_failed: d.failed ?? 0,
         bdd: d.bdd ?? 0,
-        http_status: res.status,
-        error_code: res.ok ? null : (d.error || `HTTP_${res.status}`),
+        channel_id: d.channel_id || 'cdl_critical_alerts_v3',
+        firebase_message_id: d.firebase_message_id || null,
+        error: d.error || null,
+        note: d.note || null,
       });
       return d;
     } catch(e) {
-      console.error('[BEDOU_VALIDATE_PUSH]', {
-        request_id,
-        client_email: payload.user_email,
-        admin_email: ADMIN_EMAIL,
-        notification_called: true,
-        fcm_sent: 0,
-        fcm_failed: 1,
-        error_code: e.message,
-      });
+      console.error('[BEDOU_VALIDATE_PUSH] ERROR', { request_id, client_email: clientEmail, error: e.message });
       return {};
     }
   };
@@ -357,6 +339,27 @@ Deno.serve(async (req) => {
       entity_type: 'DemandeRecharge',
       notif_route: '/gestion-bedou',
     },
+  });
+
+  // Log V2 diagnostic — tous les champs demandés
+  console.log('[PUSH_V2_PIPELINE]', {
+    event_type: 'bedou_recharge_approved',
+    target_role_admin: 'admin',
+    target_role_client: 'client',
+    target_email_admin: adminEmail,
+    target_email_client: clientEmail,
+    internal_admin_created: internalAdminCreated,
+    internal_client_created: internalClientCreated,
+    admin_token_found: (notifAdminResult.total || 0) > 0,
+    client_token_found: (notifClientResult.total || 0) > 0,
+    fcm_admin_sent: notifAdminResult.sent || 0,
+    fcm_client_sent: notifClientResult.sent || 0,
+    firebase_message_id_admin: notifAdminResult.firebase_message_id || null,
+    firebase_message_id_client: notifClientResult.firebase_message_id || null,
+    channel_id: 'cdl_critical_alerts_v3',
+    error_admin: notifAdminResult.note || notifAdminResult.error || null,
+    error_client: notifClientResult.note || notifClientResult.error || null,
+    delay_ms: Date.now() - t0,
   });
 
   // Log pipeline complet

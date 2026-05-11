@@ -134,23 +134,18 @@ Deno.serve(async (req) => {
   // Helper : envoyer via sendCdlNotification (source unique — BDD + FCM)
   // On passe le header Authorization de la requête admin originale pour propager le contexte.
   // createClientFromRequest dans sendCdlNotification recevra ainsi un token valide.
-  const APP_ID = Deno.env.get('BASE44_APP_ID') || '69c3c74fc4b62396dca61751';
-  const CDL_NOTIF_URL = `https://cdl.base44.app/api/apps/${APP_ID}/functions/sendCdlNotification`;
-  const originalAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
+  // notify via asServiceRole — garantit l'accès BDD (FcmToken) sans dépendre du token admin front
   const notify = async (payload) => {
-    L(`→ sendCdlNotification (forwarded auth) | to=${payload.user_email || payload.role} | type=${payload.data?.type}`);
-    const res = await fetch(CDL_NOTIF_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(originalAuth ? { 'Authorization': originalAuth } : {}),
-      },
-      body: JSON.stringify(payload),
-    }).catch(e => { L(`fetch sendCdlNotification error: ${e.message}`); return null; });
-    if (!res) return { data: {} };
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok) L(`sendCdlNotification HTTP ${res.status} — non-bloquant`);
-    return { data: d };
+    L(`→ sendCdlNotification (asServiceRole) | to=${payload.user_email || payload.role} | type=${payload.data?.type}`);
+    try {
+      const res = await base44.asServiceRole.functions.invoke('sendCdlNotification', payload);
+      const d = res?.data || {};
+      L(`sendCdlNotification OK | fcm_sent=${d.sent ?? 0} bdd=${d.bdd ?? 0} channel=${d.channel_id || 'v3'}`);
+      return { data: d };
+    } catch(e) {
+      L(`sendCdlNotification error (non-bloquant): ${e.message}`);
+      return { data: {} };
+    }
   };
 
   // ── REFUS ─────────────────────────────────────────────────────────────────

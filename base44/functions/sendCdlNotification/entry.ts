@@ -88,19 +88,19 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
           notification: { title, body },
           data: stringData,
           android: {
-            priority: 'HIGH',
-            ttl: '86400s',
-            notification: {
-              channel_id: CDL_CHANNEL,
-              sound: 'default',
-              visibility: 'PUBLIC',
-              notification_priority: 'PRIORITY_HIGH',
-              default_sound: true,
-              default_vibrate_timings: true,
-              default_light_settings: true,
-              notification_count: 1,
-              tag: `cdl_${data?.type || 'notif'}_${data?.entity_id || Date.now()}`,
-            },
+          priority: 'HIGH',
+          ttl: '86400s',
+          notification: {
+            channel_id: CDL_CHANNEL,
+            sound: 'default',
+            visibility: 'PUBLIC',
+            notification_priority: 'PRIORITY_MAX',
+            default_sound: true,
+            default_vibrate_timings: true,
+            default_light_settings: true,
+            notification_count: 1,
+            tag: `cdl_${data?.type || 'notif'}_${data?.entity_id || Date.now()}`,
+          },
           },
           webpush: {
             notification: {
