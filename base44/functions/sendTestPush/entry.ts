@@ -27,11 +27,12 @@ Deno.serve(async (req) => {
 
     // Auth souple : tenter de récupérer le user, sinon continuer avec target_email
     let user = null;
+    console.log(`[PUSH_V2_AUTH_START] tentative auth.me...`);
     try {
       user = await base44.auth.me();
-      console.log(`[PUSH_TEST_AUTH_OK] user=${user?.email} | role=${user?.role}`);
+      console.log(`[PUSH_V2_AUTH_OK] user=${user?.email} | role=${user?.role}`);
     } catch (authErr) {
-      console.warn(`[PUSH_TEST_AUTH_FAILED] auth.me failed: ${authErr?.message} — fallback target_email`);
+      console.warn(`[PUSH_V2_AUTH_FAILED] auth.me failed: ${authErr?.message} — fallback target_email`);
     }
 
     const targetEmail = (body?.target_email || user?.email || '').toLowerCase().trim();
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
     }
 
     const senderEmail = user?.email || 'diagnostic_audit';
-    console.log(`[PUSH_TEST_AUTH_OK] sender=${senderEmail} | target=${targetEmail}`);
+    console.log(`[PUSH_V2_AUTH_OK] sender=${senderEmail} | target=${targetEmail} | role=${user?.role || 'none'}`);
 
     // 1. Vérifier token en BDD via asServiceRole
     let tokenInfo = { token_count: 0, token_found: false, token_preview: 'AUCUN', device_type: 'N/A', last_used: 'N/A' };
@@ -67,6 +68,7 @@ Deno.serve(async (req) => {
     let pushResult = {};
     const rawAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
 
+    console.log(`[PUSH_V2_SEND_START] target=${targetEmail} | token_found=${tokenInfo.token_found} | token_count=${tokenInfo.token_count}`);
     try {
       const notifPayload = {
         user_email: targetEmail,
@@ -98,12 +100,12 @@ Deno.serve(async (req) => {
 
       const fcmSent = pushResult.sent || 0;
       if (fcmSent > 0) {
-        console.log(`[PUSH_TEST_SENT] target=${targetEmail} | fcm_sent=${fcmSent} | firebase_message_id=${pushResult.firebase_message_id || 'N/A'} | channel_id=${pushResult.channel_id || 'cdl_critical_alerts_v3'} | HTTP=${res.status}`);
+        console.log(`[PUSH_V2_SEND_SUCCESS] target=${targetEmail} | fcm_sent=${fcmSent} | firebase_message_id=${pushResult.firebase_message_id || 'N/A'} | channel_id=${pushResult.channel_id || 'cdl_critical_alerts_v3'} | HTTP=${res.status}`);
       } else {
-        console.warn(`[PUSH_TEST_ERROR] target=${targetEmail} | fcm_sent=0 | HTTP=${res.status} | token_found=${tokenInfo.token_found} | note=${pushResult.note || pushResult.error || 'aucun token réel'}`);
+        console.error(`[PUSH_V2_SEND_ERROR] target=${targetEmail} | fcm_sent=0 | HTTP=${res.status} | token_found=${tokenInfo.token_found} | note=${pushResult.note || pushResult.error || 'aucun token réel'}`);
       }
     } catch (e) {
-      console.error(`[PUSH_TEST_ERROR] fetch sendCdlNotification failed: ${e.message}`);
+      console.error(`[PUSH_V2_SEND_ERROR] fetch sendCdlNotification failed: ${e.message}`);
       pushResult = { error: e.message, sent: 0, failed: 1 };
     }
 

@@ -22,18 +22,25 @@ import { initCapacitorPush, isNativeApp } from '@/lib/nativePush';
 const APP_BASE_URL = 'https://cdl.base44.app';
 const FCM_DELAY_MS = 2000;
 
-// 🔒 CANAL UNIQUE V3 — synchronisé avec sendCdlNotification
+// 🔒 CANAL UNIQUE VERROUILLÉ V3 — synchronisé avec sendCdlNotification + nativePush.js
+// NE JAMAIS MODIFIER cet objet sans mettre à jour les 3 fichiers simultanément
 export const CDL_CHANNEL_V3 = {
   id: 'cdl_critical_alerts_v3',
   name: 'CDL Alertes Critiques',
   description: 'Courses, recharges Bedou, profils — priorité maximale',
-  importance: 5,
+  importance: 5,           // IMPORTANCE_MAX → heads-up obligatoire
   sound: 'default',
   vibration: true,
   lights: true,
   lightColor: '#FF6B1E',
-  visibility: 1,
+  visibility: 1,           // PUBLIC — visible sur écran verrouillé
 };
+
+// Anciens canaux à supprimer — liste synchronisée avec nativePush.js
+const LEGACY_CHANNELS_TO_DELETE = [
+  'default', 'CDL_ALERTS_HIGH', 'urgent', 'cdl_default_v2',
+  'cdl_critical_alerts_v1', 'cdl_critical_alerts_v2',
+];
 
 // ── Verrou anti-doublon : clé = email__token, TTL 10s ────────────────────────
 const _tokenSaveRecent = new Map();
@@ -150,11 +157,19 @@ async function runNativeFcm(propEmail) {
 
     // Créer canal v3 AVANT tout
     try {
+      // Supprimer les anciens canaux legacy avant de créer le v3
+      await Promise.allSettled(LEGACY_CHANNELS_TO_DELETE.map(id => PushNotifications.deleteChannel({ id }).catch(() => {})));
       await PushNotifications.createChannel(CDL_CHANNEL_V3);
-      console.log(`[FCM_PERMISSION_CHECK] canal_created=${CDL_CHANNEL_V3.id} importance=5`);
+      console.log(`[FCM_PERMISSION_CHECK] canal_created=${CDL_CHANNEL_V3.id} | importance=5 | legacy_cleaned=${LEGACY_CHANNELS_TO_DELETE.length}`);
     } catch (chErr) {
       console.warn(`[FCM_PERMISSION_CHECK] canal_create_error=${chErr?.message}`);
     }
+
+    // Anti-Doze : demander exemption batterie après permission accordée (silencieux, non-bloquant)
+    try {
+      const { requestBatteryOptimizationExempt } = await import('@/lib/nativePush');
+      await requestBatteryOptimizationExempt();
+    } catch (_) {}
 
     const checkResult = await PushNotifications.checkPermissions();
     const currentStatus = checkResult.receive;

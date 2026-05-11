@@ -47,31 +47,63 @@ async function getPN() {
 }
 
 // ── Canal Android ─────────────────────────────────────────────────────────────
-// 🔒 CANAL VERROUILLÉ : doit correspondre exactement à sendCdlNotification
-const CDL_CHANNEL_ID = 'cdl_critical_alerts_v2';
+// 🔒 CANAL UNIQUE VERROUILLÉ V3 — NE JAMAIS MODIFIER
+const CDL_CHANNEL_ID = 'cdl_critical_alerts_v3';
 
-const LEGACY_CHANNEL_IDS = ['default', 'CDL_ALERTS_HIGH', 'urgent', 'cdl_default_v2'];
+// Tous les anciens canaux à supprimer (v1, v2, et autres legacy)
+const LEGACY_CHANNEL_IDS = ['default', 'CDL_ALERTS_HIGH', 'urgent', 'cdl_default_v2', 'cdl_critical_alerts_v1', 'cdl_critical_alerts_v2'];
 
 async function ensureChannel(PN) {
   try {
     // Supprimer tous les anciens canaux legacy
     await Promise.allSettled(LEGACY_CHANNEL_IDS.map(id => PN.deleteChannel({ id })));
 
-    // 🔒 Canal unique — importance: 5 = IMPORTANCE_MAX, heads-up garanti
+    // 🔒 Canal unique V3 — importance: 5 = IMPORTANCE_MAX, heads-up garanti
     await PN.createChannel({
       id: CDL_CHANNEL_ID,
       name: 'CDL Alertes Critiques',
       description: 'Courses, recharges Bedou, profils — priorité maximale',
-      importance: 5,
+      importance: 5,           // IMPORTANCE_MAX → heads-up obligatoire
       sound: 'default',
       vibration: true,
       lights: true,
       lightColor: '#FF6B1E',
-      visibility: 1, // PUBLIC
+      visibility: 1,           // PUBLIC — visible sur écran verrouillé
     });
     console.log(`[FCM_CHANNEL_CHECK] channel_used=${CDL_CHANNEL_ID} | channel_created=true | importance=5 | sound=true | vibration=true | legacy_cleaned=${LEGACY_CHANNEL_IDS.length}`);
   } catch (e) {
     console.warn(`[FCM_CHANNEL_CHECK] channel_error=${e?.message} (non-fatal)`);
+  }
+}
+
+// ── Anti-Doze / Battery Optimization ─────────────────────────────────────────
+// Demande à Android d'ignorer l'optimisation batterie pour CDL
+// Requis pour réception fiable en arrière-plan sur Samsung, Xiaomi, Tecno
+export async function requestBatteryOptimizationExempt() {
+  try {
+    // Capacitor @ionic/android-network-status ou intent natif
+    // On utilise un intent Android direct via le plugin App
+    const { App } = await import('@capacitor/app');
+    const info = await App.getInfo();
+    const packageName = info?.id || 'com.cdl.app';
+
+    // Intent ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+    const intentUrl = `package:${packageName}`;
+    console.log(`[FCM_BATTERY_OPT] request_ignore_battery_optimization | package=${packageName}`);
+
+    // Utiliser window.open avec l'intent Android
+    if (window.Capacitor?.getPlatform?.() === 'android') {
+      // Via le plugin Browser ou cordova
+      try {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: `android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS#${intentUrl}` });
+      } catch (_) {
+        // Fallback : settings générales
+        window.open('package:com.cdl.app', '_system');
+      }
+    }
+  } catch (e) {
+    console.warn(`[FCM_BATTERY_OPT] erreur non-fatale: ${e?.message}`);
   }
 }
 
