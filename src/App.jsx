@@ -129,6 +129,7 @@ import TrackingPublic from './pages/TrackingPublic';
 import DownloadApp from './pages/DownloadApp';
 import FcmBootstrap from './components/FcmBootstrap';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
+import FcmApkAudit from './pages/FcmApkAudit';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -403,6 +404,7 @@ const AuthenticatedApp = () => {
         <Route path="/fcm-quick-test" element={<FcmQuickTest />} />
         <Route path="/fcm-test-full" element={<FcmTestFull />} />
         <Route path="/fcm-token-refresh" element={<FcmTokenRefresh />} />
+        <Route path="/fcm-apk-audit" element={<FcmApkAudit />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />

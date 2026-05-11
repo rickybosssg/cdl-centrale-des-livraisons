@@ -426,6 +426,14 @@ export default function Settings() {
 
       {/* Diagnostic notifications */}
       <div className="space-y-2">
+        <Link to="/fcm-apk-audit" className="flex items-center gap-3 p-4 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors">
+          <span className="text-xl">🔴</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-900">Audit FCM APK Final</p>
+            <p className="text-xs text-red-700">9 checks Android runtime — test push minimal sans CDL</p>
+          </div>
+          <span className="text-red-400 text-sm">›</span>
+        </Link>
         <Link to="/fcm-token-refresh" className="flex items-center gap-3 p-4 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors">
           <span className="text-xl">🔑</span>
           <div className="flex-1">
