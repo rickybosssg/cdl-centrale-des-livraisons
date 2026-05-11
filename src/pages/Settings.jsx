@@ -5,8 +5,9 @@ import { base44 } from "@/api/base44Client";
 import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft, Plus, Trash2, CheckCircle2, XCircle, Shield, FileText,
-  LogOut, User, Truck, Store, Megaphone, RefreshCw, Lock, Megaphone as MegaphoneAlt,
+  LogOut, User, Truck, Store, Megaphone, RefreshCw, Lock, Keyboard,
 } from "lucide-react";
+import { isKeyboardFxEnabled, setKeyboardFxEnabled } from "@/lib/keyboardFeedback";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -74,6 +75,7 @@ export default function Settings() {
   const [switching, setSwitching] = useState(null);
   const [deplError, setDeplError] = useState(false);
   const [codePromo, setCodePromo] = useState("");
+  const [keyFxEnabled, setKeyFxState] = useState(() => isKeyboardFxEnabled());
   const [codePromoError, setCodePromoError] = useState("");
 
   const load = async () => {
@@ -449,6 +451,33 @@ export default function Settings() {
           <span className="text-blue-400 text-sm">›</span>
         </Link>
       </div>
+
+      {/* Effets clavier */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Keyboard className="h-4 w-4" /> Expérience saisie
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
+            <div>
+              <p className="text-sm font-semibold">Effets clavier</p>
+              <p className="text-xs text-muted-foreground">Vibration, son discret et animation lors de la saisie</p>
+            </div>
+            <button
+              onClick={() => {
+                const next = !keyFxEnabled;
+                setKeyFxState(next);
+                setKeyboardFxEnabled(next);
+              }}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${keyFxEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${keyFxEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Légal & Conformité */}
         <Card>
