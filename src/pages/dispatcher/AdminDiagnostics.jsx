@@ -5,6 +5,14 @@ import { Card, CardContent } from "@/components/ui/card";
 
 const DIAGNOSTIC_TOOLS = [
   {
+    id: "push-v2",
+    icon: Bell,
+    title: "🔔 Push V2 Audit — Moteur Unique",
+    description: "Audit complet 10 tests : permission → register → token → save → BDD → push → profil → multi-profil",
+    path: "/admin/push-v2-audit",
+    color: "bg-green-50 border-green-400 text-green-800"
+  },
+  {
     id: "fcm",
     icon: Bell,
     title: "🔔 Diagnostic Notifications",

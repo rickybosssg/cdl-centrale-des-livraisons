@@ -1,9 +1,9 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║  sendCdlNotification — SYSTÈME VERROUILLÉ v4.0 — SOURCE UNIQUE CDL    ║
- * ║  CANAL OFFICIEL UNIQUE = cdl_critical_alerts_v2                         ║
+ * ║  sendCdlNotification — SYSTÈME VERROUILLÉ v5.0 — SOURCE UNIQUE CDL    ║
+ * ║  CANAL OFFICIEL UNIQUE = cdl_critical_alerts_v3                         ║
  * ╠══════════════════════════════════════════════════════════════════════════╣
- * ║  🔒 CANAL VERROUILLÉ : cdl_critical_alerts_v2 (importance=HIGH)        ║
+ * ║  🔒 CANAL VERROUILLÉ : cdl_critical_alerts_v3 (importance=MAX)         ║
  * ║  🔒 FCM_TOKEN_LOCK : 1 seul token actif par user_email                 ║
  * ║     → cleanup automatique des doublons avant chaque push               ║
  * ║     → UNREGISTERED → suppression auto                                  ║
@@ -62,8 +62,8 @@ async function getAccessToken(sa) {
   return d.access_token;
 }
 
-// 🔒 CANAL UNIQUE VERROUILLÉ — NE JAMAIS MODIFIER
-const CDL_CHANNEL = 'cdl_critical_alerts_v2';
+// 🔒 CANAL UNIQUE VERROUILLÉ V3 — NE JAMAIS MODIFIER
+const CDL_CHANNEL = 'cdl_critical_alerts_v3';
 
 const FATAL_FCM_ERRORS = ['UNREGISTERED', 'INVALID_ARGUMENT'];
 

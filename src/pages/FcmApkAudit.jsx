@@ -64,12 +64,12 @@ function Row({ label, ok, detail, warn }) {
   );
 }
 
-// ── Canal officiel CDL — doit correspondre exactement à sendCdlNotification ──
-const CDL_CHANNEL_ID = 'cdl_critical_alerts_v2';
+// ── Canal officiel CDL V3 — doit correspondre exactement à sendCdlNotification ──
+const CDL_CHANNEL_ID = 'cdl_critical_alerts_v3';
 const CDL_CHANNEL_DEF = {
   id: CDL_CHANNEL_ID,
   name: 'CDL Alertes Critiques',
-  description: 'Courses, recharges Bedou, profils — priorité maximale',
+  description: 'Courses, recharges Bedou, profils — priorité maximale — V3',
   importance: 5,
   sound: 'default',
   vibration: true,

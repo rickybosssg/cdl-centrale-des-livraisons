@@ -133,6 +133,7 @@ import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
 import FcmRegisterAudit from './pages/FcmRegisterAudit';
 import NotifCoverage from './pages/dispatcher/NotifCoverage';
+import PushV2Audit from './pages/dispatcher/PushV2Audit';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -471,6 +472,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin-auth-diagnostics" element={<AdminAuthDiagnostics />} />
           <Route path="/test-notifications" element={<TestNotifications />} />
           <Route path="/admin/notif-coverage" element={<NotifCoverage />} />
+          <Route path="/admin/push-v2-audit" element={<PushV2Audit />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />

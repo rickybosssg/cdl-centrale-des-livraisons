@@ -22,6 +22,19 @@ import { initCapacitorPush, isNativeApp } from '@/lib/nativePush';
 const APP_BASE_URL = 'https://cdl.base44.app';
 const FCM_DELAY_MS = 2000;
 
+// 🔒 CANAL UNIQUE V3 — synchronisé avec sendCdlNotification
+export const CDL_CHANNEL_V3 = {
+  id: 'cdl_critical_alerts_v3',
+  name: 'CDL Alertes Critiques',
+  description: 'Courses, recharges Bedou, profils — priorité maximale',
+  importance: 5,
+  sound: 'default',
+  vibration: true,
+  lights: true,
+  lightColor: '#FF6B1E',
+  visibility: 1,
+};
+
 // ── Verrou anti-doublon : clé = email__token, TTL 10s ────────────────────────
 const _tokenSaveRecent = new Map();
 
@@ -129,34 +142,44 @@ export default function FcmBootstrap({ userEmail }) {
 
 // ─── NATIVE FCM ────────────────────────────────────────────────────────────────
 async function runNativeFcm(propEmail) {
-  console.log(`[FCM_REGISTER_SUCCESS] runNativeFcm START | email=${propEmail}`);
+  console.log(`[FCM_REGISTER_SUCCESS] runNativeFcm START | email=${propEmail} | canal=${CDL_CHANNEL_V3.id}`);
 
   // ── Vérifier/demander permission Android AVANT initCapacitorPush ─────────────
   try {
     const { PushNotifications } = await import('@capacitor/push-notifications');
+
+    // Créer canal v3 AVANT tout
+    try {
+      await PushNotifications.createChannel(CDL_CHANNEL_V3);
+      console.log(`[FCM_PERMISSION_CHECK] canal_created=${CDL_CHANNEL_V3.id} importance=5`);
+    } catch (chErr) {
+      console.warn(`[FCM_PERMISSION_CHECK] canal_create_error=${chErr?.message}`);
+    }
+
     const checkResult = await PushNotifications.checkPermissions();
     const currentStatus = checkResult.receive;
-    console.log(`[FCM_PERMISSION_CHECK] permission_status=${currentStatus}`);
+    console.log(`[FCM_PERMISSION_CHECK] permission_status=${currentStatus} | canal=${CDL_CHANNEL_V3.id}`);
 
     if (currentStatus === 'prompt' || currentStatus === 'prompt-with-rationale') {
       console.log(`[FCM_PERMISSION_CHECK] request_triggered=true`);
       const reqResult = await PushNotifications.requestPermissions();
-      console.log(`[FCM_PERMISSION_CHECK] request_result=${reqResult.receive}`);
-      if (reqResult.receive !== 'granted') {
-        console.warn(`[FCM_PERMISSION_CHECK] permission_status=${reqResult.receive} — push impossible, affichage bannière`);
-        // Dispatcher un event pour que l'UI puisse afficher la bannière
+      const granted = reqResult.receive === 'granted';
+      console.log(granted
+        ? `[FCM_PERMISSION_GRANTED] permission_status=granted`
+        : `[FCM_PERMISSION_DENIED] permission_status=${reqResult.receive}`);
+      if (!granted) {
         try { window.dispatchEvent(new CustomEvent('cdl_fcm_permission_denied', { detail: { status: reqResult.receive } })); } catch (_) {}
         return;
       }
     } else if (currentStatus === 'denied') {
-      console.warn(`[FCM_PERMISSION_CHECK] permission_status=denied — push impossible, affichage bannière`);
+      console.warn(`[FCM_PERMISSION_DENIED] permission_status=denied — affichage bannière`);
       try { window.dispatchEvent(new CustomEvent('cdl_fcm_permission_denied', { detail: { status: 'denied' } })); } catch (_) {}
       return;
-    } else {
-      console.log(`[FCM_PERMISSION_CHECK] permission_status=${currentStatus} request_triggered=false`);
+    } else if (currentStatus === 'granted') {
+      console.log(`[FCM_PERMISSION_GRANTED] permission_status=granted (déjà accordée)`);
     }
   } catch (permErr) {
-    console.warn(`[FCM_PERMISSION_CHECK] checkPermissions error: ${permErr?.message} — on continue`);
+    console.warn(`[FCM_PERMISSION_CHECK] error=${permErr?.message} — on continue`);
   }
 
   await initCapacitorPush({
