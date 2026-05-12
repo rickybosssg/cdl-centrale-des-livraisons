@@ -113,16 +113,8 @@ Deno.serve(async (req) => {
       }, { headers: corsHeaders });
     }
 
-    // CAS 2 : nouveau token → désactiver les anciens actifs, créer le nouveau
-    let desactivés = 0;
-    for (const old of allUserTokens) {
-      if (old.is_active) {
-        try {
-          await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
-          desactivés++;
-        } catch (_) {}
-      }
-    }
+    // CAS 2 : nouveau token → créer D'ABORD, puis désactiver les anciens
+    // ORDRE CRITIQUE : créer avant désactiver pour éviter fenêtre sans token actif
 
     // Supprimer les tokens vraiment anciens (> 30j) pour éviter l'accumulation
     let supprimés = 0;
@@ -135,7 +127,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Créer le nouveau token actif
+    // Créer le nouveau token actif EN PREMIER
     let result;
     try {
       result = await base44.asServiceRole.entities.FcmToken.create({
@@ -149,6 +141,17 @@ Deno.serve(async (req) => {
     } catch (createErr) {
       console.error(`[FCM_SAVE_FAILED] CREATE BDD: ${createErr.message} | step=create_db | user=${cleanEmail}`);
       return Response.json({ success: false, error: 'Création BDD: ' + createErr.message, step: 'create_db' }, { status: 500, headers: corsHeaders });
+    }
+
+    // Désactiver les anciens tokens SEULEMENT APRÈS que le nouveau est créé
+    let desactivés = 0;
+    for (const old of allUserTokens) {
+      if (old.is_active && old.id !== result.id) {
+        try {
+          await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
+          desactivés++;
+        } catch (_) {}
+      }
     }
 
     console.log(`[FCM_SAVE_SUCCESS] action=created | user=${cleanEmail} | token_id=${result.id} | token_preview=${cleanToken.slice(0, 30)}... | desactivés=${desactivés} | supprimés_anciens=${supprimés} | delay=${Date.now() - t0}ms`);
