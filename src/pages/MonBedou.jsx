@@ -255,7 +255,7 @@ export default function MonBedou() {
         </div>
         <div className="text-center mb-1">
           <p className="text-sm text-white/60 font-medium">Solde total</p>
-          <p className="text-5xl font-extrabold tracking-tight mt-1">{fmt(bedou?.solde || 0)}</p>
+          <p className="text-5xl font-extrabold tracking-tight mt-1">{fmt((bedou?.solde_disponible || 0) + (bedou?.solde_bonus || 0))}</p>
         </div>
         <div className="grid grid-cols-3 gap-2 mt-5">
           <div className="bg-white/15 rounded-2xl p-3 text-center border border-white/10">
