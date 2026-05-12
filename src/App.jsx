@@ -129,6 +129,8 @@ import TrackingPublic from './pages/TrackingPublic';
 import DownloadApp from './pages/DownloadApp';
 import FcmBootstrap from './components/FcmBootstrap';
 import FcmPermissionBanner from './components/FcmPermissionBanner';
+import FcmBootBanner from './components/FcmBootBanner';
+import { FcmReadyProvider } from '@/context/FcmReadyContext';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
 import FcmRegisterAudit from './pages/FcmRegisterAudit';
@@ -354,6 +356,7 @@ const AuthenticatedApp = () => {
   return (
     <>
       <FcmBootstrap userEmail={user?.email || ''} />
+      <FcmBootBanner />
       <FcmPermissionBanner />
       <KeyboardFeedbackProvider />
       <TopNotificationBanner notification={notification} onClose={closeNotification} />
@@ -557,6 +560,7 @@ function App() {
     <ErrorBoundary>
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
+        <FcmReadyProvider>
         <TopNotificationProvider>
           <FcmErrorBoundary />
           <Router>
@@ -564,6 +568,7 @@ function App() {
           </Router>
           <Toaster />
         </TopNotificationProvider>
+        </FcmReadyProvider>
       </QueryClientProvider>
     </AuthProvider>
     </ErrorBoundary>

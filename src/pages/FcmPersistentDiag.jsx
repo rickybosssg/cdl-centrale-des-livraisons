@@ -11,6 +11,7 @@ import { saveFcmTokenRemote } from '@/components/FcmBootstrap';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, RefreshCw, ShieldCheck, ShieldX, AlertTriangle, Zap, CheckCircle2 } from 'lucide-react';
+import { useFcmReady } from '@/context/FcmReadyContext';
 import { toast } from 'sonner';
 
 function StatusPill({ ok, label }) {
@@ -33,6 +34,7 @@ function InfoRow({ label, value, mono = false }) {
 
 export default function FcmPersistentDiag() {
   const navigate = useNavigate();
+  const { fcmReady, fcmStatus } = useFcmReady();
   const [user, setUser] = useState(null);
   const [deviceToken, setDeviceToken] = useState(null);
   const [bddTokens, setBddTokens] = useState([]);
@@ -186,6 +188,7 @@ export default function FcmPersistentDiag() {
             <StatusPill ok={activeTokens.length > 0} label={`${activeTokens.length} token(s) actif(s)`} />
             <StatusPill ok={!!deviceToken} label={deviceToken ? 'Token local présent' : 'Token local absent'} />
             <StatusPill ok={native} label={native ? 'APK natif' : 'Web/PWA'} />
+            <StatusPill ok={fcmReady} label={fcmReady ? `Boot: READY` : `Boot: ${fcmStatus}`} />
           </div>
           <InfoRow label="Utilisateur" value={user?.email} />
           <InfoRow label="Rôle" value={user?.role} />

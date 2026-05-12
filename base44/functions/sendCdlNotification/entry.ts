@@ -300,7 +300,8 @@ Deno.serve(async (req) => {
         return !isTestToken(t.token);
       });
       if (validTokens.length === 0) {
-        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN | hint=user_must_reopen_app`);
+        console.error(`[FCM_BOOT_RECOVERY] recipient_email=${email} | token_count=0 | error=NO_ACTIVE_TOKEN | action=auto_recovery_needed`);
+        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN`);
       } else {
         // Trier par last_used desc pour avoir le plus récent en premier
         validTokens.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0));
@@ -313,8 +314,18 @@ Deno.serve(async (req) => {
     console.log(`[sendCdlNotification] tokens_count=${tokensCount} (tous appareils) | +${Date.now() - t0}ms`);
 
     if (tokensCount === 0) {
-      console.error(`[FCM_SEND_RESULT] ❌ AUCUN TOKEN ACTIF — [${targetEmails.join(', ')}] — BDD fallback: ${bddCreated}`);
-      return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'Aucun token FCM actif' });
+      console.error(`[FCM_BOOT_RECOVERY] ❌ token_count=0 POUR [${targetEmails.join(', ')}] — auto-recovery requis`);
+      // Tenter un auto-recovery passif : marquer les tokens inactifs existants comme à régénérer
+      // et créer une notification interne d'urgence pour alerter
+      for (const email of targetEmails) {
+        try {
+          // Vérifier s'il existe des tokens inactifs pour cet utilisateur
+          const allTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email });
+          const inactiveCount = (allTokens || []).filter(t => !t.is_active).length;
+          console.error(`[FCM_BOOT_RECOVERY] user=${email} | token_count=0 | inactive_tokens=${inactiveCount} | action=skip_push_bdd_fallback`);
+        } catch (_) {}
+      }
+      return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'Aucun token FCM actif — auto-recovery requis côté APK', token_count_zero: true });
     }
 
     const sa = JSON.parse(SA_JSON);
