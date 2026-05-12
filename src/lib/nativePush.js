@@ -219,7 +219,7 @@ async function doRegister(PN) {
  * register() doit être appelé à chaque ouverture de l'app pour garantir
  * que le callback 'registration' se déclenche et que le token est sauvegardé.
  */
-export async function initCapacitorPush({ onToken, onForegroundNotif, onNotificationTap, onPermissionDenied }) {
+export async function initCapacitorPush({ onToken, onTokenRefresh, onForegroundNotif, onNotificationTap, onPermissionDenied }) {
   if (!isNativeApp()) {
     console.log('[NativePush] Non-native → skip initCapacitorPush');
     return { permissionStatus: 'not_native' };
@@ -252,8 +252,8 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   _onToken = onToken;
   _onForegroundNotif = onForegroundNotif;
   _onNotificationTap = onNotificationTap;
-  // onTokenRefresh = même callback que onToken (on re-sauvegarde le nouveau token)
-  _onTokenRefreshCallback = onToken;
+  // onTokenRefresh distinct si fourni, sinon fallback sur onToken
+  _onTokenRefreshCallback = onTokenRefresh || onToken;
 
   // Étape 4 : Attacher les listeners AVANT register()
   await attachListeners(PN);

@@ -93,6 +93,8 @@ export default function EmailLogin() {
         // Sauvegarder le password pour admin_secret (bypass token expiré APK)
         try { localStorage.setItem('cdl_admin_pwd', password); } catch(_) {}
         startSessionPing();
+        // Force re-enregistrement FCM après login (garantit token en BDD)
+        try { window.dispatchEvent(new CustomEvent('cdl_fcm_force_register', { detail: { email: email.trim().toLowerCase() } })); } catch (_) {}
         console.log("[LOGIN] SET LOGGED IN");
         setLoggedIn({ email: email.trim().toLowerCase() });
         console.log("[LOGIN] NAVIGATE TRIGGERED");

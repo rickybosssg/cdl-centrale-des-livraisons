@@ -255,13 +255,15 @@ export default function FcmPersistentDiag() {
 
       {/* Guide rapide */}
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">📋 Guide rapide</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">📋 Architecture auto-réparatrice V4</CardTitle></CardHeader>
         <CardContent className="text-xs text-muted-foreground space-y-1">
-          <p>• Si token_count = 0 → appuyer "Forcer régénération"</p>
-          <p>• Si token présent mais push non reçu → vérifier canal <strong>cdl_critical_alerts_v3</strong></p>
-          <p>• Le heartbeat re-vérifie le token automatiquement toutes les 10 min</p>
-          <p>• Après mise à jour APK → rouvrir l'app → le token se re-enregistre automatiquement</p>
-          <p>• Logs à surveiller : <strong>[FCM_AUTO_RECOVERY_START]</strong> · <strong>[FCM_TOKEN_SAVED]</strong></p>
+          <p>• Heartbeat <strong>8 min</strong> : vérifie BDD → re-register si token absent</p>
+          <p>• Retour foreground : vérification silencieuse automatique</p>
+          <p>• Login : event <code>cdl_fcm_force_register</code> → re-register immédiat</p>
+          <p>• Firebase <strong>onTokenRefresh</strong> : nouveau token sauvegardé automatiquement</p>
+          <p>• Nettoyage : jamais supprimer le dernier token actif &lt; 7j</p>
+          <p>• Auto-retry 30s si save échoue</p>
+          <p>• Logs : <strong>[FCM_AUTO_RECOVERY_START]</strong> · <strong>[FCM_TOKEN_SAVED]</strong> · <strong>[FCM_AUTO_RECOVERY_SUCCESS]</strong></p>
         </CardContent>
       </Card>
     </div>
