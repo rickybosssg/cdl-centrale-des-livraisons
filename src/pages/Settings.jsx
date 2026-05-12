@@ -412,20 +412,16 @@ export default function Settings() {
           </Card>
            )}
 
-        {/* Localisation GPS */}
-      {!isAdmin && activeProfileType === 'client' && (
-        <GpsLocationManager onLocationUpdate={async (data) => {
-          try {
-            await base44.auth.updateMe(data);
-            setUser(prev => ({ ...prev, ...data }));
-          } catch (err) {
-            console.error('[Settings] Erreur GPS:', err);
-          }
-        }} />
-      )}
-
-      {/* Diagnostic notifications */}
-      <div className="space-y-2">
+        {/* 🚨 Diagnostic notifications — SECTION PRIORITAIRE */}
+      <Card className="border-primary/50 bg-gradient-to-br from-primary/5 to-transparent">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            🔔 Problèmes de notifications ?
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Si vous ne recevez pas de push, rafraîchissez votre token</p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="space-y-2">
         <Link to="/fcm-register-audit" className="flex items-center gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors">
           <span className="text-xl">🔍</span>
           <div className="flex-1">
@@ -442,31 +438,65 @@ export default function Settings() {
           </div>
           <span className="text-red-400 text-sm">›</span>
         </Link>
-        <Link to="/fcm-token-refresh" className="flex items-center gap-3 p-4 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors">
-          <span className="text-xl">🔑</span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-purple-900">Gérer Token FCM</p>
-            <p className="text-xs text-purple-700">Rafraîchir et nettoyer les tokens</p>
+          <Link to="/fcm-token-refresh" className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors">
+            <span className="text-lg font-bold">🔑</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-primary">Rafraîchir Token FCM</p>
+              <p className="text-xs text-muted-foreground">Force re-register → repare les notifications</p>
+            </div>
+            <span className="text-primary text-sm">›</span>
+          </Link>
+          <Link to="/fcm-quick-test" className="flex items-center gap-3 p-3 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 transition-colors">
+            <span className="text-lg">✅</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-green-900">Test Notification</p>
+              <p className="text-xs text-green-700">Envoyer un push test</p>
+            </div>
+            <span className="text-green-400 text-sm">›</span>
+          </Link>
           </div>
-          <span className="text-purple-400 text-sm">›</span>
-        </Link>
-        <Link to="/fcm-quick-test" className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 transition-colors">
-          <span className="text-xl">✅</span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-green-900">Test FCM Rapide</p>
-            <p className="text-xs text-green-700">Vérifier token et envoyer notification test</p>
-          </div>
-          <span className="text-green-400 text-sm">›</span>
-        </Link>
-        <Link to="/fcm-diagnostic" className="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors">
-          <span className="text-xl">🔔</span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-blue-900">Diagnostic détaillé</p>
-            <p className="text-xs text-blue-700">Debug FCM complet avec tous les logs</p>
-          </div>
-          <span className="text-blue-400 text-sm">›</span>
-        </Link>
-      </div>
+        </CardContent>
+      </Card>
+
+      {/* Localisation GPS */}
+      {!isAdmin && activeProfileType === 'client' && (
+        <GpsLocationManager onLocationUpdate={async (data) => {
+          try {
+            await base44.auth.updateMe(data);
+            setUser(prev => ({ ...prev, ...data }));
+          } catch (err) {
+            console.error('[Settings] Erreur GPS:', err);
+          }
+        }} />
+      )}
+
+      {/* Diagnostic avancé — liens supplémentaires */}
+      <details className="p-3 rounded-lg border border-muted bg-muted/30 cursor-pointer hover:bg-muted/50">
+        <summary className="font-semibold text-sm">📋 Diagnostics avancés (admin/tech)</summary>
+        <div className="space-y-2 mt-3">
+          <Link to="/fcm-register-audit" className="flex items-center gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-xs transition-colors">
+            <span>🔍</span>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900">Audit Register → Save → BDD</p>
+              <p className="text-amber-700">8 étapes : register() token email save BDD push</p>
+            </div>
+          </Link>
+          <Link to="/fcm-apk-audit" className="flex items-center gap-3 p-3 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-xs transition-colors">
+            <span>🔴</span>
+            <div className="flex-1">
+              <p className="font-semibold text-red-900">Audit FCM APK Final</p>
+              <p className="text-red-700">9 checks Android runtime</p>
+            </div>
+          </Link>
+          <Link to="/fcm-diagnostic" className="flex items-center gap-3 p-3 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-xs transition-colors">
+            <span>🔔</span>
+            <div className="flex-1">
+              <p className="font-semibold text-blue-900">Diagnostic détaillé</p>
+              <p className="text-blue-700">Debug FCM complet avec tous les logs</p>
+            </div>
+          </Link>
+        </div>
+      </details>
 
       {/* Effets clavier */}
       <Card>
