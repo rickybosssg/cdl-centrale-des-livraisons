@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * CDL — Modification du mode dispatch (ADMIN UNIQUEMENT)
@@ -6,22 +6,33 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
  * Ne jamais mettre de valeur par défaut locale.
  */
 Deno.serve(async (req) => {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
     if (user.role !== 'admin') {
-      console.warn(`[DispatchMode] Tentative refusée : ${user.email} n'est pas admin`);
-      return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+      console.warn(`[DISPATCH_MODE_WRITE] Refusé : ${user.email} n'est pas admin`);
+      return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403, headers: corsHeaders });
     }
 
-    const { mode } = await req.json();
+    const body = await req.json();
+    const { mode } = body;
+
+    console.log(`[DISPATCH_MODE_WRITE] Demande changement → mode=${mode} | admin=${user.email}`);
+
     if (!['auto', 'manuel'].includes(mode)) {
-      return Response.json({ error: 'Mode invalide. Valeurs: auto | manuel' }, { status: 400 });
+      return Response.json({ error: 'Mode invalide. Valeurs: auto | manuel' }, { status: 400, headers: corsHeaders });
     }
 
-    // Lire la config existante
+    // Lire la config existante (service role pour garantir la lecture)
     const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
 
     let config;
@@ -34,9 +45,8 @@ Deno.serve(async (req) => {
         last_changed_reason: `Changé manuellement par admin ${user.email}`,
         last_changed_at: new Date().toISOString(),
       });
-      console.log(`[DispatchMode] Mode changé par admin ${user.email} : ${oldMode} → ${mode}`);
+      console.log(`[DISPATCH_MODE_WRITE] ✅ Mode sauvegardé en BDD : ${oldMode} → ${mode} | id=${configs[0].id}`);
     } else {
-      // Première initialisation uniquement
       config = await base44.asServiceRole.entities.DispatchConfig.create({
         mode,
         force_override: true,
@@ -44,12 +54,12 @@ Deno.serve(async (req) => {
         last_changed_reason: `Initialisation par ${user.email}`,
         last_changed_at: new Date().toISOString(),
       });
-      console.log(`[DispatchMode] Config initialisée par ${user.email} : ${mode}`);
+      console.log(`[DISPATCH_MODE_WRITE] ✅ Config initialisée : ${mode} | id=${config?.id}`);
     }
 
-    return Response.json({ success: true, mode, config });
+    return Response.json({ success: true, mode, config }, { headers: corsHeaders });
   } catch (error) {
-    console.error('[DispatchMode] Erreur:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    console.error('[DISPATCH_MODE_WRITE] ❌ Erreur:', error.message);
+    return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 });

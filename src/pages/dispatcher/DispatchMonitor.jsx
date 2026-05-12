@@ -177,12 +177,18 @@ export default function DispatchMonitor() {
   const [togglingMode, setTogglingMode] = useState(false);
 
   const loadDispatchConfig = useCallback(async () => {
-    const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-    if (configs.length > 0) {
-      setDispatchConfig(configs[0]);
-    } else {
-      const created = await base44.entities.DispatchConfig.create({ mode: 'auto', force_override: true });
-      setDispatchConfig(created);
+    try {
+      const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
+      if (configs.length > 0) {
+        console.log(`[DISPATCH_MODE_READ] mode=${configs[0].mode} | id=${configs[0].id}`);
+        setDispatchConfig(configs[0]);
+      } else {
+        console.log('[DISPATCH_MODE_READ] Aucune config — création avec mode=auto');
+        const created = await base44.entities.DispatchConfig.create({ mode: 'auto', force_override: true });
+        setDispatchConfig(created);
+      }
+    } catch (err) {
+      console.error('[DISPATCH_MODE_READ] Erreur lecture config:', err.message);
     }
   }, []);
 
@@ -207,18 +213,32 @@ export default function DispatchMonitor() {
     if (!dispatchConfig) return;
     setTogglingMode(true);
     const newMode = dispatchConfig.mode === 'auto' ? 'manuel' : 'auto';
+
+    // 1. Mise à jour optimiste immédiate de l'UI
+    setDispatchConfig(prev => ({ ...prev, mode: newMode }));
+    console.log(`[DISPATCH_MODE_WRITE] Optimistic UI update → ${newMode}`);
+
     try {
-      // Utiliser la fonction backend sécurisée (vérification admin côté serveur)
       const res = await base44.functions.invoke('setDispatchMode', { mode: newMode });
-      if (!res.data?.success) throw new Error(res.data?.error || 'Erreur');
-      // Recharger depuis la BDD pour avoir la source de vérité
-      await loadDispatchConfig();
+      if (!res.data?.success) throw new Error(res.data?.error || 'Erreur backend setDispatchMode');
+
+      console.log(`[DISPATCH_MODE_SYNC] ✅ Mode confirmé BDD → ${newMode}`);
+      // Synchroniser avec la réponse BDD (données fraîches)
+      if (res.data?.config) {
+        setDispatchConfig(res.data.config);
+        console.log(`[DISPATCH_MODE_REFRESH] Config rechargée depuis réponse backend | mode=${res.data.config.mode}`);
+      } else {
+        await loadDispatchConfig();
+      }
       toast.success(newMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
-      console.log(`[DispatchMonitor] Mode changé → ${newMode}`);
     } catch (err) {
-      toast.error('Erreur: ' + err.message);
+      // Annuler la mise à jour optimiste si erreur
+      console.error(`[DISPATCH_MODE_WRITE] ❌ Erreur — rollback vers ${dispatchConfig.mode} | err=${err.message}`);
+      setDispatchConfig(prev => ({ ...prev, mode: dispatchConfig.mode }));
+      toast.error('Erreur changement de mode: ' + err.message);
+    } finally {
+      setTogglingMode(false);
     }
-    setTogglingMode(false);
   };
 
   // Assigner manuellement un livreur à une course
@@ -292,6 +312,14 @@ export default function DispatchMonitor() {
     load();
     const interval = setInterval(load, 20000);
 
+    // Temps réel — DispatchConfig (sync multi-écrans instantanée)
+    const unsubConfig = base44.entities.DispatchConfig.subscribe((event) => {
+      if ((event.type === "update" || event.type === "create") && event.data) {
+        console.log(`[DISPATCH_MODE_SYNC] Realtime DispatchConfig.${event.type} → mode=${event.data.mode}`);
+        setDispatchConfig(event.data);
+      }
+    });
+
     // Temps réel — Courses
     const unsubCourses = base44.entities.Course.subscribe((event) => {
       if (event.type === "create") setCourses(prev => [event.data, ...prev]);
@@ -306,7 +334,6 @@ export default function DispatchMonitor() {
           const exists = prev.find(l => l.id === event.id);
           const isEligible = event.data.driver_online && event.data.profil_valide;
           if (exists) {
-            // Retirer si plus éligible, mettre à jour sinon
             if (!isEligible) return prev.filter(l => l.id !== event.id);
             return prev.map(l => l.id === event.id ? event.data : l);
           }
@@ -318,7 +345,7 @@ export default function DispatchMonitor() {
       }
     });
 
-    return () => { clearInterval(interval); unsubCourses(); unsubUsers(); };
+    return () => { clearInterval(interval); unsubConfig(); unsubCourses(); unsubUsers(); };
   }, []);
 
   const isManuel = (dispatchConfig?.mode || 'auto') === 'manuel';
