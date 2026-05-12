@@ -85,19 +85,25 @@ Deno.serve(async (req) => {
     const tokensAvant = allUserTokens.length;
     const exactMatch = allUserTokens.find(t => t.token === cleanToken);
 
-    // CAS 1 : token exact déjà en BDD → réactiver + nettoyer les AUTRES inactifs anciens
+    // CAS 1 : token exact déjà en BDD → réactiver uniquement, supprimer les doublons du même token
     if (exactMatch) {
-      await base44.asServiceRole.entities.FcmToken.update(exactMatch.id, {
-        is_active: true,
-        last_used: new Date().toISOString(),
-        device_type,
-      });
+      // Trouver tous les enregistrements avec le même token (doublons)
+      const sameTokenRecords = allUserTokens.filter(t => t.token === cleanToken);
 
-      // Désactiver les AUTRES tokens (pas supprimer — préserver l'historique récent)
-      // Ne désactiver que ceux qui sont actifs mais différents
+      // Garder le plus récent (exactMatch), supprimer les autres doublons
+      let suppriméDoublons = 0;
+      for (const dup of sameTokenRecords) {
+        if (dup.id === exactMatch.id) continue;
+        try {
+          await base44.asServiceRole.entities.FcmToken.delete(dup.id);
+          suppriméDoublons++;
+        } catch (_) {}
+      }
+
+      // Désactiver les tokens avec un AUTRE token (pas supprimer)
       let desactivés = 0;
       for (const old of allUserTokens) {
-        if (old.id === exactMatch.id) continue;
+        if (old.token === cleanToken) continue; // même token → ne pas toucher
         if (old.is_active) {
           try {
             await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
@@ -106,10 +112,18 @@ Deno.serve(async (req) => {
         }
       }
 
-      console.log(`[FCM_SAVE_SUCCESS] action=reactivated | user=${cleanEmail} | token_id=${exactMatch.id} | desactivés=${desactivés} | delay=${Date.now() - t0}ms`);
+      // Réactiver en dernier pour éviter toute course condition
+      await base44.asServiceRole.entities.FcmToken.update(exactMatch.id, {
+        is_active: true,
+        last_used: new Date().toISOString(),
+        device_type,
+      });
+
+      console.log(`[FCM_SAVE_SUCCESS] action=reactivated | user=${cleanEmail} | token_id=${exactMatch.id} | doublons_supprimés=${suppriméDoublons} | desactivés=${desactivés} | delay=${Date.now() - t0}ms`);
       return Response.json({
         success: true, action: 'reactivated', token_id: exactMatch.id,
         user_email: cleanEmail, tokens_avant: tokensAvant, tokens_desactivés: desactivés,
+        doublons_supprimés: suppriméDoublons,
       }, { headers: corsHeaders });
     }
 
