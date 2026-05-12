@@ -153,6 +153,7 @@ export default function CourseLivreur() {
       return;
     }
     setUpdating(true);
+    console.log(`[COURSE_MARKED_DELIVERED] course_id=${course.id} | livreur=${course.livreur_email} | client=${course.client_email} | montant=${course.prix} | statut_before=${course.statut}`);
     console.log('[CourseLivreur] livrerColis START — course.id:', course.id, 'statut:', course.statut);
     const montant = course.prix || 0;
     const gainLivreur = course.gain_livreur || Math.round(montant * 0.8);
