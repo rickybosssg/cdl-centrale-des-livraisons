@@ -43,11 +43,22 @@ export default function NotificationBell({ userEmail }) {
       if (isMounted) loadNotifs();
     }, 1500);
 
-    // Sur natif : poll 30s (WebSocket peut être tué par Android en arrière-plan)
-    // Sur web : poll 2min (WebSocket suffit)
-    const pollInterval = isNative ? 30000 : 120000;
+    // Sur natif : poll 8s (fallback si WebSocket tué par Android en arrière-plan)
+    // Sur web : poll 60s (WebSocket suffit)
+    const pollInterval = isNative ? 8000 : 60000;
+    let pollActive = false;
+
+    // Polling de sécurité — démarre seulement si le WebSocket n'a pas reçu d'event depuis 10s
+    let wsLastEvent = Date.now();
     const interval = setInterval(() => {
-      if (isMounted) loadNotifs();
+      if (!isMounted) return;
+      const timeSinceWs = Date.now() - wsLastEvent;
+      if (isNative && wsActive && timeSinceWs < 15000) return; // WS actif et récent → skip poll
+      if (!pollActive) {
+        pollActive = true;
+        console.log(`[APK_NOTIFICATION_POLL] poll_triggered | platform=${isNative ? 'capacitor' : 'web'} | ws_last_event_ms=${timeSinceWs} | ws_active=${wsActive}`);
+      }
+      loadNotifs();
     }, pollInterval);
 
     console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] poll_interval=${pollInterval}ms | websocket_subscribe_starting=true`);
@@ -64,7 +75,9 @@ export default function NotificationBell({ userEmail }) {
           if (!isMounted || event.data?.destinataire_email !== userEmail) return;
           if (event.type === 'create') {
             const newNotif = event.data;
-            console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] last_notification_event_received=${new Date().toISOString()} | titre="${newNotif.titre}" | platform=${isNative ? 'capacitor' : 'web'}`);
+            wsLastEvent = Date.now();
+            pollActive = false; // Reset — WS fonctionne
+            console.log(`[APK_NOTIFICATION_REALTIME_RECEIVED] titre="${newNotif.titre}" | platform=${isNative ? 'capacitor' : 'web'} | at=${new Date().toISOString()}`);
             setNotifs(prev => [newNotif, ...prev]);
             const priority = resolveNotifPriority(newNotif);
             if (priority === 'critical') {
@@ -99,12 +112,27 @@ export default function NotificationBell({ userEmail }) {
       console.warn(`[APK_NOTIFICATION_RUNTIME_CHECK] subscribe_error=${err?.message} | websocket_connected=false`);
     }
 
-    // Sur natif : vérifier le token FCM après 5s
+    // Retour focus app → refresh immédiat
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        console.log(`[APK_NOTIFICATION_REALTIME_RECEIVED] visibilitychange → reload | platform=${isNative ? 'capacitor' : 'web'}`);
+        if (isMounted) loadNotifs();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    // Push FCM bedou_recharge_approved → reload notifs immédiat
+    const onFcmBedou = () => {
+      console.log(`[APK_NOTIFICATION_REALTIME_RECEIVED] event=bedou_recharge_approved FCM → reload notifs`);
+      if (isMounted) loadNotifs();
+      setTimeout(() => { if (isMounted) loadNotifs(); }, 2000);
+    };
+    window.addEventListener('bedou_recharge_approved', onFcmBedou);
+
+    // Sur natif : log diagnostic token FCM après 5s
     if (isNative) {
-      setTimeout(async () => {
+      setTimeout(() => {
         try {
-          const { getFcmTokens } = await import('@/api/base44Client').then(m => ({ getFcmTokens: null }));
-          // Log diagnostic token FCM côté APK
           const stored = localStorage.getItem('cdl_fcm_token_saved');
           const lastPush = localStorage.getItem('cdl_last_push_received');
           console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] fcm_token_saved=${!!stored} | last_push_event_received=${lastPush || 'never'} | platform=capacitor_android`);
@@ -116,6 +144,8 @@ export default function NotificationBell({ userEmail }) {
       isMounted = false;
       clearTimeout(initialTimer);
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('bedou_recharge_approved', onFcmBedou);
       try { if (unsub) unsub(); } catch (_) {}
     };
   }, [userEmail]);

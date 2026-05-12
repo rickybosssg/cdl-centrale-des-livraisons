@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch(_) {}
 
   const { request_id, action, comment } = body;
-  console.log('[ADMIN_VALIDATE_START]', { request_id, action, token_present: !!tokenFromHeader });
+  console.log(`[BEDOU_RECHARGE_APPROVED_V3_START] request_id=${request_id} | action=${action} | token_present=${!!tokenFromHeader}`);
 
   // Toutes les opérations passent par asServiceRole — pas de vérification de rôle nécessaire
   const base44 = createClientFromRequest(req);
@@ -306,6 +306,7 @@ Deno.serve(async (req) => {
     push_called: true,
   });
 
+  console.log(`[PUSH_V3_PIPELINE_CLIENT] START | target=${clientEmail} | montant=${montantCredite} | channel=cdl_critical_alerts_v3`);
   const notifClientResult = await notify({
     user_email: clientEmail,
     title: '✅ Recharge Bedou validée',
@@ -319,6 +320,7 @@ Deno.serve(async (req) => {
       user_id: demande.user_id || clientEmail,
     },
   });
+  console.log(`[PUSH_V3_PIPELINE_CLIENT] DONE | sent=${notifClientResult.sent ?? 0} | failed=${notifClientResult.failed ?? 0} | token_found=${(notifClientResult.sent ?? 0) + (notifClientResult.failed ?? 0) > 0} | firebase_message_id=${notifClientResult.firebase_message_id || 'N/A'} | error=${notifClientResult.error || 'none'}`);
 
   console.log('[CLIENT_PUSH_ONLY_CHECK] push_response:', {
     push_response: JSON.stringify(notifClientResult).slice(0, 200),
@@ -329,6 +331,7 @@ Deno.serve(async (req) => {
   });
 
   // 4. Push FCM ADMIN
+  console.log(`[PUSH_V3_PIPELINE_ADMIN] START | target=${adminEmail} | channel=cdl_critical_alerts_v3`);
   const notifAdminResult = await notify({
     user_email: adminEmail,
     title: '💰 Recharge validée',
@@ -340,6 +343,8 @@ Deno.serve(async (req) => {
       notif_route: '/gestion-bedou',
     },
   });
+
+  console.log(`[PUSH_V3_PIPELINE_ADMIN] DONE | sent=${notifAdminResult.sent ?? 0} | failed=${notifAdminResult.failed ?? 0} | token_found=${(notifAdminResult.sent ?? 0) + (notifAdminResult.failed ?? 0) > 0} | firebase_message_id=${notifAdminResult.firebase_message_id || 'N/A'} | error=${notifAdminResult.error || 'none'}`);
 
   // Log V2 diagnostic — tous les champs demandés
   console.log('[PUSH_V2_PIPELINE]', {

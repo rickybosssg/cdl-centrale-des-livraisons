@@ -238,6 +238,8 @@ async function runNativeFcm(propEmail) {
 
         if (notifType === 'bedou_recharge_approved') {
           try { window.dispatchEvent(new CustomEvent('bedou_recharge_approved')); } catch (_) {}
+          try { window.dispatchEvent(new CustomEvent('bedou_updated')); } catch (_) {}
+          console.log(`[BEDOU_SYNC_EVENT_RECEIVED] FCM foreground bedou_recharge_approved dispatched | user=${propEmail}`);
         }
 
         import('sonner').then(({ toast }) => {
@@ -262,6 +264,8 @@ async function runNativeFcm(propEmail) {
         console.log(`[FCM_TOKEN_RECEIVED] 👆 Tap → route=${route} | type=${notifType}`);
         if (notifType === 'bedou_recharge_approved') {
           try { window.dispatchEvent(new CustomEvent('bedou_recharge_approved')); } catch (_) {}
+          try { window.dispatchEvent(new CustomEvent('bedou_updated')); } catch (_) {}
+          console.log(`[BEDOU_SYNC_EVENT_RECEIVED] FCM tap bedou_recharge_approved dispatched | user=${propEmail}`);
         }
         if (route?.startsWith('/')) {
           try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
