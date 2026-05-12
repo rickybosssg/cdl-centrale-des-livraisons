@@ -1,24 +1,14 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║  sendCdlNotification — SYSTÈME VERROUILLÉ v5.0 — SOURCE UNIQUE CDL    ║
+ * ║  sendCdlNotification — SYSTÈME VERROUILLÉ v5.1 — SOURCE UNIQUE CDL    ║
  * ║  CANAL OFFICIEL UNIQUE = cdl_critical_alerts_v3                         ║
  * ╠══════════════════════════════════════════════════════════════════════════╣
  * ║  🔒 CANAL VERROUILLÉ : cdl_critical_alerts_v3 (importance=MAX)         ║
- * ║  🔒 FCM_TOKEN_LOCK : 1 seul token actif par user_email                 ║
- * ║     → cleanup automatique des doublons avant chaque push               ║
- * ║     → UNREGISTERED → suppression auto                                  ║
- * ║     → sélection du token le plus récent (last_used ou registered_at)   ║
+ * ║  🔒 FALLBACK TOKEN : si token_count=0 (actifs), tente le dernier       ║
+ * ║     token inactif récent (< 7 jours) avant d'abandonner                ║
  * ║  🔒 ANTI-DOUBLON : clé event_type+entity_id+recipient_email (60s)     ║
  * ║  🔒 LOG OBLIGATOIRE : [CDL_PUSH_SENT] sur chaque push réussi           ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
- *
- * RÈGLE ABSOLUE :
- * Toute notification CDL (push Android + BDD interne) DOIT passer par cette fonction.
- * Aucune logique FCM directe n'est autorisée dans les autres fonctions.
- *
- * Modules couverts :
- *   Bedou recharge/retrait · Courses · Dispatch livreur · Profils
- *   Commandes Mall · Publicités · Messages
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
@@ -31,6 +21,15 @@ function isTestToken(token) {
   if (!token) return true;
   const t = String(token).toLowerCase();
   return BLACKLISTED_TOKENS.some(b => t.includes(b)) || t.includes('_test_') || t.startsWith('test_');
+}
+
+// Token considéré utilisable en fallback si < 7 jours
+const FALLBACK_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getTokenAge(tokenRecord) {
+  const ref = tokenRecord.last_used || tokenRecord.registered_at;
+  if (!ref) return Infinity;
+  return Date.now() - new Date(ref).getTime();
 }
 
 async function getAccessToken(sa) {
@@ -88,19 +87,19 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
           notification: { title, body },
           data: stringData,
           android: {
-          priority: 'HIGH',
-          ttl: '86400s',
-          notification: {
-            channel_id: CDL_CHANNEL,
-            sound: 'default',
-            visibility: 'PUBLIC',
-            notification_priority: 'PRIORITY_MAX',
-            default_sound: true,
-            default_vibrate_timings: true,
-            default_light_settings: true,
-            notification_count: 1,
-            tag: `cdl_${data?.type || 'notif'}_${data?.entity_id || Date.now()}`,
-          },
+            priority: 'HIGH',
+            ttl: '86400s',
+            notification: {
+              channel_id: CDL_CHANNEL,
+              sound: 'default',
+              visibility: 'PUBLIC',
+              notification_priority: 'PRIORITY_MAX',
+              default_sound: true,
+              default_vibrate_timings: true,
+              default_light_settings: true,
+              notification_count: 1,
+              tag: `cdl_${data?.type || 'notif'}_${data?.entity_id || Date.now()}`,
+            },
           },
           webpush: {
             notification: {
@@ -194,6 +193,41 @@ async function createInternalNotif(base44, { recipientEmail, title, body, data =
   }
 }
 
+// ── Résoudre les tokens à utiliser (actifs + fallback inactif récent) ─────────
+async function resolveTokensForEmail(base44, email) {
+  // 1. Chercher tokens actifs
+  const activeTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true });
+  const validActive = (activeTokens || []).filter(t => t.token && !isTestToken(t.token));
+
+  if (validActive.length > 0) {
+    // Trier par last_used desc
+    validActive.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0));
+    console.log(`[FCM_TOKEN_RESOLVE] email=${email} | active_count=${validActive.length} | best_preview=${validActive[0].token.slice(0, 30)}...`);
+    return { tokens: validActive, usedFallback: false };
+  }
+
+  // 2. Fallback : chercher le dernier token inactif récent (< 7 jours)
+  console.warn(`[FCM_TOKEN_RESOLVE] email=${email} | active_count=0 → tentative fallback token inactif récent`);
+  const allTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email }, '-updated_date', 20);
+  const recentInactive = (allTokens || [])
+    .filter(t => t.token && !isTestToken(t.token) && getTokenAge(t) < FALLBACK_MAX_AGE_MS)
+    .sort((a, b) => getTokenAge(a) - getTokenAge(b)); // plus récent en premier
+
+  if (recentInactive.length > 0) {
+    const best = recentInactive[0];
+    const ageH = Math.round(getTokenAge(best) / 3600000);
+    console.warn(`[FCM_TOKEN_FALLBACK] email=${email} | using_inactive_token | age_hours=${ageH} | preview=${best.token.slice(0, 30)}...`);
+    // Réactiver ce token temporairement pour l'envoi
+    try {
+      await base44.asServiceRole.entities.FcmToken.update(best.id, { is_active: true, last_used: new Date().toISOString() });
+    } catch (_) {}
+    return { tokens: [best], usedFallback: true };
+  }
+
+  console.error(`[FCM_BOOT_RECOVERY] recipient_email=${email} | token_count=0 | error=NO_TOKEN_AT_ALL | inactive_total=${(allTokens || []).length}`);
+  return { tokens: [], usedFallback: false };
+}
+
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -221,7 +255,6 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'user_email ou role requis' }, { status: 400 });
     }
 
-    // Enrichir data avec champs standard
     const enrichedData = {
       ...data,
       entity_type: entityType,
@@ -272,7 +305,7 @@ Deno.serve(async (req) => {
       console.error(`[sendCdlNotification] ❌ BDD batch: ${e.message}`);
     }
 
-    // ── 3. FCM Push — tous les tokens actifs par destinataire ───────────────
+    // ── 3. FCM Push — actifs + fallback inactif récent ───────────────────────
     let sent = 0, failed = 0, firstMsgId = null;
 
     if (!SA_JSON) {
@@ -280,52 +313,29 @@ Deno.serve(async (req) => {
       return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'FCM désactivé (SA manquant)' });
     }
 
-    // Récupérer TOUS les tokens actifs pour chaque email
+    // Résoudre tokens pour chaque destinataire (avec fallback)
     const tokenResults = await Promise.allSettled(
-      targetEmails.map(email => base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true }))
+      targetEmails.map(email => resolveTokensForEmail(base44, email))
     );
 
-    // Construire la liste complète : TOUS les tokens valides, pas de déduplication
-    // (envoyer à tous les appareils enregistrés — l'utilisateur peut avoir plusieurs)
     const tokenRecords = [];
     for (let i = 0; i < targetEmails.length; i++) {
-      const email = targetEmails[i];
       const r = tokenResults[i];
-      if (r.status !== 'fulfilled') {
-        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=FETCH_FAILED`);
+      if (r.status !== 'fulfilled' || r.value.tokens.length === 0) {
+        console.error(`[FCM_SEND_RESULT] recipient_email=${targetEmails[i]} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN`);
         continue;
       }
-      const validTokens = (r.value || []).filter(t => {
-        if (!t.token || String(t.token).trim().length < 10) return false;
-        return !isTestToken(t.token);
-      });
-      if (validTokens.length === 0) {
-        console.error(`[FCM_BOOT_RECOVERY] recipient_email=${email} | token_count=0 | error=NO_ACTIVE_TOKEN | action=auto_recovery_needed`);
-        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN`);
-      } else {
-        // Trier par last_used desc pour avoir le plus récent en premier
-        validTokens.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0));
-        console.log(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=true | token_count=${validTokens.length} | best_token_preview=${validTokens[0].token.slice(0, 30)}... | device_type=${validTokens[0].device_type || 'unknown'} | last_used=${validTokens[0].last_used || validTokens[0].registered_at || 'N/A'}`);
-        tokenRecords.push(...validTokens);
-      }
+      const { tokens, usedFallback } = r.value;
+      console.log(`[FCM_SEND_RESULT] recipient_email=${targetEmails[i]} | token_found=true | token_count=${tokens.length} | used_fallback=${usedFallback} | best_token_preview=${tokens[0].token.slice(0, 30)}... | last_used=${tokens[0].last_used || tokens[0].registered_at || 'N/A'}`);
+      tokenRecords.push(...tokens);
     }
 
     const tokensCount = tokenRecords.length;
     console.log(`[sendCdlNotification] tokens_count=${tokensCount} (tous appareils) | +${Date.now() - t0}ms`);
 
     if (tokensCount === 0) {
-      console.error(`[FCM_BOOT_RECOVERY] ❌ token_count=0 POUR [${targetEmails.join(', ')}] — auto-recovery requis`);
-      // Tenter un auto-recovery passif : marquer les tokens inactifs existants comme à régénérer
-      // et créer une notification interne d'urgence pour alerter
-      for (const email of targetEmails) {
-        try {
-          // Vérifier s'il existe des tokens inactifs pour cet utilisateur
-          const allTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email });
-          const inactiveCount = (allTokens || []).filter(t => !t.is_active).length;
-          console.error(`[FCM_BOOT_RECOVERY] user=${email} | token_count=0 | inactive_tokens=${inactiveCount} | action=skip_push_bdd_fallback`);
-        } catch (_) {}
-      }
-      return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'Aucun token FCM actif — auto-recovery requis côté APK', token_count_zero: true });
+      console.error(`[FCM_BOOT_RECOVERY] ❌ token_count=0 pour [${targetEmails.join(', ')}] — aucun token actif ni inactif récent`);
+      return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'Aucun token FCM disponible', token_count_zero: true });
     }
 
     const sa = JSON.parse(SA_JSON);
@@ -341,7 +351,10 @@ Deno.serve(async (req) => {
       if (r.status === 'fulfilled' && r.value.ok) {
         sent++;
         if (!firstMsgId) firstMsgId = r.value.msgId;
-        base44.asServiceRole.entities.FcmToken.update(tokenRecord.id, { last_used: new Date().toISOString() }).catch(() => {});
+        base44.asServiceRole.entities.FcmToken.update(tokenRecord.id, {
+          last_used: new Date().toISOString(),
+          is_active: true,
+        }).catch(() => {});
 
         console.log(
           `[FCM_SEND_RESULT] recipient_email=${tokenRecord.user_email} | ` +
@@ -369,20 +382,11 @@ Deno.serve(async (req) => {
           `error_code=${errCode} | error_message=${errMsg} | ` +
           `event_type=${eventType}`
         );
-        console.error(
-          `[CDL_PUSH_SENT] event_type=${eventType} | entity_type=${entityType} | entity_id=${entityId} | ` +
-          `recipient_email=${tokenRecord.user_email} | token_used=${tokenRecord.token.slice(0, 25)}... | ` +
-          `channel_id=${CDL_CHANNEL} | fcm_sent=0 | fcm_failed=1 | error_code=${errCode} | error_message=${errMsg}`
-        );
 
-        // Token invalide/expiré → désactiver immédiatement
+        // Token définitivement invalide → désactiver
         if (FATAL_FCM_ERRORS.includes(errCode)) {
-          console.error(`[FCM_SEND_RESULT] ❌ TOKEN_FATAL_ERROR → désactivation | user=${tokenRecord.user_email} | token=${tokenRecord.token.slice(0, 25)}... | error_code=${errCode}`);
-          base44.asServiceRole.entities.FcmToken.update(tokenRecord.id, {
-            is_active: false,
-            deactivation_reason: errCode,
-            deactivated_at: new Date().toISOString(),
-          }).catch(() => {});
+          console.error(`[FCM_SEND_RESULT] ❌ TOKEN_FATAL_ERROR → désactivation | user=${tokenRecord.user_email} | error_code=${errCode}`);
+          base44.asServiceRole.entities.FcmToken.update(tokenRecord.id, { is_active: false }).catch(() => {});
         }
       }
     }
@@ -391,23 +395,16 @@ Deno.serve(async (req) => {
     const notification_client_sent = sent > 0;
 
     console.log(
-      `[sendCdlNotification] ━━━ DONE ━━━ | ` +
-      `event_type=${eventType} | ` +
-      `tokens_count=${tokensCount} | ` +
-      `fcm_sent=${sent} | ` +
-      `fcm_failed=${failed} | ` +
-      `bdd=${bddCreated} | ` +
-      `notification_client_sent=${notification_client_sent} | ` +
-      `delay_ms=${elapsed}`
+      `[sendCdlNotification] ━━━ DONE ━━━ | event_type=${eventType} | tokens_count=${tokensCount} | ` +
+      `fcm_sent=${sent} | fcm_failed=${failed} | bdd=${bddCreated} | notification_client_sent=${notification_client_sent} | delay_ms=${elapsed}`
     );
 
     if (failed > 0 && sent === 0) {
-      console.error(`[sendCdlNotification] 🔴 MONITORING ALERT — fcm_sent=0 failed=${failed} | event_type=${eventType} | BDD fallback=${bddCreated > 0 ? 'OK' : 'ÉCHEC'}`);
+      console.error(`[sendCdlNotification] 🔴 MONITORING ALERT — fcm_sent=0 failed=${failed} | event_type=${eventType}`);
     }
 
     return Response.json({
-      sent,
-      failed,
+      sent, failed,
       total: tokensCount,
       bdd: bddCreated,
       elapsed_ms: elapsed,

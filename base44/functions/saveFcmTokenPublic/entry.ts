@@ -1,15 +1,14 @@
 /**
  * saveFcmTokenPublic — Endpoint PUBLIC pour enregistrer un token FCM
  *
- * CORRECTION : utilise createClientFromRequest(req) comme TOUTES les autres functions.
- * Le SDK injecte automatiquement le service token depuis le contexte Deno.
- * Ne PAS utiliser createClient({ appId }) seul — manque le service token.
+ * POLITIQUE DE RÉTENTION V6 :
+ * - On NE supprime JAMAIS les tokens actifs récents (< 30j)
+ * - Si token exact déjà en BDD → réactiver + mettre à jour last_used SEULEMENT
+ * - Si nouveau token → créer EN PLUS (sans supprimer les anciens actifs)
+ *   puis désactiver les AUTRES anciens tokens (pas les actifs du même jour)
+ * - 1 token actif max par user_email → garantit findabilité côté push
  *
- * LOGS :
- * [FCM_SAVE_ATTEMPT]  — requête reçue avec paramètres
- * [SDK_INIT_SUCCESS]  — SDK service role initialisé correctement
- * [FCM_SAVE_SUCCESS]  — token créé/réactivé en BDD
- * [FCM_SAVE_FAILED]   — erreur avec étape précise
+ * OBJECTIF : éviter token_count=0 entre deux ouvertures de l'APK
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
@@ -18,6 +17,15 @@ function isTestToken(token) {
   if (!token || token.length < 20) return true;
   const t = String(token).toLowerCase();
   return BLACKLISTED_PREFIXES.some(p => t.startsWith(p)) || t.includes('_test_') || t.includes('test_token');
+}
+
+// Token considéré "récent" si utilisé dans les 30 derniers jours
+const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function isTokenRecent(tokenRecord) {
+  const ref = tokenRecord.last_used || tokenRecord.registered_at;
+  if (!ref) return false;
+  return Date.now() - new Date(ref).getTime() < MAX_TOKEN_AGE_MS;
 }
 
 Deno.serve(async (req) => {
@@ -36,7 +44,6 @@ Deno.serve(async (req) => {
 
     console.log(`[FCM_SAVE_ATTEMPT] user=${user_email || 'VIDE'} | token_len=${token?.length || 0} | device=${device_type}`);
 
-    // Validation paramètres
     if (!user_email || !token) {
       const missing = !user_email ? 'user_email' : 'token';
       console.error(`[FCM_SAVE_FAILED] MISSING_PARAM=${missing}`);
@@ -56,21 +63,19 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, action: 'ignored_test_token' }, { headers: corsHeaders });
     }
 
-    // SDK via createClientFromRequest — identique aux autres functions CDL
     let base44;
     try {
       base44 = createClientFromRequest(req);
-      // Test rapide pour confirmer que asServiceRole fonctionne
       console.log(`[SDK_INIT_SUCCESS] createClientFromRequest OK | user=${cleanEmail}`);
     } catch (sdkErr) {
       console.error(`[FCM_SAVE_FAILED] SDK init error: ${sdkErr.message} | step=sdk_init`);
       return Response.json({ success: false, error: 'SDK init: ' + sdkErr.message, step: 'sdk_init' }, { status: 500, headers: corsHeaders });
     }
 
-    // Charger les tokens existants de cet utilisateur
+    // Charger TOUS les tokens existants de cet utilisateur
     let allUserTokens = [];
     try {
-      allUserTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: cleanEmail }, null, 50);
+      allUserTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: cleanEmail }, null, 100);
       console.log(`[FCM_SAVE_ATTEMPT] tokens_existants=${allUserTokens.length} | user=${cleanEmail}`);
     } catch (fetchErr) {
       console.error(`[FCM_SAVE_FAILED] Lecture BDD: ${fetchErr.message} | step=read_db`);
@@ -80,7 +85,7 @@ Deno.serve(async (req) => {
     const tokensAvant = allUserTokens.length;
     const exactMatch = allUserTokens.find(t => t.token === cleanToken);
 
-    // CAS 1 : token exact déjà en BDD → réactiver + nettoyer les autres
+    // CAS 1 : token exact déjà en BDD → réactiver + nettoyer les AUTRES inactifs anciens
     if (exactMatch) {
       await base44.asServiceRole.entities.FcmToken.update(exactMatch.id, {
         is_active: true,
@@ -88,28 +93,49 @@ Deno.serve(async (req) => {
         device_type,
       });
 
-      const toDelete = allUserTokens.filter(t => t.id !== exactMatch.id);
-      let supprimés = 0;
-      for (const old of toDelete) {
-        try { await base44.asServiceRole.entities.FcmToken.delete(old.id); supprimés++; } catch (_) {}
+      // Désactiver les AUTRES tokens (pas supprimer — préserver l'historique récent)
+      // Ne désactiver que ceux qui sont actifs mais différents
+      let desactivés = 0;
+      for (const old of allUserTokens) {
+        if (old.id === exactMatch.id) continue;
+        if (old.is_active) {
+          try {
+            await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
+            desactivés++;
+          } catch (_) {}
+        }
       }
 
-      console.log(`[FCM_SAVE_SUCCESS] action=reactivated | user=${cleanEmail} | token_id=${exactMatch.id} | supprimés=${supprimés} | delay=${Date.now() - t0}ms`);
+      console.log(`[FCM_SAVE_SUCCESS] action=reactivated | user=${cleanEmail} | token_id=${exactMatch.id} | desactivés=${desactivés} | delay=${Date.now() - t0}ms`);
       return Response.json({
         success: true, action: 'reactivated', token_id: exactMatch.id,
-        user_email: cleanEmail, tokens_avant: tokensAvant, tokens_supprimés: supprimés,
+        user_email: cleanEmail, tokens_avant: tokensAvant, tokens_desactivés: desactivés,
       }, { headers: corsHeaders });
     }
 
-    // CAS 2 : nouveau token → supprimer tous les anciens
-    let supprimés = 0;
+    // CAS 2 : nouveau token → désactiver les anciens actifs, créer le nouveau
+    let desactivés = 0;
     for (const old of allUserTokens) {
-      try { await base44.asServiceRole.entities.FcmToken.delete(old.id); supprimés++; } catch (_) {
-        try { await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false }); } catch (_) {}
+      if (old.is_active) {
+        try {
+          await base44.asServiceRole.entities.FcmToken.update(old.id, { is_active: false });
+          desactivés++;
+        } catch (_) {}
       }
     }
 
-    // Créer le nouveau token unique
+    // Supprimer les tokens vraiment anciens (> 30j) pour éviter l'accumulation
+    let supprimés = 0;
+    for (const old of allUserTokens) {
+      if (!isTokenRecent(old)) {
+        try {
+          await base44.asServiceRole.entities.FcmToken.delete(old.id);
+          supprimés++;
+        } catch (_) {}
+      }
+    }
+
+    // Créer le nouveau token actif
     let result;
     try {
       result = await base44.asServiceRole.entities.FcmToken.create({
@@ -125,11 +151,12 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, error: 'Création BDD: ' + createErr.message, step: 'create_db' }, { status: 500, headers: corsHeaders });
     }
 
-    console.log(`[FCM_SAVE_SUCCESS] action=created | user=${cleanEmail} | token_id=${result.id} | token_preview=${cleanToken.slice(0, 30)}... | supprimés=${supprimés} | delay=${Date.now() - t0}ms`);
+    console.log(`[FCM_SAVE_SUCCESS] action=created | user=${cleanEmail} | token_id=${result.id} | token_preview=${cleanToken.slice(0, 30)}... | desactivés=${desactivés} | supprimés_anciens=${supprimés} | delay=${Date.now() - t0}ms`);
 
     return Response.json({
       success: true, action: 'created', token_id: result.id,
-      user_email: cleanEmail, tokens_avant: tokensAvant, tokens_supprimés: supprimés,
+      user_email: cleanEmail, tokens_avant: tokensAvant,
+      tokens_desactivés: desactivés, tokens_supprimés_anciens: supprimés,
       token_preview: cleanToken.slice(0, 30) + '...',
     }, { headers: corsHeaders });
 

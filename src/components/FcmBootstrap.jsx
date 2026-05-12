@@ -322,6 +322,25 @@ export default function FcmBootstrap({ userEmail }) {
     }
   }, [startNativeFcm, setFcmReady, setFcmStatus]);
 
+  // ── Vérification rapide token actif en BDD (au montage) ─────────────────────
+  const checkAndBootIfNeeded = useCallback(async (email) => {
+    if (!email) return;
+    try {
+      const tokens = await base44.entities.FcmToken.filter({ user_email: email, is_active: true });
+      const hasActive = (tokens || []).some(t => t.token && t.token.length > 20);
+      if (!hasActive) {
+        console.warn(`[FCM_BOOT_RECOVERY] Aucun token actif au démarrage → re-register immédiat | user=${email}`);
+        setFcmStatus('recovery');
+        await startNativeFcmRef.current?.(email);
+      } else {
+        console.log(`[FCM_TOKEN_VERIFY_SUCCESS] Token actif confirmé au démarrage | user=${email} | count=${tokens.length}`);
+        markBootReady('startup_check');
+      }
+    } catch (e) {
+      console.warn(`[FCM_BOOT_RECOVERY] checkAndBootIfNeeded error: ${e?.message} → proceeding with normal boot`);
+    }
+  }, [markBootReady, setFcmStatus]);
+
   // ── Effect principal ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!userEmail) return;
@@ -367,6 +386,10 @@ export default function FcmBootstrap({ userEmail }) {
 
     // Statut initial
     setFcmStatus('booting');
+
+    // 0. Vérification immédiate : si token actif déjà en BDD → boot rapide sans attendre Firebase
+    // (couvre le cas APK rouvert après courte absence — évite le délai d'affichage du banner)
+    setTimeout(() => checkAndBootIfNeeded(userEmail), 300);
 
     // 1. Timeout de boot : si token jamais confirmé après BOOT_TIMEOUT_MS → recovery forcé
     bootTimerRef.current = setTimeout(async () => {
@@ -430,7 +453,7 @@ export default function FcmBootstrap({ userEmail }) {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('cdl_fcm_force_register', onForceRegister);
     };
-  }, [userEmail, native, startNativeFcm, silentRecovery, onTokenReceived, markBootReady, setFcmStatus, setFcmReady]);
+  }, [userEmail, native, startNativeFcm, silentRecovery, onTokenReceived, markBootReady, setFcmStatus, setFcmReady, checkAndBootIfNeeded]);
 
   return null;
 }
