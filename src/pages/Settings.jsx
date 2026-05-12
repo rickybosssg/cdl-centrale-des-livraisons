@@ -412,51 +412,7 @@ export default function Settings() {
           </Card>
            )}
 
-        {/* 🚨 Diagnostic notifications — SECTION PRIORITAIRE */}
-      <Card className="border-primary/50 bg-gradient-to-br from-primary/5 to-transparent">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            🔔 Problèmes de notifications ?
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">Si vous ne recevez pas de push, rafraîchissez votre token</p>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="space-y-2">
-        <Link to="/fcm-register-audit" className="flex items-center gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors">
-          <span className="text-xl">🔍</span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-amber-900">Audit Register → Save → BDD</p>
-            <p className="text-xs text-amber-700">8 étapes : register() token email save BDD push</p>
-          </div>
-          <span className="text-amber-400 text-sm">›</span>
-        </Link>
-        <Link to="/fcm-apk-audit" className="flex items-center gap-3 p-4 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors">
-          <span className="text-xl">🔴</span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-red-900">Audit FCM APK Final</p>
-            <p className="text-xs text-red-700">9 checks Android runtime — test push minimal sans CDL</p>
-          </div>
-          <span className="text-red-400 text-sm">›</span>
-        </Link>
-          <Link to="/fcm-token-refresh" className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors">
-            <span className="text-lg font-bold">🔑</span>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-primary">Rafraîchir Token FCM</p>
-              <p className="text-xs text-muted-foreground">Force re-register → repare les notifications</p>
-            </div>
-            <span className="text-primary text-sm">›</span>
-          </Link>
-          <Link to="/fcm-quick-test" className="flex items-center gap-3 p-3 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 transition-colors">
-            <span className="text-lg">✅</span>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-green-900">Test Notification</p>
-              <p className="text-xs text-green-700">Envoyer un push test</p>
-            </div>
-            <span className="text-green-400 text-sm">›</span>
-          </Link>
-          </div>
-        </CardContent>
-      </Card>
+  
 
       {/* Localisation GPS */}
       {!isAdmin && activeProfileType === 'client' && (
@@ -470,7 +426,8 @@ export default function Settings() {
         }} />
       )}
 
-      {/* Diagnostic avancé — liens supplémentaires */}
+      {/* Diagnostic avancé — liens admin uniquement */}
+      {isAdmin && (
       <details className="p-3 rounded-lg border border-muted bg-muted/30 cursor-pointer hover:bg-muted/50">
         <summary className="font-semibold text-sm">📋 Diagnostics avancés (admin/tech)</summary>
         <div className="space-y-2 mt-3">
@@ -497,6 +454,7 @@ export default function Settings() {
           </Link>
         </div>
       </details>
+      )}
 
       {/* Effets clavier */}
       <Card>

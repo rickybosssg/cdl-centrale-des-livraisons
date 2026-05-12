@@ -305,6 +305,39 @@ export default function FcmBootstrap({ userEmail }) {
   // Synchroniser la ref
   useEffect(() => { startNativeFcmRef.current = startNativeFcm; }, [startNativeFcm]);
 
+  // ── Auto-détection + réparation token expiré (silencieux) ────────────────────
+  const autoRepairExpiredToken = useCallback(async (email) => {
+    if (!email) return;
+    try {
+      const tokens = await base44.entities.FcmToken.filter({ user_email: email });
+      if (!tokens || tokens.length === 0) return; // Aucun token du tout
+
+      // Séparer actifs vs inactifs/expirés
+      const now = Date.now();
+      const active = tokens.filter(t => {
+        if (!t.is_active) return false;
+        const ref = t.last_used || t.registered_at;
+        if (!ref) return true;
+        return now - new Date(ref).getTime() < TOKEN_MAX_AGE_MS;
+      });
+
+      // Si au moins 1 token actif valide → OK, on n'intervient pas
+      if (active.length > 0) {
+        console.log(`[FCM_AUTO_REPAIR] tokens valides trouvés | count=${active.length} | user=${email}`);
+        return;
+      }
+
+      // Pas de token actif valide → trigger re-register silencieux
+      console.warn(`[FCM_AUTO_REPAIR] Token expiré/absent détecté (${tokens.length} en BDD) | re-register silencieux | user=${email}`);
+      setFcmStatus('auto_repair');
+      
+      // Lancer re-register sans afficher banner (juste en arrière-plan)
+      await startNativeFcm(email);
+    } catch (e) {
+      console.error(`[FCM_AUTO_REPAIR] error: ${e?.message}`);
+    }
+  }, [setFcmStatus, startNativeFcm]);
+
   // ── Recovery silencieux ────────────────────────────────────────────────────
   const silentRecovery = useCallback(async (source = 'heartbeat') => {
     const email = lastEmailRef.current;
@@ -389,7 +422,9 @@ export default function FcmBootstrap({ userEmail }) {
 
     // 0. Vérification immédiate : si token actif déjà en BDD → boot rapide sans attendre Firebase
     // (couvre le cas APK rouvert après courte absence — évite le délai d'affichage du banner)
+    // + soft check auto-repair en parallèle (silencieux, pas de blocage)
     setTimeout(() => checkAndBootIfNeeded(userEmail), 300);
+    setTimeout(() => autoRepairExpiredToken(userEmail), 500);
 
     // 1. Timeout de boot : si token jamais confirmé après BOOT_TIMEOUT_MS → recovery forcé
     bootTimerRef.current = setTimeout(async () => {
@@ -423,9 +458,13 @@ export default function FcmBootstrap({ userEmail }) {
     // 2. Init immédiate
     const initTimer = setTimeout(() => startNativeFcm(userEmail), emailChanged ? 1500 : 500);
 
-    // 3. Heartbeat 8 min
+    // 3. Heartbeat 8 min (+ auto-repair)
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-    heartbeatRef.current = setInterval(() => silentRecovery('heartbeat'), HEARTBEAT_INTERVAL_MS);
+    heartbeatRef.current = setInterval(async () => {
+      const email = lastEmailRef.current;
+      await autoRepairExpiredToken(email);  // Check & repair silencieux
+      await silentRecovery('heartbeat');     // Vérification secondaire
+    }, HEARTBEAT_INTERVAL_MS);
 
     // 4. Retour foreground
     const onVisible = () => {
@@ -453,7 +492,7 @@ export default function FcmBootstrap({ userEmail }) {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('cdl_fcm_force_register', onForceRegister);
     };
-  }, [userEmail, native, startNativeFcm, silentRecovery, onTokenReceived, markBootReady, setFcmStatus, setFcmReady, checkAndBootIfNeeded]);
+  }, [userEmail, native, startNativeFcm, silentRecovery, onTokenReceived, markBootReady, setFcmStatus, setFcmReady, checkAndBootIfNeeded, autoRepairExpiredToken]);
 
   return null;
 }
