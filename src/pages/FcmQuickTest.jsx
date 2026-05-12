@@ -41,22 +41,15 @@ export default function FcmQuickTest() {
   }, []);
 
   const sendTest = async () => {
-    if (tokens.length === 0) {
-      toast.error('Aucun token enregistré');
-      return;
-    }
-
     setSending(true);
     try {
-      const res = await base44.functions.invoke('testNotification', {
-        user_email: user.email,
-        user_role: 'test'
-      });
-
-      if (res?.data?.success) {
-        toast.success('📬 Test envoyé! Check ton téléphone dans 5s.');
+      const res = await base44.functions.invoke('sendTestPush', { target_email: user.email });
+      const d = res?.data;
+      if (d?.fcm_sent > 0) {
+        toast.success('📬 Push envoyé via cdl_critical_alerts_v3 ! Check ton téléphone dans 5s.');
       } else {
-        toast.error('Erreur: ' + (res?.data?.error || 'Unknown'));
+        const msg = d?.note || d?.error || (d?.token_info?.token_found === false ? 'Aucun token FCM — ouvrir l\'APK' : 'Envoi échoué');
+        toast.error('Erreur: ' + msg);
       }
     } catch (err) {
       console.error('[FcmQuickTest] Send error:', err);

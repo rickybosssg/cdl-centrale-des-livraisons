@@ -261,28 +261,28 @@ export default function FcmTestFull() {
     }
   };
 
-  // STEP 7: Envoyer notification test
+  // STEP 7: Envoyer notification test via sendTestPush V3
   const sendTestNotif = async () => {
     try {
-      addLog('[STEP 7] Envoyer notification test...', 'info');
+      addLog('[STEP 7] Envoyer notification test (sendTestPush V3)...', 'info');
       updateStep('notif_send', 'loading');
 
-      const res = await base44.functions.invoke('testNotification', {
-        recipient_email: user?.email,
-        recipient_role: user?.role || 'user',
+      const res = await base44.functions.invoke('sendTestPush', {
+        target_email: user?.email,
       });
 
       const data = res?.data;
-      if (data?.success) {
-        addLog(`✅ Notification envoyée: ${data.details?.sent} token(s)`, 'success');
+      if (data?.fcm_sent > 0) {
+        addLog(`✅ Push envoyé via cdl_critical_alerts_v3 | msg_id=${data.firebase_message_id || 'N/A'}`, 'success');
         updateStep('notif_send', 'success');
         toast.success('📬 Notification envoyée — vérifiez votre téléphone');
       } else {
-        addLog(`❌ Notification FAILED: ${data?.message || 'unknown'}`, 'error');
+        const reason = data?.note || data?.error || (data?.token_info?.token_found === false ? 'Aucun token FCM réel — ouvrir l\'APK' : 'Push échoué');
+        addLog(`❌ Push FAILED: ${reason}`, 'error');
         updateStep('notif_send', 'error');
       }
     } catch (e) {
-      addLog(`❌ Notification error: ${e?.message}`, 'error');
+      addLog(`❌ sendTestPush error: ${e?.message}`, 'error');
       updateStep('notif_send', 'error');
     }
   };

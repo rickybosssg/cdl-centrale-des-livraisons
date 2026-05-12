@@ -80,16 +80,15 @@ export default function FcmTokenDebug() {
   const sendTestToEmail = async (email) => {
     setSending(true);
     try {
-      const res = await base44.functions.invoke('testNotification', {
-        recipient_email: email,
-        recipient_role: user?.role || 'admin',
-      });
-      if (res.data?.success) {
-        setLastResult({ status: 'success', email, ...res.data.details });
-        toast.success(`✅ Notif envoyée à ${email} (${res.data.details?.sent} token(s))`);
+      const res = await base44.functions.invoke('sendTestPush', { target_email: email });
+      const d = res.data;
+      if (d?.fcm_sent > 0) {
+        setLastResult({ status: 'success', email, sent: d.fcm_sent, tokens_found: d.token_info?.token_count || 0 });
+        toast.success(`✅ Push envoyé à ${email} | channel: cdl_critical_alerts_v3`);
       } else {
-        setLastResult({ status: 'failed', email, message: res.data?.details || res.data?.message });
-        toast.error(`⚠️ Échec: ${res.data?.details || res.data?.message}`);
+        const msg = d?.note || d?.error || (d?.token_info?.token_found === false ? 'Aucun token FCM — ouvrir l\'APK' : 'Envoi échoué');
+        setLastResult({ status: 'failed', email, message: msg });
+        toast.error(`⚠️ Échec: ${msg}`);
       }
     } catch (err) {
       setLastResult({ status: 'error', email, message: err.message });
@@ -355,7 +354,7 @@ export default function FcmTokenDebug() {
           </div>
           {isNative && (
             <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-blue-700">
-              <strong>Mode Capacitor natif détecté</strong> — Le canal Android "default" doit exister avec importance=5 pour les notifications app fermée.
+              <strong>Mode Capacitor natif détecté</strong> — Canal officiel : <code>cdl_critical_alerts_v3</code> (importance=5, heads-up activé, visible écran verrouillé).
             </div>
           )}
         </CardContent>

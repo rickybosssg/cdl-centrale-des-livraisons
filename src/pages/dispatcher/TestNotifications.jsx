@@ -104,32 +104,28 @@ export default function TestNotifications() {
     setSending(true);
     
     try {
-      console.log('[TestNotifications] Calling testFcmSend for:', selectedEmail);
-      const res = await base44.functions.invoke('testFcmSend', {
-        user_email: selectedEmail,
-        title: '🧪 Test CDL Notification',
-        body: 'Test depuis l\'admin panel',
+      console.log('[TestNotifications] Calling sendTestPush for:', selectedEmail);
+      const res = await base44.functions.invoke('sendTestPush', {
+        target_email: selectedEmail,
       });
 
       console.log('[TestNotifications] Response:', res.data);
 
-      // Succès : status 200 + success: true
-      if (res.data?.success) {
-        const sent = res.data.sent || 0;
-        const total = res.data.total || 0;
-        console.log('[TestNotifications] ✅ SUCCESS');
-        toast.success(`✅ Notification envoyée avec succès!\n${sent}/${total} tokens reçus`);
+      // Succès : fcm_sent > 0
+      const d = res.data;
+      if (d?.fcm_sent > 0) {
+        console.log('[TestNotifications] ✅ SUCCESS | firebase_message_id:', d.firebase_message_id);
+        toast.success(`✅ Push envoyé ! channel: cdl_critical_alerts_v3`);
         setLastResult({
           ok: true,
-          msg: `✅ Envoyée ! ${sent}/${total} token(s)`,
-          sent,
-          tokens_found: total,
+          msg: `✅ Envoyé ! fcm_sent=${d.fcm_sent} | msg_id=${d.firebase_message_id || 'N/A'}`,
+          sent: d.fcm_sent,
+          tokens_found: d.token_info?.token_count || 0,
           recipient_email: selectedEmail,
           timestamp: new Date().toISOString(),
         });
       } else {
-        // Erreur métier (success: false)
-        const errMsg = res.data?.message || res.data?.error || 'Utilisateur doit se connecter + autoriser les notifications';
+        const errMsg = d?.note || d?.error || (d?.token_info?.token_found === false ? 'Aucun token FCM — ouvrir l\'APK d\'abord' : 'Push échoué');
         console.log('[TestNotifications] ❌ FAILED:', errMsg);
         toast.error(`❌ ${errMsg}`);
         setLastResult({
@@ -391,8 +387,7 @@ export default function TestNotifications() {
             notifications. Le token est auto-sauvegardé en BDD.
           </p>
           <p>
-            <strong>Notif non reçue?</strong> Vérifie les logs de la console APK. Assure-toi que le canal
-            "default" est créé avec importance=5.
+            <strong>Notif non reçue?</strong> Vérifie les logs APK. Canal officiel : <code>cdl_critical_alerts_v3</code> (importance=5, heads-up activé).
           </p>
           <p>
             <strong>App fermée?</strong> Le payload FCM inclut la priorité HIGH + channel_id pour affichage
