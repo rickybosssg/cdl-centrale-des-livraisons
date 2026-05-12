@@ -13,7 +13,7 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const EXPECTED_CHANNEL = 'cdl_critical_alerts_v2';
+const EXPECTED_CHANNEL = 'cdl_critical_alerts_v3';
 const MAX_DELAY_MS = 5000;
 const SA_JSON = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
 
