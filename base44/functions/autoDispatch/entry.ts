@@ -75,12 +75,19 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
 
-    // ── 1. Mode dispatch ──────────────────────────────────────────────────
+    // ── 1. Mode dispatch — SOURCE DE VÉRITÉ BDD (jamais écrasé) ──────────
     const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
     const mode = configs[0]?.mode || 'auto';
+    const configId = configs[0]?.id || null;
+
+    if (configs.length > 0) {
+      console.log(`[DISPATCH_CONFIG_EXISTING_RESPECTED] mode=${mode} | id=${configId} | force=${forceDispatch}`);
+    } else {
+      console.log(`[DISPATCH_CONFIG_BOOT_READ] Aucune config BDD — fallback mode=auto (lecture seule, pas de création ici)`);
+    }
 
     if (mode === 'manuel' && !forceDispatch) {
-      console.log('[Dispatch] BLOQUÉ — mode manuel');
+      console.log(`[DISPATCH_MODE_NOT_OVERWRITTEN] BLOQUÉ — mode manuel respecté | configId=${configId}`);
       return Response.json({ success: false, blocked: true, reason: 'mode_manuel' });
     }
 

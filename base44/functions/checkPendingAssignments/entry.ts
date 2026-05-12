@@ -129,8 +129,16 @@ Deno.serve(async (req) => {
 
     const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
     const config = configs[0];
-    if (config?.mode === 'manuel' && !forceImmediateTrigger) {
-      console.log('[CHECK] Mode manuel — skip');
+    const mode = config?.mode || 'auto';
+
+    if (configs.length > 0) {
+      console.log(`[DISPATCH_CONFIG_EXISTING_RESPECTED] checkPendingAssignments | mode=${mode} | id=${config?.id}`);
+    } else {
+      console.log(`[DISPATCH_CONFIG_BOOT_READ] checkPendingAssignments — aucune config BDD | fallback mode=auto`);
+    }
+
+    if (mode === 'manuel' && !forceImmediateTrigger) {
+      console.log(`[DISPATCH_MODE_NOT_OVERWRITTEN] SKIP — mode manuel respecté par checkPendingAssignments`);
       return Response.json({ success: true, blocked: true, reason: 'mode_manuel', reassigned: 0, skipped: 0 });
     }
 

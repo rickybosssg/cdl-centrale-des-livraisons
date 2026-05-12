@@ -104,12 +104,22 @@ export function scoreDriver(driver, course) {
 
 /**
  * Récupère le mode de dispatch depuis la BDD.
+ * RÈGLE : ne jamais créer ni écraser une config existante.
+ * Fallback 'auto' uniquement si la BDD est inaccessible.
  */
 export async function getDispatchMode() {
   try {
     const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-    return configs[0]?.mode || 'auto';
-  } catch {
+    if (configs.length > 0) {
+      const mode = configs[0]?.mode || 'auto';
+      console.log(`[DISPATCH_CONFIG_BOOT_READ] mode=${mode} | id=${configs[0]?.id} | source=BDD`);
+      return mode;
+    }
+    // Aucune config en BDD — on n'en crée pas ici (responsabilité de setDispatchMode)
+    console.log(`[DISPATCH_CONFIG_BOOT_READ] Aucune config BDD — fallback mode=auto (lecture seule)`);
+    return 'auto';
+  } catch (err) {
+    console.warn(`[DISPATCH_CONFIG_BOOT_READ] Erreur lecture BDD — fallback mode=auto | err=${err?.message}`);
     return 'auto';
   }
 }

@@ -180,15 +180,27 @@ export default function DispatchMonitor() {
     try {
       const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
       if (configs.length > 0) {
-        console.log(`[DISPATCH_MODE_READ] mode=${configs[0].mode} | id=${configs[0].id}`);
-        setDispatchConfig(configs[0]);
+        const cfg = configs[0];
+        console.log(`[DISPATCH_CONFIG_BOOT_READ] mode=${cfg.mode} | id=${cfg.id} | source=BDD`);
+        console.log(`[DISPATCH_CONFIG_EXISTING_RESPECTED] Valeur BDD conservée — aucun écrasement`);
+        setDispatchConfig(cfg);
       } else {
-        console.log('[DISPATCH_MODE_READ] Aucune config — création avec mode=auto');
-        const created = await base44.entities.DispatchConfig.create({ mode: 'auto', force_override: true });
-        setDispatchConfig(created);
+        // Aucune config en BDD — initialiser via la fonction backend sécurisée (admin only)
+        // Cela garantit que la création passe par setDispatchMode avec les vérifications requises
+        console.log(`[DISPATCH_CONFIG_DEFAULT_CREATED] Aucune config BDD détectée — initialisation via backend`);
+        try {
+          const res = await base44.functions.invoke('setDispatchMode', { mode: 'auto' });
+          if (res.data?.config) {
+            console.log(`[DISPATCH_CONFIG_DEFAULT_CREATED] Config créée avec mode=auto | id=${res.data.config.id}`);
+            setDispatchConfig(res.data.config);
+          }
+        } catch (createErr) {
+          console.warn(`[DISPATCH_CONFIG_DEFAULT_CREATED] Échec init backend — mode=auto UI seulement | err=${createErr.message}`);
+          setDispatchConfig({ mode: 'auto', _local_only: true });
+        }
       }
     } catch (err) {
-      console.error('[DISPATCH_MODE_READ] Erreur lecture config:', err.message);
+      console.error(`[DISPATCH_CONFIG_BOOT_READ] Erreur lecture BDD | err=${err.message}`);
     }
   }, []);
 
@@ -212,29 +224,37 @@ export default function DispatchMonitor() {
   const toggleMode = async () => {
     if (!dispatchConfig) return;
     setTogglingMode(true);
-    const newMode = dispatchConfig.mode === 'auto' ? 'manuel' : 'auto';
 
-    // 1. Mise à jour optimiste immédiate de l'UI
+    // Capturer le mode actuel AVANT la mise à jour optimiste (évite closure stale)
+    const previousMode = dispatchConfig.mode;
+    const newMode = previousMode === 'auto' ? 'manuel' : 'auto';
+
+    console.log(`[DISPATCH_MODE_PERSIST_CHECK] Tentative changement : ${previousMode} → ${newMode}`);
+
+    // Mise à jour optimiste immédiate de l'UI
     setDispatchConfig(prev => ({ ...prev, mode: newMode }));
-    console.log(`[DISPATCH_MODE_WRITE] Optimistic UI update → ${newMode}`);
 
     try {
       const res = await base44.functions.invoke('setDispatchMode', { mode: newMode });
       if (!res.data?.success) throw new Error(res.data?.error || 'Erreur backend setDispatchMode');
 
-      console.log(`[DISPATCH_MODE_SYNC] ✅ Mode confirmé BDD → ${newMode}`);
-      // Synchroniser avec la réponse BDD (données fraîches)
+      // Synchroniser avec la réponse BDD (source de vérité)
       if (res.data?.config) {
+        const confirmedMode = res.data.config.mode;
         setDispatchConfig(res.data.config);
-        console.log(`[DISPATCH_MODE_REFRESH] Config rechargée depuis réponse backend | mode=${res.data.config.mode}`);
+        console.log(`[DISPATCH_MODE_PERSIST_CHECK] ✅ Persisté en BDD | mode_confirmé=${confirmedMode}`);
+        if (confirmedMode !== newMode) {
+          // La BDD a retourné un mode différent (ex: conflit concurrent) — logguer
+          console.warn(`[DISPATCH_MODE_NOT_OVERWRITTEN] BDD a retourné mode=${confirmedMode} ≠ demandé=${newMode} — BDD respectée`);
+        }
       } else {
         await loadDispatchConfig();
       }
       toast.success(newMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
     } catch (err) {
-      // Annuler la mise à jour optimiste si erreur
-      console.error(`[DISPATCH_MODE_WRITE] ❌ Erreur — rollback vers ${dispatchConfig.mode} | err=${err.message}`);
-      setDispatchConfig(prev => ({ ...prev, mode: dispatchConfig.mode }));
+      // Rollback vers le mode BDD précédent (pas de la closure)
+      console.error(`[DISPATCH_MODE_PERSIST_CHECK] ❌ Échec — rollback vers ${previousMode} | err=${err.message}`);
+      setDispatchConfig(prev => ({ ...prev, mode: previousMode }));
       toast.error('Erreur changement de mode: ' + err.message);
     } finally {
       setTogglingMode(false);
