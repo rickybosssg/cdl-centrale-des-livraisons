@@ -21,6 +21,8 @@ import { initCapacitorPush, isNativeApp } from '@/lib/nativePush';
 
 const APP_BASE_URL = 'https://cdl.base44.app';
 const FCM_DELAY_MS = 2000;
+const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // 10 min
+const TOKEN_MAX_AGE_DAYS = 7;
 
 // 🔒 CANAL UNIQUE VERROUILLÉ V3 — synchronisé avec sendCdlNotification + nativePush.js
 // NE JAMAIS MODIFIER cet objet sans mettre à jour les 3 fichiers simultanément
@@ -118,8 +120,27 @@ export async function saveFcmTokenRemote({ user_email, token, device_type = 'and
   }
 }
 
+// ─── Vérifier si l'utilisateur a un token actif en BDD ──────────────────────
+async function checkTokenExistsInBDD(userEmail) {
+  try {
+    const tokens = await base44.entities.FcmToken.filter({ user_email: userEmail, is_active: true });
+    const valid = (tokens || []).filter(t => {
+      if (!t.is_active) return false;
+      if (!t.registered_at && !t.last_used) return true;
+      const age = Date.now() - new Date(t.last_used || t.registered_at).getTime();
+      return age < TOKEN_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+    });
+    console.log(`[FCM_AUTO_RECOVERY_START] check_bdd | found=${valid.length} | user=${userEmail}`);
+    return valid.length > 0;
+  } catch (e) {
+    console.warn(`[FCM_AUTO_RECOVERY_START] check_bdd_error=${e?.message} | user=${userEmail}`);
+    return false; // Considérer absent → régénérer
+  }
+}
+
 export default function FcmBootstrap({ userEmail }) {
   const registeredEmail = useRef(null);
+  const heartbeatRef = useRef(null);
 
   useEffect(() => {
     if (!userEmail) return;
@@ -129,7 +150,7 @@ export default function FcmBootstrap({ userEmail }) {
     const native = isNativeApp();
     console.log(`[FCM_REGISTER_SUCCESS] Bootstrap START | native=${native} | email=${userEmail}`);
 
-    const timer = setTimeout(async () => {
+    const run = async () => {
       try {
         if (native) {
           await runNativeFcm(userEmail);
@@ -139,9 +160,46 @@ export default function FcmBootstrap({ userEmail }) {
       } catch (err) {
         console.error(`[FCM_SAVE_FAILED] Bootstrap error: ${err?.message}`);
       }
-    }, FCM_DELAY_MS);
+    };
 
-    return () => clearTimeout(timer);
+    const timer = setTimeout(run, FCM_DELAY_MS);
+
+    // ── Heartbeat : toutes les 10min, vérifier token en BDD + régénérer si absent ──
+    if (native) {
+      heartbeatRef.current = setInterval(async () => {
+        try {
+          const exists = await checkTokenExistsInBDD(userEmail);
+          if (!exists) {
+            console.warn(`[FCM_AUTO_RECOVERY_START] Heartbeat: token absent en BDD → régénération | user=${userEmail}`);
+            await runNativeFcm(userEmail);
+          } else {
+            console.log(`[FCM_REGISTER_SUCCESS] Heartbeat OK — token actif confirmé | user=${userEmail}`);
+          }
+        } catch (e) {
+          console.warn(`[FCM_SAVE_FAILED] Heartbeat error: ${e?.message}`);
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+    }
+
+    // ── visibilitychange : à chaque retour au premier plan, vérifier le token ──
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!native) return;
+      try {
+        const exists = await checkTokenExistsInBDD(userEmail);
+        if (!exists) {
+          console.warn(`[FCM_AUTO_RECOVERY_START] visibilitychange: token absent → régénération | user=${userEmail}`);
+          await runNativeFcm(userEmail);
+        }
+      } catch (_) {}
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearTimeout(timer);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [userEmail]);
 
   return null;
@@ -210,12 +268,19 @@ async function runNativeFcm(propEmail) {
         }
 
         console.log(`[FCM_TOKEN_RECEIVED] email résolu = ${email} | prêt pour save`);
+        console.log(`[FCM_TOKEN_REGENERATED] token prêt pour BDD | preview=${token.slice(0, 30)}... | user=${email}`);
         const result = await saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' });
 
         if (result?.success) {
-          console.log(`[FCM_SAVE_SUCCESS] ✅ Token FCM en BDD | action=${result.action} | id=${result.token_id}`);
+          console.log(`[FCM_TOKEN_SAVED] ✅ Token FCM en BDD | action=${result.action} | id=${result.token_id} | user=${email}`);
+          console.log(`[FCM_AUTO_RECOVERY_SUCCESS] token enregistré | user=${email} | id=${result.token_id}`);
+          // Exposer le token courant globalement pour le diagnostic
+          try { localStorage.setItem('cdl_fcm_current_token', token.slice(0, 60)); } catch (_) {}
+          try { localStorage.setItem('cdl_fcm_last_save', new Date().toISOString()); } catch (_) {}
         } else {
-          console.error(`[FCM_SAVE_FAILED] ❌ Échec save | error=${result?.error || 'inconnu'}`);
+          console.error(`[FCM_SAVE_FAILED] ❌ Échec save | error=${result?.error || 'inconnu'} | user=${email}`);
+          // Auto-retry après 30s
+          setTimeout(() => saveFcmTokenRemote({ user_email: email, token, device_type: 'android_native' }).catch(() => {}), 30000);
         }
       } catch (e) {
         console.error(`[FCM_SAVE_FAILED] onToken exception: ${e?.message}`);

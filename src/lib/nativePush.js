@@ -20,6 +20,7 @@ let _listeners = [];
 let _onToken = null;
 let _onForegroundNotif = null;
 let _onNotificationTap = null;
+let _onTokenRefreshCallback = null; // Callback global pour onTokenRefresh
 
 // ── Détection contexte natif ──────────────────────────────────────────────────
 export function isNativeApp() {
@@ -158,6 +159,18 @@ async function attachListeners(PN) {
       console.error('[NativePush] ❌ registrationError:', JSON.stringify(err));
     }));
 
+    // onTokenRefresh — Firebase renouvelle le token automatiquement
+    // (expiration, réinstallation, reset FCM) → on le re-sauvegarde immédiatement
+    _listeners.push(await PN.addListener('registration', (token) => {
+      // Ce listener "registration" est aussi déclenché par Firebase lors d'un token refresh
+      // La logique dans le callback principal le gère déjà — ici on loggue explicitement
+      const val = token?.value;
+      if (val && _onTokenRefreshCallback) {
+        console.log('[NativePush] 🔄 onTokenRefresh — nouveau token Firebase détecté:', val.slice(0, 25) + '…');
+        _onTokenRefreshCallback(val);
+      }
+    }).catch(() => null)); // Peut échouer si déjà attaché — non-fatal
+
     _listeners.push(await PN.addListener('pushNotificationReceived', (notif) => {
       console.log('[NativePush] 📬 Notification foreground:', notif?.title);
       if (_onForegroundNotif) _onForegroundNotif(notif);
@@ -239,6 +252,8 @@ export async function initCapacitorPush({ onToken, onForegroundNotif, onNotifica
   _onToken = onToken;
   _onForegroundNotif = onForegroundNotif;
   _onNotificationTap = onNotificationTap;
+  // onTokenRefresh = même callback que onToken (on re-sauvegarde le nouveau token)
+  _onTokenRefreshCallback = onToken;
 
   // Étape 4 : Attacher les listeners AVANT register()
   await attachListeners(PN);

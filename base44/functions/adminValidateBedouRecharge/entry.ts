@@ -346,88 +346,26 @@ Deno.serve(async (req) => {
 
   console.log(`[PUSH_V3_PIPELINE_ADMIN] DONE | sent=${notifAdminResult.sent ?? 0} | failed=${notifAdminResult.failed ?? 0} | token_found=${(notifAdminResult.sent ?? 0) + (notifAdminResult.failed ?? 0) > 0} | firebase_message_id=${notifAdminResult.firebase_message_id || 'N/A'} | error=${notifAdminResult.error || 'none'}`);
 
-  // Log V2 diagnostic — tous les champs demandés
-  console.log('[PUSH_V2_PIPELINE]', {
-    event_type: 'bedou_recharge_approved',
-    target_role_admin: 'admin',
-    target_role_client: 'client',
-    target_email_admin: adminEmail,
-    target_email_client: clientEmail,
-    internal_admin_created: internalAdminCreated,
-    internal_client_created: internalClientCreated,
-    admin_token_found: (notifAdminResult.total || 0) > 0,
-    client_token_found: (notifClientResult.total || 0) > 0,
-    fcm_admin_sent: notifAdminResult.sent || 0,
-    fcm_client_sent: notifClientResult.sent || 0,
-    firebase_message_id_admin: notifAdminResult.firebase_message_id || null,
-    firebase_message_id_client: notifClientResult.firebase_message_id || null,
-    channel_id: 'cdl_critical_alerts_v3',
-    error_admin: notifAdminResult.note || notifAdminResult.error || null,
-    error_client: notifClientResult.note || notifClientResult.error || null,
-    delay_ms: Date.now() - t0,
-  });
+  const elapsed = Date.now() - t0;
+  const fcmClientSent = notifClientResult.sent || 0;
+  const fcmAdminSent  = notifAdminResult.sent || 0;
 
-  // Log pipeline complet
-  console.log('[RECHARGE_NOTIFY_PIPELINE]', {
-    recharge_id: request_id,
+  console.log('[BEDOU_RECHARGE_FLOW_END]', {
+    request_id,
     client_email: clientEmail,
     admin_email: adminEmail,
-    bedou_updated: true,
+    solde_avant: ancienSolde,
+    solde_apres: nouveauSolde,
+    montant_credite: montantCredite,
     internal_client_created: internalClientCreated,
     internal_admin_created: internalAdminCreated,
-    push_client_called: true,
-    push_client_sent: (notifClientResult.sent || 0) > 0,
-    push_admin_called: true,
-    push_admin_sent: (notifAdminResult.sent || 0) > 0,
-    fcm_client_token_found: (notifClientResult.sent || 0) + (notifClientResult.failed || 0) > 0,
-    fcm_admin_token_found: (notifAdminResult.sent || 0) + (notifAdminResult.failed || 0) > 0,
-    error: null,
-    delay_ms: Date.now() - t0,
-  });
-
-  // Alias pour compatibilité logs existants
-  const notifResult = notifClientResult;
-
-  const elapsed = Date.now() - t0;
-  console.log('[ADMIN_VALIDATE_DONE]', {
-    action: 'validate',
-    request_id,
-    client_email: demande.user_email,
-    ancien_solde: ancienSolde,
-    nouveau_solde: nouveauSolde,
-    montant_credite: montantCredite,
-    fcm_sent: notifResult.sent || 0,
-    fcm_failed: notifResult.failed || 0,
-    delay_ms: elapsed,
-  });
-  console.log('[BEDOU_REALTIME_SYNC]', {
-    client_email: demande.user_email,
-    event_received: 'admin_validate',
-    push_client_sent: (notifResult.sent || 0) > 0,
-    internal_notification_sent: true,
-    reload_triggered: true,
-    reload_source: 'push_bedou_realtime',
-    solde_avant: ancienSolde,
-    solde_apres: nouveauSolde,
-    delay_ms: elapsed,
-  });
-
-  console.log('[CLIENT_RECHARGE_FINAL_CHECK]', {
-    client_email: demande.user_email,
-    recharge_id: request_id,
-    bedou_updated: true,
-    internal_notification_created: internalClientCreated,
-    push_called: true,
-    push_sent: (notifResult.sent || 0) > 0,
-    fcm_token_found: (notifResult.sent || 0) + (notifResult.failed || 0) > 0,
-    fcm_failed: notifResult.failed || 0,
-    reload_dashboard: true,
-    reload_monbedou: true,
-    reload_commander: true,
-    solde_avant: ancienSolde,
-    solde_apres: nouveauSolde,
-    solde_disponible_apres: nouveauDisponible,
-    solde_bonus_apres: nouveauSoldeBonus,
+    push_v3_client_sent: fcmClientSent,
+    push_v3_admin_sent: fcmAdminSent,
+    firebase_message_id_client: notifClientResult.firebase_message_id || null,
+    firebase_message_id_admin: notifAdminResult.firebase_message_id || null,
+    channel_id: 'cdl_critical_alerts_v3',
+    error_client: notifClientResult.note || notifClientResult.error || null,
+    error_admin: notifAdminResult.note || notifAdminResult.error || null,
     delay_ms: elapsed,
   });
 
@@ -444,9 +382,9 @@ Deno.serve(async (req) => {
     solde_bonus: nouveauSoldeBonus,
     bonus: bonusAmount,
     montant_credite: montantCredite,
-    fcm_sent: notifResult.sent || 0,
-    fcm_failed: notifResult.failed || 0,
-    notification_client_sent: (notifResult.sent || 0) > 0,
+    fcm_sent: fcmClientSent,
+    fcm_failed: notifClientResult.failed || 0,
+    notification_client_sent: fcmClientSent > 0,
     delay_ms: elapsed,
   }, { headers: CORS_HEADERS });
 });

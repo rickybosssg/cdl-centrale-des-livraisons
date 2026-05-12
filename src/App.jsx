@@ -132,6 +132,7 @@ import FcmPermissionBanner from './components/FcmPermissionBanner';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
 import FcmRegisterAudit from './pages/FcmRegisterAudit';
+import FcmPersistentDiag from './pages/FcmPersistentDiag';
 import NotifCoverage from './pages/dispatcher/NotifCoverage';
 import PushV2Audit from './pages/dispatcher/PushV2Audit';
 
@@ -411,6 +412,7 @@ const AuthenticatedApp = () => {
         <Route path="/fcm-token-refresh" element={<FcmTokenRefresh />} />
         <Route path="/fcm-apk-audit" element={<FcmApkAudit />} />
         <Route path="/fcm-register-audit" element={<FcmRegisterAudit />} />
+        <Route path="/fcm-persistent-diag" element={<FcmPersistentDiag />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />
