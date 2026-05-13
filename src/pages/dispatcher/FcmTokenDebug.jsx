@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import FcmCleanupPanel from '@/components/FcmCleanupPanel';
 
 export default function FcmTokenDebug() {
   const navigate = useNavigate();
@@ -359,6 +360,9 @@ export default function FcmTokenDebug() {
           )}
         </CardContent>
       </Card>
+
+      {/* Nettoyage tokens FCM (admin) */}
+      {user?.role === 'admin' && <FcmCleanupPanel />}
 
       {/* Liste des emails avec tokens (admin) */}
       {user?.role === 'admin' && allTokenUsers.length > 0 && (
