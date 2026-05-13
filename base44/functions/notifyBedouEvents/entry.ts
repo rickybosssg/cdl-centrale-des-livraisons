@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
 
     const notify = (payload) => {
       console.log(`[notifyBedouEvents] → notify | user=${payload.user_email || ''} role=${payload.role || ''} type=${payload.data?.type || ''}`);
-      return base44.asServiceRole.functions.invoke('sendCdlNotification', payload).catch(e =>
+      return base44.functions.invoke('sendCdlNotification', payload).catch(e =>
         console.warn('[notifyBedouEvents] notify error (non-fatal):', e.message)
       );
     };
