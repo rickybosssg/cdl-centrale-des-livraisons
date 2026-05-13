@@ -193,39 +193,56 @@ async function createInternalNotif(base44, { recipientEmail, title, body, data =
   }
 }
 
-// ── Résoudre les tokens à utiliser (actifs + fallback inactif récent) ─────────
+// ── FcmTokenEngine.getActiveTokens — SOURCE UNIQUE pour résolution tokens ─────
+// Règle : actifs valides en premier, fallback inactif récent si token_count=0
+// Si token_count=0 → logger cause exacte + déclencher repair via Notification entity
 async function resolveTokensForEmail(base44, email) {
-  // 1. Chercher tokens actifs
+  // 1. Tokens actifs valides
   const activeTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true });
-  const validActive = (activeTokens || []).filter(t => t.token && !isTestToken(t.token));
+  const validActive = (activeTokens || []).filter(t => t.token && !isTestToken(t.token) && getTokenAge(t) < FALLBACK_MAX_AGE_MS);
 
   if (validActive.length > 0) {
-    // Trier par last_used desc
     validActive.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0));
-    console.log(`[FCM_TOKEN_RESOLVE] email=${email} | active_count=${validActive.length} | best_preview=${validActive[0].token.slice(0, 30)}...`);
+    console.log(`[FCM_TOKEN_RESOLVE] engine=FcmTokenEngine | email=${email} | active_count=${validActive.length} | best_preview=${validActive[0].token.slice(0, 30)}...`);
     return { tokens: validActive, usedFallback: false };
   }
 
-  // 2. Fallback : chercher le dernier token inactif récent (< 7 jours)
-  console.warn(`[FCM_TOKEN_RESOLVE] email=${email} | active_count=0 → tentative fallback token inactif récent`);
+  // 2. Fallback : dernier inactif récent (< 7 jours)
+  console.warn(`[FCM_TOKEN_RESOLVE] engine=FcmTokenEngine | email=${email} | active_count=0 → fallback token inactif récent`);
   const allTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email }, '-updated_date', 20);
   const recentInactive = (allTokens || [])
     .filter(t => t.token && !isTestToken(t.token) && getTokenAge(t) < FALLBACK_MAX_AGE_MS)
-    .sort((a, b) => getTokenAge(a) - getTokenAge(b)); // plus récent en premier
+    .sort((a, b) => getTokenAge(a) - getTokenAge(b));
 
   if (recentInactive.length > 0) {
     const best = recentInactive[0];
     const ageH = Math.round(getTokenAge(best) / 3600000);
-    console.warn(`[FCM_TOKEN_FALLBACK] email=${email} | using_inactive_token | age_hours=${ageH} | preview=${best.token.slice(0, 30)}...`);
-    // Réactiver ce token temporairement pour l'envoi
+    console.warn(`[FCM_TOKEN_FALLBACK] engine=FcmTokenEngine | email=${email} | using_inactive_token | age_hours=${ageH} | preview=${best.token.slice(0, 30)}...`);
     try {
       await base44.asServiceRole.entities.FcmToken.update(best.id, { is_active: true, last_used: new Date().toISOString() });
     } catch (_) {}
     return { tokens: [best], usedFallback: true };
   }
 
-  console.error(`[FCM_BOOT_RECOVERY] recipient_email=${email} | token_count=0 | error=NO_TOKEN_AT_ALL | inactive_total=${(allTokens || []).length}`);
-  return { tokens: [], usedFallback: false };
+  // token_count=0 → NE PAS SKIP silencieusement — logger cause exacte
+  const totalInBdd = (allTokens || []).length;
+  const cause = totalInBdd === 0 ? 'NO_TOKEN_EVER_SAVED' : 'ALL_TOKENS_EXPIRED_OR_INACTIVE';
+  console.error(`[FCM_ENGINE_REPAIR_NEEDED] engine=FcmTokenEngine | recipient_email=${email} | token_count=0 | cause=${cause} | total_in_bdd=${totalInBdd}`);
+
+  // Créer une Notification interne de réparation pour que le client re-register au prochain login
+  try {
+    await base44.asServiceRole.entities.Notification.create({
+      destinataire_email: email,
+      titre: '🔧 Synchronisation notifications',
+      message: 'Votre connexion aux notifications nécessite une mise à jour. Ouvrez l\'app pour la rétablir.',
+      type: 'warning',
+      lue: false,
+      target_screen: '/settings',
+      notification_key: `${email}__fcm_repair__${cause}__${new Date().toDateString()}`,
+    });
+  } catch (_) {}
+
+  return { tokens: [], usedFallback: false, cause };
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────

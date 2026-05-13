@@ -21,125 +21,19 @@ import { useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { initCapacitorPush, isNativeApp } from '@/lib/nativePush';
 import { useFcmReady } from '@/context/FcmReadyContext';
+import FcmTokenEngine from '@/lib/FcmTokenEngine';
 
-const APP_BASE_URL = 'https://cdl.base44.app';
-const HEARTBEAT_INTERVAL_MS = 8 * 60 * 1000;  // 8 min
-const TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
-const SAVE_DEBOUNCE_MS = 10_000;
-const BOOT_TIMEOUT_MS = 20_000;   // 20s max avant recovery forcé
-const VERIFY_RETRY_MAX = 3;       // Nombre max de tentatives verify
+const HEARTBEAT_INTERVAL_MS = 8 * 60 * 1000;
+const BOOT_TIMEOUT_MS = 20_000;
 
-// ── Verrou anti-doublon save ──────────────────────────────────────────────────
-const _saveRecent = new Map();
-
-function shouldSkipSave(email, token) {
-  const key = `${email}__${token.slice(0, 20)}`;
-  const last = _saveRecent.get(key) || 0;
-  const elapsed = Date.now() - last;
-  if (elapsed < SAVE_DEBOUNCE_MS) {
-    console.log(`[FCM_SAVE_ATTEMPT] debounce skip — ${elapsed}ms | user=${email}`);
-    return true;
-  }
-  _saveRecent.set(key, Date.now());
-  setTimeout(() => _saveRecent.delete(key), SAVE_DEBOUNCE_MS * 3);
-  return false;
-}
-
-async function resolveEmail(propEmail) {
-  if (propEmail) return propEmail;
-  try {
-    const me = await Promise.race([
-      base44.auth.me(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
-    ]);
-    return me?.email || null;
-  } catch (e) {
-    console.warn('[FCM_SAVE_FAILED] resolveEmail:', e?.message);
-    return null;
-  }
-}
-
-// ── Save public endpoint ──────────────────────────────────────────────────────
-export async function saveFcmTokenRemote({ user_email, token, device_type = 'android_native' }) {
-  if (!user_email || !token) {
-    console.error(`[FCM_SAVE_FAILED] params manquants | email=${!!user_email} token=${!!token}`);
-    return { success: false };
-  }
-  if (shouldSkipSave(user_email, token)) return { success: false, action: 'debounced' };
-
-  console.log(`[FCM_TOKEN_SAVE_START] user=${user_email} | token_preview=${token.slice(0, 30)}...`);
-
-  try {
-    const res = await fetch(`${APP_BASE_URL}/functions/saveFcmTokenPublic`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_email, token, device_type }),
-    });
-    const text = await res.text();
-    let data = {};
-    try { data = JSON.parse(text); } catch (_) {
-      console.error(`[FCM_SAVE_FAILED] JSON parse | raw=${text.slice(0, 150)}`);
-      return { success: false };
-    }
-
-    if (res.ok && data?.success) {
-      console.log(`[FCM_TOKEN_SAVE_SUCCESS] action=${data.action} | token_id=${data.token_id} | user=${user_email}`);
-      try {
-        localStorage.setItem('cdl_fcm_current_token', token);
-        localStorage.setItem('cdl_fcm_last_save', new Date().toISOString());
-        localStorage.setItem('cdl_fcm_last_user', user_email);
-      } catch (_) {}
-      return data;
-    }
-
-    console.error(`[FCM_SAVE_FAILED] HTTP ${res.status} | error=${data.error || '?'} | user=${user_email}`);
-    return { success: false, error: data.error };
-  } catch (err) {
-    console.error(`[FCM_SAVE_FAILED] fetch error | ${err.message} | user=${user_email}`);
-    return { success: false };
-  }
-}
-
-// ── Vérification forte : relire BDD et comparer avec token local ──────────────
-async function verifyTokenInBdd(userEmail, localToken, attempt = 1) {
-  try {
-    const tokens = await base44.entities.FcmToken.filter({ user_email: userEmail, is_active: true });
-    const valid = (tokens || []).filter(t => {
-      if (!t.is_active) return false;
-      const ref = t.last_used || t.registered_at;
-      if (!ref) return true;
-      return Date.now() - new Date(ref).getTime() < TOKEN_MAX_AGE_MS;
-    });
-
-    if (valid.length === 0) {
-      console.error(`[FCM_BOOT_RECOVERY] verifyTokenInBdd | aucun token actif BDD | attempt=${attempt} | user=${userEmail}`);
-      return { verified: false, count: 0 };
-    }
-
-    // Comparer token local vs token BDD
-    if (localToken) {
-      const localPreview = localToken.slice(0, 60);
-      const bddMatch = valid.find(t => t.token && t.token.startsWith(localPreview.slice(0, 30)));
-      if (!bddMatch) {
-        console.warn(`[FCM_BOOT_RECOVERY] token local != BDD | local_preview=${localPreview.slice(0, 30)} | bdd_preview=${valid[0].token.slice(0, 30)} | user=${userEmail}`);
-        // Mismatch → le token BDD est différent du local, mais il y a quand même un token actif
-        // On accepte si la BDD a au moins 1 token valide récent
-        console.log(`[FCM_TOKEN_VERIFY_SUCCESS] token BDD valide (mismatch local accepté) | count=${valid.length} | user=${userEmail}`);
-        return { verified: true, count: valid.length };
-      }
-    }
-
-    console.log(`[FCM_TOKEN_VERIFY_SUCCESS] token confirmé en BDD | count=${valid.length} | user=${userEmail}`);
-    return { verified: true, count: valid.length };
-  } catch (e) {
-    console.error(`[FCM_BOOT_RECOVERY] verifyTokenInBdd error | ${e?.message} | user=${userEmail}`);
-    return { verified: false, count: 0 };
-  }
+// ── Compat : anciens appels saveFcmTokenRemote → FcmTokenEngine ──────────────
+export async function saveFcmTokenRemote({ user_email, token }) {
+  return FcmTokenEngine.saveToken(user_email, token, 'saveFcmTokenRemote_compat');
 }
 
 // ── Vérifier existence rapide (pour heartbeat/recovery) ──────────────────────
 async function hasActiveBddToken(userEmail) {
-  const { verified } = await verifyTokenInBdd(userEmail, null);
+  const { verified } = await FcmTokenEngine.verify(userEmail);
   return verified;
 }
 
@@ -165,10 +59,19 @@ export default function FcmBootstrap({ userEmail }) {
     }
   }, [setFcmReady, setFcmStatus]);
 
-  // ── Callback token (registration + refresh) ──────────────────────────────
+  // ── Callback token (registration + refresh) → délégué à FcmTokenEngine ─────
   const onTokenReceived = useCallback(async (token, source = 'registration') => {
     try {
-      const email = await resolveEmail(lastEmailRef.current);
+      let email = lastEmailRef.current;
+      if (!email) {
+        try {
+          const me = await Promise.race([
+            base44.auth.me(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+          ]);
+          email = me?.email || null;
+        } catch (_) {}
+      }
       if (!email) {
         console.error(`[FCM_SAVE_FAILED] email indisponible | source=${source}`);
         return;
@@ -176,47 +79,29 @@ export default function FcmBootstrap({ userEmail }) {
 
       console.log(`[FCM_TOKEN_RECEIVED] source=${source} | preview=${token.slice(0, 30)}... | user=${email}`);
 
-      // Vérifier token local existant
-      let localToken = null;
-      try { localToken = localStorage.getItem('cdl_fcm_current_token'); } catch (_) {}
-      if (localToken) {
-        console.log(`[FCM_TOKEN_LOCAL_FOUND] local_preview=${localToken.slice(0, 30)}... | user=${email}`);
-      }
+      // Tout délégué à FcmTokenEngine (save + verify)
+      const result = await FcmTokenEngine.saveToken(email, token, source);
 
-      // Save en BDD
-      const result = await saveFcmTokenRemote({ user_email: email, token, device_type: native ? 'android_native' : 'web' });
-
-      if (result?.success) {
-        // Vérification forte post-save
-        let verified = false;
-        for (let attempt = 1; attempt <= VERIFY_RETRY_MAX; attempt++) {
-          await new Promise(r => setTimeout(r, 800 * attempt)); // délai croissant
-          const { verified: v } = await verifyTokenInBdd(email, token, attempt);
-          if (v) { verified = true; break; }
-          console.warn(`[FCM_BOOT_RECOVERY] verify attempt ${attempt}/${VERIFY_RETRY_MAX} failed | user=${email}`);
-        }
-
-        if (verified) {
-          console.log(`[FCM_AUTO_RECOVERY_SUCCESS] token enregistré et vérifié BDD | user=${email} | source=${source}`);
-          markBootReady('post_save_verify');
-        } else {
-          // Mismatch persistant → re-trigger recovery
-          console.error(`[FCM_BOOT_RECOVERY] verify failed après ${VERIFY_RETRY_MAX} tentatives → re-register | user=${email}`);
-          setFcmStatus('recovery');
-          setTimeout(() => startNativeFcmRef.current?.(email), 2000);
-        }
+      if (result?.success && result?.verified) {
+        console.log(`[FCM_AUTO_RECOVERY_SUCCESS] token enregistré et vérifié BDD | user=${email} | source=${source}`);
+        markBootReady('post_save_verify');
+      } else if (result?.success && !result?.verified) {
+        // Sauvé mais verify failed → re-register
+        console.error(`[FCM_BOOT_RECOVERY] verify échoué → re-register | user=${email}`);
+        setFcmStatus('recovery');
+        setTimeout(() => startNativeFcmRef.current?.(email), 2000);
       } else if (result?.action !== 'debounced') {
         console.error(`[FCM_SAVE_FAILED] échec save | error=${result?.error} | retry 30s`);
-        setTimeout(() => saveFcmTokenRemote({ user_email: email, token, device_type: native ? 'android_native' : 'web' }).catch(() => {}), 30_000);
+        setTimeout(() => FcmTokenEngine.saveToken(email, token, 'retry').catch(() => {}), 30_000);
       } else {
-        // Debounce = token déjà sauvé récemment → vérifier si BDD ok quand même
-        const { verified } = await verifyTokenInBdd(email, token);
+        // Debounce → vérifier BDD quand même
+        const { verified } = await FcmTokenEngine.verify(email);
         if (verified) markBootReady('debounced_verify_ok');
       }
     } catch (e) {
       console.error(`[FCM_SAVE_FAILED] onTokenReceived: ${e?.message}`);
     }
-  }, [native, markBootReady]);
+  }, [markBootReady, setFcmStatus]);
 
   // Ref pour permettre appel récursif sans dépendance circulaire
   const startNativeFcmRef = useRef(null);
@@ -305,38 +190,26 @@ export default function FcmBootstrap({ userEmail }) {
   // Synchroniser la ref
   useEffect(() => { startNativeFcmRef.current = startNativeFcm; }, [startNativeFcm]);
 
-  // ── Auto-détection + réparation token expiré (silencieux) ────────────────────
+  // ── Auto-détection + réparation token expiré → délégué à FcmTokenEngine ─────
   const autoRepairExpiredToken = useCallback(async (email) => {
     if (!email) return;
     try {
-      const tokens = await base44.entities.FcmToken.filter({ user_email: email });
-      if (!tokens || tokens.length === 0) return; // Aucun token du tout
-
-      // Séparer actifs vs inactifs/expirés
-      const now = Date.now();
-      const active = tokens.filter(t => {
-        if (!t.is_active) return false;
-        const ref = t.last_used || t.registered_at;
-        if (!ref) return true;
-        return now - new Date(ref).getTime() < TOKEN_MAX_AGE_MS;
-      });
-
-      // Si au moins 1 token actif valide → OK, on n'intervient pas
-      if (active.length > 0) {
-        console.log(`[FCM_AUTO_REPAIR] tokens valides trouvés | count=${active.length} | user=${email}`);
+      const { count, tokens } = await FcmTokenEngine.getActiveTokens(email);
+      if (count > 0) {
+        console.log(`[FCM_AUTO_REPAIR] tokens valides trouvés | count=${count} | user=${email}`);
         return;
       }
-
-      // Pas de token actif valide → trigger re-register silencieux
-      console.warn(`[FCM_AUTO_REPAIR] Token expiré/absent détecté (${tokens.length} en BDD) | re-register silencieux | user=${email}`);
+      // Vérifier si il y avait des tokens avant (inactifs)
+      const allTokens = await base44.entities.FcmToken.filter({ user_email: email }, null, 5);
+      const cause = (allTokens?.length || 0) > 0 ? 'all_tokens_expired' : 'no_token_ever_saved';
+      console.warn(`[FCM_AUTO_REPAIR] Token absent/expiré | cause=${cause} | user=${email} → re-register silencieux`);
       setFcmStatus('auto_repair');
-      
-      // Lancer re-register sans afficher banner (juste en arrière-plan)
-      await startNativeFcm(email);
+      // FcmTokenEngine.repair dispatche l'event → startNativeFcm le capte
+      await FcmTokenEngine.repair(email, cause);
     } catch (e) {
       console.error(`[FCM_AUTO_REPAIR] error: ${e?.message}`);
     }
-  }, [setFcmStatus, startNativeFcm]);
+  }, [setFcmStatus]);
 
   // ── Recovery silencieux ────────────────────────────────────────────────────
   const silentRecovery = useCallback(async (source = 'heartbeat') => {
@@ -355,18 +228,17 @@ export default function FcmBootstrap({ userEmail }) {
     }
   }, [startNativeFcm, setFcmReady, setFcmStatus]);
 
-  // ── Vérification rapide token actif en BDD (au montage) ─────────────────────
+  // ── Vérification rapide token actif en BDD (au montage) → FcmTokenEngine ────
   const checkAndBootIfNeeded = useCallback(async (email) => {
     if (!email) return;
     try {
-      const tokens = await base44.entities.FcmToken.filter({ user_email: email, is_active: true });
-      const hasActive = (tokens || []).some(t => t.token && t.token.length > 20);
-      if (!hasActive) {
+      const { verified, count } = await FcmTokenEngine.verify(email);
+      if (!verified) {
         console.warn(`[FCM_BOOT_RECOVERY] Aucun token actif au démarrage → re-register immédiat | user=${email}`);
         setFcmStatus('recovery');
         await startNativeFcmRef.current?.(email);
       } else {
-        console.log(`[FCM_TOKEN_VERIFY_SUCCESS] Token actif confirmé au démarrage | user=${email} | count=${tokens.length}`);
+        console.log(`[FCM_TOKEN_VERIFY_SUCCESS] Token actif confirmé au démarrage | user=${email} | count=${count}`);
         markBootReady('startup_check');
       }
     } catch (e) {
