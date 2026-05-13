@@ -156,12 +156,9 @@ const PermissionEngine = {
   async openAndroidSettings() {
     if (isNative()) {
       try {
-        const { NativeSettings } = await import('capacitor-native-settings');
-        await NativeSettings.openAndroid({ option: 'application_details' });
-      } catch (_) {
-        // Fallback
-        try { window.open('app-settings:', '_system'); } catch (_2) {}
-      }
+        // Fallback universel — ouvrir les paramètres via schéma URI
+        window.open('app-settings:', '_system');
+      } catch (_) {}
     }
   },
 };

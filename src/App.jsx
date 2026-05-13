@@ -138,6 +138,7 @@ import FcmEngineDashboard from './pages/FcmEngineDashboard';
 import FcmPersistentDiag from './pages/FcmPersistentDiag';
 import NotifCoverage from './pages/dispatcher/NotifCoverage';
 import PushV2Audit from './pages/dispatcher/PushV2Audit';
+import SystemHealth from './pages/dispatcher/SystemHealth';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -480,6 +481,7 @@ const AuthenticatedApp = () => {
           <Route path="/test-notifications" element={<TestNotifications />} />
           <Route path="/admin/notif-coverage" element={<NotifCoverage />} />
           <Route path="/admin/push-v2-audit" element={<PushV2Audit />} />
+          <Route path="/system-health" element={<SystemHealth />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
