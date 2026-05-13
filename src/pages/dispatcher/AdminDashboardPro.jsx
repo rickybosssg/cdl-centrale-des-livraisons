@@ -590,6 +590,7 @@ export default function AdminDashboardPro() {
             { to: "/health-dashboard", label: "Santé système", icon: Activity, color: "text-teal-600", bg: "bg-teal-50 border-teal-200" },
             { to: "/audit-complet",    label: "Audit complet", icon: Eye,       color: "text-purple-600", bg: "bg-purple-50 border-purple-200" },
             { to: "/bedou-audit",      label: "Audit Bedou",  icon: Wallet,    color: "text-green-600", bg: "bg-green-50 border-green-200" },
+            { to: "/admin/logs",       label: "Historiques",  icon: Activity,  color: "text-blue-600",  bg: "bg-blue-50 border-blue-200" },
           ].map(({ to, label, icon: Icon, color, bg }) => (
             <Link key={to} to={to}>
               <div className={`flex items-center gap-3 p-3 rounded-xl border ${bg} hover:shadow-sm transition-all active:scale-95 cursor-pointer`}>
