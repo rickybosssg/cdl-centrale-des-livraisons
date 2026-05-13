@@ -80,10 +80,14 @@ const HealthMonitorEngine = {
   async checkFcm() {
     return checkEngine('FcmTokenEngine', async () => {
       const FcmTokenEngine = (await import('./FcmTokenEngine')).default;
-      const report = await FcmTokenEngine.getDiagnosticReport();
+      let user = null;
+      try { user = await base44.auth.me(); } catch (_) {}
+      if (!user?.email) return { status: 'warn', message: 'Utilisateur non connecté — vérif FCM ignorée' };
+      const report = await FcmTokenEngine.getDiagnostics(user.email);
       if (!report) return { status: 'warn', message: 'Rapport FCM indisponible' };
-      if (report.activeCount === 0) return { status: 'critical', message: 'Aucun token FCM actif', details: report };
-      return { status: 'ok', message: `${report.activeCount} token(s) actif(s)`, details: report };
+      const activeCount = report.bdd_active ?? 0;
+      if (activeCount === 0) return { status: 'critical', message: 'Aucun token FCM actif', details: report };
+      return { status: 'ok', message: `${activeCount} token(s) actif(s)`, details: { bdd_active: activeCount, device: report.device?.device_type, local_match: report.local_match_in_bdd } };
     });
   },
 
