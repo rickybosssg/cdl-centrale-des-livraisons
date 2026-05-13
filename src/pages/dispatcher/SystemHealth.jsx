@@ -407,6 +407,27 @@ export default function SystemHealth() {
               <Database className="w-3 h-3" />
               Vider tout le cache
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full gap-1.5 text-xs border-orange-200 text-orange-700 hover:bg-orange-50"
+              disabled={running}
+              onClick={async () => {
+                setRunning(true);
+                try {
+                  const res = await base44.functions.invoke('cleanupStaleTokens', {});
+                  alert(`✅ FCM nettoyé\n- Supprimés (inactifs > 7j) : ${res.data?.deleted_stale ?? 0}\n- Dédupliqués (actifs) : ${res.data?.deduped_active ?? 0}`);
+                  setTimeout(runHealthCheck, 500);
+                } catch (e) {
+                  alert(`❌ Erreur: ${e.message}`);
+                } finally {
+                  setRunning(false);
+                }
+              }}
+            >
+              <Bell className="w-3 h-3" />
+              Nettoyer tokens FCM anciens
+            </Button>
           </CardContent>
         </Card>
       )}

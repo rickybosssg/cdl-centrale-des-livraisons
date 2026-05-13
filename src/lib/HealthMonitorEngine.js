@@ -83,11 +83,31 @@ const HealthMonitorEngine = {
       let user = null;
       try { user = await base44.auth.me(); } catch (_) {}
       if (!user?.email) return { status: 'warn', message: 'Utilisateur non connecté — vérif FCM ignorée' };
+
+      // Vérifier si on est sur APK native
+      const isNative = (
+        window.location?.protocol === 'capacitor:' ||
+        window.location?.protocol === 'file:' ||
+        window.Capacitor?.getPlatform?.() === 'android'
+      );
+
       const report = await FcmTokenEngine.getDiagnostics(user.email);
       if (!report) return { status: 'warn', message: 'Rapport FCM indisponible' };
       const activeCount = report.bdd_active ?? 0;
-      if (activeCount === 0) return { status: 'critical', message: 'Aucun token FCM actif', details: report };
-      return { status: 'ok', message: `${activeCount} token(s) actif(s)`, details: { bdd_active: activeCount, device: report.device?.device_type, local_match: report.local_match_in_bdd } };
+
+      // Si aucun token actif sur APK native → WARN (pas CRITICAL) : l'APK doit ouvrir /fcm-native-debug
+      if (activeCount === 0) {
+        const msg = isNative
+          ? 'Aucun token FCM actif — ouvrir /fcm-native-debug pour enregistrer'
+          : 'Aucun token FCM actif (web — push non configuré)';
+        return { status: 'warn', message: msg, details: report };
+      }
+
+      return {
+        status: 'ok',
+        message: `${activeCount} token(s) actif(s)`,
+        details: { bdd_active: activeCount, device: report.device?.device_type, local_match: report.local_match_in_bdd },
+      };
     });
   },
 
@@ -113,17 +133,21 @@ const HealthMonitorEngine = {
       const RealtimeSyncEngine = (await import('./RealtimeSyncEngine')).default;
       const status = RealtimeSyncEngine.getStatus?.() || {};
 
-      // OK : WebSocket connecté
-      if (status.ws === 'connected') {
-        return { status: 'ok', message: `[REALTIME_HEALTH_OK] WebSocket actif | subs=${status.subscriptionCount}`, details: status };
+      // OK : WebSocket connecté (état natif ou via subscription externe)
+      if (status.ws === 'connected' || status.subscriptionCount > 0) {
+        return {
+          status: 'ok',
+          message: `WebSocket actif | subs=${status.subscriptionCount || 0} | mode=${status.mode || 'realtime'}`,
+          details: status,
+        };
       }
       // WARN : fallback polling actif (dégradé mais fonctionnel)
       if (status.mode === 'polling') {
         return { status: 'warn', message: 'Fallback polling actif (WS non disponible)', details: status };
       }
-      // WARN : moteur non démarré / idle (pas encore utilisé, pas une erreur critique)
+      // WARN : moteur non démarré / idle (première ouverture de page, pas critique)
       if (!status.active || status.ws === 'unknown') {
-        return { status: 'warn', message: 'Moteur en attente de démarrage (premier utilisateur)', details: status };
+        return { status: 'warn', message: 'Moteur en attente de démarrage', details: status };
       }
       // CRITICAL : WS erreur + pas de fallback
       return { status: 'critical', message: `WS erreur + pas de fallback | ws=${status.ws}`, details: status };
