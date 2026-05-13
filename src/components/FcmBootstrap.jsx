@@ -19,9 +19,10 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
-import { initCapacitorPush, isNativeApp } from '@/lib/nativePush';
+import { initCapacitorPush, isNativeApp, getPermissionStatus } from '@/lib/nativePush';
 import { useFcmReady } from '@/context/FcmReadyContext';
 import FcmTokenEngine from '@/lib/FcmTokenEngine';
+import { PushNotifications } from '@capacitor/push-notifications';
 
 const HEARTBEAT_INTERVAL_MS = 8 * 60 * 1000;
 const BOOT_TIMEOUT_MS = 20_000;
