@@ -23,10 +23,10 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Profil introuvable' }, { status: 404 });
     }
 
-    // Accepter le profil demandé quelle que soit son validité côté client
+    // Accepter le profil actif en priorité, sinon le premier profil disponible
     // (la vérification de validation est faite côté frontend avant d'appeler cette fonction)
     const targetProfile = profiles.find(p => p.status === 'actif') || profiles[0];
-    if (!targetProfile) return Response.json({ error: 'Profil introuvable ou non validé' }, { status: 404 });
+    // targetProfile est toujours défini ici (profiles.length > 0 déjà vérifié au-dessus)
 
     // Désactiver tous les anciens profils actifs
     const oldActives = await base44.entities.UserProfile.filter({

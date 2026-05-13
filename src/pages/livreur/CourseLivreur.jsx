@@ -85,9 +85,22 @@ export default function CourseLivreur() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [course?.statut, id]);
 
-  // ── Étapes intermédiaires ──────────────────────────────────────────────────
+  // ── Transitions de statut valides pour le livreur ──────────────────────────
+  const LIVREUR_TRANSITIONS = {
+    acceptee:               ['driver_en_route_pickup'],
+    driver_en_route_pickup: ['arrived_pickup'],
+    arrived_pickup:         ['en_cours'],
+    en_cours:               ['arrived_dropoff', 'livree'],
+    arrived_dropoff:        ['livree'],
+  };
+
   const updateStatut = async (newStatut, extra = {}) => {
     if (updating) return;
+    const validNext = LIVREUR_TRANSITIONS[course?.statut] || [];
+    if (!validNext.includes(newStatut)) {
+      console.warn(`[CourseLivreur] Transition ignorée: ${course?.statut} → ${newStatut}`);
+      return;
+    }
     setUpdating(true);
     try {
       const update = { statut: newStatut, ...extra };
