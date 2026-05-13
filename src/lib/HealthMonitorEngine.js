@@ -112,11 +112,21 @@ const HealthMonitorEngine = {
     return checkEngine('RealtimeSyncEngine', async () => {
       const RealtimeSyncEngine = (await import('./RealtimeSyncEngine')).default;
       const status = RealtimeSyncEngine.getStatus?.() || {};
-      const wsOk = status.ws === 'connected' || status.mode === 'polling';
-      if (!wsOk && status.mode !== 'polling') {
-        return { status: 'warn', message: 'Realtime dégradé (fallback polling)', details: status };
+
+      // OK : WebSocket connecté
+      if (status.ws === 'connected') {
+        return { status: 'ok', message: `[REALTIME_HEALTH_OK] WebSocket actif | subs=${status.subscriptionCount}`, details: status };
       }
-      return { status: 'ok', message: `Realtime: ${status.mode || 'actif'}`, details: status };
+      // WARN : fallback polling actif (dégradé mais fonctionnel)
+      if (status.mode === 'polling') {
+        return { status: 'warn', message: 'Fallback polling actif (WS non disponible)', details: status };
+      }
+      // WARN : moteur non démarré / idle (pas encore utilisé, pas une erreur critique)
+      if (!status.active || status.ws === 'unknown') {
+        return { status: 'warn', message: 'Moteur en attente de démarrage (premier utilisateur)', details: status };
+      }
+      // CRITICAL : WS erreur + pas de fallback
+      return { status: 'critical', message: `WS erreur + pas de fallback | ws=${status.ws}`, details: status };
     });
   },
 
