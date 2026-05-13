@@ -93,6 +93,28 @@ class RealtimeSyncEngine {
     }, WS_RECONNECT_DELAY_MS);
   }
 
+  /**
+   * registerExternalSubscription — Appelé par un composant qui a déjà une
+   * subscription WS active (NotificationBell, BedouWidget, etc.).
+   * Permet au moteur de se marquer "connecté" sans dupliquer la subscription.
+   * @param {string} key    - clé unique ('notifications', 'bedou', etc.)
+   * @param {function} unsub - fonction de cleanup
+   * @param {string} email  - email utilisateur
+   */
+  registerExternalSubscription(key, unsub, email) {
+    if (this._subscriptions.has(key)) return; // déjà enregistré
+    this._subscriptions.set(key, unsub);
+    if (email && !this._userEmail) this._userEmail = email;
+    if (!this._active) {
+      this._active = true;
+      this._wsStatus = 'connected';
+      this._lastConnectedAt = new Date().toISOString();
+      this._pollingActive = false;
+      console.log(`[REALTIME_WEBSOCKET_CONNECTED] external sub registered | key=${key} | user=${email}`);
+      console.log(`[REALTIME_HEALTH_OK] moteur actif via subscription externe | subs=${this._subscriptions.size}`);
+    }
+  }
+
   /** Retourne l'état courant du moteur (utilisé par HealthMonitorEngine) */
   getStatus() {
     return {
