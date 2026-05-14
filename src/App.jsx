@@ -132,6 +132,7 @@ import FcmBootstrap from './components/FcmBootstrap';
 import FcmPermissionBanner from './components/FcmPermissionBanner';
 import FcmBootBanner from './components/FcmBootBanner';
 import { FcmReadyProvider } from '@/context/FcmReadyContext';
+import { DispatchModeProvider } from '@/context/DispatchModeContext';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
 import FcmRegisterAudit from './pages/FcmRegisterAudit';
@@ -569,6 +570,7 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <FcmReadyProvider>
+        <DispatchModeProvider>
         <TopNotificationProvider>
           <FcmErrorBoundary />
           <Router>
@@ -576,6 +578,7 @@ function App() {
           </Router>
           <Toaster />
         </TopNotificationProvider>
+        </DispatchModeProvider>
         </FcmReadyProvider>
       </QueryClientProvider>
     </AuthProvider>

@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useDispatchMode } from "@/context/DispatchModeContext";
 import { isDriverDispatchable } from "@/lib/dispatch";
 import moment from "moment";
 import {
@@ -91,9 +92,9 @@ export default function AdminDashboardPro() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);
-  const [dispatchMode, setDispatchMode] = useState("auto");
-  const [dispatchConfigId, setDispatchConfigId] = useState(null);
-  const [togglingMode, setTogglingMode] = useState(false);
+
+  // SOURCE UNIQUE : context global — plus de state local pour le mode dispatch
+  const { mode: dispatchMode, toggle: toggleMode } = useDispatchMode();
 
   // Data
   const [courses, setCourses] = useState([]);
@@ -128,10 +129,7 @@ export default function AdminDashboardPro() {
       if (retraitRes.status === "fulfilled") setDemandesRetrait(retraitRes.value || []);
       if (partenaireRes.status === "fulfilled") setPartenaires(partenaireRes.value || []);
       if (pubRes.status === "fulfilled") setPublicites(pubRes.value || []);
-      if (dispatchRes.status === "fulfilled" && dispatchRes.value?.length > 0) {
-        setDispatchMode(dispatchRes.value[0].mode || "auto");
-        setDispatchConfigId(dispatchRes.value[0].id);
-      }
+      // NOTE: dispatchMode géré par DispatchModeContext — pas de setDispatchMode ici
 
       setLastSync(new Date());
       console.log('[DASHBOARD] sync success');
@@ -253,23 +251,7 @@ export default function AdminDashboardPro() {
   if (demandesRetraitCount > 0) alerts.push({ level: "warning", title: `${demandesRetraitCount} retrait(s) Bedou en attente`, desc: "Validation des retraits requise", action: "/gestion-bedou", actionLabel: "Traiter" });
   if (livreursOnline.length < 3 && enAttente.length > 0) alerts.push({ level: "warning", title: `Peu de livreurs en ligne (${livreursOnline.length})`, desc: "Capacité de dispatch réduite", action: "/profils/livreurs", actionLabel: "Voir livreurs" });
 
-  // ── Toggle mode dispatch ────────────────────────────────────────────────────
-  const toggleMode = async () => {
-    setTogglingMode(true);
-    const newMode = dispatchMode === "auto" ? "manuel" : "auto";
-    try {
-      const res = await base44.functions.invoke("setDispatchMode", { mode: newMode });
-      if (res?.data?.success) {
-        setDispatchMode(newMode);
-        toast.success(newMode === "auto" ? "⚡ Mode automatique activé" : "🔧 Mode manuel activé");
-      }
-    } catch (e) {
-      console.error('[DASHBOARD] toggleMode error (non-fatal):', e?.message);
-      toast.error("Erreur changement de mode");
-    } finally {
-      setTogglingMode(false);
-    }
-  };
+  // toggleMode vient du context — plus de logique locale
 
   if (loading) {
     return (
@@ -280,6 +262,7 @@ export default function AdminDashboardPro() {
   }
 
   const isManuel = dispatchMode === "manuel";
+  console.log(`[UI_MODE_BEFORE_RENDER] AdminDashboardPro | dispatchMode=${dispatchMode} | isManuel=${isManuel}`);
 
   return (
     <div className="space-y-4 pb-24">
@@ -330,13 +313,12 @@ export default function AdminDashboardPro() {
         </div>
         <button
           onClick={toggleMode}
-          disabled={togglingMode}
-          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border-2 transition-all disabled:opacity-50 ${
+          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border-2 transition-all active:scale-95 ${
             !isManuel ? "border-amber-400 text-amber-700 bg-white" : "border-green-400 text-green-700 bg-white"
           }`}
         >
           {!isManuel ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-          {togglingMode ? "..." : !isManuel ? "Manuel" : "Auto"}
+          {!isManuel ? "Manuel" : "Auto"}
         </button>
       </div>
 

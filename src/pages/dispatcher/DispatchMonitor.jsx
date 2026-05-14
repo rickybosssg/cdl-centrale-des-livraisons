@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useDispatchMode } from "@/context/DispatchModeContext";
 import { classifyDriversForCourse } from "@/lib/dispatch";
 import {
   ArrowLeft, RefreshCw, Zap, Users, AlertCircle, Clock,
@@ -173,28 +174,9 @@ export default function DispatchMonitor() {
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
-  const [dispatchConfig, setDispatchConfig] = useState(null);
-  const [togglingMode, setTogglingMode] = useState(false);
 
-  const loadDispatchConfig = useCallback(async () => {
-    try {
-      const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-      if (configs.length > 0) {
-        const cfg = configs[0];
-        // Normaliser : "manual" → "manuel"
-        const normalized = cfg.mode === 'manual' ? 'manuel' : (cfg.mode || 'auto');
-        console.log(`[DISPATCH_MODE_READ] raw=${cfg.mode} | normalized=${normalized} | id=${cfg.id} | source=BDD`);
-        setDispatchConfig({ ...cfg, mode: normalized });
-      } else {
-        // Aucune config en BDD — afficher "auto" en UI uniquement, SANS écrire en BDD
-        // La création doit être explicite via un clic admin, jamais automatique
-        console.log(`[DISPATCH_CONFIG_BOOT_READ] Aucune config BDD — affichage auto (lecture seule, pas d'écriture)`);
-        setDispatchConfig({ mode: 'auto', _local_only: true });
-      }
-    } catch (err) {
-      console.error(`[DISPATCH_CONFIG_BOOT_READ] Erreur lecture BDD | err=${err.message}`);
-    }
-  }, []);
+  // SOURCE UNIQUE : context global — plus de state local pour le mode dispatch
+  const { mode: dispatchMode, toggle: toggleMode } = useDispatchMode();
 
   const load = useCallback(async () => {
     const [coursesData, allUsers] = await Promise.all([
@@ -213,60 +195,7 @@ export default function DispatchMonitor() {
     setLoading(false);
   }, []);
 
-  const toggleMode = async () => {
-    if (!dispatchConfig || togglingMode) return;
-    setTogglingMode(true);
-
-    const previousMode = dispatchConfig.mode;
-    const newMode = previousMode === 'auto' ? 'manuel' : 'auto';
-
-    console.log(`[DISPATCH_MODE_UPDATE_START] UI toggle : ${previousMode} → ${newMode}`);
-
-    // Mise à jour optimiste immédiate — l'UI reflète le changement sans attendre le backend
-    setDispatchConfig(prev => ({ ...prev, mode: newMode }));
-
-    // Timeout sécurité 4s — libère le bouton même si le backend freeze (APK natif)
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('TIMEOUT')), 4000)
-    );
-
-    try {
-      const res = await Promise.race([
-        base44.functions.invoke('setDispatchMode', { mode: newMode }),
-        timeoutPromise,
-      ]);
-
-      if (!res.data?.success) throw new Error(res.data?.error || 'Erreur backend setDispatchMode');
-
-      const confirmedMode = res.data?.config?.mode || newMode;
-      // Sync avec la réponse BDD confirmée (sans écraser si realtime a déjà mis à jour)
-      if (res.data?.config) {
-        setDispatchConfig(res.data.config);
-      }
-
-      console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] mode confirmé BDD=${confirmedMode}`);
-      if (confirmedMode === 'manuel') {
-        console.log(`[DISPATCH_AUTO_BLOCKED_MANUAL_MODE] Mode manuel actif — autoDispatch bloqué côté backend`);
-      }
-      toast.success(confirmedMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
-
-    } catch (err) {
-      if (err.message === 'TIMEOUT') {
-        // Timeout : la mise à jour optimiste reste (le backend a très probablement réussi)
-        // Le subscribe realtime va confirmer le vrai état dans la seconde qui suit
-        console.warn(`[DISPATCH_MODE_UPDATE_START] Timeout 4s — mode optimiste conservé=${newMode}, realtime confirmera`);
-        toast.success(newMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
-      } else {
-        console.error(`[DISPATCH_MODE_UPDATE_START] ❌ Échec rollback → ${previousMode} | err=${err.message}`);
-        setDispatchConfig(prev => ({ ...prev, mode: previousMode }));
-        toast.error('Erreur changement de mode: ' + err.message);
-      }
-    } finally {
-      // GARANTI dans tous les cas : success / error / timeout / exception inattendue
-      setTogglingMode(false);
-      console.log(`[DISPATCH_MODE_UI_UNLOCK] togglingMode=false | mode final=${newMode}`);
-    }
-  };
+  // toggleMode vient du context — aucune logique locale
 
   // Assigner manuellement un livreur à une course
   const handleAssign = async (course, driver) => {
@@ -335,20 +264,10 @@ export default function DispatchMonitor() {
   };
 
   useEffect(() => {
-    loadDispatchConfig();
     load();
     const interval = setInterval(load, 20000);
 
-    // Temps réel — DispatchConfig (sync multi-écrans instantanée)
-    const unsubConfig = base44.entities.DispatchConfig.subscribe((event) => {
-      if ((event.type === "update" || event.type === "create") && event.data) {
-        console.log(`[DISPATCH_MODE_SUBSCRIBE_RECEIVED] event=${event.type} | mode=${event.data.mode} | id=${event.data.id}`);
-        if (event.data.mode === 'manuel') {
-          console.log(`[DISPATCH_AUTO_BLOCKED_MANUAL_MODE] Mode manuel reçu via realtime — dispatch auto bloqué`);
-        }
-        setDispatchConfig(event.data);
-      }
-    });
+    // NOTE: DispatchConfig géré par DispatchModeContext — pas de subscribe local ici
 
     // Temps réel — Courses
     const unsubCourses = base44.entities.Course.subscribe((event) => {
@@ -357,7 +276,6 @@ export default function DispatchMonitor() {
     });
 
     // Temps réel — Livreurs (driver_online, profil_valide, nombre_courses_actives)
-    // SANS current_role : inclut tout utilisateur avec profil_valide=true + driver_online=true
     const unsubUsers = base44.entities.User.subscribe((event) => {
       if (event.type === "update" && event.data) {
         setLivreurs(prev => {
@@ -375,11 +293,12 @@ export default function DispatchMonitor() {
       }
     });
 
-    return () => { clearInterval(interval); unsubConfig(); unsubCourses(); unsubUsers(); };
+    return () => { clearInterval(interval); unsubCourses(); unsubUsers(); };
   }, []);
 
-  // Source unique : BDD — "manuel" ou "auto"
-  const isManuel = dispatchConfig?.mode === 'manuel';
+  // Source unique : DispatchModeContext
+  const isManuel = dispatchMode === 'manuel';
+  console.log(`[UI_MODE_BEFORE_RENDER] DispatchMonitor | dispatchMode=${dispatchMode} | isManuel=${isManuel}`);
   // Filtre SANS current_role — basé sur profil_valide + driver_online + non bloqué/suspendu
   const livreursOnline = livreurs.filter(l => !l.livreur_bloque && !l.livreur_suspendu);
   const livreursDispatchables = livreurs.filter(l =>
@@ -435,26 +354,19 @@ export default function DispatchMonitor() {
               <p className={`text-xs ${!isManuel ? 'text-green-700' : 'text-amber-700'}`}>
                 {!isManuel ? 'Courses assignées automatiquement selon le score' : 'Toutes les courses attendent votre assignation manuelle'}
               </p>
-              {dispatchConfig?.last_changed_by && (
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Modifié par {dispatchConfig.last_changed_by}
-                  {dispatchConfig.last_changed_at ? ` · ${moment(dispatchConfig.last_changed_at).format('DD/MM HH:mm')}` : ''}
-                </p>
-              )}
               <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                <Lock className="h-2.5 w-2.5" /> Source : BDD — ne se réinitialise jamais seul
+                <Lock className="h-2.5 w-2.5" /> Source : BDD via DispatchModeContext
               </p>
             </div>
           </div>
           <button
             onClick={toggleMode}
-            disabled={togglingMode}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 disabled:opacity-50 ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${
               !isManuel ? 'border-amber-400 text-amber-700 bg-white hover:bg-amber-50' : 'border-green-400 text-green-700 bg-white hover:bg-green-50'
             }`}
           >
             {!isManuel ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-            {togglingMode ? 'Sauvegarde...' : !isManuel ? 'Activer manuel' : 'Activer auto'}
+            {!isManuel ? 'Activer manuel' : 'Activer auto'}
           </button>
         </div>
       </div>

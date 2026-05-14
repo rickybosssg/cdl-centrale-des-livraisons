@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
+import { useDispatchMode } from "@/context/DispatchModeContext";
 import { Package, Users, TrendingUp, Clock, AlertCircle, Bell, Zap, LayoutGrid, Truck, Store, Megaphone, Wallet, Sparkles, Trash2, Activity, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,36 +47,12 @@ export default function AdminDashboard() {
   const [demandeBedouCount, setDemandeBedouCount] = useState(0);
   const [zonesData, setZonesData] = useState([]);
   const [syncingLivreurs, setSyncingLivreurs] = useState(false);
-  const [dispatchMode, setDispatchMode] = useState(null); // null = pas encore chargé
   const [coursesAAffecter, setCoursesAAffecter] = useState(0);
   const [testingFirebase, setTestingFirebase] = useState(false);
   const [firebaseTestResult, setFirebaseTestResult] = useState(null);
 
-  const normalizeDispatchMode = (raw) => {
-    if (!raw) return null; // null = pas encore chargé, jamais forcer 'auto'
-    const v = String(raw).toLowerCase().trim();
-    if (v === 'manual' || v === 'manuel') return 'manuel';
-    if (v === 'auto') return 'auto';
-    return null; // valeur inconnue → ne pas afficher un état faux
-  };
-
-  const loadDispatchMode = async () => {
-    try {
-      const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-      if (configs.length === 0) {
-        // Aucune config BDD → on affiche "auto" uniquement si vraiment rien en BDD
-        console.log(`[UI_MODE_RENDERED] Aucune config BDD — fallback affiché: auto`);
-        setDispatchMode('auto');
-        return;
-      }
-      const raw = configs[0]?.mode;
-      const normalized = normalizeDispatchMode(raw);
-      console.log(`[UI_MODE_RENDERED] raw=${raw} | normalized=${normalized} | id=${configs[0]?.id}`);
-      setDispatchMode(normalized);
-    } catch (e) {
-      console.warn('[DASHBOARD_DISPATCH_MODE_READ] erreur:', e.message);
-    }
-  };
+  // SOURCE UNIQUE : context global — plus de state local pour le mode dispatch
+  const { mode: dispatchMode } = useDispatchMode();
 
   const loadData = async () => {
     try {
@@ -198,19 +175,9 @@ export default function AdminDashboard() {
     console.log('[AdminDashboard] Component mounted');
     console.log('[AdminDashboard] Admin dashboard loaded');
     loadData();
-    loadDispatchMode();
     const interval = setInterval(loadData, 30000);
 
-    // Subscription dédiée DispatchConfig — temps réel, indépendante des autres KPIs
-    const unsubDispatch = base44.entities.DispatchConfig.subscribe((event) => {
-      if (!event?.data) return;
-      const raw = event.data.mode; // PAS de fallback 'auto' ici — lire exactement la BDD
-      const normalized = normalizeDispatchMode(raw);
-      console.log(`[UI_MODE_RENDERED] realtime event=${event.type} | raw=${raw} | normalized=${normalized} | id=${event.data.id}`);
-      if (normalized !== null) setDispatchMode(normalized);
-      else loadDispatchMode(); // mode inconnu → relire BDD proprement
-    });
-
+    // NOTE: pas de subscribe DispatchConfig ici — géré par DispatchModeContext (source unique)
     const unsubs = [];
     unsubs.push(base44.entities.User.subscribe(() => { loadData(); }));
     unsubs.push(base44.entities.Partenaire.subscribe(() => loadData()));
@@ -219,7 +186,6 @@ export default function AdminDashboard() {
 
     return () => {
       clearInterval(interval);
-      unsubDispatch?.();
       unsubs.forEach(u => u?.());
     };
   }, []);
