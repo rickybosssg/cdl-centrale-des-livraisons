@@ -84,17 +84,14 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, blocked: true, reason: 'no_canonical_config' });
     }
 
-    if (mode === 'manuel' && !forceDispatch) {
-      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | course=${courseId} | configId=${configId} | function=autoDispatch`);
-      console.log(`[MANUAL_MODE_PROTECTED] autoDispatch bloqué par verrou manuel | course=${courseId}`);
+    // VERROU ABSOLU — mode=manuel bloque TOUJOURS, force=true ne bypass JAMAIS
+    if (mode === 'manuel') {
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | course=${courseId} | configId=${configId} | function=autoDispatch | force_ignored=${forceDispatch}`);
+      console.log(`[MANUAL_MODE_PROTECTED] autoDispatch bloqué par verrou manuel (force ignoré) | course=${courseId}`);
       return Response.json({ success: false, blocked: true, reason: 'manual_mode_active' });
     }
 
-    if (mode === 'manuel' && forceDispatch) {
-      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] autoDispatch force=true en mode manuel | course=${courseId} | configId=${configId} | source=admin_force_dispatch`);
-    } else {
-      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] autoDispatch autorisé | mode=auto | course=${courseId} | configId=${configId}`);
-    }
+    console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] autoDispatch autorisé | mode=auto | course=${courseId} | configId=${configId}`);
 
     // ── 2. Récupérer la course ─────────────────────────────────────────────────
     const courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });

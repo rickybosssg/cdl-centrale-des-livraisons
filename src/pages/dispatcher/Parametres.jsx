@@ -50,8 +50,13 @@ export default function Parametres() {
   const [confirmText, setConfirmText] = useState("");
 
   useEffect(() => {
-    base44.entities.DispatchConfig.list('-updated_date', 1).then(configs => {
-      if (configs[0]) setParams(prev => ({ ...prev, mode_dispatch: configs[0].mode || 'auto' }));
+    // LECTURE CANONIQUE STRICTE — uniquement mode_key=GLOBAL
+    base44.entities.DispatchConfig.list('-updated_date', 50).then(configs => {
+      const canonical = configs.find(c => c.mode_key === 'GLOBAL');
+      if (canonical) {
+        console.log(`[DISPATCH_CANONICAL_READ] Parametres | mode=${canonical.mode} | id=${canonical.id}`);
+        setParams(prev => ({ ...prev, mode_dispatch: canonical.mode || 'auto' }));
+      }
     }).catch(() => {});
   }, []);
 
@@ -81,13 +86,19 @@ export default function Parametres() {
 
   const sauvegarder = async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(params));
-    // Sauvegarder le mode dans DispatchConfig (source de vérité BDD)
-    const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-    if (configs[0]) {
-      const me = await base44.auth.me();
-      await base44.entities.DispatchConfig.update(configs[0].id, {
-        mode: params.mode_dispatch, force_override: true, last_changed_by: me?.email || 'admin',
+    // ÉCRITURE CANONIQUE OBLIGATOIRE — passe toujours par setDispatchModeCanonical
+    try {
+      const res = await base44.functions.invoke('setDispatchModeCanonical', {
+        mode: params.mode_dispatch,
+        source: 'admin_click',
+        reason: 'Sauvegarde depuis Parametres admin',
       });
+      if (!res.data?.success) throw new Error(res.data?.error || 'setDispatchModeCanonical failed');
+      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] Parametres | mode=${params.mode_dispatch} | ok=true`);
+    } catch (e) {
+      console.error(`[DISPATCH_CANONICAL_WRITE_BLOCKED] Parametres | ${e.message}`);
+      toast.error("Erreur sauvegarde mode dispatch : " + e.message);
+      return;
     }
     setSaved(true);
     toast.success("Paramètres sauvegardés !");
