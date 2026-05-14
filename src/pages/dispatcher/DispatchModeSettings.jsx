@@ -13,13 +13,17 @@ export default function DispatchModeSettings() {
   const [changing, setChanging] = useState(false);
 
   const handleChangeMode = async (newMode) => {
-    if (mode === newMode) return;
+    if (mode === newMode) {
+      console.log(`[DISPATCH_MODE_BUTTON_CLICK] SKIP — déjà ${newMode}`);
+      return;
+    }
     
     console.log(`[DISPATCH_MODE_BUTTON_CLICK] ${mode} → ${newMode}`);
     setChanging(true);
     try {
       console.log(`[DISPATCH_MODE_SET_START] Calling setDispatchMode("${newMode}")`);
-      await setMode(newMode);
+      const result = await setMode(newMode);
+      console.log(`[DISPATCH_MODE_SET_SUCCESS] Result:`, result);
       console.log(`[DISPATCH_MODE_SET_SUCCESS] Mode ${newMode} activé`);
       toast.success(`✅ Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
       await refresh();

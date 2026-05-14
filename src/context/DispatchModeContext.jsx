@@ -11,10 +11,12 @@ export function DispatchModeProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // Chargement initial + subscription temps réel
-  const loadMode = useCallback(async () => {
+  const loadMode = useCallback(async (source = 'init') => {
     try {
-      const res = await base44.functions.invoke('getDispatchMode', {});
+      // Cache buster: ajoute timestamp pour éviter cache HTTP
+      const res = await base44.functions.invoke('getDispatchMode', { _t: Date.now() });
       const data = res.data;
+      console.log(`[DispatchModeContext] loadMode [${source}] | mode=${data.mode} | config_id=${data.config_id} | updated_at=${data.updated_at}`);
       setMode(data.mode);
       setUpdatedAt(data.updated_at);
       setUpdatedBy(data.updated_by);
@@ -29,10 +31,11 @@ export function DispatchModeProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    loadMode();
+    loadMode('init');
 
     // Subscription temps réel aux changements
     const unsubscribe = base44.entities.DispatchModeState.subscribe((event) => {
+      console.log('[DispatchModeContext] subscribe event:', event.type, event.data?.mode);
       if (event.type === 'update' && event.data) {
         setMode(event.data.mode);
         setUpdatedAt(event.data.updated_at);
@@ -52,29 +55,37 @@ export function DispatchModeProvider({ children }) {
   }, [loadMode]);
 
   // Action: changer le mode (appelle la fonction sécurisée)
-  const setModeSecure = useCallback(async (newMode) => {
+  const setModeSecure = useCallback(async (newMode, skipRefresh = false) => {
     if (!['auto', 'manuel'].includes(newMode)) {
       throw new Error(`Mode invalide: ${newMode}`);
     }
 
     try {
+      console.log(`[DispatchModeContext] setModeSecure START | newMode=${newMode}`);
       const res = await base44.functions.invoke('setDispatchMode', { mode: newMode });
+      console.log(`[DispatchModeContext] setModeSecure RESPONSE | success=${res.data?.success} | mode=${res.data?.mode}`);
+      
       if (!res.data?.success) {
         throw new Error(res.data?.error || 'setDispatchMode failed');
       }
       
-      // Mise à jour immédiate du state (la subscription confirmera)
+      // Mise à jour immédiate du state
       setMode(newMode);
       setUpdatedAt(res.data.updated_at);
       setUpdatedBy(res.data.updated_by);
       setConfigId(res.data.config_id);
+      
+      // Refresh immédiat pour confirmer depuis BDD
+      if (!skipRefresh) {
+        setTimeout(() => loadMode('post-set'), 500);
+      }
       
       return { success: true, mode: newMode };
     } catch (error) {
       console.error('[DispatchModeContext] setModeSecure error:', error);
       throw error;
     }
-  }, []);
+  }, [loadMode]);
 
   const value = {
     mode,

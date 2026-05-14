@@ -77,7 +77,12 @@ Deno.serve(async (req) => {
       updated_by: modeState.updated_by,
       updated_at: modeState.updated_at,
       config_id: modeState.id,
-    }, { headers: corsHeaders });
+    }, { 
+      headers: {
+        ...corsHeaders,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      }
+    });
 
   } catch (error) {
     console.error('[DISPATCH_MODE_WRITE_BLOCKED] ERROR:', error.message);
