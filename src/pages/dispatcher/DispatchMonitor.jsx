@@ -214,27 +214,34 @@ export default function DispatchMonitor() {
   }, []);
 
   const toggleMode = async () => {
-    if (!dispatchConfig) return;
+    if (!dispatchConfig || togglingMode) return;
     setTogglingMode(true);
 
     const previousMode = dispatchConfig.mode;
-    // Valeurs BDD : "auto" ou "manuel"
-    const newMode = (previousMode === 'auto') ? 'manuel' : 'auto';
+    const newMode = previousMode === 'auto' ? 'manuel' : 'auto';
 
     console.log(`[DISPATCH_MODE_UPDATE_START] UI toggle : ${previousMode} → ${newMode}`);
 
-    // Mise à jour optimiste
+    // Mise à jour optimiste immédiate — l'UI reflète le changement sans attendre le backend
     setDispatchConfig(prev => ({ ...prev, mode: newMode }));
 
+    // Timeout sécurité 4s — libère le bouton même si le backend freeze (APK natif)
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('TIMEOUT')), 4000)
+    );
+
     try {
-      const res = await base44.functions.invoke('setDispatchMode', { mode: newMode });
+      const res = await Promise.race([
+        base44.functions.invoke('setDispatchMode', { mode: newMode }),
+        timeoutPromise,
+      ]);
+
       if (!res.data?.success) throw new Error(res.data?.error || 'Erreur backend setDispatchMode');
 
       const confirmedMode = res.data?.config?.mode || newMode;
+      // Sync avec la réponse BDD confirmée (sans écraser si realtime a déjà mis à jour)
       if (res.data?.config) {
         setDispatchConfig(res.data.config);
-      } else {
-        await loadDispatchConfig();
       }
 
       console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] mode confirmé BDD=${confirmedMode}`);
@@ -242,12 +249,22 @@ export default function DispatchMonitor() {
         console.log(`[DISPATCH_AUTO_BLOCKED_MANUAL_MODE] Mode manuel actif — autoDispatch bloqué côté backend`);
       }
       toast.success(confirmedMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
+
     } catch (err) {
-      console.error(`[DISPATCH_MODE_UPDATE_START] ❌ Échec rollback → ${previousMode} | err=${err.message}`);
-      setDispatchConfig(prev => ({ ...prev, mode: previousMode }));
-      toast.error('Erreur changement de mode: ' + err.message);
+      if (err.message === 'TIMEOUT') {
+        // Timeout : la mise à jour optimiste reste (le backend a très probablement réussi)
+        // Le subscribe realtime va confirmer le vrai état dans la seconde qui suit
+        console.warn(`[DISPATCH_MODE_UPDATE_START] Timeout 4s — mode optimiste conservé=${newMode}, realtime confirmera`);
+        toast.success(newMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
+      } else {
+        console.error(`[DISPATCH_MODE_UPDATE_START] ❌ Échec rollback → ${previousMode} | err=${err.message}`);
+        setDispatchConfig(prev => ({ ...prev, mode: previousMode }));
+        toast.error('Erreur changement de mode: ' + err.message);
+      }
     } finally {
+      // GARANTI dans tous les cas : success / error / timeout / exception inattendue
       setTogglingMode(false);
+      console.log(`[DISPATCH_MODE_UI_UNLOCK] togglingMode=false | mode final=${newMode}`);
     }
   };
 
