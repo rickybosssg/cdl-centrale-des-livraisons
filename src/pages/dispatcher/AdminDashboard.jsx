@@ -52,18 +52,25 @@ export default function AdminDashboard() {
   const [firebaseTestResult, setFirebaseTestResult] = useState(null);
 
   const normalizeDispatchMode = (raw) => {
-    if (!raw) return 'auto';
+    if (!raw) return null; // null = pas encore chargé, jamais forcer 'auto'
     const v = String(raw).toLowerCase().trim();
     if (v === 'manual' || v === 'manuel') return 'manuel';
-    return 'auto';
+    if (v === 'auto') return 'auto';
+    return null; // valeur inconnue → ne pas afficher un état faux
   };
 
   const loadDispatchMode = async () => {
     try {
       const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-      const raw = configs[0]?.mode || 'auto';
+      if (configs.length === 0) {
+        // Aucune config BDD → on affiche "auto" uniquement si vraiment rien en BDD
+        console.log(`[UI_MODE_RENDERED] Aucune config BDD — fallback affiché: auto`);
+        setDispatchMode('auto');
+        return;
+      }
+      const raw = configs[0]?.mode;
       const normalized = normalizeDispatchMode(raw);
-      console.log(`[DASHBOARD_DISPATCH_MODE_READ] raw=${raw} | normalized=${normalized} | id=${configs[0]?.id || 'none'}`);
+      console.log(`[UI_MODE_RENDERED] raw=${raw} | normalized=${normalized} | id=${configs[0]?.id}`);
       setDispatchMode(normalized);
     } catch (e) {
       console.warn('[DASHBOARD_DISPATCH_MODE_READ] erreur:', e.message);
@@ -196,10 +203,12 @@ export default function AdminDashboard() {
 
     // Subscription dédiée DispatchConfig — temps réel, indépendante des autres KPIs
     const unsubDispatch = base44.entities.DispatchConfig.subscribe((event) => {
-      const raw = event?.data?.mode || 'auto';
+      if (!event?.data) return;
+      const raw = event.data.mode; // PAS de fallback 'auto' ici — lire exactement la BDD
       const normalized = normalizeDispatchMode(raw);
-      console.log(`[DASHBOARD_DISPATCH_MODE_SUBSCRIBE_RECEIVED] event=${event?.type} | raw=${raw} | normalized=${normalized}`);
-      setDispatchMode(normalized);
+      console.log(`[UI_MODE_RENDERED] realtime event=${event.type} | raw=${raw} | normalized=${normalized} | id=${event.data.id}`);
+      if (normalized !== null) setDispatchMode(normalized);
+      else loadDispatchMode(); // mode inconnu → relire BDD proprement
     });
 
     const unsubs = [];
