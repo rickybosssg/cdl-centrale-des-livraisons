@@ -172,7 +172,7 @@ async function offerCourseToDriver(base44, course, driver, position) {
   } else if (response.result === 'timeout') {
     updateData.status = 'timeout';
     // Remettre en attente si toujours assignée à ce livreur
-    const fresh = await base44.asServiceRole.entities.Course.filter({ id: course_id }, null, 1).catch(() => []);
+    const fresh = await base44.asServiceRole.entities.Course.filter({ id: course.id }, null, 1).catch(() => []);
     if (fresh[0]?.livreur_email === driver.email && fresh[0]?.statut === 'assignee_attente') {
       await base44.asServiceRole.entities.Course.update(course.id, {
         statut: 'en_attente', livreur_email: null, livreur_name: null,
