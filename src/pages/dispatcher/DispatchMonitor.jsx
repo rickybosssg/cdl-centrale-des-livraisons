@@ -179,20 +179,27 @@ export default function DispatchMonitor() {
   const { mode: dispatchMode, toggle: toggleMode } = useDispatchMode();
 
   const load = useCallback(async () => {
-    const [coursesData, allUsers] = await Promise.all([
-      base44.entities.Course.list("-created_date", 150),
-      // Charger tous les users — le filtre strict se fait côté JS
-      base44.entities.User.list('-updated_date', 500),
-    ]);
-    setCourses(coursesData || []);
-    // Critères SANS current_role : profil_valide + driver_online
-    // Un livreur multi-profils (ex: commercial+livreur) est inclus dès qu'il a profil_valide=true et driver_online=true
-    const livreursData = (allUsers || []).filter(u =>
-      u.driver_online === true && u.profil_valide === true
-    );
-    setLivreurs(livreursData);
-    setLastRefresh(new Date());
-    setLoading(false);
+    try {
+      const [coursesResult, usersResult] = await Promise.allSettled([
+        base44.entities.Course.list("-created_date", 150),
+        base44.entities.User.filter({ driver_online: true, profil_valide: true }, '-updated_date', 200),
+      ]);
+
+      if (coursesResult.status === 'fulfilled') {
+        setCourses(coursesResult.value || []);
+      }
+
+      if (usersResult.status === 'fulfilled') {
+        setLivreurs(usersResult.value || []);
+      } else {
+        console.warn('[DispatchMonitor] Erreur chargement livreurs:', usersResult.reason?.message);
+      }
+    } catch (err) {
+      console.error('[DispatchMonitor] Erreur load:', err.message);
+    } finally {
+      setLastRefresh(new Date());
+      setLoading(false);
+    }
   }, []);
 
   // toggleMode vient du context — aucune logique locale
