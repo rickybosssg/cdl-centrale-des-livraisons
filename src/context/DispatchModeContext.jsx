@@ -15,9 +15,9 @@ const DispatchModeContext = createContext(null);
 function normalizeMode(raw) {
   if (raw === 'manuel' || raw === 'manual') return 'manuel';
   if (raw === 'auto') return 'auto';
-  // Valeur inconnue → ne pas écraser, logguer
-  console.warn(`[DISPATCH_MODE_REVERT_DETECTED] Valeur inattendue raw="${raw}" — conservée telle quelle, pas de fallback auto`);
-  return raw || 'auto';
+  // Valeur inconnue → NE PAS fallback sur auto, logguer et rejeter
+  console.error(`[DISPATCH_FORCE_AUTO_DETECTED] normalizeMode — valeur inconnue raw="${raw}" — REJETÉ (pas de fallback auto)`);
+  return null; // null = rejeté
 }
 
 export function DispatchModeProvider({ children }) {
@@ -29,6 +29,10 @@ export function DispatchModeProvider({ children }) {
 
   const applyMode = useCallback((raw, source, id) => {
     const normalized = normalizeMode(raw);
+    if (normalized === null) {
+      console.error(`[DISPATCH_FORCE_AUTO_DETECTED] applyMode rejeté — raw="${raw}" source=${source} id=${id}`);
+      return; // Ne pas appliquer
+    }
     const prev = lastKnownMode.current;
 
     if (prev === 'manuel' && normalized === 'auto') {
@@ -46,14 +50,15 @@ export function DispatchModeProvider({ children }) {
 
   const loadFromDB = useCallback(async () => {
     try {
-      const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-      if (configs.length === 0) {
-        console.log('[DISPATCH_MODE_WRITE_SOURCE] source=BDD | aucune config → affichage auto (pas d\'écriture BDD)');
-        applyMode('auto', 'BDD_empty', null);
-      } else {
-        const cfg = configs[0];
-        applyMode(cfg.mode, 'BDD_load', cfg.id);
+      // STRICT : ne lire QUE le document canonique GLOBAL
+      const all = await base44.entities.DispatchConfig.list('-updated_date', 50);
+      const canonical = all.find(c => c.mode_key === 'GLOBAL');
+      if (!canonical) {
+        console.warn(`[DISPATCH_WRITE_SOURCE] V1 loadFromDB — aucun doc GLOBAL trouvé (${all.length} docs) — mode non appliqué`);
+        setLoading(false);
+        return;
       }
+      applyMode(canonical.mode, 'BDD_load_GLOBAL', canonical.id);
     } catch (e) {
       console.warn('[DispatchModeContext] loadFromDB error:', e.message);
     } finally {
@@ -65,15 +70,20 @@ export function DispatchModeProvider({ children }) {
     console.log('[DISPATCH_MODE_WRITE_SOURCE] Context mount — chargement BDD initial...');
     loadFromDB();
 
-    // Abonnement realtime unique — propagé à tous les consommateurs
+    // Abonnement realtime — FILTRE STRICT sur doc canonique GLOBAL
     const unsub = base44.entities.DispatchConfig.subscribe((event) => {
       if (!event?.data) return;
+      // Ignorer tout event non-canonique
+      if (event.data.mode_key !== 'GLOBAL') {
+        console.warn(`[DISPATCH_WRITE_SOURCE] V1 realtime IGNORÉ (non-GLOBAL): id=${event.data.id} mode_key=${event.data.mode_key || 'NONE'}`);
+        return;
+      }
       const raw = event.data.mode;
       if (!raw) {
         console.warn('[DISPATCH_MODE_REVERT_DETECTED] Realtime event sans mode — ignoré');
         return;
       }
-      applyMode(raw, `realtime_${event.type}`, event.data.id);
+      applyMode(raw, `realtime_${event.type}_GLOBAL`, event.data.id);
     });
 
     return () => unsub();

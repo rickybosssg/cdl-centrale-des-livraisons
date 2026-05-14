@@ -215,6 +215,17 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'course_id requis' }, { status: 400 });
   }
 
+  // ── 0. Vérifier le mode dispatch — STRICT GLOBAL ──────────────────────────
+  const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
+  const canonicalCfg = allConfigs.find(c => c.mode_key === 'GLOBAL');
+  const dispatchMode = (canonicalCfg || allConfigs[0])?.mode || 'auto';
+  L(`[DISPATCH_WRITE_SOURCE] createSmartDispatch | CANONICAL=${!!canonicalCfg} | mode=${dispatchMode} | id=${(canonicalCfg||allConfigs[0])?.id||'none'}`);
+
+  if (dispatchMode === 'manuel') {
+    L(`[DISPATCH_FORCE_AUTO_DETECTED] BLOQUÉ — mode=manuel actif. createSmartDispatch ne dispatche pas en mode manuel.`);
+    return Response.json({ ok: true, blocked: true, reason: 'mode_manuel' });
+  }
+
   // ── 1. Charger la course ──────────────────────────────────────────────────
   let course = null;
   try {

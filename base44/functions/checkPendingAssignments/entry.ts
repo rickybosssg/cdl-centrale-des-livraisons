@@ -127,15 +127,12 @@ Deno.serve(async (req) => {
     const singleCourseId = body.course_id || null;
     const forceImmediateTrigger = body.force_immediate === true;
 
-    const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
-    const config = configs[0];
-    const mode = config?.mode || 'auto';
+    const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50);
+    const canonicalConfig = allConfigs.find(c => c.mode_key === 'GLOBAL');
+    const activeConfig = canonicalConfig || allConfigs[0] || null;
+    const mode = activeConfig?.mode || 'auto';
 
-    if (configs.length > 0) {
-      console.log(`[DISPATCH_CONFIG_EXISTING_RESPECTED] checkPendingAssignments | mode=${mode} | id=${config?.id}`);
-    } else {
-      console.log(`[DISPATCH_CONFIG_BOOT_READ] checkPendingAssignments — aucune config BDD | fallback mode=auto`);
-    }
+    console.log(`[DISPATCH_WRITE_SOURCE] checkPendingAssignments | CANONICAL=${!!canonicalConfig} | mode=${mode} | id=${activeConfig?.id || 'none'} | totalDocs=${allConfigs.length}`);
 
     if (mode === 'manuel' && !forceImmediateTrigger) {
       console.log(`[DISPATCH_MODE_NOT_OVERWRITTEN] SKIP — mode manuel respecté par checkPendingAssignments`);

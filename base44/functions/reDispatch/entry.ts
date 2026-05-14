@@ -43,8 +43,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
-    if (configs[0]?.mode === 'manuel') {
+    const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
+    const canonicalCfg = allConfigs.find(c => c.mode_key === 'GLOBAL');
+    const reDispatchMode = (canonicalCfg || allConfigs[0])?.mode || 'auto';
+    console.log(`[DISPATCH_WRITE_SOURCE] reDispatch | CANONICAL=${!!canonicalCfg} | mode=${reDispatchMode}`);
+    if (reDispatchMode === 'manuel') {
       return Response.json({ success: false, blocked: true, reason: 'mode_manuel' });
     }
 

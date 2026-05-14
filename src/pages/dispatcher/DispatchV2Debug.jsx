@@ -94,10 +94,12 @@ export default function DispatchV2Debug() {
           id: canonical?.id || null,
           mode_key: canonical?.mode_key || null,
           last_changed_by: canonical?.last_changed_by || null,
+          last_changed_at: canonical?.last_changed_at || null,
+          updated_date: canonical?.updated_date || null,
           allCount: all.length,
           allModes: all.map(c => `${c.mode}(${c.mode_key || 'NO_KEY'})`).join(', '),
         };
-        console.log(`[STABILITY_${delay / 1000}s] mode=${entry.mode} | id=${entry.id} | changed_by=${entry.last_changed_by} | all=${entry.allModes}`);
+        console.log(`[STABILITY_${delay / 1000}s] mode=${entry.mode} | id=${entry.id} | changed_by=${entry.last_changed_by} | updated=${entry.updated_date} | all=${entry.allModes}`);
         setStabilityLog(prev => [...prev, entry]);
         if (delay === 30000) {
           setStabilityRunning(false);
@@ -295,8 +297,10 @@ export default function DispatchV2Debug() {
                       }
                     </div>
                     <p>id: {entry.id || '—'}</p>
-                    <p>changed_by: {entry.last_changed_by || '—'}</p>
-                    <p>all_docs ({entry.allCount}): {entry.allModes}</p>
+                     <p>changed_by: <span className="font-bold">{entry.last_changed_by || '—'}</span></p>
+                     <p>changed_at: {entry.last_changed_at ? moment(entry.last_changed_at).format('HH:mm:ss') : '—'}</p>
+                     <p>updated_date: <span className={isReverted ? 'text-red-600 font-bold' : ''}>{entry.updated_date ? moment(entry.updated_date).format('HH:mm:ss.SSS') : '—'}</span></p>
+                     <p>all_docs ({entry.allCount}): {entry.allModes}</p>
                   </div>
                 );
               })}
