@@ -44,21 +44,18 @@ export default function DispatchModeSettings() {
 
   const handleChangeMode = async (newMode) => {
     if (mode === newMode) {
-      console.log(`[DISPATCH_MANUAL_BUTTON_CLICKED] SKIP — déjà ${newMode}`);
       return;
     }
     
     console.log(`[DISPATCH_MANUAL_BUTTON_CLICKED] ${mode} → ${newMode}`);
     setChanging(true);
     try {
-      // Appel DIRECT avec token frais
       const res = await base44.functions.invoke('setDispatchMode', { mode: newMode, _t: Date.now() });
       
       if (!res.data?.success) {
         throw new Error(res.data?.error || 'Échec');
       }
       
-      // Mise à jour immédiate UI
       setMode(newMode);
       setUpdatedAt(res.data.updated_at);
       setUpdatedBy(res.data.updated_by);
@@ -66,7 +63,6 @@ export default function DispatchModeSettings() {
       console.log(`[DISPATCH_MANUAL_BUTTON_SUCCESS] Mode ${newMode} activé`);
       toast.success(`✅ Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
       
-      // Refresh confirmation BDD
       setTimeout(() => loadMode(), 500);
     } catch (error) {
       console.error(`[DISPATCH_MANUAL_BUTTON_ERROR] ${error.message}`);
