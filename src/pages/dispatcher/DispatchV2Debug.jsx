@@ -70,36 +70,65 @@ export default function DispatchV2Debug() {
     stabilityTimers.current.forEach(t => clearTimeout(t));
     stabilityTimers.current = [];
 
+    const modeAvant = mode;
+    const modeAttendu = modeAvant === 'auto' ? 'manuel' : 'auto';
+    const testStartTs = new Date().toISOString();
+
     // Snapshot avant clic
-    const snapshot = {
-      modeAvant: mode,
-      canonicalId,
-      ts: new Date().toISOString(),
-    };
+    const snapshot = { modeAvant, canonicalId, ts: testStartTs };
     setClickSnapshot(snapshot);
 
-    // Lancer le toggle
-    await toggle(user?.email);
+    // Lancer le toggle via setDispatchModeCanonical directement (pour capturer last_changed_at confirmé)
+    let confirmedChangedAt = null;
+    try {
+      const res = await base44.functions.invoke('setDispatchModeCanonical', {
+        mode: modeAttendu,
+        source: 'admin_click',
+        reason: `Stability test: ${modeAvant} → ${modeAttendu}`,
+      });
+      if (res.data?.success) {
+        confirmedChangedAt = res.data?.config?.last_changed_at;
+        console.log(`[STABILITY_TOGGLE_OK] mode=${modeAttendu} | confirmed_changed_at=${confirmedChangedAt}`);
+      } else {
+        console.error(`[STABILITY_TOGGLE_FAIL] ${JSON.stringify(res.data)}`);
+        setStabilityRunning(false);
+        return;
+      }
+    } catch (err) {
+      console.error(`[STABILITY_TOGGLE_ERR] ${err.message}`);
+      setStabilityRunning(false);
+      return;
+    }
 
     // Lire à 1s, 5s, 15s, 30s
+    // Une vraie réversion = mode ≠ modeAttendu ET last_changed_at ≠ confirmedChangedAt (qqqn d'autre a écrasé)
     const delays = [1000, 5000, 15000, 30000];
     for (const delay of delays) {
       const t = setTimeout(async () => {
         const all = await base44.entities.DispatchConfig.list('-updated_date', 50);
         const canonical = all.find(c => c.mode_key === CANONICAL_KEY);
+        const readMode = canonical?.mode || null;
+        const readChangedAt = canonical?.last_changed_at || null;
+
+        // RÉVERSION réelle = mode incorrect ET changed_at différent du toggle confirmé
+        const modeKO = readMode !== modeAttendu;
+        const changedAtKO = confirmedChangedAt && readChangedAt !== confirmedChangedAt;
+        const isReverted = modeKO && changedAtKO;
+
         const entry = {
           delay: `${delay / 1000}s`,
           ts: new Date().toISOString(),
-          mode: canonical?.mode || null,
+          mode: readMode,
+          modeAttendu,
           id: canonical?.id || null,
-          mode_key: canonical?.mode_key || null,
           last_changed_by: canonical?.last_changed_by || null,
-          last_changed_at: canonical?.last_changed_at || null,
+          last_changed_at: readChangedAt,
           updated_date: canonical?.updated_date || null,
           allCount: all.length,
           allModes: all.map(c => `${c.mode}(${c.mode_key || 'NO_KEY'})`).join(', '),
+          isReverted,
         };
-        console.log(`[STABILITY_${delay / 1000}s] mode=${entry.mode} | id=${entry.id} | changed_by=${entry.last_changed_by} | updated=${entry.updated_date} | all=${entry.allModes}`);
+        console.log(`[STABILITY_${delay / 1000}s] mode=${readMode} (attendu=${modeAttendu}) | changedAt=${readChangedAt} | confirmedAt=${confirmedChangedAt} | reverted=${isReverted}`);
         setStabilityLog(prev => [...prev, entry]);
         if (delay === 30000) {
           setStabilityRunning(false);
@@ -280,30 +309,28 @@ export default function DispatchV2Debug() {
           )}
           {stabilityLog.length > 0 && (
             <div className="space-y-1.5">
-              {stabilityLog.map((entry, i) => {
-                const isReverted = clickSnapshot && entry.mode !== (clickSnapshot.modeAvant === 'auto' ? 'manuel' : 'auto');
-                return (
-                  <div key={i} className={`rounded-xl p-2 text-xs font-mono border ${
-                    isReverted ? 'bg-red-50 border-red-400' : 'bg-green-50 border-green-300'
-                  }`}>
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-sm">+{entry.delay}</span>
-                      <span className={`font-bold ${entry.mode === 'manuel' ? 'text-amber-700' : entry.mode === 'auto' ? 'text-green-700' : 'text-red-600'}`}>
-                        {entry.mode ? entry.mode.toUpperCase() : '❌ NULL'}
-                      </span>
-                      {isReverted
-                        ? <span className="text-red-600 font-bold">⚠️ RÉVERSION</span>
-                        : <span className="text-green-700 font-bold">✅ STABLE</span>
-                      }
-                    </div>
-                    <p>id: {entry.id || '—'}</p>
-                     <p>changed_by: <span className="font-bold">{entry.last_changed_by || '—'}</span></p>
-                     <p>changed_at: {entry.last_changed_at ? moment(entry.last_changed_at).format('HH:mm:ss') : '—'}</p>
-                     <p>updated_date: <span className={isReverted ? 'text-red-600 font-bold' : ''}>{entry.updated_date ? moment(entry.updated_date).format('HH:mm:ss.SSS') : '—'}</span></p>
-                     <p>all_docs ({entry.allCount}): {entry.allModes}</p>
+              {stabilityLog.map((entry, i) => (
+                <div key={i} className={`rounded-xl p-2 text-xs font-mono border ${
+                  entry.isReverted ? 'bg-red-50 border-red-400' : 'bg-green-50 border-green-300'
+                }`}>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-sm">+{entry.delay}</span>
+                    <span className={`font-bold ${entry.mode === 'manuel' ? 'text-amber-700' : entry.mode === 'auto' ? 'text-green-700' : 'text-red-600'}`}>
+                      {entry.mode ? entry.mode.toUpperCase() : '❌ NULL'}
+                      {entry.modeAttendu && entry.mode !== entry.modeAttendu && ` (attendu: ${entry.modeAttendu})`}
+                    </span>
+                    {entry.isReverted
+                      ? <span className="text-red-600 font-bold">⚠️ RÉVERSION</span>
+                      : <span className="text-green-700 font-bold">✅ STABLE</span>
+                    }
                   </div>
-                );
-              })}
+                  <p>id: {entry.id || '—'}</p>
+                  <p>changed_by: <span className="font-bold">{entry.last_changed_by || '—'}</span></p>
+                  <p>changed_at: {entry.last_changed_at ? moment(entry.last_changed_at).format('HH:mm:ss') : '—'}</p>
+                  <p>updated_date: <span className={entry.isReverted ? 'text-red-600 font-bold' : ''}>{entry.updated_date ? moment(entry.updated_date).format('HH:mm:ss.SSS') : '—'}</span></p>
+                  <p>all_docs ({entry.allCount}): {entry.allModes}</p>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

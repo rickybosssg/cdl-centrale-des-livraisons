@@ -140,13 +140,7 @@ export function DispatchModeV2Provider({ children }) {
       const confirmedMode = res.data?.config?.mode;
       const confirmedId = res.data?.config?.id;
       console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] Toggle confirmé: mode=${confirmedMode} | id=${confirmedId}`);
-
-      // Re-lecture 1s après pour vérifier la persistance
-      setTimeout(() => {
-        loadFromDB().then(() => {
-          console.log(`[DISPATCH_CANONICAL_READ] Re-lecture 1s après toggle: mode=${lastMode.current}`);
-        });
-      }, 1000);
+      // Le realtime subscribe gère la propagation — pas de loadFromDB() ici (évite race condition)
     } catch (err) {
       console.error(`[DISPATCH_CANONICAL_WRITE_BLOCKED] Toggle ERREUR → rollback | ${err.message}`);
       lastMode.current = prevMode;
