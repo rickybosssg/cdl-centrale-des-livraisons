@@ -24,12 +24,15 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { mode } = body;
+    const rawMode = body.mode;
 
-    console.log(`[DISPATCH_MODE_WRITE] Demande changement → mode=${mode} | admin=${user.email}`);
+    // Normaliser : accepter "manual" (spec) et "manuel" (legacy) → stocké en "manuel"
+    const mode = rawMode === 'manual' ? 'manuel' : rawMode;
+
+    console.log(`[DISPATCH_MODE_UPDATE_START] admin=${user.email} | raw_mode=${rawMode} | normalized_mode=${mode}`);
 
     if (!['auto', 'manuel'].includes(mode)) {
-      return Response.json({ error: 'Mode invalide. Valeurs: auto | manuel' }, { status: 400, headers: corsHeaders });
+      return Response.json({ error: 'Mode invalide. Valeurs: auto | manual | manuel' }, { status: 400, headers: corsHeaders });
     }
 
     // Lire la config existante (service role pour garantir la lecture)
@@ -45,7 +48,7 @@ Deno.serve(async (req) => {
         last_changed_reason: `Changé manuellement par admin ${user.email}`,
         last_changed_at: new Date().toISOString(),
       });
-      console.log(`[DISPATCH_MODE_WRITE] ✅ Mode sauvegardé en BDD : ${oldMode} → ${mode} | id=${configs[0].id}`);
+      console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] BDD mise à jour : ${oldMode} → ${mode} | id=${configs[0].id} | admin=${user.email}`);
     } else {
       config = await base44.asServiceRole.entities.DispatchConfig.create({
         mode,
@@ -54,7 +57,7 @@ Deno.serve(async (req) => {
         last_changed_reason: `Initialisation par ${user.email}`,
         last_changed_at: new Date().toISOString(),
       });
-      console.log(`[DISPATCH_MODE_WRITE] ✅ Config initialisée : ${mode} | id=${config?.id}`);
+      console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] Config initialisée : ${mode} | id=${config?.id} | admin=${user.email}`);
     }
 
     return Response.json({ success: true, mode, config }, { headers: corsHeaders });

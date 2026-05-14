@@ -86,8 +86,10 @@ Deno.serve(async (req) => {
       console.log(`[DISPATCH_CONFIG_BOOT_READ] Aucune config BDD — fallback mode=auto (lecture seule, pas de création ici)`);
     }
 
+    console.log(`[DISPATCH_MODE_READ] mode=${mode} | configId=${configId || 'none'} | force=${forceDispatch}`);
+
     if (mode === 'manuel' && !forceDispatch) {
-      console.log(`[DISPATCH_MODE_NOT_OVERWRITTEN] BLOQUÉ — mode manuel respecté | configId=${configId}`);
+      console.log(`[DISPATCH_AUTO_BLOCKED_MANUAL_MODE] autoDispatch bloqué — mode=manuel | course=${courseId} | configId=${configId}`);
       return Response.json({ success: false, blocked: true, reason: 'mode_manuel' });
     }
 

@@ -17,15 +17,22 @@ const ASSIGNMENT_TIMEOUT_MS = 60_000; // 60 secondes
 const DispatchEngine = {
   version: ENGINE_VERSION,
 
-  /** Lire le mode actuel (auto/manuel) */
+  /** Lire le mode actuel (auto/manuel) — NE JAMAIS forcer 'auto' si config existante */
   async getMode() {
-    const configs = await base44.entities.DispatchConfig.list('-created_date', 1);
-    return configs[0] || { mode: 'auto', force_override: false };
+    const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
+    const cfg = configs[0] || { mode: 'auto', force_override: false };
+    console.log(`[DISPATCH_MODE_READ] mode=${cfg.mode} | id=${cfg.id || 'none'} | source=BDD`);
+    return cfg;
   },
 
-  /** Changer le mode dispatch (admin) */
+  /** Changer le mode dispatch (admin) — accepte 'auto', 'manual', 'manuel' */
   async setMode(mode, reason) {
-    return base44.functions.invoke('setDispatchMode', { mode, reason });
+    console.log(`[DISPATCH_MODE_UPDATE_START] mode demandé=${mode} | reason=${reason || ''}`);
+    const res = await base44.functions.invoke('setDispatchMode', { mode, reason });
+    if (res.data?.success) {
+      console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] mode confirmé=${res.data.mode}`);
+    }
+    return res;
   },
 
   /** Obtenir les livreurs disponibles (GPS actif, en ligne) */

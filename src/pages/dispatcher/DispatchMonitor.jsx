@@ -181,8 +181,7 @@ export default function DispatchMonitor() {
       const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
       if (configs.length > 0) {
         const cfg = configs[0];
-        console.log(`[DISPATCH_CONFIG_BOOT_READ] mode=${cfg.mode} | id=${cfg.id} | source=BDD`);
-        console.log(`[DISPATCH_CONFIG_EXISTING_RESPECTED] Valeur BDD conservée — aucun écrasement`);
+        console.log(`[DISPATCH_MODE_READ] mode=${cfg.mode} | id=${cfg.id} | source=BDD`);
         setDispatchConfig(cfg);
       } else {
         // Aucune config en BDD — initialiser via la fonction backend sécurisée (admin only)
@@ -225,35 +224,33 @@ export default function DispatchMonitor() {
     if (!dispatchConfig) return;
     setTogglingMode(true);
 
-    // Capturer le mode actuel AVANT la mise à jour optimiste (évite closure stale)
     const previousMode = dispatchConfig.mode;
-    const newMode = previousMode === 'auto' ? 'manuel' : 'auto';
+    // Valeurs BDD : "auto" ou "manuel"
+    const newMode = (previousMode === 'auto') ? 'manuel' : 'auto';
 
-    console.log(`[DISPATCH_MODE_PERSIST_CHECK] Tentative changement : ${previousMode} → ${newMode}`);
+    console.log(`[DISPATCH_MODE_UPDATE_START] UI toggle : ${previousMode} → ${newMode}`);
 
-    // Mise à jour optimiste immédiate de l'UI
+    // Mise à jour optimiste
     setDispatchConfig(prev => ({ ...prev, mode: newMode }));
 
     try {
       const res = await base44.functions.invoke('setDispatchMode', { mode: newMode });
       if (!res.data?.success) throw new Error(res.data?.error || 'Erreur backend setDispatchMode');
 
-      // Synchroniser avec la réponse BDD (source de vérité)
+      const confirmedMode = res.data?.config?.mode || newMode;
       if (res.data?.config) {
-        const confirmedMode = res.data.config.mode;
         setDispatchConfig(res.data.config);
-        console.log(`[DISPATCH_MODE_PERSIST_CHECK] ✅ Persisté en BDD | mode_confirmé=${confirmedMode}`);
-        if (confirmedMode !== newMode) {
-          // La BDD a retourné un mode différent (ex: conflit concurrent) — logguer
-          console.warn(`[DISPATCH_MODE_NOT_OVERWRITTEN] BDD a retourné mode=${confirmedMode} ≠ demandé=${newMode} — BDD respectée`);
-        }
       } else {
         await loadDispatchConfig();
       }
-      toast.success(newMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
+
+      console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] mode confirmé BDD=${confirmedMode}`);
+      if (confirmedMode === 'manuel') {
+        console.log(`[DISPATCH_AUTO_BLOCKED_MANUAL_MODE] Mode manuel actif — autoDispatch bloqué côté backend`);
+      }
+      toast.success(confirmedMode === 'auto' ? '⚡ Mode automatique activé' : '🔧 Mode manuel activé');
     } catch (err) {
-      // Rollback vers le mode BDD précédent (pas de la closure)
-      console.error(`[DISPATCH_MODE_PERSIST_CHECK] ❌ Échec — rollback vers ${previousMode} | err=${err.message}`);
+      console.error(`[DISPATCH_MODE_UPDATE_START] ❌ Échec rollback → ${previousMode} | err=${err.message}`);
       setDispatchConfig(prev => ({ ...prev, mode: previousMode }));
       toast.error('Erreur changement de mode: ' + err.message);
     } finally {
@@ -335,7 +332,10 @@ export default function DispatchMonitor() {
     // Temps réel — DispatchConfig (sync multi-écrans instantanée)
     const unsubConfig = base44.entities.DispatchConfig.subscribe((event) => {
       if ((event.type === "update" || event.type === "create") && event.data) {
-        console.log(`[DISPATCH_MODE_SYNC] Realtime DispatchConfig.${event.type} → mode=${event.data.mode}`);
+        console.log(`[DISPATCH_MODE_SUBSCRIBE_RECEIVED] event=${event.type} | mode=${event.data.mode} | id=${event.data.id}`);
+        if (event.data.mode === 'manuel') {
+          console.log(`[DISPATCH_AUTO_BLOCKED_MANUAL_MODE] Mode manuel reçu via realtime — dispatch auto bloqué`);
+        }
         setDispatchConfig(event.data);
       }
     });
@@ -368,7 +368,8 @@ export default function DispatchMonitor() {
     return () => { clearInterval(interval); unsubConfig(); unsubCourses(); unsubUsers(); };
   }, []);
 
-  const isManuel = (dispatchConfig?.mode || 'auto') === 'manuel';
+  // Source unique : BDD — "manuel" ou "auto"
+  const isManuel = dispatchConfig?.mode === 'manuel';
   // Filtre SANS current_role — basé sur profil_valide + driver_online + non bloqué/suspendu
   const livreursOnline = livreurs.filter(l => !l.livreur_bloque && !l.livreur_suspendu);
   const livreursDispatchables = livreurs.filter(l =>
