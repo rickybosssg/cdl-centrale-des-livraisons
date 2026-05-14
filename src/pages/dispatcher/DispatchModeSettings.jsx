@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useDispatchMode } from "@/context/DispatchModeContext";
+import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Settings, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,26 +9,67 @@ import moment from "moment";
 
 export default function DispatchModeSettings() {
   const navigate = useNavigate();
-  const { mode, loading, setMode, updatedAt, updatedBy, refresh } = useDispatchMode();
+  const [mode, setMode] = useState('auto');
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [updatedBy, setUpdatedBy] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [changing, setChanging] = useState(false);
+
+  // Charger le mode actuel
+  const loadMode = async () => {
+    try {
+      const res = await base44.functions.invoke('getDispatchMode', { _t: Date.now() });
+      setMode(res.data.mode || 'auto');
+      setUpdatedAt(res.data.updated_at);
+      setUpdatedBy(res.data.updated_by);
+    } catch (err) {
+      console.error('[LOAD_MODE_ERROR]', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMode();
+    // Subscription temps réel
+    const unsub = base44.entities.DispatchModeState.subscribe((event) => {
+      if (event.data) {
+        setMode(event.data.mode);
+        setUpdatedAt(event.data.updated_at);
+        setUpdatedBy(event.data.updated_by);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const handleChangeMode = async (newMode) => {
     if (mode === newMode) {
-      console.log(`[DISPATCH_MODE_BUTTON_CLICK] SKIP — déjà ${newMode}`);
+      console.log(`[DISPATCH_MANUAL_BUTTON_CLICKED] SKIP — déjà ${newMode}`);
       return;
     }
     
-    console.log(`[DISPATCH_MODE_BUTTON_CLICK] ${mode} → ${newMode}`);
+    console.log(`[DISPATCH_MANUAL_BUTTON_CLICKED] ${mode} → ${newMode}`);
     setChanging(true);
     try {
-      console.log(`[DISPATCH_MODE_SET_START] Calling setDispatchMode("${newMode}")`);
-      const result = await setMode(newMode);
-      console.log(`[DISPATCH_MODE_SET_SUCCESS] Result:`, result);
-      console.log(`[DISPATCH_MODE_SET_SUCCESS] Mode ${newMode} activé`);
+      // Appel DIRECT avec token frais
+      const res = await base44.functions.invoke('setDispatchMode', { mode: newMode, _t: Date.now() });
+      
+      if (!res.data?.success) {
+        throw new Error(res.data?.error || 'Échec');
+      }
+      
+      // Mise à jour immédiate UI
+      setMode(newMode);
+      setUpdatedAt(res.data.updated_at);
+      setUpdatedBy(res.data.updated_by);
+      
+      console.log(`[DISPATCH_MANUAL_BUTTON_SUCCESS] Mode ${newMode} activé`);
       toast.success(`✅ Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
-      await refresh();
+      
+      // Refresh confirmation BDD
+      setTimeout(() => loadMode(), 500);
     } catch (error) {
-      console.error(`[DISPATCH_MODE_SET_ERROR] ${error.message}`);
+      console.error(`[DISPATCH_MANUAL_BUTTON_ERROR] ${error.message}`);
       toast.error(`❌ Erreur: ${error.message}`);
     } finally {
       setChanging(false);
@@ -56,7 +97,7 @@ export default function DispatchModeSettings() {
             {updatedAt && `Modifié ${moment(updatedAt).fromNow()} par ${updatedBy?.split('@')[0]}`}
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={refresh}>
+        <Button variant="ghost" size="icon" onClick={loadMode}>
           <Settings className="h-4 w-4" />
         </Button>
       </div>
