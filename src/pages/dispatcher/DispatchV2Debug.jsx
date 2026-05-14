@@ -1,227 +1,294 @@
 /**
- * Page de diagnostic DispatchEngine V2
+ * DispatchV2Debug — Page de diagnostic BLOQUANT
  * Route : /dispatch-v2-debug
+ *
+ * Affiche en temps réel :
+ * - Le doc canonique exact (ID, mode, mode_key)
+ * - Tous les docs DispatchConfig existants
+ * - L'historique des events realtime reçus
+ * - Un test de stabilité avec relay 1s/5s/15s/30s
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useDispatchModeV2 } from '@/context/DispatchModeV2Context';
-import { normalizeModeV2 } from '@/lib/DispatchEngineV2';
+import { CANONICAL_KEY } from '@/lib/DispatchEngineV2';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCw, ShieldCheck, ShieldX, Zap, ZapOff } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 
 export default function DispatchV2Debug() {
   const navigate = useNavigate();
-  const { mode, configId, configData, loading, toggling, toggle, reload } = useDispatchModeV2();
-  const [dbMode, setDbMode] = useState(null);
-  const [dbConfig, setDbConfig] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [autoDispatchStatus, setAutoDispatchStatus] = useState(null);
-  const [testRunning, setTestRunning] = useState(false);
+  const { mode, canonicalId, configData, allDocs, loading, toggling, toggle, reload } = useDispatchModeV2();
   const [user, setUser] = useState(null);
+  const [realtimeLog, setRealtimeLog] = useState([]); // historique brut des events realtime
+  const [stabilityLog, setStabilityLog] = useState([]); // lectures à 1s/5s/15s/30s
+  const [stabilityRunning, setStabilityRunning] = useState(false);
+  const [clickSnapshot, setClickSnapshot] = useState(null); // snapshot avant clic
+  const [allDocsRaw, setAllDocsRaw] = useState([]);
+  const stabilityTimers = useRef([]);
 
-  const loadAll = async () => {
-    try {
-      const [u, configs] = await Promise.all([
-        base44.auth.me(),
-        base44.entities.DispatchConfig.list('-updated_date', 10),
-      ]);
-      setUser(u);
-
-      if (configs.length > 0) {
-        setDbConfig(configs[0]);
-        setDbMode(normalizeModeV2(configs[0].mode));
-        setHistory(configs.slice(0, 10));
-      } else {
-        setDbMode(null);
-        setHistory([]);
-      }
-    } catch (e) {
-      console.error('[DispatchV2Debug] loadAll error:', e.message);
-    }
-  };
-
-  const testAutoDispatchBlocked = async () => {
-    setTestRunning(true);
-    try {
-      // Simuler un call autoDispatch avec une fausse course (juste pour tester le blocage mode)
-      const res = await base44.functions.invoke('autoDispatch', {
-        course_id: 'TEST_DEBUG_V2_FAKE',
-        _v2_test: true,
-      });
-      const blocked = res.data?.blocked === true;
-      setAutoDispatchStatus({
-        blocked,
-        reason: res.data?.reason || 'non bloqué',
-        mode: res.data?.mode || '?',
-        raw: res.data,
-      });
-    } catch (e) {
-      setAutoDispatchStatus({ blocked: null, error: e.message });
-    } finally {
-      setTestRunning(false);
-    }
-  };
-
-  useEffect(() => {
-    loadAll();
-    const interval = setInterval(loadAll, 10000);
-    return () => clearInterval(interval);
+  const loadRaw = useCallback(async () => {
+    const all = await base44.entities.DispatchConfig.list('-updated_date', 20);
+    setAllDocsRaw(all);
+    return all;
   }, []);
 
-  const modeMatch = mode === dbMode;
+  useEffect(() => {
+    base44.auth.me().then(setUser);
+    loadRaw();
+
+    // Subscribe brut indépendant — logge TOUT ce qui arrive
+    const unsub = base44.entities.DispatchConfig.subscribe((event) => {
+      const entry = {
+        ts: new Date().toISOString(),
+        type: event.type,
+        id: event.data?.id || event.id || '?',
+        mode: event.data?.mode || '?',
+        mode_key: event.data?.mode_key || 'NONE',
+        last_changed_by: event.data?.last_changed_by || '?',
+        isCanonical: event.data?.mode_key === CANONICAL_KEY,
+      };
+      console.log(`[DEBUG_RAW_SUBSCRIBE] type=${entry.type} | id=${entry.id} | mode=${entry.mode} | mode_key=${entry.mode_key} | canonical=${entry.isCanonical}`);
+      setRealtimeLog(prev => [entry, ...prev].slice(0, 30));
+      // Recharger les docs bruts à chaque event
+      loadRaw();
+    });
+
+    return () => unsub();
+  }, [loadRaw]);
+
+  const runStabilityTest = async () => {
+    if (stabilityRunning) return;
+    setStabilityRunning(true);
+    setStabilityLog([]);
+
+    // Annuler les anciens timers
+    stabilityTimers.current.forEach(t => clearTimeout(t));
+    stabilityTimers.current = [];
+
+    // Snapshot avant clic
+    const snapshot = {
+      modeAvant: mode,
+      canonicalId,
+      ts: new Date().toISOString(),
+    };
+    setClickSnapshot(snapshot);
+
+    // Lancer le toggle
+    await toggle(user?.email);
+
+    // Lire à 1s, 5s, 15s, 30s
+    const delays = [1000, 5000, 15000, 30000];
+    for (const delay of delays) {
+      const t = setTimeout(async () => {
+        const all = await base44.entities.DispatchConfig.list('-updated_date', 50);
+        const canonical = all.find(c => c.mode_key === CANONICAL_KEY);
+        const entry = {
+          delay: `${delay / 1000}s`,
+          ts: new Date().toISOString(),
+          mode: canonical?.mode || null,
+          id: canonical?.id || null,
+          mode_key: canonical?.mode_key || null,
+          last_changed_by: canonical?.last_changed_by || null,
+          allCount: all.length,
+          allModes: all.map(c => `${c.mode}(${c.mode_key || 'NO_KEY'})`).join(', '),
+        };
+        console.log(`[STABILITY_${delay / 1000}s] mode=${entry.mode} | id=${entry.id} | changed_by=${entry.last_changed_by} | all=${entry.allModes}`);
+        setStabilityLog(prev => [...prev, entry]);
+        if (delay === 30000) {
+          setStabilityRunning(false);
+          reload();
+          loadRaw();
+        }
+      }, delay);
+      stabilityTimers.current.push(t);
+    }
+  };
+
+  const deleteParasites = async () => {
+    const all = await base44.entities.DispatchConfig.list('-updated_date', 50);
+    const parasites = all.filter(c => c.mode_key !== CANONICAL_KEY);
+    for (const p of parasites) {
+      await base44.entities.DispatchConfig.delete(p.id).catch(() => {});
+    }
+    alert(`${parasites.length} doc(s) parasite(s) supprimé(s)`);
+    reload();
+    loadRaw();
+  };
+
+  const initCanonical = async () => {
+    const res = await base44.functions.invoke('setDispatchMode', { mode: 'auto' });
+    alert(res.data?.success ? `✅ Config canonique créée: id=${res.data?.config?.id}` : `❌ ${res.data?.error}`);
+    reload();
+    loadRaw();
+  };
+
+  const canonical = allDocsRaw.find(c => c.mode_key === CANONICAL_KEY);
+  const parasites = allDocsRaw.filter(c => c.mode_key !== CANONICAL_KEY);
 
   return (
-    <div className="space-y-4 pb-16 px-4">
+    <div className="space-y-4 pb-20 px-3 max-w-2xl mx-auto">
       <div className="flex items-center gap-3 py-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold">DispatchEngine V2 — Debug</h1>
-          <p className="text-xs text-muted-foreground">Diagnostic complet mode dispatch</p>
+          <h1 className="text-lg font-bold">Dispatch V2 — Diagnostic BLOQUANT</h1>
+          <p className="text-xs text-muted-foreground">Toute réversion est un bug à tracer ici</p>
         </div>
-        <Button variant="outline" size="icon" onClick={() => { reload(); loadAll(); }}>
+        <Button variant="outline" size="icon" onClick={() => { reload(); loadRaw(); }}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Status global */}
+      {/* Mode actuel Context V2 */}
       <div className={`rounded-2xl border-2 p-4 ${
-        mode === 'manuel' ? 'bg-amber-50 border-amber-400' :
-        mode === 'auto' ? 'bg-green-50 border-green-400' :
-        'bg-gray-50 border-gray-300'
+        mode === 'manuel' ? 'bg-amber-50 border-amber-500' :
+        mode === 'auto' ? 'bg-green-50 border-green-500' :
+        'bg-red-50 border-red-400'
       }`}>
-        <p className="text-xs font-bold uppercase text-muted-foreground mb-1">Mode actuel (UI Context V2)</p>
-        <p className={`text-3xl font-black ${
-          mode === 'manuel' ? 'text-amber-700' :
-          mode === 'auto' ? 'text-green-700' :
-          'text-gray-500'
+        <p className="text-xs font-bold uppercase text-muted-foreground">Mode Context V2</p>
+        <p className={`text-4xl font-black mt-1 ${
+          mode === 'manuel' ? 'text-amber-700' : mode === 'auto' ? 'text-green-700' : 'text-red-600'
         }`}>
-          {loading ? '⏳ Chargement...' : mode ? mode.toUpperCase() : '❌ AUCUNE CONFIG'}
+          {loading ? '⏳' : mode ? mode.toUpperCase() : '❌ PAS DE CONFIG'}
         </p>
-        <p className="text-xs text-muted-foreground mt-1">configId: {configId || 'none'}</p>
+        <p className="text-xs text-muted-foreground mt-1 font-mono">canonicalId: {canonicalId || 'aucun'}</p>
       </div>
 
-      {/* Comparaison UI vs BDD */}
-      <Card className={modeMatch ? 'border-green-300' : 'border-red-400 bg-red-50'}>
+      {/* Docs en BDD */}
+      <Card className={allDocsRaw.length !== 1 ? 'border-red-400' : 'border-green-300'}>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
-            {modeMatch ? <ShieldCheck className="h-4 w-4 text-green-600" /> : <ShieldX className="h-4 w-4 text-red-600" />}
-            Cohérence UI ↔ BDD
+            {allDocsRaw.length === 1
+              ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+              : <AlertTriangle className="h-4 w-4 text-red-500" />
+            }
+            Docs DispatchConfig en BDD ({allDocsRaw.length} total)
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 text-xs">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Mode UI (context V2)</span>
-            <span className={`font-bold ${mode === 'manuel' ? 'text-amber-700' : 'text-green-700'}`}>{mode ?? 'null'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Mode BDD (lecture directe)</span>
-            <span className={`font-bold ${dbMode === 'manuel' ? 'text-amber-700' : 'text-green-700'}`}>{dbMode ?? 'null'}</span>
-          </div>
-          {!modeMatch && (
-            <p className="text-red-600 font-bold mt-2">⚠️ DÉSYNCHRONISATION DÉTECTÉE</p>
-          )}
-          {modeMatch && (
-            <p className="text-green-700 font-medium mt-1">✅ Synchronisés</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Dernier write */}
-      {dbConfig && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">📝 Dernier changement</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 text-xs">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Admin</span>
-              <span className="font-medium">{dbConfig.last_changed_by || '—'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Raison</span>
-              <span className="font-medium text-right max-w-[60%]">{dbConfig.last_changed_reason || '—'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Timestamp</span>
-              <span className="font-medium">{dbConfig.last_changed_at ? moment(dbConfig.last_changed_at).format('DD/MM HH:mm:ss') : '—'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">force_override</span>
-              <span className={`font-bold ${dbConfig.force_override ? 'text-primary' : 'text-muted-foreground'}`}>
-                {String(dbConfig.force_override)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Test autoDispatch bloqué */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">🧪 Test : autoDispatch bloqué ?</CardTitle>
-        </CardHeader>
         <CardContent className="space-y-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full"
-            onClick={testAutoDispatchBlocked}
-            disabled={testRunning}
-          >
-            {testRunning ? '⏳ Test en cours...' : 'Tester autoDispatch (fausse course)'}
-          </Button>
-          {autoDispatchStatus && (
-            <div className={`rounded-xl p-3 text-xs space-y-1 ${
-              autoDispatchStatus.blocked ? 'bg-amber-50 border border-amber-300' : 'bg-green-50 border border-green-300'
-            }`}>
-              <div className="flex items-center gap-2">
-                {autoDispatchStatus.blocked
-                  ? <ZapOff className="h-4 w-4 text-amber-600" />
-                  : <Zap className="h-4 w-4 text-green-600" />
-                }
-                <span className="font-bold">
-                  {autoDispatchStatus.blocked
-                    ? '✅ Bloqué correctement (mode manuel)'
-                    : autoDispatchStatus.error
-                    ? `❌ Erreur: ${autoDispatchStatus.error}`
-                    : '⚡ Non bloqué (mode auto)'}
-                </span>
+          {allDocsRaw.length === 0 && (
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-red-600 font-bold">Aucun document — le système ne peut pas fonctionner</p>
+              <Button size="sm" onClick={initCanonical}>Initialiser</Button>
+            </div>
+          )}
+          {allDocsRaw.map((doc, i) => {
+            const isC = doc.mode_key === CANONICAL_KEY;
+            return (
+              <div key={doc.id} className={`rounded-xl p-2.5 text-xs border font-mono ${
+                isC ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'
+              }`}>
+                <div className="flex items-center gap-2 mb-1">
+                  {isC
+                    ? <span className="bg-green-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold">CANONIQUE</span>
+                    : <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold">PARASITE</span>
+                  }
+                  <span className={`font-bold ${doc.mode === 'manuel' ? 'text-amber-700' : 'text-green-700'}`}>
+                    {doc.mode?.toUpperCase()}
+                  </span>
+                </div>
+                <p>id: <span className="text-primary">{doc.id}</span></p>
+                <p>mode_key: {doc.mode_key || '❌ ABSENT'}</p>
+                <p>last_changed_by: {doc.last_changed_by || '—'}</p>
+                <p>last_changed_at: {doc.last_changed_at ? moment(doc.last_changed_at).format('HH:mm:ss') : moment(doc.updated_date).format('HH:mm:ss')}</p>
               </div>
-              <p>Raison : {autoDispatchStatus.reason}</p>
-              <p>Mode BDD lu : {autoDispatchStatus.mode}</p>
+            );
+          })}
+          {parasites.length > 0 && (
+            <Button size="sm" variant="destructive" onClick={deleteParasites} className="w-full">
+              🗑️ Supprimer {parasites.length} doc(s) parasite(s)
+            </Button>
+          )}
+          {allDocsRaw.length > 0 && !canonical && (
+            <Button size="sm" onClick={initCanonical} className="w-full">
+              ✅ Créer config canonique (mode_key=GLOBAL)
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Test de stabilité 30s */}
+      <Card className="border-primary/40">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">🧪 Test stabilité 30s</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {clickSnapshot && (
+            <div className="bg-muted rounded-xl p-2 text-xs font-mono space-y-0.5">
+              <p className="font-bold">Snapshot avant clic :</p>
+              <p>mode avant: <span className={clickSnapshot.modeAvant === 'manuel' ? 'text-amber-700 font-bold' : 'text-green-700 font-bold'}>{clickSnapshot.modeAvant}</span></p>
+              <p>id: {clickSnapshot.canonicalId || 'aucun'}</p>
+              <p>ts: {moment(clickSnapshot.ts).format('HH:mm:ss')}</p>
+            </div>
+          )}
+          <Button
+            className="w-full"
+            disabled={stabilityRunning || loading || !canonical}
+            onClick={runStabilityTest}
+          >
+            {stabilityRunning
+              ? `⏳ Test en cours... (attendre 30s)`
+              : `▶ Toggle + Vérifier 1s/5s/15s/30s`}
+          </Button>
+          {!canonical && (
+            <p className="text-xs text-red-600 text-center">❌ Aucun doc canonique — initialiser d'abord</p>
+          )}
+          {stabilityLog.length > 0 && (
+            <div className="space-y-1.5">
+              {stabilityLog.map((entry, i) => {
+                const isReverted = clickSnapshot && entry.mode !== (clickSnapshot.modeAvant === 'auto' ? 'manuel' : 'auto');
+                return (
+                  <div key={i} className={`rounded-xl p-2 text-xs font-mono border ${
+                    isReverted ? 'bg-red-50 border-red-400' : 'bg-green-50 border-green-300'
+                  }`}>
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-sm">+{entry.delay}</span>
+                      <span className={`font-bold ${entry.mode === 'manuel' ? 'text-amber-700' : entry.mode === 'auto' ? 'text-green-700' : 'text-red-600'}`}>
+                        {entry.mode ? entry.mode.toUpperCase() : '❌ NULL'}
+                      </span>
+                      {isReverted
+                        ? <span className="text-red-600 font-bold">⚠️ RÉVERSION</span>
+                        : <span className="text-green-700 font-bold">✅ STABLE</span>
+                      }
+                    </div>
+                    <p>id: {entry.id || '—'}</p>
+                    <p>changed_by: {entry.last_changed_by || '—'}</p>
+                    <p>all_docs ({entry.allCount}): {entry.allModes}</p>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Historique configs */}
+      {/* Historique realtime brut */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">📋 Historique DispatchConfig (10 derniers)</CardTitle>
+          <CardTitle className="text-sm">📡 Historique Realtime (brut, 30 derniers)</CardTitle>
         </CardHeader>
         <CardContent>
-          {history.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-2">Aucune config en BDD</p>
+          {realtimeLog.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-2">En attente d'events...</p>
           ) : (
-            <div className="space-y-2">
-              {history.map((cfg, idx) => (
-                <div key={cfg.id || idx} className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs border ${
-                  cfg.mode === 'manuel' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'
+            <div className="space-y-1.5">
+              {realtimeLog.map((e, i) => (
+                <div key={i} className={`rounded-lg p-2 text-xs font-mono border ${
+                  !e.isCanonical ? 'bg-red-50 border-red-200' :
+                  e.mode === 'manuel' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'
                 }`}>
-                  <div>
-                    <span className={`font-bold ${cfg.mode === 'manuel' ? 'text-amber-700' : 'text-green-700'}`}>
-                      {cfg.mode?.toUpperCase()}
+                  <div className="flex justify-between">
+                    <span className="font-bold">{moment(e.ts).format('HH:mm:ss')}</span>
+                    <span className={`font-bold ${e.mode === 'manuel' ? 'text-amber-700' : e.mode === 'auto' ? 'text-green-700' : 'text-gray-500'}`}>
+                      {e.type?.toUpperCase()} → {e.mode?.toUpperCase()}
                     </span>
-                    <span className="text-muted-foreground ml-2">{cfg.last_changed_by || 'system'}</span>
+                    {!e.isCanonical && <span className="text-red-600 font-bold">NON-CANONIQUE</span>}
                   </div>
-                  <span className="text-muted-foreground">
-                    {cfg.last_changed_at ? moment(cfg.last_changed_at).format('DD/MM HH:mm:ss') : moment(cfg.updated_date).format('DD/MM HH:mm:ss')}
-                  </span>
+                  <p>id: {e.id} | mode_key: {e.mode_key} | by: {e.last_changed_by}</p>
                 </div>
               ))}
             </div>
@@ -229,32 +296,27 @@ export default function DispatchV2Debug() {
         </CardContent>
       </Card>
 
-      {/* Switch test V2 */}
-      <Card className="border-primary/30">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">🔧 Switch V2 (test direct)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            Utilise <code>toggle()</code> du context V2 directement.
-            Vérifie que le mode reste stable 30 secondes après.
-          </p>
-          <Button
-            className="w-full"
-            variant={mode === 'auto' ? 'default' : 'outline'}
-            onClick={() => toggle(user?.email)}
-            disabled={toggling || loading}
-          >
-            {toggling ? '⏳ En cours...' : mode === 'auto' ? '→ Passer en Manuel' : '→ Passer en Auto'}
-          </Button>
-          <p className="text-[10px] text-muted-foreground text-center">
-            Admin : {user?.email || 'inconnu'} | État toggle : {toggling ? 'en cours' : 'prêt'}
-          </p>
-        </CardContent>
-      </Card>
+      {/* Infos config canonique détaillée */}
+      {configData && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">📝 Config canonique détaillée</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs font-mono space-y-1">
+            <p>id: <span className="text-primary">{configData.id}</span></p>
+            <p>mode: <span className="font-bold">{configData.mode}</span></p>
+            <p>mode_key: {configData.mode_key || '❌ ABSENT'}</p>
+            <p>force_override: {String(configData.force_override)}</p>
+            <p>last_changed_by: {configData.last_changed_by || '—'}</p>
+            <p>last_changed_reason: {configData.last_changed_reason || '—'}</p>
+            <p>last_changed_at: {configData.last_changed_at ? moment(configData.last_changed_at).format('DD/MM/YY HH:mm:ss') : '—'}</p>
+            <p>updated_date: {configData.updated_date ? moment(configData.updated_date).format('DD/MM/YY HH:mm:ss') : '—'}</p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="text-center text-[10px] text-muted-foreground pt-2">
-        Auto-refresh toutes les 10s · DispatchEngine V2
+        Dispatch V2 Debug · CANONICAL_KEY="{CANONICAL_KEY}" · admin={user?.email || '?'}
       </div>
     </div>
   );

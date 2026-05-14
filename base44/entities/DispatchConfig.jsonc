@@ -2,6 +2,11 @@
   "name": "DispatchConfig",
   "type": "object",
   "properties": {
+    "mode_key": {
+      "type": "string",
+      "title": "Cl\u00e9 canonique (GLOBAL = document unique)",
+      "index": true
+    },
     "mode": {
       "type": "string",
       "enum": [
@@ -28,6 +33,10 @@
     "last_changed_reason": {
       "type": "string",
       "title": "Raison du changement"
+    },
+    "last_changed_at": {
+      "type": "string",
+      "title": "Date/heure du dernier changement"
     }
   },
   "required": [

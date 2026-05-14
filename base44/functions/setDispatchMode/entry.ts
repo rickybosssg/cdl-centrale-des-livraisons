@@ -1,10 +1,16 @@
+/**
+ * setDispatchMode — ADMIN UNIQUEMENT
+ *
+ * Document canonique FIXE : on cherche DispatchConfig avec mode_key="GLOBAL"
+ * S'il n'existe pas, on le crée avec cet identifiant logique.
+ * Tous les reads/writes pointent TOUJOURS vers le même doc.
+ *
+ * ⚠️ Aucun autre code n'est autorisé à écrire mode=auto automatiquement.
+ */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-/**
- * CDL — Modification du mode dispatch (ADMIN UNIQUEMENT)
- * Source de vérité unique : entité DispatchConfig en BDD.
- * Ne jamais mettre de valeur par défaut locale.
- */
+const CANONICAL_KEY = 'GLOBAL'; // valeur unique pour identifier le doc canonique
+
 Deno.serve(async (req) => {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -19,50 +25,64 @@ Deno.serve(async (req) => {
 
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
     if (user.role !== 'admin') {
-      console.warn(`[DISPATCH_MODE_WRITE] Refusé : ${user.email} n'est pas admin`);
-      return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403, headers: corsHeaders });
+      console.warn(`[DISPATCH_V2_MODE_WRITE] REFUSÉ: ${user.email} n'est pas admin`);
+      return Response.json({ error: 'Forbidden' }, { status: 403, headers: corsHeaders });
     }
 
     const body = await req.json();
     const rawMode = body.mode;
+    const mode = (rawMode === 'manual' || rawMode === 'manuel') ? 'manuel' : rawMode === 'auto' ? 'auto' : null;
 
-    // Normaliser : accepter "manual" (spec) et "manuel" (legacy) → stocké en "manuel"
-    const mode = rawMode === 'manual' ? 'manuel' : rawMode;
-
-    console.log(`[DISPATCH_MODE_UPDATE_START] admin=${user.email} | raw_mode=${rawMode} | normalized_mode=${mode}`);
-
-    if (!['auto', 'manuel'].includes(mode)) {
-      return Response.json({ error: 'Mode invalide. Valeurs: auto | manual | manuel' }, { status: 400, headers: corsHeaders });
+    if (!mode) {
+      return Response.json({ error: `Mode invalide: "${rawMode}". Valeurs: auto | manuel` }, { status: 400, headers: corsHeaders });
     }
 
-    // Lire la config existante (service role pour garantir la lecture)
-    const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
+    console.log(`[DISPATCH_V2_MODE_WRITE] DEMANDE: admin=${user.email} | mode=${mode}`);
 
+    // ── Chercher le document canonique ────────────────────────────────────
+    const all = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50);
+    const canonical = all.find(c => c.mode_key === CANONICAL_KEY);
+
+    const now = new Date().toISOString();
     let config;
-    if (configs.length > 0) {
-      const oldMode = configs[0].mode;
-      config = await base44.asServiceRole.entities.DispatchConfig.update(configs[0].id, {
+
+    if (canonical) {
+      const oldMode = canonical.mode;
+      config = await base44.asServiceRole.entities.DispatchConfig.update(canonical.id, {
         mode,
+        mode_key: CANONICAL_KEY,
         force_override: true,
         last_changed_by: user.email,
-        last_changed_reason: `Changé manuellement par admin ${user.email}`,
-        last_changed_at: new Date().toISOString(),
+        last_changed_reason: body.reason || `Admin ${user.email} → ${mode}`,
+        last_changed_at: now,
       });
-      console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] BDD mise à jour : ${oldMode} → ${mode} | id=${configs[0].id} | admin=${user.email}`);
+      console.log(`[DISPATCH_V2_MODE_WRITE] SUCCÈS: ${oldMode} → ${mode} | id=${canonical.id} | admin=${user.email} | timestamp=${now}`);
     } else {
+      // Créer le doc canonique (première fois seulement)
       config = await base44.asServiceRole.entities.DispatchConfig.create({
         mode,
+        mode_key: CANONICAL_KEY,
         force_override: true,
         last_changed_by: user.email,
-        last_changed_reason: `Initialisation par ${user.email}`,
-        last_changed_at: new Date().toISOString(),
+        last_changed_reason: `Initialisation canonique par ${user.email}`,
+        last_changed_at: now,
       });
-      console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] Config initialisée : ${mode} | id=${config?.id} | admin=${user.email}`);
+      console.log(`[DISPATCH_V2_MODE_WRITE] CRÉÉ (canonique): mode=${mode} | id=${config.id} | admin=${user.email} | timestamp=${now}`);
+    }
+
+    // ── Supprimer les docs non-canoniques parasites ───────────────────────
+    const parasites = all.filter(c => c.mode_key !== CANONICAL_KEY);
+    if (parasites.length > 0) {
+      console.log(`[DISPATCH_V2_MODE_WRITE] Suppression de ${parasites.length} doc(s) parasite(s)`);
+      for (const p of parasites) {
+        await base44.asServiceRole.entities.DispatchConfig.delete(p.id).catch(() => {});
+        console.log(`[DISPATCH_V2_MODE_WRITE] Parasite supprimé: id=${p.id} mode=${p.mode}`);
+      }
     }
 
     return Response.json({ success: true, mode, config }, { headers: corsHeaders });
   } catch (error) {
-    console.error('[DISPATCH_MODE_WRITE] ❌ Erreur:', error.message);
+    console.error('[DISPATCH_V2_MODE_WRITE] ERREUR:', error.message);
     return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 });

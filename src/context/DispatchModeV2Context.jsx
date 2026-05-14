@@ -1,79 +1,99 @@
 /**
- * DispatchModeV2Context — Hook centralisé V2
+ * DispatchModeV2Context — Hook V2 avec document canonique fixe
  *
- * Un seul abonnement BDD par session.
- * Zéro fallback local. Zéro useState("auto").
- * Tous les dashboards branchés ici.
+ * Ne lit QUE le doc avec mode_key="GLOBAL".
+ * Le subscribe realtime filtre les events pour ignorer les docs non-canoniques.
+ * Zéro écriture automatique. Zéro fallback local.
  */
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
-import { normalizeModeV2 } from '@/lib/DispatchEngineV2';
+import { normalizeModeV2, CANONICAL_KEY } from '@/lib/DispatchEngineV2';
 
 const DispatchModeV2Context = createContext(null);
 
 export function DispatchModeV2Provider({ children }) {
-  const [mode, setMode] = useState(null);       // null = chargement
-  const [configId, setConfigId] = useState(null);
+  const [mode, setMode] = useState(null);
+  const [canonicalId, setCanonicalId] = useState(null);
   const [configData, setConfigData] = useState(null);
+  const [allDocs, setAllDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
-  const lastMode = useRef(null); // ref pour éviter les closures stales dans toggle
 
-  // ── Appliquer un mode — avec détection de réversion ────────────────────
-  const applyMode = useCallback((raw, source, id, fullConfig) => {
-    const normalized = normalizeModeV2(raw);
-    if (!normalized) return; // valeur invalide → ignorer
+  // Ref pour éviter les closures stales — source de vérité synchrone
+  const lastMode = useRef(null);
+  const canonicalIdRef = useRef(null);
 
+  const applyConfig = useCallback((cfg, source) => {
+    if (!cfg) return;
+    const normalized = normalizeModeV2(cfg.mode);
+    if (!normalized) {
+      console.error(`[DISPATCH_V2] Mode invalide ignoré: "${cfg.mode}" | source=${source} | id=${cfg.id}`);
+      return;
+    }
     const prev = lastMode.current;
     if (prev === 'manuel' && normalized === 'auto') {
-      console.warn(`[DISPATCH_V2_REVERT_DETECTED] ⚠️ ${prev} → ${normalized} | source=${source} | id=${id}`);
+      console.error(`[DISPATCH_V2_REVERT_DETECTED] ⚠️ RÉVERSION: ${prev} → ${normalized} | source=${source} | id=${cfg.id} | mode_key=${cfg.mode_key}`);
     }
-
-    console.log(`[DISPATCH_V2_MODE_APPLY] ${prev ?? 'null'} → ${normalized} | source=${source} | id=${id || 'none'}`);
+    console.log(`[DISPATCH_V2] ${prev ?? 'null'} → ${normalized} | source=${source} | id=${cfg.id} | mode_key=${cfg.mode_key || 'NONE'}`);
     lastMode.current = normalized;
+    canonicalIdRef.current = cfg.id;
     setMode(normalized);
-    if (id) setConfigId(id);
-    if (fullConfig) setConfigData(fullConfig);
+    setCanonicalId(cfg.id);
+    setConfigData(cfg);
   }, []);
 
-  // ── Charger depuis BDD ──────────────────────────────────────────────────
   const loadFromDB = useCallback(async () => {
     try {
-      const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-      if (configs.length === 0) {
-        console.log('[DISPATCH_V2] Aucune config BDD — mode null jusqu\'à init admin');
+      const all = await base44.entities.DispatchConfig.list('-updated_date', 50);
+      setAllDocs(all);
+
+      const canonical = all.find(c => c.mode_key === CANONICAL_KEY);
+
+      if (!canonical) {
+        console.warn(`[DISPATCH_V2] Aucun doc canonique (mode_key=${CANONICAL_KEY}). Docs: ${all.length}. IDs: ${all.map(c => c.id).join(', ')}`);
+        // Pas de doc canonique → mode null (pas de fallback auto!)
+        lastMode.current = null;
+        canonicalIdRef.current = null;
         setMode(null);
-        setLoading(false);
-        return;
+        setCanonicalId(null);
+        setConfigData(null);
+      } else {
+        applyConfig(canonical, 'DB_load');
       }
-      const cfg = configs[0];
-      applyMode(cfg.mode, 'DB_load', cfg.id, cfg);
     } catch (e) {
       console.error('[DISPATCH_V2] loadFromDB error:', e.message);
     } finally {
       setLoading(false);
     }
-  }, [applyMode]);
+  }, [applyConfig]);
 
-  // ── Mount : charge BDD + subscribe realtime ────────────────────────────
   useEffect(() => {
     loadFromDB();
 
+    // Subscribe realtime — FILTRE STRICT : ignorer tout doc non-canonique
     const unsub = base44.entities.DispatchConfig.subscribe((event) => {
-      if (!event?.data?.mode) return;
-      applyMode(event.data.mode, `realtime_${event.type}`, event.data.id, event.data);
+      const data = event?.data;
+      if (!data) return;
+
+      // Ignorer si ce n'est pas le document canonique
+      if (data.mode_key !== CANONICAL_KEY) {
+        console.warn(`[DISPATCH_V2] Realtime event IGNORÉ (non-canonique): id=${data.id} mode_key=${data.mode_key || 'NONE'} mode=${data.mode}`);
+        return;
+      }
+
+      console.log(`[DISPATCH_V2] Realtime event canonique: type=${event.type} | id=${data.id} | mode=${data.mode}`);
+      applyConfig(data, `realtime_${event.type}`);
     });
 
     return () => unsub();
-  }, [loadFromDB, applyMode]);
+  }, [loadFromDB, applyConfig]);
 
-  // ── Toggle admin (V2) ──────────────────────────────────────────────────
   const toggle = useCallback(async (adminEmail) => {
     if (toggling) return;
     const prevMode = lastMode.current;
     const newMode = prevMode === 'auto' ? 'manuel' : 'auto';
 
-    console.log(`[DISPATCH_V2_MODE_WRITE] toggle: ${prevMode} → ${newMode} | adminEmail=${adminEmail || 'unknown'} | source=admin_toggle`);
+    console.log(`[DISPATCH_V2] Toggle: ${prevMode} → ${newMode} | admin=${adminEmail}`);
 
     // Optimiste
     lastMode.current = newMode;
@@ -82,32 +102,34 @@ export function DispatchModeV2Provider({ children }) {
 
     try {
       const res = await base44.functions.invoke('setDispatchMode', { mode: newMode });
-      if (!res.data?.success) throw new Error(res.data?.error || 'setDispatchMode V2 failed');
+      if (!res.data?.success) throw new Error(res.data?.error || 'setDispatchMode failed');
 
-      const confirmed = res.data?.config?.mode;
-      if (confirmed) {
-        const n = normalizeModeV2(confirmed);
-        if (n && n !== newMode) {
-          console.warn(`[DISPATCH_V2_REVERT_DETECTED] BDD a confirmé ${confirmed} ≠ ${newMode} — application BDD`);
-          lastMode.current = n;
-          setMode(n);
-        }
-      }
-      console.log(`[DISPATCH_V2_MODE_WRITE] oldMode=${prevMode} | newMode=${newMode} | confirmed=${confirmed} | source=admin_toggle | timestamp=${new Date().toISOString()}`);
+      const confirmedMode = res.data?.config?.mode;
+      const confirmedId = res.data?.config?.id;
+      console.log(`[DISPATCH_V2] Toggle confirmé: mode=${confirmedMode} | id=${confirmedId}`);
+
+      // Relire la BDD 1s après pour vérifier que rien n'a écrasé
+      setTimeout(() => {
+        loadFromDB().then(() => {
+          console.log(`[DISPATCH_V2] Re-lecture 1s après toggle: mode=${lastMode.current}`);
+        });
+      }, 1000);
     } catch (err) {
-      // Rollback
-      console.error(`[DISPATCH_V2_REVERT_DETECTED] Erreur toggle — rollback ${newMode} → ${prevMode} | ${err.message}`);
+      console.error(`[DISPATCH_V2] Toggle ERREUR → rollback | ${err.message}`);
       lastMode.current = prevMode;
       setMode(prevMode);
     } finally {
       setToggling(false);
     }
-  }, [toggling]);
+  }, [toggling, loadFromDB]);
 
   const reload = useCallback(() => loadFromDB(), [loadFromDB]);
 
   return (
-    <DispatchModeV2Context.Provider value={{ mode, configId, configData, loading, toggling, toggle, reload }}>
+    <DispatchModeV2Context.Provider value={{
+      mode, canonicalId, configData, allDocs,
+      loading, toggling, toggle, reload
+    }}>
       {children}
     </DispatchModeV2Context.Provider>
   );
