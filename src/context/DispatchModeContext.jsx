@@ -1,29 +1,14 @@
 /**
- * DispatchModeContext (V1) — WRAPPER PASSIF VERS V2
+ * DispatchModeContext (V1) — RE-EXPORT UNIQUEMENT
  *
- * Ce context est conservé pour la rétrocompatibilité (composants qui utilisent useDispatchMode).
- * Il délègue TOUT au DispatchModeV2Context — AUCUNE écriture propre, AUCUN toggle propre.
- * La source unique de vérité est DispatchModeV2Context.
+ * Ce fichier est conservé pour la rétrocompatibilité des imports existants.
+ * Il n'a AUCUN provider propre — tout passe par DispatchModeV2Provider (dans App.jsx).
  *
- * ⚠️ NE JAMAIS réintroduire de logique de toggle ou d'écriture ici.
+ * ⚠️ NE JAMAIS réintroduire de Provider, de toggle ou d'écriture ici.
  */
-import { createContext, useContext } from 'react';
 import { useDispatchModeV2 } from './DispatchModeV2Context';
 
-const DispatchModeContext = createContext(null);
-
-export function DispatchModeProvider({ children }) {
-  // Le V1 est maintenant un shell vide — le vrai provider est DispatchModeV2Provider (dans App.jsx)
-  // On expose le context via un provider enfant qui lira depuis V2
-  return (
-    <DispatchModeContext.Provider value={null}>
-      {children}
-    </DispatchModeContext.Provider>
-  );
-}
-
 export function useDispatchMode() {
-  // Déléguer directement au V2 — source unique de vérité
   const v2 = useDispatchModeV2();
   return {
     mode: v2.mode,

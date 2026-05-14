@@ -17,20 +17,34 @@ const ASSIGNMENT_TIMEOUT_MS = 60_000; // 60 secondes
 const DispatchEngine = {
   version: ENGINE_VERSION,
 
-  /** Lire le mode actuel (auto/manuel) — NE JAMAIS forcer 'auto' si config existante */
+  /**
+   * LECTURE CANONIQUE STRICTE — aucun fallback auto
+   * Retourne { mode, id, isCanonical } ou { mode: null } si aucun doc GLOBAL
+   */
   async getMode() {
-    const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-    const cfg = configs[0] || { mode: 'auto', force_override: false };
-    console.log(`[DISPATCH_MODE_READ] mode=${cfg.mode} | id=${cfg.id || 'none'} | source=BDD`);
-    return cfg;
+    const configs = await base44.entities.DispatchConfig.list('-updated_date', 50);
+    const canonical = configs.find(c => c.mode_key === 'GLOBAL');
+    if (!canonical) {
+      console.warn(`[DISPATCH_CANONICAL_READ] DispatchEngine.getMode — Aucun doc GLOBAL. Docs: ${configs.length}`);
+      return { mode: null, isCanonical: false };
+    }
+    console.log(`[DISPATCH_CANONICAL_READ] DispatchEngine.getMode — mode=${canonical.mode} | id=${canonical.id}`);
+    return canonical;
   },
 
-  /** Changer le mode dispatch (admin) — accepte 'auto', 'manual', 'manuel' */
-  async setMode(mode, reason) {
-    console.log(`[DISPATCH_MODE_UPDATE_START] mode demandé=${mode} | reason=${reason || ''}`);
-    const res = await base44.functions.invoke('setDispatchMode', { mode, reason });
+  /**
+   * ÉCRITURE CANONIQUE — délègue vers setDispatchModeCanonical (source unique)
+   * Seule route d'écriture autorisée.
+   */
+  async setMode(mode, reason, adminEmail) {
+    console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] DispatchEngine.setMode | mode=${mode} | source=admin_click | admin=${adminEmail || '?'}`);
+    const res = await base44.functions.invoke('setDispatchModeCanonical', {
+      mode,
+      source: 'admin_click',
+      reason: reason || `DispatchEngine.setMode → ${mode}`,
+    });
     if (res.data?.success) {
-      console.log(`[DISPATCH_MODE_UPDATE_SUCCESS] mode confirmé=${res.data.mode}`);
+      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] setMode confirmé: mode=${res.data.mode}`);
     }
     return res;
   },
