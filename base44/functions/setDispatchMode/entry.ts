@@ -22,8 +22,11 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log('[setDispatchMode] START | method=' + req.method + ' | has_auth=' + !!req.headers.get('Authorization'));
+    
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
+    console.log('[setDispatchMode] USER | email=' + (user?.email || 'none') + ' | role=' + (user?.role || 'none'));
 
     // VERROU: admin-only
     if (!user) {

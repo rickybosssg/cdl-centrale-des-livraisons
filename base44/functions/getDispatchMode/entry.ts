@@ -8,7 +8,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   try {
+    console.log('[getDispatchMode] START | method=' + req.method + ' | has_auth=' + !!req.headers.get('Authorization'));
+    
     const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    console.log('[getDispatchMode] USER | email=' + (user?.email || 'none') + ' | role=' + (user?.role || 'none'));
     
     // Lecture simple — premier document trouvé (un seul devrait exister)
     const modes = await base44.asServiceRole.entities.DispatchModeState.list('-updated_at', 1);
@@ -34,10 +38,12 @@ Deno.serve(async (req) => {
     }, {
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
     });
   } catch (error) {
-    console.error('[getDispatchMode] ERROR:', error.message);
+    console.error('[getDispatchMode] ERROR:', error.message, error.stack);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
