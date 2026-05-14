@@ -14,9 +14,6 @@ export default function DispatchModeSettings() {
   const [updatedBy, setUpdatedBy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [changing, setChanging] = useState(false);
-  
-  // Alias pour le bouton refresh
-  const refresh = loadMode;
 
   // Charger le mode actuel
   const loadMode = async () => {
@@ -96,7 +93,7 @@ export default function DispatchModeSettings() {
             {updatedAt && `Modifié ${moment(updatedAt).fromNow()} par ${updatedBy?.split('@')[0]}`}
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={loadMode}>
+        <Button variant="ghost" size="icon" onClick={() => loadMode()}>
           <Settings className="h-4 w-4" />
         </Button>
       </div>
