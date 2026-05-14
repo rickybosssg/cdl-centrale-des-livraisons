@@ -22,11 +22,13 @@ export default function DispatchV2Debug() {
   const navigate = useNavigate();
   const { mode, canonicalId, configData, allDocs, loading, toggling, toggle, reload } = useDispatchModeV2();
   const [user, setUser] = useState(null);
-  const [realtimeLog, setRealtimeLog] = useState([]); // historique brut des events realtime
-  const [stabilityLog, setStabilityLog] = useState([]); // lectures à 1s/5s/15s/30s
+  const [realtimeLog, setRealtimeLog] = useState([]);
+  const [stabilityLog, setStabilityLog] = useState([]);
   const [stabilityRunning, setStabilityRunning] = useState(false);
-  const [clickSnapshot, setClickSnapshot] = useState(null); // snapshot avant clic
+  const [clickSnapshot, setClickSnapshot] = useState(null);
   const [allDocsRaw, setAllDocsRaw] = useState([]);
+  const [initLog, setInitLog] = useState([]); // logs visibles du bouton Initialiser
+  const [initRunning, setInitRunning] = useState(false);
   const stabilityTimers = useRef([]);
 
   const loadRaw = useCallback(async () => {
@@ -118,11 +120,41 @@ export default function DispatchV2Debug() {
     loadRaw();
   };
 
+  const addInitLog = (msg, type = 'info') => {
+    const entry = { ts: new Date().toISOString(), msg, type };
+    console.log(`[INITIALIZE_${type.toUpperCase()}] ${msg}`);
+    setInitLog(prev => [entry, ...prev].slice(0, 20));
+  };
+
   const initCanonical = async () => {
-    const res = await base44.functions.invoke('setDispatchMode', { mode: 'auto' });
-    alert(res.data?.success ? `✅ Config canonique créée: id=${res.data?.config?.id}` : `❌ ${res.data?.error}`);
-    reload();
-    loadRaw();
+    if (initRunning) return;
+    setInitRunning(true);
+    addInitLog('INITIALIZE_CLICKED — Démarrage', 'info');
+
+    try {
+      addInitLog('INITIALIZE_STARTED — Appel setDispatchMode(auto)', 'info');
+
+      const res = await base44.functions.invoke('setDispatchMode', { mode: 'auto' });
+
+      addInitLog(`Réponse reçue: status=${res.status} | success=${res.data?.success}`, 'info');
+
+      if (!res.data?.success) {
+        const errMsg = res.data?.error || JSON.stringify(res.data);
+        addInitLog(`INITIALIZE_ERROR — ${errMsg}`, 'error');
+        return;
+      }
+
+      const cfg = res.data?.config;
+      addInitLog(`INITIALIZE_SUCCESS — id=${cfg?.id} | mode=${cfg?.mode} | mode_key=${cfg?.mode_key}`, 'success');
+
+      // Recharger UI
+      await Promise.all([reload(), loadRaw()]);
+      addInitLog('Rechargement UI terminé', 'success');
+    } catch (err) {
+      addInitLog(`INITIALIZE_ERROR — Exception: ${err.message}`, 'error');
+    } finally {
+      setInitRunning(false);
+    }
   };
 
   const canonical = allDocsRaw.find(c => c.mode_key === CANONICAL_KEY);
@@ -171,9 +203,16 @@ export default function DispatchV2Debug() {
         </CardHeader>
         <CardContent className="space-y-2">
           {allDocsRaw.length === 0 && (
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-red-600 font-bold">Aucun document — le système ne peut pas fonctionner</p>
-              <Button size="sm" onClick={initCanonical}>Initialiser</Button>
+            <div className="space-y-2">
+              <p className="text-xs text-red-600 font-bold">❌ Aucun document — le système ne peut pas fonctionner</p>
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={initCanonical}
+                disabled={initRunning}
+              >
+                {initRunning ? '⏳ Initialisation...' : '✅ Initialiser config canonique (GLOBAL)'}
+              </Button>
             </div>
           )}
           {allDocsRaw.map((doc, i) => {
@@ -204,8 +243,8 @@ export default function DispatchV2Debug() {
             </Button>
           )}
           {allDocsRaw.length > 0 && !canonical && (
-            <Button size="sm" onClick={initCanonical} className="w-full">
-              ✅ Créer config canonique (mode_key=GLOBAL)
+            <Button size="sm" onClick={initCanonical} className="w-full" disabled={initRunning}>
+              {initRunning ? '⏳...' : '✅ Créer config canonique (mode_key=GLOBAL)'}
             </Button>
           )}
         </CardContent>
@@ -265,6 +304,29 @@ export default function DispatchV2Debug() {
           )}
         </CardContent>
       </Card>
+
+      {/* Logs Initialisation */}
+      {initLog.length > 0 && (
+        <Card className="border-blue-300">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">🪵 Logs Initialisation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {initLog.map((e, i) => (
+                <div key={i} className={`rounded-lg px-2 py-1 text-xs font-mono ${
+                  e.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+                  e.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
+                  'bg-blue-50 text-blue-700 border border-blue-200'
+                }`}>
+                  <span className="text-[10px] opacity-60 mr-2">{moment(e.ts).format('HH:mm:ss')}</span>
+                  {e.msg}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Historique realtime brut */}
       <Card>
