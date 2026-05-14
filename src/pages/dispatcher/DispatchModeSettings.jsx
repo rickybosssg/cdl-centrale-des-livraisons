@@ -15,13 +15,17 @@ export default function DispatchModeSettings() {
   const handleChangeMode = async (newMode) => {
     if (mode === newMode) return;
     
+    console.log(`[DISPATCH_MODE_BUTTON_CLICK] ${mode} → ${newMode}`);
     setChanging(true);
     try {
+      console.log(`[DISPATCH_MODE_SET_START] Calling setDispatchMode("${newMode}")`);
       await setMode(newMode);
+      console.log(`[DISPATCH_MODE_SET_SUCCESS] Mode ${newMode} activé`);
       toast.success(`✅ Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
       await refresh();
     } catch (error) {
-      toast.error(`Erreur: ${error.message}`);
+      console.error(`[DISPATCH_MODE_SET_ERROR] ${error.message}`);
+      toast.error(`❌ Erreur: ${error.message}`);
     } finally {
       setChanging(false);
     }
@@ -74,20 +78,22 @@ export default function DispatchModeSettings() {
           <button
             onClick={() => handleChangeMode('auto')}
             disabled={changing || mode === 'auto'}
-            className={`p-4 rounded-xl border-2 transition-all active:scale-95 ${
+            className={`p-4 rounded-xl border-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
               mode === 'auto'
                 ? 'border-green-400 bg-green-100 cursor-default'
                 : 'border-green-300 bg-white hover:bg-green-50'
             }`}
           >
             <div className="flex items-center gap-2 mb-2">
-              {mode === 'auto' ? (
+              {changing && mode !== 'auto' ? (
+                <Loader2 className="h-5 w-5 animate-spin text-green-600" />
+              ) : mode === 'auto' ? (
                 <CheckCircle2 className="h-5 w-5 text-green-600" />
               ) : (
                 <Settings className="h-5 w-5 text-green-600" />
               )}
               <span className={`font-bold ${mode === 'auto' ? 'text-green-800' : 'text-green-700'}`}>
-                Mode automatique
+                {changing && mode !== 'auto' ? 'Activation...' : 'Mode automatique'}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -98,20 +104,22 @@ export default function DispatchModeSettings() {
           <button
             onClick={() => handleChangeMode('manuel')}
             disabled={changing || mode === 'manuel'}
-            className={`p-4 rounded-xl border-2 transition-all active:scale-95 ${
+            className={`p-4 rounded-xl border-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
               mode === 'manuel'
                 ? 'border-amber-400 bg-amber-100 cursor-default'
                 : 'border-amber-300 bg-white hover:bg-amber-50'
             }`}
           >
             <div className="flex items-center gap-2 mb-2">
-              {mode === 'manuel' ? (
+              {changing && mode !== 'manuel' ? (
+                <Loader2 className="h-5 w-5 animate-spin text-amber-600" />
+              ) : mode === 'manuel' ? (
                 <CheckCircle2 className="h-5 w-5 text-amber-600" />
               ) : (
                 <AlertCircle className="h-5 w-5 text-amber-600" />
               )}
               <span className={`font-bold ${mode === 'manuel' ? 'text-amber-800' : 'text-amber-700'}`}>
-                Mode manuel
+                {changing && mode !== 'manuel' ? 'Passage en manuel...' : 'Mode manuel'}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -120,12 +128,7 @@ export default function DispatchModeSettings() {
           </button>
         </div>
 
-        {changing && (
-          <div className="flex items-center justify-center mt-4">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="ml-2 text-sm text-muted-foreground">Changement en cours...</span>
-          </div>
-        )}
+
       </div>
 
       {/* Info */}

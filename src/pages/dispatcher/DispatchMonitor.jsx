@@ -175,8 +175,8 @@ export default function DispatchMonitor() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
 
-  // SOURCE UNIQUE : context global — plus de state local pour le mode dispatch
-  const { mode: dispatchMode, toggle: toggleMode } = useDispatchMode();
+  // SOURCE UNIQUE : context global
+  const { mode: dispatchMode, setMode, refresh: refreshMode } = useDispatchMode();
 
   const load = useCallback(async () => {
     try {
@@ -202,7 +202,22 @@ export default function DispatchMonitor() {
     }
   }, []);
 
-  // toggleMode vient du context — aucune logique locale
+  // Gestion changement mode — avec logs
+  const handleToggleMode = async () => {
+    const newMode = dispatchMode === 'auto' ? 'manuel' : 'auto';
+    console.log(`[DISPATCH_MODE_BUTTON_CLICK] ${dispatchMode} → ${newMode}`);
+    
+    try {
+      console.log(`[DISPATCH_MODE_SET_START] Calling setDispatchMode("${newMode}")`);
+      await setMode(newMode);
+      console.log(`[DISPATCH_MODE_SET_SUCCESS] Mode ${newMode} activé`);
+      toast.success(`✅ Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
+      await refreshMode();
+    } catch (error) {
+      console.error(`[DISPATCH_MODE_SET_ERROR] ${error.message}`);
+      toast.error(`❌ Erreur: ${error.message}`);
+    }
+  };
 
   // Assigner manuellement un livreur à une course
   const handleAssign = async (course, driver) => {
@@ -367,8 +382,9 @@ export default function DispatchMonitor() {
             </div>
           </div>
           <button
-            onClick={toggleMode}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${
+            onClick={handleToggleMode}
+            disabled={loading}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
               !isManuel ? 'border-amber-400 text-amber-700 bg-white hover:bg-amber-50' : 'border-green-400 text-green-700 bg-white hover:bg-green-50'
             }`}
           >
@@ -437,10 +453,11 @@ export default function DispatchMonitor() {
                 variant="outline"
                 className="text-xs h-7 border-orange-300 text-orange-700"
                 onClick={async () => {
+                  console.log('[DISPATCH_BULK_TRIGGER] Relance automatique pour', aDispatcher.length, 'courses');
                   for (const c of aDispatcher) {
                     base44.functions.invoke('autoDispatch', { course_id: c.id, force: true }).catch(() => {});
                   }
-                  toast.success('Relance en cours...');
+                  toast.success('📡 Relance dispatch en cours...');
                   setTimeout(load, 2000);
                 }}
               >
