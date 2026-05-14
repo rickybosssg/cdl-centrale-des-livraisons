@@ -93,9 +93,6 @@ export default function DispatchModeSettings() {
             {updatedAt && `Modifié ${moment(updatedAt).fromNow()} par ${updatedBy?.split('@')[0]}`}
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => loadMode()}>
-          <Settings className="h-4 w-4" />
-        </Button>
       </div>
 
       {/* Bandeau mode actuel */}
