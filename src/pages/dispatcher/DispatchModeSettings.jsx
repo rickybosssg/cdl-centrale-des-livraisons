@@ -14,83 +14,93 @@ export default function DispatchModeSettings() {
   const [updatedBy, setUpdatedBy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [changing, setChanging] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [showLogs, setShowLogs] = useState(false);
+
+  // Helper pour ajouter un log
+  const addLog = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString('fr-FR', { hour12: false });
+    const log = `[${timestamp}] ${message}`;
+    console.log(log);
+    setLogs(prev => [log, ...prev].slice(0, 50));
+  };
 
   const loadMode = async (source = 'init') => {
-    console.log(`[DISPATCH_MODE] loadMode START | source=${source} | timestamp=${Date.now()}`);
+    addLog(`📥 loadMode START | source=${source}`);
     try {
-      console.log(`[DISPATCH_MODE] Calling getDispatchMode...`);
+      addLog(`🔌 Appel getDispatchMode...`);
       const res = await base44.functions.invoke('getDispatchMode', { _t: Date.now() });
-      console.log(`[DISPATCH_MODE] getDispatchMode RESPONSE | status=${res.status} | data=`, res.data);
+      addLog(`✅ getDispatchMode RESPONSE | mode=${res.data.mode} | status=${res.status}`);
       
       const newMode = res.data.mode || 'auto';
       setMode(newMode);
       setUpdatedAt(res.data.updated_at);
       setUpdatedBy(res.data.updated_by);
-      console.log(`[DISPATCH_MODE] STATE UPDATED | mode=${newMode} | updated_at=${res.data.updated_at} | updated_by=${res.data.updated_by}`);
+      addLog(`📝 STATE UPDATED | mode=${newMode} | par=${res.data.updated_by}`);
     } catch (err) {
+      addLog(`❌ loadMode ERROR | ${err.message}`);
       console.error(`[DISPATCH_MODE] loadMode ERROR | source=${source} |`, err.message, err.stack);
       toast.error(`Erreur: ${err.message}`);
     } finally {
       setLoading(false);
-      console.log(`[DISPATCH_MODE] loadMode END | loading=false`);
+      addLog(`⏹️ loadMode END`);
     }
   };
 
   const handleChangeMode = async (newMode) => {
     if (mode === newMode || changing) {
-      console.log(`[DISPATCH_MODE_CHANGE] SKIP | mode=${mode} | newMode=${newMode} | changing=${changing}`);
+      addLog(`⏭️ SKIP | déjà ${mode}`);
       return;
     }
     
-    console.log(`[DISPATCH_MODE_CHANGE] START | ${mode} → ${newMode} | timestamp=${Date.now()}`);
+    addLog(`🔄 ${mode} → ${newMode}`);
     setChanging(true);
     
     try {
-      console.log(`[DISPATCH_MODE_CHANGE] Calling setDispatchMode...`);
+      addLog(`📤 Appel setDispatchMode...`);
       const res = await base44.functions.invoke('setDispatchMode', { mode: newMode, _t: Date.now() });
-      console.log(`[DISPATCH_MODE_CHANGE] RESPONSE | status=${res.status} | data=`, res.data);
+      addLog(`📥 RESPONSE | success=${res.data?.success}`);
       
       if (!res.data?.success) {
-        console.error(`[DISPATCH_MODE_CHANGE] FAILED | success=false | error=`, res.data?.error);
+        addLog(`❌ FAILED | ${res.data?.error}`);
         throw new Error(res.data?.error || 'Échec du changement de mode');
       }
       
-      console.log(`[DISPATCH_MODE_CHANGE] SUCCESS | updating state...`);
+      addLog(`✅ SUCCESS | mise à jour state`);
       setMode(newMode);
       setUpdatedAt(res.data.updated_at);
       setUpdatedBy(res.data.updated_by);
       
       toast.success(`Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
-      
-      console.log(`[DISPATCH_MODE_CHANGE] Scheduling refresh...`);
+      addLog(`🔄 Refresh...`);
       await loadMode('post-change');
     } catch (error) {
+      addLog(`❌ ERROR | ${error.message}`);
       console.error(`[DISPATCH_MODE_CHANGE] ERROR |`, error.message, error.stack);
       toast.error(`Erreur: ${error.message}`);
       await loadMode('error-recovery');
     } finally {
       setChanging(false);
-      console.log(`[DISPATCH_MODE_CHANGE] END | changing=false`);
+      addLog(`⏹️ END`);
     }
   };
 
   useEffect(() => {
-    console.log('[DISPATCH_MODE] useEffect MOUNTED');
+    addLog('📍 useEffect MOUNTED');
     loadMode('init');
     
-    console.log('[DISPATCH_MODE] Subscribing to DispatchModeState changes...');
+    addLog('📡 Subscription DispatchModeState...');
     const unsubscribe = base44.entities.DispatchModeState.subscribe((event) => {
-      console.log('[DISPATCH_MODE] SUBSCRIPTION EVENT |', event.type, event.data?.mode, event.id);
+      addLog(`🔔 EVENT | ${event.type} | mode=${event.data?.mode}`);
       if (event.data) {
         setMode(event.data.mode);
         setUpdatedAt(event.data.updated_at);
         setUpdatedBy(event.data.updated_by);
-        console.log('[DISPATCH_MODE] STATE UPDATED from subscription');
       }
     });
     
     return () => {
-      console.log('[DISPATCH_MODE] useEffect UNMOUNT | unsubscribing...');
+      addLog('📍 useEffect UNMOUNT');
       unsubscribe();
     };
   }, []);
@@ -106,17 +116,57 @@ export default function DispatchModeSettings() {
   return (
     <div className="space-y-4 pb-16">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold">Mode de Dispatch</h1>
-          <p className="text-xs text-muted-foreground">
-            {updatedAt && `Modifié ${moment(updatedAt).fromNow()} par ${updatedBy?.split('@')[0]}`}
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-xl font-bold">Mode de Dispatch</h1>
+            <p className="text-xs text-muted-foreground">
+              {updatedAt && `Modifié ${moment(updatedAt).fromNow()} par ${updatedBy?.split('@')[0]}`}
+            </p>
+          </div>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowLogs(!showLogs)}
+          className="text-xs"
+        >
+          {showLogs ? '🙈 Masquer' : '👁️ Logs'} ({logs.length})
+        </Button>
       </div>
+
+      {/* Panneau de logs */}
+      {showLogs && (
+        <Card className="bg-black text-green-400 font-mono text-xs">
+          <CardContent className="p-3 max-h-64 overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-bold">📋 Logs en temps réel</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setLogs([])}
+                className="h-6 text-xs"
+              >
+                🗑️ Clear
+              </Button>
+            </div>
+            {logs.length === 0 ? (
+              <p className="text-muted-foreground">Aucun log pour le moment</p>
+            ) : (
+              <div className="space-y-1">
+                {logs.map((log, i) => (
+                  <div key={i} className="border-l-2 border-green-600 pl-2 py-0.5">
+                    {log}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Mode actuel */}
       <div className={`rounded-2xl border-2 p-6 ${mode === 'auto' ? 'bg-green-50 border-green-400' : 'bg-amber-50 border-amber-400'}`}>
