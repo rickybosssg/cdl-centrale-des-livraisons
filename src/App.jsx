@@ -133,6 +133,8 @@ import FcmPermissionBanner from './components/FcmPermissionBanner';
 import FcmBootBanner from './components/FcmBootBanner';
 import { FcmReadyProvider } from '@/context/FcmReadyContext';
 import { DispatchModeProvider } from '@/context/DispatchModeContext';
+import { DispatchModeV2Provider } from '@/context/DispatchModeV2Context';
+import DispatchV2Debug from './pages/dispatcher/DispatchV2Debug';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
 import FcmRegisterAudit from './pages/FcmRegisterAudit';
@@ -467,6 +469,7 @@ const AuthenticatedApp = () => {
           <Route path="/profils-admin" element={<ProfilsAdmin />} />
           <Route path="/test-upload" element={<TestUpload />} />
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
+          <Route path="/dispatch-v2-debug" element={<DispatchV2Debug />} />
           <Route path="/health-dashboard" element={<HealthDashboard />} />
           <Route path="/audit-complet" element={<AuditComplet />} />
           <Route path="/test-publicites" element={<TestPublicitesVisibilite />} />
@@ -570,6 +573,7 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <FcmReadyProvider>
+        <DispatchModeV2Provider>
         <DispatchModeProvider>
         <TopNotificationProvider>
           <FcmErrorBoundary />
@@ -579,6 +583,7 @@ function App() {
           <Toaster />
         </TopNotificationProvider>
         </DispatchModeProvider>
+        </DispatchModeV2Provider>
         </FcmReadyProvider>
       </QueryClientProvider>
     </AuthProvider>
