@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
-
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -28,8 +28,12 @@ Deno.serve(async (req) => {
   try {
     console.log('[ADMIN_REPAIR_START] ========================================');
     console.log('[ADMIN_REPAIR_START] Timestamp:', new Date().toISOString());
+    console.log('[ADMIN_REPAIR_START] Request method:', req.method);
+    console.log('[ADMIN_REPAIR_START] Has Authorization header:', !!req.headers.get('Authorization'));
     
+    // Initialisation correcte du client Base44
     const base44 = createClientFromRequest(req);
+    console.log('[ADMIN_REPAIR_INIT] ✅ Base44 client initialized from request');
     
     // Récupérer l'utilisateur connecté (même sans rôle admin)
     const user = await base44.auth.me();

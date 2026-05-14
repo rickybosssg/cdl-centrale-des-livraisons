@@ -42,9 +42,16 @@ export default function AdminRepair() {
         return;
       }
 
-      // 2. User record check
-      const users = await base44.asServiceRole.entities.User.filter({ email: currentUser.email });
-      const userRecord = users[0];
+      // 2. User record check (via backend function)
+      addLog('📡 Appel adminAuthDiagnostics...');
+      const userRes = await base44.functions.invoke('adminAuthDiagnostics', { email: currentUser.email, _t: Date.now() });
+      const userRecord = userRes.data?.user;
+      
+      if (!userRes.data?.success) {
+        addLog(`❌ adminAuthDiagnostics échec: ${userRes.data?.error}`);
+        return;
+      }
+      
       setDiagnostics(prev => ({ 
         ...prev, 
         hasUserRecord: !!userRecord,
@@ -54,14 +61,9 @@ export default function AdminRepair() {
       }));
       addLog(`✅ User Record: role=${userRecord?.role} | user_type=${userRecord?.user_type}`);
 
-      // 3. Admin profile check
-      const adminProfiles = await base44.asServiceRole.entities.UserProfile.filter({
-        user_email: currentUser.email,
-        profile_type: 'admin',
-        deleted: false,
-      });
-      setDiagnostics(prev => ({ ...prev, adminProfileExists: adminProfiles.length > 0 }));
-      addLog(`✅ Admin Profile: ${adminProfiles.length > 0 ? 'EXISTS' : 'MISSING'}`);
+      // 3. Admin profile check (via backend function)
+      setDiagnostics(prev => ({ ...prev, adminProfileExists: userRecord?.has_admin_profile || false }));
+      addLog(`✅ Admin Profile: ${userRecord?.has_admin_profile ? 'EXISTS' : 'MISSING'}`);
 
       // 4. Backend functions check (test simple)
       try {
@@ -70,6 +72,22 @@ export default function AdminRepair() {
         addLog('✅ Backend Functions: ENABLED');
       } catch (err) {
         addLog(`⚠️ Backend Functions: ${err.message}`);
+      }
+
+      // 5. Résumé complet
+      addLog('📊 DIAGNOSTIC COMPLET:');
+      addLog(`   - Rôle: ${userRecord?.role}`);
+      addLog(`   - user_type: ${userRecord?.user_type}`);
+      addLog(`   - active_profile_type: ${userRecord?.active_profile_type}`);
+      addLog(`   - is_admin: ${userRecord?.is_admin}`);
+      addLog(`   - admin_status: ${userRecord?.admin_status}`);
+      addLog(`   - has_admin_profile: ${userRecord?.has_admin_profile}`);
+      addLog(`   - backend_enabled: ${userRes.data?.backend?.functions_enabled}`);
+      
+      if (userRecord?.role === 'admin' && userRecord?.has_admin_profile) {
+        addLog('🎉 COMPTE ADMIN VALIDE ET OPÉRATIONNEL');
+      } else {
+        addLog('⚠️ COMPTE NON ADMIN - Réparation recommandée');
       }
 
     } catch (error) {
