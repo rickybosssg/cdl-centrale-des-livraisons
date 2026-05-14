@@ -181,22 +181,15 @@ export default function DispatchMonitor() {
       const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
       if (configs.length > 0) {
         const cfg = configs[0];
-        console.log(`[DISPATCH_MODE_READ] mode=${cfg.mode} | id=${cfg.id} | source=BDD`);
-        setDispatchConfig(cfg);
+        // Normaliser : "manual" → "manuel"
+        const normalized = cfg.mode === 'manual' ? 'manuel' : (cfg.mode || 'auto');
+        console.log(`[DISPATCH_MODE_READ] raw=${cfg.mode} | normalized=${normalized} | id=${cfg.id} | source=BDD`);
+        setDispatchConfig({ ...cfg, mode: normalized });
       } else {
-        // Aucune config en BDD — initialiser via la fonction backend sécurisée (admin only)
-        // Cela garantit que la création passe par setDispatchMode avec les vérifications requises
-        console.log(`[DISPATCH_CONFIG_DEFAULT_CREATED] Aucune config BDD détectée — initialisation via backend`);
-        try {
-          const res = await base44.functions.invoke('setDispatchMode', { mode: 'auto' });
-          if (res.data?.config) {
-            console.log(`[DISPATCH_CONFIG_DEFAULT_CREATED] Config créée avec mode=auto | id=${res.data.config.id}`);
-            setDispatchConfig(res.data.config);
-          }
-        } catch (createErr) {
-          console.warn(`[DISPATCH_CONFIG_DEFAULT_CREATED] Échec init backend — mode=auto UI seulement | err=${createErr.message}`);
-          setDispatchConfig({ mode: 'auto', _local_only: true });
-        }
+        // Aucune config en BDD — afficher "auto" en UI uniquement, SANS écrire en BDD
+        // La création doit être explicite via un clic admin, jamais automatique
+        console.log(`[DISPATCH_CONFIG_BOOT_READ] Aucune config BDD — affichage auto (lecture seule, pas d'écriture)`);
+        setDispatchConfig({ mode: 'auto', _local_only: true });
       }
     } catch (err) {
       console.error(`[DISPATCH_CONFIG_BOOT_READ] Erreur lecture BDD | err=${err.message}`);
