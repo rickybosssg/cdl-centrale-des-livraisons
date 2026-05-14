@@ -202,19 +202,30 @@ export default function DispatchMonitor() {
     }
   }, []);
 
-  // Gestion changement mode — avec logs
+  // Gestion changement mode — APPEL DIRECT setDispatchMode (sans context)
+  const [localMode, setLocalMode] = useState(dispatchMode);
+  
   const handleToggleMode = async () => {
-    const newMode = dispatchMode === 'auto' ? 'manuel' : 'auto';
-    console.log(`[DISPATCH_MODE_BUTTON_CLICK] ${dispatchMode} → ${newMode}`);
+    const newMode = localMode === 'auto' ? 'manuel' : 'auto';
+    console.log(`[DISPATCH_MANUAL_BUTTON_CLICKED] ${localMode} → ${newMode}`);
     
     try {
-      console.log(`[DISPATCH_MODE_SET_START] Calling setDispatchMode("${newMode}")`);
-      await setMode(newMode);
-      console.log(`[DISPATCH_MODE_SET_SUCCESS] Mode ${newMode} activé`);
+      // Appel direct à la fonction backend
+      const res = await base44.functions.invoke('setDispatchMode', { mode: newMode, _t: Date.now() });
+      console.log(`[DISPATCH_MANUAL_BUTTON_SUCCESS] Response:`, res.data);
+      
+      if (!res.data?.success) {
+        throw new Error(res.data?.error || 'Échec de la commande');
+      }
+      
+      // Mise à jour immédiate de l'état local
+      setLocalMode(newMode);
       toast.success(`✅ Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
-      await refreshMode();
+      
+      // Refresh BDD pour confirmation
+      setTimeout(() => refreshMode(), 500);
     } catch (error) {
-      console.error(`[DISPATCH_MODE_SET_ERROR] ${error.message}`);
+      console.error(`[DISPATCH_MANUAL_BUTTON_ERROR] ${error.message}`);
       toast.error(`❌ Erreur: ${error.message}`);
     }
   };
@@ -318,9 +329,9 @@ export default function DispatchMonitor() {
     return () => { clearInterval(interval); unsubCourses(); unsubUsers(); };
   }, []);
 
-  // Source unique : DispatchModeContext
-  const isManuel = dispatchMode === 'manuel';
-  console.log(`[UI_MODE_BEFORE_RENDER] DispatchMonitor | dispatchMode=${dispatchMode} | isManuel=${isManuel}`);
+  // État local prioritaire (évite latence context)
+  const isManuel = localMode === 'manuel';
+  console.log(`[UI_MODE_BEFORE_RENDER] DispatchMonitor | localMode=${localMode} | isManuel=${isManuel}`);
   // Filtre SANS current_role — basé sur profil_valide + driver_online + non bloqué/suspendu
   const livreursOnline = livreurs.filter(l => !l.livreur_bloque && !l.livreur_suspendu);
   const livreursDispatchables = livreurs.filter(l =>
@@ -377,7 +388,7 @@ export default function DispatchMonitor() {
                 {!isManuel ? 'Courses assignées automatiquement selon le score' : 'Toutes les courses attendent votre assignation manuelle'}
               </p>
               <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                <Lock className="h-2.5 w-2.5" /> Source : BDD via DispatchModeContext
+                <Lock className="h-2.5 w-2.5" /> Contrôle direct via setDispatchMode
               </p>
             </div>
           </div>
