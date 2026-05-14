@@ -15,19 +15,19 @@ import BedouEngine from './BedouEngine';
 
 const ENGINE_VERSION = '1.0.0';
 
-// Transitions valides
+// Transitions valides — SOURCE UNIQUE DE VÉRITÉ
 const VALID_TRANSITIONS = {
-  en_attente:          ['assignee_attente', 'annulee'],
-  assignee_attente:    ['acceptee', 'refusee', 'aucun_livreur', 'en_attente'],
-  acceptee:            ['driver_en_route_pickup', 'annulee', 'refusee'],
-  driver_en_route_pickup: ['arrived_pickup'],
-  arrived_pickup:      ['en_cours'],
-  en_cours:            ['arrived_dropoff', 'annulee'],
-  arrived_dropoff:     ['livree'],
-  livree:              [], // Terminal
-  annulee:             [], // Terminal
-  refusee:             ['en_attente'], // Peut être re-dispatché
-  aucun_livreur:       ['en_attente'], // Peut être re-dispatché
+  en_attente:             ['assignee_attente', 'annulee', 'aucun_livreur'],
+  assignee_attente:       ['acceptee', 'refusee', 'aucun_livreur', 'en_attente'],
+  acceptee:               ['driver_en_route_pickup', 'en_cours', 'annulee', 'refusee'],
+  driver_en_route_pickup: ['arrived_pickup', 'en_cours'],
+  arrived_pickup:         ['en_cours'],
+  en_cours:               ['arrived_dropoff', 'livree', 'annulee'],
+  arrived_dropoff:        ['livree'],
+  livree:                 [], // Terminal
+  annulee:                [], // Terminal
+  refusee:                ['en_attente'],
+  aucun_livreur:          ['en_attente'],
 };
 
 const TERMINAL_STATUSES = ['livree', 'annulee'];

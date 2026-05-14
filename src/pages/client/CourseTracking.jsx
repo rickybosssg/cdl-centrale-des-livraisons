@@ -110,13 +110,28 @@ export default function CourseTracking() {
 
   useEffect(() => {
     if (!id) return;
-    const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.id === id && event.data) {
-        setCourse(event.data);
-        setLastUpdate(new Date());
+    console.log(`[REALTIME_DRIVER_LIST_START] subscribe tracking client | course=${id}`);
+
+    const unsub = base44.entities.Course.subscribe(async (event) => {
+      if (event.id !== id || !event.data) return;
+      console.log(`[REALTIME_DRIVER_LIST_UPDATE] course update reçu | statut=${event.data?.statut} | livreur_lat=${event.data?.livreur_lat}`);
+      setCourse(event.data);
+      setLastUpdate(new Date());
+      // Si le livreur vient d'être assigné, charger son profil
+      if (event.data?.livreur_email && event.data.livreur_email !== livreur?.email) {
+        base44.entities.User.filter({ email: event.data.livreur_email }).then(livs => {
+          if (livs?.[0]) {
+            setLivreur(livs[0]);
+            setLivreurRating({ note_moyenne: livs[0].note_moyenne || 0, nombre_notes: livs[0].nombre_notes || 0 });
+          }
+        }).catch(() => {});
       }
     });
-    return unsub;
+
+    return () => {
+      console.log(`[REALTIME_DRIVER_LIST_UNSUBSCRIBE] désinscription tracking | course=${id}`);
+      unsub?.();
+    };
   }, [id]);
 
   useEffect(() => {

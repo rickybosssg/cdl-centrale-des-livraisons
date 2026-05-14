@@ -51,29 +51,32 @@ export default function CoursesDisponibles() {
 
   useEffect(() => {
     loadData();
-    console.log('[DRIVER_COURSE_SUBSCRIBE_START] subscription cours disponibles activée');
+    console.log('[REALTIME_DRIVER_LIST_START] subscription courses disponibles activée');
 
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (!event.data) return;
+      if (!event.data && event.type !== "delete") return;
 
       if (event.type === "create" && event.data?.statut === "en_attente") {
-        console.log(`[DRIVER_COURSE_RECEIVED_REALTIME] nouvelle course | id=${event.id} | statut=en_attente`);
+        console.log(`[REALTIME_DRIVER_LIST_UPDATE] nouvelle course reçue | id=${event.id} | statut=en_attente`);
         setCourses(prev => {
           if (prev.find(c => c.id === event.id)) return prev;
-          console.log('[DRIVER_COURSE_UI_UPDATED] liste mise à jour — nouvelle course ajoutée');
           return [event.data, ...prev];
         });
       } else if (event.type === "update") {
-        // Retirer si plus en_attente (acceptée par un autre livreur, annulée, etc.)
         if (event.data?.statut !== "en_attente") {
-          console.log(`[DRIVER_COURSE_UI_UPDATED] course ${event.id} retirée de la liste (statut=${event.data?.statut})`);
+          console.log(`[REALTIME_DRIVER_LIST_UPDATE] course retirée | id=${event.id} | statut=${event.data?.statut}`);
           setCourses(prev => prev.filter(c => c.id !== event.id));
         }
       } else if (event.type === "delete") {
+        console.log(`[REALTIME_DRIVER_LIST_UPDATE] course supprimée | id=${event.id}`);
         setCourses(prev => prev.filter(c => c.id !== event.id));
       }
     });
-    return unsub;
+
+    return () => {
+      console.log('[REALTIME_DRIVER_LIST_UNSUBSCRIBE] désinscription subscription courses disponibles');
+      unsub?.();
+    };
   }, []);
 
   const accepter = async (course) => {
