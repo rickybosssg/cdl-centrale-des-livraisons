@@ -77,6 +77,7 @@ import DiffusionGlobale from './pages/dispatcher/DiffusionGlobale';
 import PendingProfileRequests from './pages/dispatcher/PendingProfileRequests';
 import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
 import DispatchModeSettings from './pages/dispatcher/DispatchModeSettings';
+import AdminRepair from './pages/dispatcher/AdminRepair';
 import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
 import ProfilsAdmin from './pages/dispatcher/ProfilsAdmin';
 import TestUpload from './pages/TestUpload';
@@ -470,6 +471,7 @@ const AuthenticatedApp = () => {
           <Route path="/test-upload" element={<TestUpload />} />
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
           <Route path="/dispatch-mode-settings" element={<DispatchModeSettings />} />
+          <Route path="/admin-repair" element={<AdminRepair />} />
           <Route path="/dispatch-v2-debug" element={<DispatchV2Debug />} />
           <Route path="/health-dashboard" element={<HealthDashboard />} />
           <Route path="/audit-complet" element={<AuditComplet />} />
