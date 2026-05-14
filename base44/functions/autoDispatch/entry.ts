@@ -75,22 +75,27 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
 
-    // ── 1. Mode dispatch — SOURCE DE VÉRITÉ BDD (jamais écrasé) ──────────
-    const configs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 1);
-    const mode = configs[0]?.mode || 'auto';
-    const configId = configs[0]?.id || null;
+    // ── 1. Mode dispatch — LECTURE STRICTE GLOBAL (jamais écriture) ─────
+    const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
+    const canonicalConfig = allConfigs.find(c => c.mode_key === 'GLOBAL');
+    const mode = canonicalConfig?.mode || (allConfigs.length === 0 ? 'auto' : null);
+    const configId = canonicalConfig?.id || null;
 
-    if (configs.length > 0) {
-      console.log(`[DISPATCH_CONFIG_EXISTING_RESPECTED] mode=${mode} | id=${configId} | force=${forceDispatch}`);
-    } else {
-      console.log(`[DISPATCH_CONFIG_BOOT_READ] Aucune config BDD — fallback mode=auto (lecture seule, pas de création ici)`);
+    console.log(`[DISPATCH_V2_WRITE_BLOCKED] autoDispatch READ-ONLY | CANONICAL=${!!canonicalConfig} | mode=${mode} | id=${configId || 'none'} | force=${forceDispatch} | totalDocs=${allConfigs.length}`);
+
+    // GARDE ABSOLU : si mode inconnu/null → bloquer (pas de fallback auto si doc existe)
+    if (mode === null) {
+      console.error(`[DISPATCH_V2_FORCE_AUTO_BLOCKED] autoDispatch BLOQUÉ — doc(s) trouvé(s) mais aucun GLOBAL canonique. Pas de fallback auto. totalDocs=${allConfigs.length}`);
+      return Response.json({ success: false, blocked: true, reason: 'no_canonical_config' });
     }
 
-    console.log(`[DISPATCH_MODE_READ] mode=${mode} | configId=${configId || 'none'} | force=${forceDispatch}`);
-
     if (mode === 'manuel' && !forceDispatch) {
-      console.log(`[DISPATCH_AUTO_BLOCKED_MANUAL_MODE] autoDispatch bloqué — mode=manuel | course=${courseId} | configId=${configId}`);
+      console.log(`[DISPATCH_V2_WRITE_BLOCKED] autoDispatch bloqué — mode=manuel | course=${courseId} | configId=${configId}`);
       return Response.json({ success: false, blocked: true, reason: 'mode_manuel' });
+    }
+
+    if (mode === 'manuel' && forceDispatch) {
+      console.log(`[DISPATCH_V2_WRITE_ALLOWED] autoDispatch force=true en mode manuel | course=${courseId} | configId=${configId} | caller=admin_force`);
     }
 
     // ── 2. Récupérer la course ─────────────────────────────────────────────

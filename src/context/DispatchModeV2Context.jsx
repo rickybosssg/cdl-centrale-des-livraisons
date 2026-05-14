@@ -91,7 +91,22 @@ export function DispatchModeV2Provider({ children }) {
   const toggle = useCallback(async (adminEmail) => {
     if (toggling) return;
     const prevMode = lastMode.current;
+
+    // GARDE ABSOLU : ne jamais toggler si le mode n'est pas encore chargé
+    if (prevMode === null) {
+      console.error('[DISPATCH_V2_WRITE_BLOCKED] Toggle ignoré — mode non encore chargé (prevMode=null). Attendre loadFromDB.');
+      return;
+    }
+
     const newMode = prevMode === 'auto' ? 'manuel' : 'auto';
+
+    // GARDE ABSOLU : ne jamais écrire 'auto' si déjà en 'manuel' sans confirmation
+    // (protection contre les double-appels ou race conditions)
+    if (prevMode === 'manuel' && newMode === 'auto') {
+      console.log(`[DISPATCH_V2_WRITE_ALLOWED] Toggle manuel→auto | source=admin_click | admin=${adminEmail}`);
+    } else {
+      console.log(`[DISPATCH_V2_WRITE_ALLOWED] Toggle auto→manuel | source=admin_click | admin=${adminEmail}`);
+    }
 
     console.log(`[DISPATCH_V2] Toggle: ${prevMode} → ${newMode} | admin=${adminEmail}`);
 

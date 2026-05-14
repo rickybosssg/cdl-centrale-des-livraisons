@@ -215,16 +215,24 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'course_id requis' }, { status: 400 });
   }
 
-  // ── 0. Vérifier le mode dispatch — STRICT GLOBAL ──────────────────────────
+  // ── 0. Vérifier le mode dispatch — FILTRE STRICT GLOBAL ──────────────────
   const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
   const canonicalCfg = allConfigs.find(c => c.mode_key === 'GLOBAL');
-  const dispatchMode = (canonicalCfg || allConfigs[0])?.mode || 'auto';
-  L(`[DISPATCH_WRITE_SOURCE] createSmartDispatch | CANONICAL=${!!canonicalCfg} | mode=${dispatchMode} | id=${(canonicalCfg||allConfigs[0])?.id||'none'}`);
+  // RÈGLE : ne lire QUE le doc canonique. Si doc(s) existant(s) mais pas de GLOBAL → bloquer
+  const dispatchMode = canonicalCfg?.mode || (allConfigs.length === 0 ? 'auto' : null);
+  L(`[DISPATCH_V2_WRITE_BLOCKED] createSmartDispatch READ | CANONICAL=${!!canonicalCfg} | mode=${dispatchMode} | id=${canonicalCfg?.id||'none'} | totalDocs=${allConfigs.length}`);
+
+  if (dispatchMode === null) {
+    L(`[DISPATCH_V2_FORCE_AUTO_BLOCKED] BLOQUÉ — doc(s) présents mais aucun GLOBAL. Pas de fallback auto.`);
+    return Response.json({ ok: true, blocked: true, reason: 'no_canonical_config' });
+  }
 
   if (dispatchMode === 'manuel') {
-    L(`[DISPATCH_FORCE_AUTO_DETECTED] BLOQUÉ — mode=manuel actif. createSmartDispatch ne dispatche pas en mode manuel.`);
+    L(`[DISPATCH_V2_WRITE_BLOCKED] BLOQUÉ — mode=manuel actif. createSmartDispatch ne dispatche pas.`);
     return Response.json({ ok: true, blocked: true, reason: 'mode_manuel' });
   }
+
+  L(`[DISPATCH_V2_WRITE_ALLOWED] createSmartDispatch autorisé | mode=${dispatchMode} | source=automation_entity`);
 
   // ── 1. Charger la course ──────────────────────────────────────────────────
   let course = null;
@@ -264,7 +272,8 @@ Deno.serve(async (req) => {
   L(`Livreurs éligibles: ${eligible.length}/${allUsers.length}`);
 
   if (eligible.length === 0) {
-    L('Aucun livreur éligible → fallback autoDispatch');
+    // MODE AUTO UNIQUEMENT — le check mode en haut garantit qu'on est en auto ici
+    L('[DISPATCH_V2_WRITE_ALLOWED] Aucun livreur smart éligible → fallback autoDispatch | mode=auto confirmé');
     try {
       await base44.asServiceRole.functions.invoke('autoDispatch', { course_id });
       L('Fallback autoDispatch lancé');
@@ -321,23 +330,31 @@ Deno.serve(async (req) => {
   const finalCheck = await base44.asServiceRole.entities.Course.filter({ id: course_id }, null, 1).catch(() => []);
   const finalCourse = finalCheck?.[0];
   if (finalCourse && ['en_attente', 'aucun_livreur'].includes(finalCourse.statut)) {
-    L('Tous les top3 ont refusé/timeout → fallback autoDispatch');
-    try {
-      await base44.asServiceRole.functions.invoke('autoDispatch', { course_id });
-    } catch (e) {
-      L(`Fallback autoDispatch erreur: ${e.message}`);
+    // Re-vérifier mode avant fallback (protection race condition)
+    const recheckConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
+    const recheckCanonical = recheckConfigs.find(c => c.mode_key === 'GLOBAL');
+    const recheckMode = recheckCanonical?.mode || (recheckConfigs.length === 0 ? 'auto' : null);
+    if (recheckMode !== 'auto') {
+      L(`[DISPATCH_V2_WRITE_BLOCKED] Fallback final BLOQUÉ — mode=${recheckMode} au moment du fallback`);
+    } else {
+      L('[DISPATCH_V2_WRITE_ALLOWED] Tous les top3 ont refusé/timeout → fallback autoDispatch | mode=auto re-confirmé');
+      try {
+        await base44.asServiceRole.functions.invoke('autoDispatch', { course_id });
+      } catch (e) {
+        L(`Fallback autoDispatch erreur: ${e.message}`);
+      }
+      // Log fallback
+      await base44.asServiceRole.entities.SmartDispatchLog.create({
+        course_id,
+        driver_email: 'fallback',
+        driver_name: 'autoDispatch fallback',
+        score: 0,
+        position: 99,
+        sent_at: new Date().toISOString(),
+        status: 'skipped',
+        fallback_used: true,
+      }).catch(() => {});
     }
-    // Log fallback
-    await base44.asServiceRole.entities.SmartDispatchLog.create({
-      course_id,
-      driver_email: 'fallback',
-      driver_name: 'autoDispatch fallback',
-      score: 0,
-      position: 99,
-      sent_at: new Date().toISOString(),
-      status: 'skipped',
-      fallback_used: true,
-    }).catch(() => {});
   }
 
   const elapsed = Date.now() - t0;
