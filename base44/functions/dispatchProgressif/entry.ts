@@ -1,19 +1,27 @@
 /**
- * dispatchProgressif — Dispatch intelligent avec retry progressif
- * 
- * STEP 1 : Sélectionner livreurs disponibles (top 3)
- * STEP 2 : Envoyer notifications (push + interne)
- * STEP 3 : Attendre acceptation (timeout 60s)
- * STEP 4 : Si refus → envoyer aux 5 suivants (timeout 90s)
- * STEP 5 : Si encore refus → élargir progressivement
- * STEP 6 : Timeout global 3 min
- * 
- * Retourne : { success, livreur_assigné, temps_acceptation, tentatives }
+ * dispatchProgressif — VERROU CANONIQUE V2 ABSOLU
+ *
+ * Si mode GLOBAL = "manuel" → BLOQUÉ TOTALEMENT, retour immédiat.
+ * Aucun fallback vers auto. Aucune écriture de DispatchConfig.
+ *
+ * LOGS :
+ *   [DISPATCH_CANONICAL_READ]
+ *   [AUTO_DISPATCH_BLOCKED_MANUAL_MODE]
+ *   [MANUAL_MODE_PROTECTED]
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+const CANONICAL_KEY = 'GLOBAL';
 const L = (msg) => console.log(`[DISPATCH] ${new Date().toISOString().slice(11, 19)} | ${msg}`);
+
+async function getCanonicalMode(base44) {
+  const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
+  const canonical = allConfigs.find(c => c.mode_key === CANONICAL_KEY);
+  const mode = canonical?.mode === 'manuel' ? 'manuel' : canonical?.mode === 'auto' ? 'auto' : null;
+  console.log(`[DISPATCH_CANONICAL_READ] dispatchProgressif | CANONICAL=${!!canonical} | mode=${mode} | id=${canonical?.id || 'none'} | totalDocs=${allConfigs.length}`);
+  return { mode, configId: canonical?.id || null };
+}
 
 Deno.serve(async (req) => {
   const t0 = Date.now();
@@ -39,6 +47,22 @@ Deno.serve(async (req) => {
 
     L(`course_id=${courseId}`);
 
+    // ── VERROU CANONIQUE ABSOLU — PRIORITÉ MAXIMALE ───────────────────────────
+    const { mode, configId } = await getCanonicalMode(base44);
+
+    if (mode === null) {
+      console.error(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] dispatchProgressif BLOQUÉ — aucun doc GLOBAL | course=${courseId} | function=dispatchProgressif`);
+      return Response.json({ success: false, blocked: true, reason: 'no_canonical_config' });
+    }
+
+    if (mode === 'manuel') {
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | course=${courseId} | configId=${configId} | function=dispatchProgressif`);
+      console.log(`[MANUAL_MODE_PROTECTED] dispatchProgressif bloqué par verrou manuel | course=${courseId}`);
+      return Response.json({ success: false, blocked: true, reason: 'manual_mode_active' });
+    }
+
+    L(`[DISPATCH_CANONICAL_READ] mode=auto confirmé | configId=${configId} — dispatch autorisé`);
+
     // ── ÉTAPE 1 : Sélectionner livreurs ──────────────────────────────────────
     let response = await base44.functions.invoke('selectSmartLivreurs', {
       courseId,
@@ -53,7 +77,6 @@ Deno.serve(async (req) => {
 
     if (allLivreurs.length === 0) {
       L('échec=aucun_livreur');
-      // Notifier admin
       try {
         await base44.asServiceRole.entities.Notification.create({
           destinataire_role: 'admin',
@@ -70,10 +93,10 @@ Deno.serve(async (req) => {
 
     // ── ÉTAPE 2-6 : Progressif (top 3 → 5 → 10 → tous) ───────────────────────
     const batches = [
-      { count: 3, timeout: 60000 },    // 3 livreurs, 60s
-      { count: 5, timeout: 90000 },    // 5 livreurs, 90s
-      { count: 10, timeout: 120000 },  // 10 livreurs, 2min
-      { count: allLivreurs.length, timeout: 60000 }, // tous, 1min
+      { count: 3, timeout: 60000 },
+      { count: 5, timeout: 90000 },
+      { count: 10, timeout: 120000 },
+      { count: allLivreurs.length, timeout: 60000 },
     ];
 
     let acceptedLivreur = null;
@@ -84,21 +107,23 @@ Deno.serve(async (req) => {
       if (acceptedLivreur) break;
       tentativeNumber++;
 
+      // RE-VÉRIFIER le mode à chaque vague (le mode peut changer pendant les 60s d'attente)
+      const { mode: currentMode } = await getCanonicalMode(base44);
+      if (currentMode !== 'auto') {
+        console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] dispatchProgressif interrompu en cours — mode=${currentMode} | course=${courseId} | vague=${tentativeNumber}`);
+        console.log(`[MANUAL_MODE_PROTECTED] dispatch interrompu mid-flight | course=${courseId}`);
+        return Response.json({ success: false, blocked: true, reason: 'manual_mode_active_mid_dispatch', tentatives: tentativeNumber });
+      }
+
       const batchLivreurs = allLivreurs.slice(0, batch.count);
       L(`tentative=${tentativeNumber} count=${batchLivreurs.length} timeout=${batch.timeout}ms`);
       L(`envoyés=${batchLivreurs.map(l => l.user_email.split('@')[0]).join(',')}`);
 
-      // Envoyer notifications à tous les livreurs du batch
       const notifPromises = batchLivreurs.map(livreur =>
-        sendDispatchNotif(base44, courseId, livreur, {
-          coursePrix,
-          clientName,
-          courseQuartier,
-        })
+        sendDispatchNotif(base44, courseId, livreur, { coursePrix, clientName, courseQuartier })
       );
       await Promise.allSettled(notifPromises);
 
-      // Attendre acceptation avec timeout
       const acceptancePromise = waitForAcceptance(base44, courseId, batchLivreurs);
       const result = await Promise.race([
         acceptancePromise,
@@ -116,8 +141,7 @@ Deno.serve(async (req) => {
     }
 
     if (!acceptedLivreur) {
-      L(`échec=tous_refus`);
-      // Notifier admin
+      L('échec=tous_refus');
       try {
         await base44.asServiceRole.entities.Notification.create({
           destinataire_role: 'admin',
@@ -129,12 +153,7 @@ Deno.serve(async (req) => {
           target_entity_type: 'Course',
         });
       } catch (_) {}
-      return Response.json({
-        success: false,
-        error: 'Aucun livreur n\'a accepté',
-        courseId,
-        tentatives: tentativeNumber,
-      });
+      return Response.json({ success: false, error: 'Aucun livreur n\'a accepté', courseId, tentatives: tentativeNumber });
     }
 
     // ── ÉTAPE FINALE : Assigner et notifier ──────────────────────────────────
@@ -146,7 +165,6 @@ Deno.serve(async (req) => {
         time_dispatch: acceptanceTime,
       });
 
-      // Notifier client : livreur en route
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: clientEmail,
         titre: '✅ Livreur assigné',
@@ -157,7 +175,6 @@ Deno.serve(async (req) => {
         target_entity_type: 'Course',
       });
 
-      // Push FCM client (non-bloquant)
       try {
         await base44.functions.invoke('sendCdlNotification', {
           user_email: clientEmail,
@@ -191,11 +208,8 @@ Deno.serve(async (req) => {
   }
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 async function sendDispatchNotif(base44, courseId, livreur, courseInfo) {
   try {
-    // Notif interne BDD
     await base44.asServiceRole.entities.Notification.create({
       destinataire_email: livreur.user_email,
       titre: '🚀 Nouvelle course disponible',
@@ -207,7 +221,6 @@ async function sendDispatchNotif(base44, courseId, livreur, courseInfo) {
       target_entity_type: 'Course',
     });
 
-    // Push FCM (non-bloquant)
     try {
       await base44.functions.invoke('sendCdlNotification', {
         user_email: livreur.user_email,
@@ -228,11 +241,10 @@ async function sendDispatchNotif(base44, courseId, livreur, courseInfo) {
 }
 
 async function waitForAcceptance(base44, courseId, livreurs) {
-  // Attendre que la course passe en "acceptee" ou qu'un livreur l'accepte
   const emails = livreurs.map(l => l.user_email);
   const t0 = Date.now();
-  const pollInterval = 2000; // polling tous les 2s
-  const maxWait = 150000; // max 2.5min
+  const pollInterval = 2000;
+  const maxWait = 150000;
 
   while (Date.now() - t0 < maxWait) {
     try {
@@ -244,10 +256,7 @@ async function waitForAcceptance(base44, courseId, livreurs) {
 
       const c = course[0];
       if (c.statut === 'acceptee' && emails.includes(c.livreur_email)) {
-        return {
-          livreur: livreurs.find(l => l.user_email === c.livreur_email),
-          time: Date.now() - t0,
-        };
+        return { livreur: livreurs.find(l => l.user_email === c.livreur_email), time: Date.now() - t0 };
       }
     } catch (_) {}
 

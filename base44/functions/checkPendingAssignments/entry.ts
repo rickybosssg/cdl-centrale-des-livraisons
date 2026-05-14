@@ -146,9 +146,10 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, blocked: true, reason: 'no_canonical_config', reassigned: 0, skipped: 0 });
     }
 
-    if (mode === 'manuel' && !forceImmediateTrigger) {
-      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | configId=${configId} | function=checkPendingAssignments`);
-      console.log(`[MANUAL_MODE_PROTECTED] checkPendingAssignments bloqué par verrou manuel`);
+    if (mode === 'manuel') {
+      // VERROU ABSOLU — forceImmediateTrigger ne bypass JAMAIS le mode manuel
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | configId=${configId} | function=checkPendingAssignments | forceImmediate=${forceImmediateTrigger}`);
+      console.log(`[MANUAL_MODE_PROTECTED] checkPendingAssignments bloqué par verrou manuel — même avec forceImmediate`);
       return Response.json({ success: true, blocked: true, reason: 'manual_mode_active', reassigned: 0, skipped: 0 });
     }
 

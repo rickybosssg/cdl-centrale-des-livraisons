@@ -115,10 +115,11 @@ Deno.serve(async (req) => {
       .map((h) => h.livreur_email);
 
     // autoDispatch vérifiera lui-même le mode canonique
+    // JAMAIS force=true depuis reDispatch — le verrou manuel doit s'appliquer
     const result = await base44.asServiceRole.functions.invoke('autoDispatch', {
       course_id: courseId,
       exclude_emails: exclus,
-      force: true,
+      force: false,
     });
 
     console.log(`[REDISPATCH] Résultat pour course ${courseId}:`, result);

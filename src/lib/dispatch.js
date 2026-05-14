@@ -103,24 +103,25 @@ export function scoreDriver(driver, course) {
 }
 
 /**
- * Récupère le mode de dispatch depuis la BDD.
- * RÈGLE : ne jamais créer ni écraser une config existante.
- * Fallback 'auto' uniquement si la BDD est inaccessible.
+ * Récupère le mode de dispatch CANONIQUE depuis la BDD.
+ * LIT UNIQUEMENT le doc avec mode_key="GLOBAL".
+ * Retourne null si aucun doc GLOBAL — JAMAIS de fallback vers 'auto'.
  */
 export async function getDispatchMode() {
   try {
-    const configs = await base44.entities.DispatchConfig.list('-updated_date', 1);
-    if (configs.length > 0) {
-      const mode = configs[0]?.mode || 'auto';
-      console.log(`[DISPATCH_CONFIG_BOOT_READ] mode=${mode} | id=${configs[0]?.id} | source=BDD`);
+    const configs = await base44.entities.DispatchConfig.list('-updated_date', 50);
+    const canonical = configs.find(c => c.mode_key === 'GLOBAL');
+    if (canonical) {
+      const mode = canonical.mode === 'manuel' ? 'manuel' : canonical.mode === 'auto' ? 'auto' : null;
+      console.log(`[DISPATCH_CANONICAL_READ] frontend | mode=${mode} | id=${canonical.id}`);
       return mode;
     }
-    // Aucune config en BDD — on n'en crée pas ici (responsabilité de setDispatchMode)
-    console.log(`[DISPATCH_CONFIG_BOOT_READ] Aucune config BDD — fallback mode=auto (lecture seule)`);
-    return 'auto';
+    // Aucun doc GLOBAL → retourner null, jamais fallback auto
+    console.warn(`[DISPATCH_CANONICAL_READ] frontend | Aucun doc GLOBAL | totalDocs=${configs.length} — dispatch bloqué`);
+    return null;
   } catch (err) {
-    console.warn(`[DISPATCH_CONFIG_BOOT_READ] Erreur lecture BDD — fallback mode=auto | err=${err?.message}`);
-    return 'auto';
+    console.warn(`[DISPATCH_CANONICAL_READ] frontend | Erreur lecture BDD — dispatch bloqué | err=${err?.message}`);
+    return null;
   }
 }
 
@@ -131,12 +132,13 @@ export async function getDispatchMode() {
 export async function lancerDispatch(course, excludeEmails = []) {
   try {
     const mode = await getDispatchMode();
-    if (mode === 'manuel') {
-      console.log('[Dispatch] BLOQUÉ — mode manuel actif');
+    if (mode !== 'auto') {
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] lancerDispatch BLOQUÉ — mode=${mode} | course=${course?.id}`);
+      console.log(`[MANUAL_MODE_PROTECTED] lancerDispatch bloqué — mode non-auto (${mode})`);
       return null;
     }
   } catch (e) {
-    console.warn('[Dispatch] Erreur lecture mode — dispatch bloqué:', e.message);
+    console.warn('[DISPATCH_CANONICAL_READ] Erreur lecture mode — dispatch bloqué:', e.message);
     return null;
   }
 
