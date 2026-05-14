@@ -14,6 +14,9 @@ export default function DispatchModeSettings() {
   const [updatedBy, setUpdatedBy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [changing, setChanging] = useState(false);
+  
+  // Alias pour le bouton refresh
+  const refresh = loadMode;
 
   // Charger le mode actuel
   const loadMode = async () => {
