@@ -15,60 +15,84 @@ export default function DispatchModeSettings() {
   const [loading, setLoading] = useState(true);
   const [changing, setChanging] = useState(false);
 
-  const loadMode = async () => {
+  const loadMode = async (source = 'init') => {
+    console.log(`[DISPATCH_MODE] loadMode START | source=${source} | timestamp=${Date.now()}`);
     try {
+      console.log(`[DISPATCH_MODE] Calling getDispatchMode...`);
       const res = await base44.functions.invoke('getDispatchMode', { _t: Date.now() });
-      setMode(res.data.mode || 'auto');
+      console.log(`[DISPATCH_MODE] getDispatchMode RESPONSE | status=${res.status} | data=`, res.data);
+      
+      const newMode = res.data.mode || 'auto';
+      setMode(newMode);
       setUpdatedAt(res.data.updated_at);
       setUpdatedBy(res.data.updated_by);
+      console.log(`[DISPATCH_MODE] STATE UPDATED | mode=${newMode} | updated_at=${res.data.updated_at} | updated_by=${res.data.updated_by}`);
     } catch (err) {
-      console.error('[LOAD_MODE_ERROR]', err.message);
-      toast.error('Erreur de chargement du mode');
+      console.error(`[DISPATCH_MODE] loadMode ERROR | source=${source} |`, err.message, err.stack);
+      toast.error(`Erreur: ${err.message}`);
     } finally {
       setLoading(false);
+      console.log(`[DISPATCH_MODE] loadMode END | loading=false`);
     }
   };
 
   const handleChangeMode = async (newMode) => {
-    if (mode === newMode || changing) return;
+    if (mode === newMode || changing) {
+      console.log(`[DISPATCH_MODE_CHANGE] SKIP | mode=${mode} | newMode=${newMode} | changing=${changing}`);
+      return;
+    }
     
-    console.log(`[DISPATCH_MODE_CHANGE] ${mode} → ${newMode}`);
+    console.log(`[DISPATCH_MODE_CHANGE] START | ${mode} → ${newMode} | timestamp=${Date.now()}`);
     setChanging(true);
     
     try {
+      console.log(`[DISPATCH_MODE_CHANGE] Calling setDispatchMode...`);
       const res = await base44.functions.invoke('setDispatchMode', { mode: newMode, _t: Date.now() });
+      console.log(`[DISPATCH_MODE_CHANGE] RESPONSE | status=${res.status} | data=`, res.data);
       
       if (!res.data?.success) {
+        console.error(`[DISPATCH_MODE_CHANGE] FAILED | success=false | error=`, res.data?.error);
         throw new Error(res.data?.error || 'Échec du changement de mode');
       }
       
+      console.log(`[DISPATCH_MODE_CHANGE] SUCCESS | updating state...`);
       setMode(newMode);
       setUpdatedAt(res.data.updated_at);
       setUpdatedBy(res.data.updated_by);
       
       toast.success(`Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
-      await loadMode();
+      
+      console.log(`[DISPATCH_MODE_CHANGE] Scheduling refresh...`);
+      await loadMode('post-change');
     } catch (error) {
-      console.error('[DISPATCH_MODE_CHANGE_ERROR]', error.message);
+      console.error(`[DISPATCH_MODE_CHANGE] ERROR |`, error.message, error.stack);
       toast.error(`Erreur: ${error.message}`);
-      await loadMode();
+      await loadMode('error-recovery');
     } finally {
       setChanging(false);
+      console.log(`[DISPATCH_MODE_CHANGE] END | changing=false`);
     }
   };
 
   useEffect(() => {
-    loadMode();
+    console.log('[DISPATCH_MODE] useEffect MOUNTED');
+    loadMode('init');
     
+    console.log('[DISPATCH_MODE] Subscribing to DispatchModeState changes...');
     const unsubscribe = base44.entities.DispatchModeState.subscribe((event) => {
+      console.log('[DISPATCH_MODE] SUBSCRIPTION EVENT |', event.type, event.data?.mode, event.id);
       if (event.data) {
         setMode(event.data.mode);
         setUpdatedAt(event.data.updated_at);
         setUpdatedBy(event.data.updated_by);
+        console.log('[DISPATCH_MODE] STATE UPDATED from subscription');
       }
     });
     
-    return () => unsubscribe();
+    return () => {
+      console.log('[DISPATCH_MODE] useEffect UNMOUNT | unsubscribing...');
+      unsubscribe();
+    };
   }, []);
 
   if (loading) {
