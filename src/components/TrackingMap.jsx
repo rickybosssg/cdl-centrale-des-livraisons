@@ -96,10 +96,13 @@ function BoundsAdjuster({ livreurLat, livreurLng, departLat, departLng, arriveLa
 
 function getScooterLabel(statut, eta) {
   switch (statut) {
-    case "acceptee":  return "En route";
-    case "en_cours":  return eta ? `~${eta}` : "En livraison";
-    case "livree":    return "Livré ✓";
-    default:          return "";
+    case "acceptee":
+    case "driver_en_route_pickup": return "En route vers départ";
+    case "arrived_pickup":         return "📍 Arrivé au départ";
+    case "en_cours":               return eta ? `🚀 ~${eta}` : "🚀 En livraison";
+    case "arrived_dropoff":        return "🏁 Arrivé destination";
+    case "livree":                 return "✅ Livré";
+    default:                       return "";
   }
 }
 

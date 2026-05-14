@@ -21,13 +21,16 @@ import UserLocationShare from "@/components/UserLocationShare";
 import LivreurHumanCard from "@/components/LivreurHumanCard";
 
 const STATUT_CFG = {
-  en_attente:       { label: "Recherche d'un livreur…",    color: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50",  emoji: "🔍" },
-  assignee_attente: { label: "Livreur contacté…",          color: "bg-blue-500",  text: "text-blue-700",  bg: "bg-blue-50",   emoji: "📲" },
-  acceptee:         { label: "En route vers récupération", color: "bg-primary",   text: "text-primary",   bg: "bg-blue-50",   emoji: "🛵" },
-  en_cours:         { label: "En route vers vous",         color: "bg-primary",   text: "text-primary",   bg: "bg-blue-50",   emoji: "🚀" },
-  livree:           { label: "Course terminée",            color: "bg-green-500", text: "text-green-700", bg: "bg-green-50",  emoji: "✅" },
-  annulee:          { label: "Course annulée",             color: "bg-gray-400",  text: "text-gray-600",  bg: "bg-gray-50",   emoji: "❌" },
-  aucun_livreur:    { label: "Aucun livreur disponible",   color: "bg-red-500",   text: "text-red-700",   bg: "bg-red-50",    emoji: "😔" },
+  en_attente:            { label: "Recherche d'un livreur…",    color: "bg-amber-500",  text: "text-amber-700",  bg: "bg-amber-50",  emoji: "🔍" },
+  assignee_attente:      { label: "Livreur contacté…",          color: "bg-blue-500",   text: "text-blue-700",   bg: "bg-blue-50",   emoji: "📲" },
+  acceptee:              { label: "Livreur en route",           color: "bg-primary",    text: "text-primary",    bg: "bg-blue-50",   emoji: "🛵" },
+  driver_en_route_pickup:{ label: "Livreur en route",           color: "bg-primary",    text: "text-primary",    bg: "bg-blue-50",   emoji: "🛵" },
+  arrived_pickup:        { label: "Livreur arrivé au départ",   color: "bg-orange-500", text: "text-orange-700", bg: "bg-orange-50", emoji: "📍" },
+  en_cours:              { label: "Livraison en cours",         color: "bg-primary",    text: "text-primary",    bg: "bg-blue-50",   emoji: "🚀" },
+  arrived_dropoff:       { label: "Livreur arrivé à destination",color:"bg-teal-500",   text: "text-teal-700",   bg: "bg-teal-50",   emoji: "🏁" },
+  livree:                { label: "Course terminée ✅",          color: "bg-green-500",  text: "text-green-700",  bg: "bg-green-50",  emoji: "✅" },
+  annulee:               { label: "Course annulée",             color: "bg-gray-400",   text: "text-gray-600",   bg: "bg-gray-50",   emoji: "❌" },
+  aucun_livreur:         { label: "Aucun livreur disponible",   color: "bg-red-500",    text: "text-red-700",    bg: "bg-red-50",    emoji: "😔" },
 };
 
 // Annulation gratuite : pas encore de livreur assigné
@@ -85,11 +88,8 @@ export default function CourseTracking() {
 
   useEffect(() => { loadCourse(); }, [loadCourse]);
 
-  useEffect(() => {
-    if (!course || ["livree", "annulee"].includes(course.statut)) return;
-    const t = setInterval(() => loadCourse(true), 5000);
-    return () => clearInterval(t);
-  }, [course?.id, course?.statut]);
+  // Plus de polling 5s — le subscribe temps réel gère les mises à jour instantanées
+  // Fallback léger : rafraîchissement au retour sur l'onglet (déjà présent via visibilitychange)
 
   useEffect(() => {
     if (!course?.livreur_lat || !course?.latitude_arrivee) return;

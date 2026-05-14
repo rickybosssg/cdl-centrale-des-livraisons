@@ -153,10 +153,7 @@ export default function CourseLivreur() {
     }
   };
 
-  const BEDOU_INVOKE_MS = 45000;
-
   const livrerColis = async () => {
-    // Sécurité : bloquer double-clic + settlement_status completed
     if (updating || livreeVerrouilleRef.current) {
       toast.info("Livraison déjà en cours ou terminée");
       return;
@@ -165,25 +162,34 @@ export default function CourseLivreur() {
       toast.info("Cette course a déjà été réglée");
       return;
     }
+
     setUpdating(true);
-    console.log(`[COURSE_MARKED_DELIVERED] course_id=${course.id} | livreur=${course.livreur_email} | client=${course.client_email} | montant=${course.prix} | statut_before=${course.statut}`);
-    console.log('[CourseLivreur] livrerColis START — course.id:', course.id, 'statut:', course.statut);
     const montant = course.prix || 0;
     const gainLivreur = course.gain_livreur || Math.round(montant * 0.8);
     const commissionCdl = course.commission_cdl || (montant - gainLivreur);
+    console.log(`[COURSE_DELIVER_START] course_id=${course.id} | livreur=${course.livreur_email} | client=${course.client_email} | montant=${montant} | statut=${course.statut}`);
+
+    // Timeout UI max 10s
+    const uiTimeoutRef = { id: setTimeout(() => {
+      console.warn(`[COURSE_DELIVER_FAIL] UI timeout 10s — libération bouton | course=${course.id}`);
+      setUpdating(false);
+      toast.error('Délai dépassé. Vérifiez votre connexion et réessayez.');
+    }, 10000) };
 
     try {
-      // 1. Débiter client + créditer livreur via Bedou (timeout pour ne pas rester bloqué sur "Mise à jour...")
-      // Vérification idempotence : relire la course pour s'assurer qu'elle n'est pas déjà livrée
+      // Idempotence : vérifier que la course n'est pas déjà livrée
       const freshCourses = await base44.entities.Course.filter({ id: course.id });
-      if (freshCourses?.[0]?.statut === 'livree') {
+      if (freshCourses?.[0]?.statut === 'livree' || freshCourses?.[0]?.settlement_status === 'completed') {
+        clearTimeout(uiTimeoutRef.id);
         livreeVerrouilleRef.current = true;
         setCourse(prev => ({ ...prev, statut: 'livree' }));
-        toast.success('Course déjà marquée comme livrée !');
+        toast.success('Course déjà livrée !');
         setUpdating(false);
         return;
       }
 
+      // Settlement Bedou (timeout backend 10s)
+      console.log(`[SETTLEMENT_START] course_id=${course.id} | montant=${montant} | client=${course.client_email} | livreur=${course.livreur_email}`);
       let res;
       try {
         res = await Promise.race([
@@ -196,37 +202,36 @@ export default function CourseLivreur() {
             livreur_nom: course.livreur_name,
             montant,
           }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('BEDOU_TIMEOUT')), BEDOU_INVOKE_MS)
-          ),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('BEDOU_TIMEOUT')), 9000)),
         ]);
-      } catch (err) {
-        if (err?.message === 'BEDOU_TIMEOUT') {
-          toast.error('Délai dépassé — vérifiez la connexion et réessayez.');
-          setUpdating(false);
-          return;
-        }
-        console.error('[CourseLivreur] bedouEngine error:', err);
-        toast.error('Erreur Bedou : ' + (err?.message || 'inconnue') + ' — Réessayez.');
-        setUpdating(false);
-        return;
-      }
-
-      console.log('[CourseLivreur] bedouEngine result:', res?.data);
-      if (res?.data?.alreadyDone) {
-        // Course déjà réglée — mettre à jour le statut UI sans erreur
-        console.log('[CourseLivreur] course déjà réglée, mise à jour statut uniquement');
-      } else if (!res?.data?.success) {
-        if (res?.data?.insuffisant) {
-          toast.error(`Solde Bedou du client insuffisant (${res.data.solde} FCFA). Contactez l'administration.`);
+      } catch (bedouErr) {
+        clearTimeout(uiTimeoutRef.id);
+        if (bedouErr?.message === 'BEDOU_TIMEOUT') {
+          console.warn(`[SETTLEMENT_FAIL] BEDOU_TIMEOUT | course=${course.id}`);
+          toast.error('Règlement en attente (réseau lent). Réessayez dans quelques secondes.');
         } else {
-          toast.error(res?.data?.error || 'Erreur lors du règlement Bedou');
+          console.error(`[SETTLEMENT_FAIL] ${bedouErr?.message} | course=${course.id}`);
+          toast.error('Erreur Bedou : ' + (bedouErr?.message || 'inconnue'));
         }
         setUpdating(false);
         return;
       }
 
-      // 2. Mettre à jour la course en BDD
+      if (!res?.data?.success && !res?.data?.alreadyDone) {
+        clearTimeout(uiTimeoutRef.id);
+        console.error(`[SETTLEMENT_FAIL] success=false | course=${course.id} | error=${res?.data?.error}`);
+        if (res?.data?.insuffisant) {
+          toast.error(`Solde Bedou client insuffisant (${res.data.solde?.toLocaleString()} FCFA). Contactez l'admin.`);
+        } else {
+          toast.error(res?.data?.error || 'Erreur lors du règlement');
+        }
+        setUpdating(false);
+        return;
+      }
+
+      console.log(`[SETTLEMENT_SUCCESS] course_id=${course.id} | gainLivreur=${gainLivreur} | commissionCdl=${commissionCdl} | alreadyDone=${res?.data?.alreadyDone}`);
+
+      // Mettre à jour statut course → livree
       await base44.entities.Course.update(id, {
         statut: 'livree',
         date_livraison: new Date().toISOString(),
@@ -235,37 +240,35 @@ export default function CourseLivreur() {
         gain_livreur: gainLivreur,
         statut_paiement_livreur: 'Payé',
       });
-      console.log('[CourseLivreur] Course mise à jour → livree');
 
-      // 3. UI + verrou anti-régression subscribe
+      // UI : verrouiller + afficher succès
+      clearTimeout(uiTimeoutRef.id);
       livreeVerrouilleRef.current = true;
-      setCourse(prev => ({
-        ...prev,
-        statut: 'livree',
-        date_livraison: new Date().toISOString(),
-        gain_livreur: gainLivreur,
-      }));
+      setCourse(prev => ({ ...prev, statut: 'livree', date_livraison: new Date().toISOString(), gain_livreur: gainLivreur }));
 
-      // 4. Stats livreur (fire & forget)
-      base44.entities.User.filter({ email: course.livreur_email }).then(livreurs => {
-        if (livreurs.length > 0) {
-          const livreur = livreurs[0];
-          base44.entities.User.update(livreur.id, {
-            total_courses_livrees: (livreur.total_courses_livrees || 0) + 1,
-            nombre_courses_actives: Math.max(0, (livreur.nombre_courses_actives || 0) - 1),
-          }).catch(e => console.warn('[CourseLivreur] stats livreur err:', e));
+      console.log(`[COURSE_DELIVER_SUCCESS] course_id=${course.id} | livreur=${course.livreur_email} | gainLivreur=${gainLivreur}`);
+      vibrateSuccess();
+      toast.success(`🎉 Livraison confirmée ! +${gainLivreur?.toLocaleString()} FCFA crédités sur votre Bedou.`);
+
+      // Stats livreur (fire & forget)
+      base44.entities.User.filter({ email: course.livreur_email }).then(livs => {
+        if (livs[0]) {
+          base44.entities.User.update(livs[0].id, {
+            total_courses_livrees: (livs[0].total_courses_livrees || 0) + 1,
+            nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 0) - 1),
+          }).catch(() => {});
         }
       }).catch(() => {});
 
-      // 5. Streak (fire & forget)
+      // Streak (fire & forget)
       base44.functions.invoke('updateLivreurStreak', {}).catch(() => {});
 
-      // 6. Notif in-app client (la notification FCM est gérée par l'automation notifyCourseEvents)
+      // Notif interne client
       base44.entities.Notification.create({
         destinataire_email: course.client_email,
         destinataire_role: 'client',
         titre: '✅ Colis livré ! Notez votre livreur',
-        message: `Votre colis a été livré par ${course.livreur_name}. ${montant.toLocaleString()} FCFA débités de votre Bedou. Appuyez pour noter !`,
+        message: `Votre colis a été livré par ${course.livreur_name}. ${montant.toLocaleString()} FCFA débités de votre Bedou.`,
         type: 'success',
         lue: false,
         course_id: course.id,
@@ -273,33 +276,25 @@ export default function CourseLivreur() {
         notification_key: `${course.client_email}__livree__${course.id}__client`,
       }).catch(() => {});
 
-      vibrateSuccess();
-      toast.success(`🎉 Livraison confirmée ! +${gainLivreur} FCFA crédités sur votre Bedou.`);
-      triggerWhatsAppNotification({
-        eventType: 'course_completed',
-        recipientRole: 'client',
-        recipientName: course.client_name || 'Client',
-        recipientPhone: course.telephone_expediteur,
-        messageText: waMsgCourseCompletedClient(),
-        entityId: course.id,
-        entityType: 'course',
-        priority: 'normal',
-      });
-      triggerWhatsAppNotification({
-        eventType: 'course_completed_driver',
-        recipientRole: 'driver',
-        recipientName: course.livreur_name || '',
-        recipientPhone: course.telephone_livreur,
-        messageText: waMsgCourseCompletedDriver(),
-        entityId: course.id,
-        entityType: 'course',
-        priority: 'normal',
-      });
-      console.log('[CourseLivreur] livrerColis DONE — gainLivreur:', gainLivreur);
+      // Notif interne admin
+      base44.entities.Notification.create({
+        destinataire_email: 'weezyh2@gmail.com',
+        destinataire_role: 'admin',
+        titre: '📦 Course livrée',
+        message: `Course ${course.quartier_depart}→${course.quartier_arrivee} livrée par ${course.livreur_name}. ${montant.toLocaleString()} FCFA réglés.`,
+        type: 'success',
+        lue: false,
+        course_id: course.id,
+        target_screen: '/gerer-courses',
+      }).catch(() => {});
+
+      triggerWhatsAppNotification({ eventType: 'course_completed', recipientRole: 'client', recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur, messageText: waMsgCourseCompletedClient(), entityId: course.id, entityType: 'course', priority: 'normal' });
+      triggerWhatsAppNotification({ eventType: 'course_completed_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur, messageText: waMsgCourseCompletedDriver(), entityId: course.id, entityType: 'course', priority: 'normal' });
+
     } catch (err) {
-      console.error('[CourseLivreur] livrerColis error:', err);
-      toast.error('Erreur : ' + (err?.message || 'inattendue — réessayez.'));
-    } finally {
+      clearTimeout(uiTimeoutRef.id);
+      console.error(`[COURSE_DELIVER_FAIL] ${err?.message} | course=${course?.id}`);
+      toast.error('Erreur inattendue : ' + (err?.message || 'réessayez'));
       setUpdating(false);
     }
   };
