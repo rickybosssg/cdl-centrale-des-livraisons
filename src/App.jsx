@@ -76,6 +76,7 @@ import GestionBedou from './pages/dispatcher/GestionBedou.jsx';
 import DiffusionGlobale from './pages/dispatcher/DiffusionGlobale';
 import PendingProfileRequests from './pages/dispatcher/PendingProfileRequests';
 import DispatchMonitor from './pages/dispatcher/DispatchMonitor';
+import DispatchModeSettings from './pages/dispatcher/DispatchModeSettings';
 import LivreursIncompletsList from './pages/dispatcher/LivreursIncompletsList';
 import ProfilsAdmin from './pages/dispatcher/ProfilsAdmin';
 import TestUpload from './pages/TestUpload';
@@ -132,7 +133,7 @@ import FcmBootstrap from './components/FcmBootstrap';
 import FcmPermissionBanner from './components/FcmPermissionBanner';
 import FcmBootBanner from './components/FcmBootBanner';
 import { FcmReadyProvider } from '@/context/FcmReadyContext';
-import { DispatchModeV2Provider } from '@/context/DispatchModeV2Context';
+import { DispatchModeProvider } from '@/context/DispatchModeContext';
 import DispatchV2Debug from './pages/dispatcher/DispatchV2Debug';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
@@ -468,6 +469,7 @@ const AuthenticatedApp = () => {
           <Route path="/profils-admin" element={<ProfilsAdmin />} />
           <Route path="/test-upload" element={<TestUpload />} />
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
+          <Route path="/dispatch-mode-settings" element={<DispatchModeSettings />} />
           <Route path="/dispatch-v2-debug" element={<DispatchV2Debug />} />
           <Route path="/health-dashboard" element={<HealthDashboard />} />
           <Route path="/audit-complet" element={<AuditComplet />} />
@@ -572,7 +574,7 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <FcmReadyProvider>
-        <DispatchModeV2Provider>
+        <DispatchModeProvider>
         <TopNotificationProvider>
           <FcmErrorBoundary />
           <Router>
@@ -580,7 +582,7 @@ function App() {
           </Router>
           <Toaster />
         </TopNotificationProvider>
-        </DispatchModeV2Provider>
+        </DispatchModeProvider>
         </FcmReadyProvider>
       </QueryClientProvider>
     </AuthProvider>

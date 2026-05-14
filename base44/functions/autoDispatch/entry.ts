@@ -1,18 +1,15 @@
 /**
- * CDL — Moteur de dispatch automatique (v3 — VERROU MANUEL ABSOLU)
+ * CDL — Moteur de dispatch automatique (NOUVEAU SYSTÈME)
  *
  * RÈGLE ABSOLUE :
- *   Si mode GLOBAL = "manuel" → BLOQUÉ TOTALEMENT, aucun dispatch, aucun fallback.
- *   Seul un clic admin via setDispatchModeCanonical peut remettre en "auto".
+ *   Si DispatchModeState.mode = "manuel" → BLOQUÉ TOTALEMENT.
+ *   AUCUNE modification du mode, AUCUN fallback.
  *
- * LOGS OBLIGATOIRES :
- *   [DISPATCH_CANONICAL_READ]
+ * LOGS:
+ *   [DISPATCH_MODE_READ]
  *   [AUTO_DISPATCH_BLOCKED_MANUAL_MODE]
- *   [DISPATCH_CANONICAL_WRITE_ALLOWED]
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-
-const CANONICAL_KEY = 'GLOBAL';
 
 function distanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
@@ -54,12 +51,13 @@ function sortByProximity(drivers, course) {
   return [...avecGPS, ...sansGPS];
 }
 
-async function getCanonicalMode(base44) {
-  const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
-  const canonical = allConfigs.find(c => c.mode_key === CANONICAL_KEY);
-  const mode = canonical?.mode === 'manuel' ? 'manuel' : canonical?.mode === 'auto' ? 'auto' : null;
-  console.log(`[DISPATCH_CANONICAL_READ] autoDispatch | CANONICAL=${!!canonical} | mode=${mode} | id=${canonical?.id || 'none'} | totalDocs=${allConfigs.length}`);
-  return { mode, configId: canonical?.id || null };
+async function getDispatchMode(base44) {
+  // LECTURE SEULE — DispatchModeState (NOUVEAU SYSTÈME)
+  const modes = await base44.asServiceRole.entities.DispatchModeState.list('-updated_at', 1).catch(() => []);
+  const modeState = modes[0];
+  const mode = modeState?.mode === 'manuel' ? 'manuel' : 'auto';
+  console.log(`[DISPATCH_MODE_READ] autoDispatch | mode=${mode} | id=${modeState?.id || 'none'}`);
+  return { mode, configId: modeState?.id || null };
 }
 
 Deno.serve(async (req) => {
@@ -75,23 +73,16 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
 
-    // ── 1. VERROU CANONIQUE ABSOLU ────────────────────────────────────────────
-    const { mode, configId } = await getCanonicalMode(base44);
+    // ── 1. VÉRIFICATION MODE — LECTURE SEULE ──────────────────────────────────
+    const { mode, configId } = await getDispatchMode(base44);
 
-    if (mode === null) {
-      // Aucun doc GLOBAL → blocage total, pas de fallback auto
-      console.error(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — aucun doc GLOBAL canonique trouvé | course=${courseId} | function=autoDispatch | source=no_canonical_doc`);
-      return Response.json({ success: false, blocked: true, reason: 'no_canonical_config' });
-    }
-
-    // VERROU ABSOLU — mode=manuel bloque TOUJOURS, force=true ne bypass JAMAIS
+    // VERROU ABSOLU — mode=manuel bloque TOUJOURS
     if (mode === 'manuel') {
-      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | course=${courseId} | configId=${configId} | function=autoDispatch | force_ignored=${forceDispatch}`);
-      console.log(`[MANUAL_MODE_PROTECTED] autoDispatch bloqué par verrou manuel (force ignoré) | course=${courseId}`);
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | course=${courseId} | configId=${configId} | function=autoDispatch`);
       return Response.json({ success: false, blocked: true, reason: 'manual_mode_active' });
     }
 
-    console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] autoDispatch autorisé | mode=auto | course=${courseId} | configId=${configId}`);
+    console.log(`[DISPATCH_MODE_READ] autoDispatch autorisé | mode=auto | course=${courseId}`);
 
     // ── 2. Récupérer la course ─────────────────────────────────────────────────
     const courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });

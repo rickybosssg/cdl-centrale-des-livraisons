@@ -1,15 +1,14 @@
 /**
- * setDispatchMode — COMPATIBILITÉ DESCENDANTE
- *
- * Cette fonction délègue désormais vers setDispatchModeCanonical.
- * Elle est conservée pour les anciens appels mais force source="admin_click".
- *
- * ⚠️ Tout appel non-admin est loggé et refusé.
- * ⚠️ Tout appel depuis un contexte non-admin est bloqué.
+ * setDispatchMode — ÉCRITURE UNIQUE ET SÉCURISÉE
+ * 
+ * SEUL admin peut changer le mode.
+ * AUCUNE autre fonction ne peut écrire dans DispatchModeState.
+ * 
+ * LOGS:
+ *   [DISPATCH_MODE_WRITE_ALLOWED] — admin autorisé
+ *   [DISPATCH_MODE_WRITE_BLOCKED] — non-admin ou source invalide
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-
-const CANONICAL_KEY = 'GLOBAL';
 
 Deno.serve(async (req) => {
   const corsHeaders = {
@@ -17,70 +16,71 @@ Deno.serve(async (req) => {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+  
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
 
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+    // VERROU: admin-only
+    if (!user) {
+      console.error('[DISPATCH_MODE_WRITE_BLOCKED] Unauthorized');
+      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+    }
+
     if (user.role !== 'admin') {
-      console.error(`[DISPATCH_CANONICAL_WRITE_BLOCKED] setDispatchMode REFUSÉ: user=${user.email} role=${user.role} n'est pas admin`);
-      return Response.json({ error: 'Forbidden' }, { status: 403, headers: corsHeaders });
+      console.error(`[DISPATCH_MODE_WRITE_BLOCKED] user=${user.email} role=${user.role} n'est pas admin`);
+      return Response.json({ error: 'Forbidden — admin only' }, { status: 403, headers: corsHeaders });
     }
 
     const body = await req.json();
     const rawMode = body.mode;
-    const mode = (rawMode === 'manual' || rawMode === 'manuel') ? 'manuel' : rawMode === 'auto' ? 'auto' : null;
-
-    if (!mode) {
-      return Response.json({ error: `Mode invalide: "${rawMode}". Valeurs: auto | manuel` }, { status: 400, headers: corsHeaders });
+    
+    // Validation stricte
+    if (!['auto', 'manuel'].includes(rawMode)) {
+      return Response.json({ 
+        error: `Mode invalide: "${rawMode}". Valeurs acceptées: auto | manuel` 
+      }, { status: 400, headers: corsHeaders });
     }
-
-    console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] setDispatchMode (compat) | admin=${user.email} | mode=${mode} | delegating to canonical...`);
-
-    // Déléguer vers la logique canonique directement (pas via invoke pour éviter double auth)
-    const all = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50);
-    const canonical = all.find(c => c.mode_key === CANONICAL_KEY);
-    const parasites = all.filter(c => c.mode_key !== CANONICAL_KEY);
 
     const now = new Date().toISOString();
-    let config;
 
-    if (canonical) {
-      const oldMode = canonical.mode;
-      config = await base44.asServiceRole.entities.DispatchConfig.update(canonical.id, {
-        mode,
-        mode_key: CANONICAL_KEY,
-        force_override: true,
-        last_changed_by: user.email,
-        last_changed_reason: body.reason || `setDispatchMode (compat): ${user.email} → ${mode}`,
-        last_changed_at: now,
+    // Vérifier s'il existe déjà un document
+    const existing = await base44.asServiceRole.entities.DispatchModeState.list('-updated_at', 1);
+
+    let modeState;
+    if (existing.length > 0) {
+      // UPDATE — un seul document doit exister
+      const oldMode = existing[0].mode;
+      modeState = await base44.asServiceRole.entities.DispatchModeState.update(existing[0].id, {
+        mode: rawMode,
+        updated_by: user.email,
+        updated_at: now,
       });
-      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] UPDATE: ${oldMode} → ${mode} | id=${canonical.id} | admin=${user.email} | timestamp=${now}`);
+      console.log(`[DISPATCH_MODE_WRITE_ALLOWED] UPDATE: ${oldMode} → ${rawMode} | admin=${user.email} | id=${existing[0].id}`);
     } else {
-      config = await base44.asServiceRole.entities.DispatchConfig.create({
-        mode,
-        mode_key: CANONICAL_KEY,
-        force_override: true,
-        last_changed_by: user.email,
-        last_changed_reason: `Création canonique (compat): ${user.email}`,
-        last_changed_at: now,
+      // CREATE — premier document
+      modeState = await base44.asServiceRole.entities.DispatchModeState.create({
+        mode: rawMode,
+        updated_by: user.email,
+        updated_at: now,
       });
-      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] CREATE: mode=${mode} | id=${config.id} | admin=${user.email} | timestamp=${now}`);
+      console.log(`[DISPATCH_MODE_WRITE_ALLOWED] CREATE: mode=${rawMode} | admin=${user.email} | id=${modeState.id}`);
     }
 
-    // Supprimer les docs parasites
-    if (parasites.length > 0) {
-      console.warn(`[DISPATCH_CANONICAL_WRITE_ALLOWED] Suppression ${parasites.length} doc(s) parasite(s)`);
-      for (const p of parasites) {
-        await base44.asServiceRole.entities.DispatchConfig.delete(p.id).catch(() => {});
-      }
-    }
+    return Response.json({
+      success: true,
+      mode: modeState.mode,
+      updated_by: modeState.updated_by,
+      updated_at: modeState.updated_at,
+      config_id: modeState.id,
+    }, { headers: corsHeaders });
 
-    return Response.json({ success: true, mode, config }, { headers: corsHeaders });
   } catch (error) {
-    console.error('[DISPATCH_CANONICAL_WRITE_BLOCKED] setDispatchMode ERROR:', error.message);
+    console.error('[DISPATCH_MODE_WRITE_BLOCKED] ERROR:', error.message);
     return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 });
