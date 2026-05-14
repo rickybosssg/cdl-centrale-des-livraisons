@@ -156,9 +156,14 @@ const HealthMonitorEngine = {
 
   async checkDispatch() {
     return checkEngine('DispatchEngine', async () => {
-      const config = await base44.entities.DispatchConfig.list(null, 1);
-      const mode = config?.[0]?.mode || 'unknown';
-      return { status: 'ok', message: `Dispatch mode: ${mode}`, details: { mode } };
+      // LECTURE STRICTE : uniquement le doc canonique GLOBAL
+      const all = await base44.entities.DispatchConfig.list('-updated_date', 50);
+      const canonical = all.find(c => c.mode_key === 'GLOBAL');
+      if (!canonical) {
+        return { status: 'warn', message: `Aucun doc GLOBAL (${all.length} docs totaux)`, details: { totalDocs: all.length } };
+      }
+      const mode = canonical.mode;
+      return { status: 'ok', message: `Dispatch mode: ${mode} | GLOBAL id=${canonical.id}`, details: { mode, id: canonical.id, isCanonical: true } };
     });
   },
 

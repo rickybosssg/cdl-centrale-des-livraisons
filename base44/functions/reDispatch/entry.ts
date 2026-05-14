@@ -1,19 +1,28 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+/**
+ * reDispatch — Refus livreur → reset course → autoDispatch
+ *
+ * VERROU MANUEL ABSOLU :
+ *   Si mode GLOBAL = "manuel" → BLOQUÉ. Aucun re-dispatch automatique.
+ *   Aucun fallback vers 'auto'.
+ */
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-function canRefuseAssignedCourse(
-  user: { email?: string; role?: string; user_type?: string } | null,
-  livreurEmail: string | undefined,
-): boolean {
+const CANONICAL_KEY = 'GLOBAL';
+
+function canRefuseAssignedCourse(user, livreurEmail) {
   if (!user?.email) return false;
   if (user.email === livreurEmail) return true;
   return user.role === 'admin' || user.role === 'dispatcher' || user.user_type === 'admin';
 }
 
-/**
- * Refus livreur (CoursePendante) — aligné sur checkPendingAssignments :
- * historique refuse, décrément nombre_courses_actives, remise en en_attente, autoDispatch.
- * Authentification obligatoire : livreur assigné ou staff.
- */
+async function getCanonicalMode(base44) {
+  const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
+  const canonical = allConfigs.find(c => c.mode_key === CANONICAL_KEY);
+  const mode = canonical?.mode === 'manuel' ? 'manuel' : canonical?.mode === 'auto' ? 'auto' : null;
+  console.log(`[DISPATCH_CANONICAL_READ] reDispatch | CANONICAL=${!!canonical} | mode=${mode} | id=${canonical?.id || 'none'}`);
+  return { mode, configId: canonical?.id || null };
+}
+
 Deno.serve(async (req) => {
   try {
     const body = await req.json();
@@ -43,16 +52,22 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
-    const canonicalCfg = allConfigs.find(c => c.mode_key === 'GLOBAL');
-    const reDispatchMode = (canonicalCfg || allConfigs[0])?.mode || 'auto';
-    console.log(`[DISPATCH_WRITE_SOURCE] reDispatch | CANONICAL=${!!canonicalCfg} | mode=${reDispatchMode}`);
-    if (reDispatchMode === 'manuel') {
-      return Response.json({ success: false, blocked: true, reason: 'mode_manuel' });
+    // ── VERROU CANONIQUE ABSOLU — AUCUN FALLBACK VERS AUTO ───────────────────
+    const { mode, configId } = await getCanonicalMode(base44);
+
+    if (mode === null) {
+      console.error(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] reDispatch BLOQUÉ — aucun doc GLOBAL | course=${courseId} | function=reDispatch`);
+      return Response.json({ success: false, blocked: true, reason: 'no_canonical_config' });
+    }
+
+    if (mode === 'manuel') {
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | course=${courseId} | configId=${configId} | function=reDispatch`);
+      console.log(`[MANUAL_MODE_PROTECTED] reDispatch bloqué par verrou manuel | course=${courseId}`);
+      return Response.json({ success: false, blocked: true, reason: 'manual_mode_active' });
     }
 
     const now = new Date().toISOString();
-    let historique: Record<string, unknown>[] = [];
+    let historique = [];
     try {
       if (course.historique_assignation) historique = JSON.parse(course.historique_assignation);
     } catch (_) {}
@@ -97,8 +112,9 @@ Deno.serve(async (req) => {
 
     const exclus = updatedHist
       .filter((h) => ['refuse', 'no_response'].includes(String(h.statut)))
-      .map((h) => h.livreur_email as string);
+      .map((h) => h.livreur_email);
 
+    // autoDispatch vérifiera lui-même le mode canonique
     const result = await base44.asServiceRole.functions.invoke('autoDispatch', {
       course_id: courseId,
       exclude_emails: exclus,
@@ -106,11 +122,10 @@ Deno.serve(async (req) => {
     });
 
     console.log(`[REDISPATCH] Résultat pour course ${courseId}:`, result);
-
     return Response.json({ success: true, redispatch: result });
+
   } catch (error) {
-    const err = error as Error;
-    console.error('[REDISPATCH] Erreur:', err.message);
-    return Response.json({ error: err.message }, { status: 500 });
+    console.error('[REDISPATCH] Erreur:', error.message);
+    return Response.json({ error: error.message }, { status: 500 });
   }
 });

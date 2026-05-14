@@ -1,16 +1,18 @@
 /**
  * CDL — Vérification des assignations en attente (timeout 60s)
  *
- * - Automation schedulée (toutes les 5 min) : traite toutes les courses en assignee_attente.
- * - Appel ciblé : POST { "course_id": "...", "force_immediate": true } depuis l'app.
+ * VERROU MANUEL ABSOLU :
+ *   Si mode GLOBAL = "manuel" → AUCUNE réassignation automatique.
+ *   Pas de fallback vers 'auto'. Pas d'écriture de config.
  *
- * Pour chaque course en statut "assignee_attente" depuis plus de 60s :
- *   1. Marquer no_response dans l'historique
- *   2. Décrémenter nombre_courses_actives du livreur
- *   3. Remettre en en_attente et relancer autoDispatch
+ * LOGS OBLIGATOIRES :
+ *   [DISPATCH_CANONICAL_READ]
+ *   [AUTO_DISPATCH_BLOCKED_MANUAL_MODE]
+ *   [MANUAL_MODE_PROTECTED]
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+const CANONICAL_KEY = 'GLOBAL';
 const TIMEOUT_MS = 60 * 1000; // 60 secondes
 
 function isDriverStillValid(driver) {
@@ -22,6 +24,14 @@ function isDriverStillValid(driver) {
     driver.disponible !== false &&
     (driver.nombre_courses_actives || 0) < 2
   );
+}
+
+async function getCanonicalMode(base44) {
+  const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
+  const canonical = allConfigs.find(c => c.mode_key === CANONICAL_KEY);
+  const mode = canonical?.mode === 'manuel' ? 'manuel' : canonical?.mode === 'auto' ? 'auto' : null;
+  console.log(`[DISPATCH_CANONICAL_READ] checkPendingAssignments | CANONICAL=${!!canonical} | mode=${mode} | id=${canonical?.id || 'none'} | totalDocs=${allConfigs.length}`);
+  return { mode, configId: canonical?.id || null };
 }
 
 async function processOnePendingCourse(base44, course, now, forceImmediate) {
@@ -78,7 +88,6 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
       historique_assignation: JSON.stringify(updatedHist),
       dispatch_fail_reason: 'Nombre maximum de tentatives atteint',
     });
-    // Notifier admins
     const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
     for (const admin of admins.slice(0, 3)) {
       await base44.asServiceRole.entities.Notification.create({
@@ -107,6 +116,7 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
     .filter(h => ['refuse', 'no_response'].includes(h.statut))
     .map(h => h.livreur_email);
 
+  // Relancer autoDispatch — il vérifiera lui-même le mode canonique
   await base44.asServiceRole.functions.invoke('autoDispatch', {
     course_id: course.id,
     exclude_emails: exclus,
@@ -127,16 +137,19 @@ Deno.serve(async (req) => {
     const singleCourseId = body.course_id || null;
     const forceImmediateTrigger = body.force_immediate === true;
 
-    const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50);
-    const canonicalConfig = allConfigs.find(c => c.mode_key === 'GLOBAL');
-    const activeConfig = canonicalConfig || allConfigs[0] || null;
-    const mode = activeConfig?.mode || 'auto';
+    // ── VERROU CANONIQUE ABSOLU — AUCUN FALLBACK VERS AUTO ───────────────────
+    const { mode, configId } = await getCanonicalMode(base44);
 
-    console.log(`[DISPATCH_WRITE_SOURCE] checkPendingAssignments | CANONICAL=${!!canonicalConfig} | mode=${mode} | id=${activeConfig?.id || 'none'} | totalDocs=${allConfigs.length}`);
+    // Si mode=null (aucun doc GLOBAL) → bloquer aussi
+    if (mode === null) {
+      console.error(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] checkPendingAssignments BLOQUÉ — aucun doc GLOBAL | function=checkPendingAssignments`);
+      return Response.json({ success: true, blocked: true, reason: 'no_canonical_config', reassigned: 0, skipped: 0 });
+    }
 
     if (mode === 'manuel' && !forceImmediateTrigger) {
-      console.log(`[DISPATCH_MODE_NOT_OVERWRITTEN] SKIP — mode manuel respecté par checkPendingAssignments`);
-      return Response.json({ success: true, blocked: true, reason: 'mode_manuel', reassigned: 0, skipped: 0 });
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | configId=${configId} | function=checkPendingAssignments`);
+      console.log(`[MANUAL_MODE_PROTECTED] checkPendingAssignments bloqué par verrou manuel`);
+      return Response.json({ success: true, blocked: true, reason: 'manual_mode_active', reassigned: 0, skipped: 0 });
     }
 
     let coursesToProcess = [];
@@ -151,7 +164,6 @@ Deno.serve(async (req) => {
       if (!c || c.statut !== 'assignee_attente') {
         return Response.json({ success: true, reassigned: 0, skipped: 1, total: 0, note: 'Course absente ou déjà traitée' });
       }
-      // Vérifier autorisation : livreur assigné ou admin
       const isAuthorized = user.role === 'admin' || user.email === c.livreur_email;
       if (!isAuthorized) {
         return Response.json({ error: 'Non autorisé' }, { status: 403 });
@@ -161,7 +173,6 @@ Deno.serve(async (req) => {
       coursesToProcess = await base44.asServiceRole.entities.Course.filter({ statut: 'assignee_attente' });
     }
 
-    // Trier par urgence puis par date
     const URGENCE_SCORE = { tres_urgent: 3, urgent: 2, normal: 1 };
     coursesToProcess.sort((a, b) => {
       const diff = (URGENCE_SCORE[b.urgence] || 1) - (URGENCE_SCORE[a.urgence] || 1);

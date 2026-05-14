@@ -1,21 +1,18 @@
 /**
- * CDL — Moteur de dispatch automatique (v2)
+ * CDL — Moteur de dispatch automatique (v3 — VERROU MANUEL ABSOLU)
  *
- * RÈGLE D'ÉLIGIBILITÉ (SANS current_role) :
- *   Un livreur est dispatchable si et seulement si :
- *     1. driver_online = true          → en ligne
- *     2. profil_valide = true          → profil livreur validé
- *     3. !livreur_bloque               → non bloqué
- *     4. !livreur_suspendu             → non suspendu
- *     5. disponible != false           → disponible (true ou non défini)
- *     6. nombre_courses_actives < 2   → pas surchargé
+ * RÈGLE ABSOLUE :
+ *   Si mode GLOBAL = "manuel" → BLOQUÉ TOTALEMENT, aucun dispatch, aucun fallback.
+ *   Seul un clic admin via setDispatchModeCanonical peut remettre en "auto".
  *
- *  ⚠️ current_role n'est JAMAIS utilisé pour le dispatch.
- *
- * TRI : par proximité GPS si disponible, sinon par note puis charge.
- * TIMER : 60 secondes par livreur (géré par checkPendingAssignments).
+ * LOGS OBLIGATOIRES :
+ *   [DISPATCH_CANONICAL_READ]
+ *   [AUTO_DISPATCH_BLOCKED_MANUAL_MODE]
+ *   [DISPATCH_CANONICAL_WRITE_ALLOWED]
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+const CANONICAL_KEY = 'GLOBAL';
 
 function distanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
@@ -27,11 +24,6 @@ function distanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/**
- * Règle unique d'éligibilité — N'utilise JAMAIS current_role.
- * Un utilisateur multi-profils (client+livreur, commercial+livreur, etc.)
- * est éligible dès qu'il a un profil livreur valide et qu'il est en ligne.
- */
 function isDriverDispatchable(d) {
   return (
     d.driver_online === true &&
@@ -62,6 +54,14 @@ function sortByProximity(drivers, course) {
   return [...avecGPS, ...sansGPS];
 }
 
+async function getCanonicalMode(base44) {
+  const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
+  const canonical = allConfigs.find(c => c.mode_key === CANONICAL_KEY);
+  const mode = canonical?.mode === 'manuel' ? 'manuel' : canonical?.mode === 'auto' ? 'auto' : null;
+  console.log(`[DISPATCH_CANONICAL_READ] autoDispatch | CANONICAL=${!!canonical} | mode=${mode} | id=${canonical?.id || 'none'} | totalDocs=${allConfigs.length}`);
+  return { mode, configId: canonical?.id || null };
+}
+
 Deno.serve(async (req) => {
   try {
     const body = await req.json();
@@ -75,30 +75,28 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
 
-    // ── 1. Mode dispatch — LECTURE STRICTE GLOBAL (jamais écriture) ─────
-    const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
-    const canonicalConfig = allConfigs.find(c => c.mode_key === 'GLOBAL');
-    const mode = canonicalConfig?.mode || (allConfigs.length === 0 ? 'auto' : null);
-    const configId = canonicalConfig?.id || null;
+    // ── 1. VERROU CANONIQUE ABSOLU ────────────────────────────────────────────
+    const { mode, configId } = await getCanonicalMode(base44);
 
-    console.log(`[DISPATCH_V2_WRITE_BLOCKED] autoDispatch READ-ONLY | CANONICAL=${!!canonicalConfig} | mode=${mode} | id=${configId || 'none'} | force=${forceDispatch} | totalDocs=${allConfigs.length}`);
-
-    // GARDE ABSOLU : si mode inconnu/null → bloquer (pas de fallback auto si doc existe)
     if (mode === null) {
-      console.error(`[DISPATCH_V2_FORCE_AUTO_BLOCKED] autoDispatch BLOQUÉ — doc(s) trouvé(s) mais aucun GLOBAL canonique. Pas de fallback auto. totalDocs=${allConfigs.length}`);
+      // Aucun doc GLOBAL → blocage total, pas de fallback auto
+      console.error(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — aucun doc GLOBAL canonique trouvé | course=${courseId} | function=autoDispatch | source=no_canonical_doc`);
       return Response.json({ success: false, blocked: true, reason: 'no_canonical_config' });
     }
 
     if (mode === 'manuel' && !forceDispatch) {
-      console.log(`[DISPATCH_V2_WRITE_BLOCKED] autoDispatch bloqué — mode=manuel | course=${courseId} | configId=${configId}`);
-      return Response.json({ success: false, blocked: true, reason: 'mode_manuel' });
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | course=${courseId} | configId=${configId} | function=autoDispatch`);
+      console.log(`[MANUAL_MODE_PROTECTED] autoDispatch bloqué par verrou manuel | course=${courseId}`);
+      return Response.json({ success: false, blocked: true, reason: 'manual_mode_active' });
     }
 
     if (mode === 'manuel' && forceDispatch) {
-      console.log(`[DISPATCH_V2_WRITE_ALLOWED] autoDispatch force=true en mode manuel | course=${courseId} | configId=${configId} | caller=admin_force`);
+      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] autoDispatch force=true en mode manuel | course=${courseId} | configId=${configId} | source=admin_force_dispatch`);
+    } else {
+      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] autoDispatch autorisé | mode=auto | course=${courseId} | configId=${configId}`);
     }
 
-    // ── 2. Récupérer la course ─────────────────────────────────────────────
+    // ── 2. Récupérer la course ─────────────────────────────────────────────────
     const courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });
     if (!courses || courses.length === 0) {
       return Response.json({ error: 'Course introuvable' }, { status: 404 });
@@ -110,7 +108,7 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, message: `Statut non éligible: ${course.statut}` });
     }
 
-    // ── 3. Historique des livreurs déjà contactés ─────────────────────────
+    // ── 3. Historique livreurs déjà contactés ─────────────────────────────────
     let historique = [];
     try {
       if (course.historique_assignation) historique = JSON.parse(course.historique_assignation);
@@ -123,38 +121,21 @@ Deno.serve(async (req) => {
         .map(h => h.livreur_email),
     ]);
 
-    // ── 4. Récupérer et filtrer les livreurs éligibles ────────────────────
-    // ⚠️ Filtre SANS current_role — basé uniquement sur profil_valide + driver_online
+    // ── 4. Livreurs éligibles ─────────────────────────────────────────────────
     const allUsers = await base44.asServiceRole.entities.User.list('-updated_date', 500);
     const eligibles = allUsers.filter(d => isDriverDispatchable(d) && !dejaContactes.has(d.email));
 
-    // Diagnostic détaillé (sans current_role)
     const onlineCount = allUsers.filter(d => d.driver_online).length;
     const validCount = allUsers.filter(d => d.driver_online && d.profil_valide).length;
     console.log(`[Dispatch] Total: ${allUsers.length} | driver_online: ${onlineCount} | profil_valide+online: ${validCount} | Éligibles: ${eligibles.length}`);
 
     const now = new Date().toISOString();
 
-    // ── 5. Aucun livreur disponible ────────────────────────────────────────
+    // ── 5. Aucun livreur disponible ────────────────────────────────────────────
     if (eligibles.length === 0) {
       let failReason = 'Aucun livreur disponible pour le moment';
-      if (onlineCount === 0) {
-        failReason = 'Aucun livreur connecté';
-      } else if (validCount === 0) {
-        failReason = `${onlineCount} livreur(s) connecté(s) mais aucun avec un profil livreur validé`;
-      } else {
-        const autresRaisons = allUsers
-          .filter(d => d.driver_online && d.profil_valide && !dejaContactes.has(d.email))
-          .map(d => {
-            if (d.livreur_bloque) return 'bloqué';
-            if (d.livreur_suspendu) return 'suspendu';
-            if (d.disponible === false) return 'indisponible';
-            if ((d.nombre_courses_actives || 0) >= 2) return 'occupé';
-            return 'exclu';
-          });
-        const occupes = autresRaisons.filter(r => r === 'occupé').length;
-        failReason = `${validCount} livreur(s) valide(s) mais tous occupés ou déjà contactés (${occupes} occupés)`;
-      }
+      if (onlineCount === 0) failReason = 'Aucun livreur connecté';
+      else if (validCount === 0) failReason = `${onlineCount} livreur(s) connecté(s) mais aucun avec un profil validé`;
 
       console.log(`[Dispatch] ❌ ${failReason}`);
 
@@ -179,7 +160,6 @@ Deno.serve(async (req) => {
         }).catch(() => {});
       }
 
-      // Notification in-app + FCM push vers les admins
       await base44.asServiceRole.functions.invoke('sendCdlNotification', {
         role: 'admin',
         title: '🚨 Course sans livreur disponible',
@@ -196,22 +176,22 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, reason: failReason, online: onlineCount, valides: validCount });
     }
 
-    // ── 6. Trier par proximité GPS (puis note, puis charge) ───────────────
+    // ── 6. Trier par proximité GPS ─────────────────────────────────────────────
     const tries = sortByProximity(eligibles, course);
     const choisi = tries[0];
 
     if (course.latitude_depart && choisi.gps_latitude) {
       const dist = distanceKm(choisi.gps_latitude, choisi.gps_longitude, parseFloat(course.latitude_depart), parseFloat(course.longitude_depart));
-      console.log(`[Dispatch] Livreur le plus proche: ${choisi.email} (${dist.toFixed(1)} km) | rôle actuel: ${choisi.current_role || 'non défini'}`);
+      console.log(`[Dispatch] Livreur le plus proche: ${choisi.email} (${dist.toFixed(1)} km)`);
     } else {
-      console.log(`[Dispatch] Pas de GPS — premier éligible: ${choisi.email} | rôle actuel: ${choisi.current_role || 'non défini'}`);
+      console.log(`[Dispatch] Pas de GPS — premier éligible: ${choisi.email}`);
     }
 
-    // ── 7. Vérification finale atomique avant assignation ─────────────────
+    // ── 7. Vérification finale atomique ───────────────────────────────────────
     const freshDrivers = await base44.asServiceRole.entities.User.filter({ email: choisi.email });
     const freshDriver = freshDrivers[0];
     if (!freshDriver || !isDriverDispatchable(freshDriver)) {
-      console.log(`[Dispatch] ⚠️ Livreur ${choisi.email} n'est plus éligible (vérification finale) — relance sans lui`);
+      console.log(`[Dispatch] ⚠️ Livreur ${choisi.email} n'est plus éligible — relance`);
       return base44.asServiceRole.functions.invoke('autoDispatch', {
         course_id: courseId,
         exclude_emails: [...Array.from(dejaContactes), choisi.email],
@@ -221,7 +201,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── 8. Proposer au livreur choisi (timer 60s) ─────────────────────────
+    // ── 8. Proposer au livreur (timer 60s) ────────────────────────────────────
     const expireAt = new Date(Date.now() + 60000).toISOString();
     historique.push({
       livreur_email: choisi.email,
@@ -249,7 +229,6 @@ Deno.serve(async (req) => {
       derniere_proposition_at: now,
     }).catch(() => {});
 
-    // Notifier le livreur (in-app — la FCM push est gérée par notifyCourseEvents)
     await base44.asServiceRole.entities.Notification.create({
       destinataire_email: choisi.email,
       destinataire_role: 'livreur',
@@ -264,7 +243,6 @@ Deno.serve(async (req) => {
       notification_key: `${choisi.email}__assignee_attente__${courseId}`,
     }).catch(() => {});
 
-    // Notifier le client (in-app)
     if (course.client_email) {
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: course.client_email,
@@ -279,7 +257,6 @@ Deno.serve(async (req) => {
       }).catch(() => {});
     }
 
-    // WhatsApp livreur (non bloquant)
     if (choisi.telephone) {
       base44.asServiceRole.functions.invoke('sendWhatsAppAlert', {
         eventType: 'driver_course_assigned',
@@ -293,7 +270,7 @@ Deno.serve(async (req) => {
       }).catch(() => {});
     }
 
-    console.log(`[Dispatch] ✅ ${courseId} → ${choisi.full_name} (${choisi.email}) | rôle actuel affiché: ${choisi.current_role || 'non défini'}`);
+    console.log(`[Dispatch] ✅ ${courseId} → ${choisi.full_name} (${choisi.email})`);
 
     return Response.json({
       success: true,

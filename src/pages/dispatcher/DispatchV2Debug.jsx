@@ -134,9 +134,9 @@ export default function DispatchV2Debug() {
     addInitLog('INITIALIZE_CLICKED — Démarrage', 'info');
 
     try {
-      addInitLog('INITIALIZE_STARTED — Appel setDispatchMode(auto)', 'info');
+      addInitLog('INITIALIZE_STARTED — Appel setDispatchModeCanonical(auto, dispatch_v2_debug)', 'info');
 
-      const res = await base44.functions.invoke('setDispatchMode', { mode: 'auto' });
+      const res = await base44.functions.invoke('setDispatchModeCanonical', { mode: 'auto', source: 'dispatch_v2_debug', reason: 'Initialisation depuis DispatchV2Debug' });
 
       addInitLog(`Réponse reçue: status=${res.status} | success=${res.data?.success}`, 'info');
 

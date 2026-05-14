@@ -1,150 +1,35 @@
 /**
- * DispatchModeContext — SOURCE UNIQUE DE VÉRITÉ pour le mode dispatch
+ * DispatchModeContext (V1) — WRAPPER PASSIF VERS V2
  *
- * Un seul abonnement BDD/realtime pour toute l'app.
- * Tous les composants lisent ici — jamais de useState local pour le mode dispatch.
+ * Ce context est conservé pour la rétrocompatibilité (composants qui utilisent useDispatchMode).
+ * Il délègue TOUT au DispatchModeV2Context — AUCUNE écriture propre, AUCUN toggle propre.
+ * La source unique de vérité est DispatchModeV2Context.
  *
- * RÈGLE : 'manuel' reste 'manuel' jusqu'à action admin explicite.
- * Ne jamais normaliser vers 'auto' si mode === 'manuel'.
+ * ⚠️ NE JAMAIS réintroduire de logique de toggle ou d'écriture ici.
  */
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { createContext, useContext } from 'react';
+import { useDispatchModeV2 } from './DispatchModeV2Context';
 
 const DispatchModeContext = createContext(null);
 
-function normalizeMode(raw) {
-  if (raw === 'manuel' || raw === 'manual') return 'manuel';
-  if (raw === 'auto') return 'auto';
-  // Valeur inconnue → NE PAS fallback sur auto, logguer et rejeter
-  console.error(`[DISPATCH_FORCE_AUTO_DETECTED] normalizeMode — valeur inconnue raw="${raw}" — REJETÉ (pas de fallback auto)`);
-  return null; // null = rejeté
-}
-
 export function DispatchModeProvider({ children }) {
-  const [mode, setMode] = useState(null); // null = pas encore chargé
-  const [configId, setConfigId] = useState(null);
-  const [loading, setLoading] = useState(true);
-  // Ref pour détecter les réversions inattendues
-  const lastKnownMode = useRef(null);
-
-  const applyMode = useCallback((raw, source, id) => {
-    const normalized = normalizeMode(raw);
-    if (normalized === null) {
-      console.error(`[DISPATCH_FORCE_AUTO_DETECTED] applyMode rejeté — raw="${raw}" source=${source} id=${id}`);
-      return; // Ne pas appliquer
-    }
-    const prev = lastKnownMode.current;
-
-    if (prev === 'manuel' && normalized === 'auto') {
-      console.warn(`[DISPATCH_MODE_REVERT_DETECTED] ⚠️ Réversion détectée ! ${prev} → ${normalized} | source=${source} | id=${id}`);
-      console.warn(`[DISPATCH_MODE_WRITE_SOURCE] Source de la réversion : ${source}`);
-    }
-
-    console.log(`[DISPATCH_MODE_CHANGED_FROM_TO] ${prev ?? 'null'} → ${normalized} | source=${source} | id=${id || 'none'}`);
-    console.log(`[DISPATCH_MODE_WRITE_SOURCE] mode appliqué=${normalized} | raw=${raw} | source=${source}`);
-
-    lastKnownMode.current = normalized;
-    setMode(normalized);
-    if (id) setConfigId(id);
-  }, []);
-
-  const loadFromDB = useCallback(async () => {
-    try {
-      // STRICT : ne lire QUE le document canonique GLOBAL
-      const all = await base44.entities.DispatchConfig.list('-updated_date', 50);
-      const canonical = all.find(c => c.mode_key === 'GLOBAL');
-      if (!canonical) {
-        console.warn(`[DISPATCH_WRITE_SOURCE] V1 loadFromDB — aucun doc GLOBAL trouvé (${all.length} docs) — mode non appliqué`);
-        setLoading(false);
-        return;
-      }
-      applyMode(canonical.mode, 'BDD_load_GLOBAL', canonical.id);
-    } catch (e) {
-      console.warn('[DispatchModeContext] loadFromDB error:', e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [applyMode]);
-
-  useEffect(() => {
-    console.log('[DISPATCH_MODE_WRITE_SOURCE] Context mount — chargement BDD initial...');
-    loadFromDB();
-
-    // Abonnement realtime — FILTRE STRICT sur doc canonique GLOBAL
-    const unsub = base44.entities.DispatchConfig.subscribe((event) => {
-      if (!event?.data) return;
-      // Ignorer tout event non-canonique
-      if (event.data.mode_key !== 'GLOBAL') {
-        console.warn(`[DISPATCH_WRITE_SOURCE] V1 realtime IGNORÉ (non-GLOBAL): id=${event.data.id} mode_key=${event.data.mode_key || 'NONE'}`);
-        return;
-      }
-      const raw = event.data.mode;
-      if (!raw) {
-        console.warn('[DISPATCH_MODE_REVERT_DETECTED] Realtime event sans mode — ignoré');
-        return;
-      }
-      applyMode(raw, `realtime_${event.type}_GLOBAL`, event.data.id);
-    });
-
-    return () => unsub();
-  }, [loadFromDB, applyMode]);
-
-  // Toggle appelé par n'importe quel composant — résultat propagé à tous via context
-  const toggle = useCallback(async () => {
-    const previousMode = lastKnownMode.current;
-    const newMode = previousMode === 'auto' ? 'manuel' : 'auto';
-    console.log(`[DISPATCH_MODE_CHANGED_FROM_TO] toggle optimiste: ${previousMode} → ${newMode}`);
-    console.log(`[DISPATCH_MODE_WRITE_SOURCE] source=toggle_admin | newMode=${newMode}`);
-
-    // Optimiste immédiat
-    lastKnownMode.current = newMode;
-    setMode(newMode);
-
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('TIMEOUT')), 5000)
-    );
-
-    try {
-      const res = await Promise.race([
-        base44.functions.invoke('setDispatchMode', { mode: newMode }),
-        timeoutPromise,
-      ]);
-
-      if (!res.data?.success) throw new Error(res.data?.error || 'setDispatchMode failed');
-
-      const confirmed = res.data?.config?.mode;
-      if (confirmed) {
-        console.log(`[DISPATCH_MODE_CHANGED_FROM_TO] BDD confirmée: ${newMode} → normalized=${normalizeMode(confirmed)}`);
-        console.log(`[DISPATCH_MODE_WRITE_SOURCE] source=setDispatchMode_response | confirmed=${confirmed}`);
-        // Ne pas appeler applyMode ici — le subscribe realtime va le faire
-        // pour éviter une double mise à jour qui pourrait créer un race condition
-      }
-    } catch (err) {
-      if (err.message === 'TIMEOUT') {
-        console.warn(`[DISPATCH_MODE_WRITE_SOURCE] Timeout 5s — mode optimiste conservé=${newMode}, realtime confirmera`);
-      } else {
-        console.error(`[DISPATCH_MODE_REVERT_DETECTED] Erreur rollback → ${previousMode} | ${err.message}`);
-        console.log(`[DISPATCH_MODE_CHANGED_FROM_TO] rollback: ${newMode} → ${previousMode}`);
-        lastKnownMode.current = previousMode;
-        setMode(previousMode);
-      }
-    }
-  }, []); // Pas de dépendance sur `mode` — on lit via lastKnownMode.current
-
-  const reload = useCallback(async () => {
-    console.log('[DISPATCH_MODE_WRITE_SOURCE] reload manuel déclenché');
-    await loadFromDB();
-  }, [loadFromDB]);
-
+  // Le V1 est maintenant un shell vide — le vrai provider est DispatchModeV2Provider (dans App.jsx)
+  // On expose le context via un provider enfant qui lira depuis V2
   return (
-    <DispatchModeContext.Provider value={{ mode, configId, loading, toggle, reload }}>
+    <DispatchModeContext.Provider value={null}>
       {children}
     </DispatchModeContext.Provider>
   );
 }
 
 export function useDispatchMode() {
-  const ctx = useContext(DispatchModeContext);
-  if (!ctx) throw new Error('useDispatchMode doit être utilisé dans DispatchModeProvider');
-  return ctx;
+  // Déléguer directement au V2 — source unique de vérité
+  const v2 = useDispatchModeV2();
+  return {
+    mode: v2.mode,
+    configId: v2.canonicalId,
+    loading: v2.loading,
+    toggle: v2.toggle,
+    reload: v2.reload,
+  };
 }
