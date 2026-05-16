@@ -261,29 +261,31 @@ export default function CourseLivreur() {
       vibrateSuccess();
       toast.success(`🎉 Livraison confirmée ! +${gainLivreur?.toLocaleString()} FCFA crédités sur votre Bedou.`);
 
-      // Fire & forget — stats + streak
+      // Fire & forget — stats UNIQUEMENT (pas de décrémentation ici — déjà faite ailleurs si nécessaire)
       base44.entities.User.filter({ email: course.livreur_email }).then(livs => {
         if (livs[0]) base44.entities.User.update(livs[0].id, {
           total_courses_livrees: (livs[0].total_courses_livrees || 0) + 1,
-          nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 0) - 1),
         }).catch(() => {});
       }).catch(() => {});
       base44.functions.invoke('updateLivreurStreak', {}).catch(() => {});
 
-      // Notifications (fire & forget)
+      // Fire & forget — Notifications IDEMPOTENTES avec keys de déduplication
+      const notif_key_client = `${course.client_email}__livree__${course.id}__client`;
+      const notif_key_admin = `weezyh2@gmail.com__livree__${course.id}__admin`;
       base44.entities.Notification.create({
         destinataire_email: course.client_email, destinataire_role: 'client',
         titre: '✅ Colis livré ! Notez votre livreur',
         message: `Votre colis a été livré par ${course.livreur_name}. ${montant.toLocaleString()} FCFA débités de votre Bedou.`,
         type: 'success', lue: false, course_id: course.id,
         target_screen: `/course/${course.id}/track`,
-        notification_key: `${course.client_email}__livree__${course.id}__client`,
+        notification_key: notif_key_client,
       }).catch(() => {});
       base44.entities.Notification.create({
         destinataire_email: 'weezyh2@gmail.com', destinataire_role: 'admin',
         titre: '📦 Course livrée',
         message: `Course ${course.quartier_depart}→${course.quartier_arrivee} livrée par ${course.livreur_name}. ${montant.toLocaleString()} FCFA réglés.`,
         type: 'success', lue: false, course_id: course.id, target_screen: '/gerer-courses',
+        notification_key: notif_key_admin,
       }).catch(() => {});
       triggerWhatsAppNotification({ eventType: 'course_completed', recipientRole: 'client', recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur, messageText: waMsgCourseCompletedClient(), entityId: course.id, entityType: 'course', priority: 'normal' });
       triggerWhatsAppNotification({ eventType: 'course_completed_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur, messageText: waMsgCourseCompletedDriver(), entityId: course.id, entityType: 'course', priority: 'normal' });
@@ -308,21 +310,16 @@ export default function CourseLivreur() {
       toast.error('Course introuvable');
       return;
     }
+    // ANTI-DOUBLE : si déjà livree via settlement, la décrémentation s'est faire ailleurs
+    // Cet écran est juste pour "fermer" la vue — ne pas re-décrémenter
     setUpdating(true);
     console.log('[CourseLivreur] marquerCourseEffectuee START — course.id:', id);
     try {
-      // Remettre le livreur disponible
-      const me = await base44.auth.me();
-      await base44.auth.updateMe({
-        disponible: true,
-        nombre_courses_actives: Math.max(0, (me.nombre_courses_actives || 0) - 1),
-      });
-      console.log('[CourseLivreur] marquerCourseEffectuee DONE — livreur remis disponible');
       vibrateSuccess();
-      toast.success('✅ Course terminée + vous êtes de nouveau disponible !');
+      toast.success('✅ Course terminée ! Vous êtes de nouveau disponible.');
       navigate('/mes-livraisons');
     } catch (err) {
-      console.error('[CourseLivreur] marquerCourseEffectuee error:', err);
+      console.error('[CourseLivreur] markerCourseEffectuee error:', err);
       toast.error(err.message || 'Erreur inattendue — Réessayez.');
     } finally {
       setUpdating(false);
