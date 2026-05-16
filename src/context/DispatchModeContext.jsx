@@ -1,117 +1,138 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+/**
+ * DispatchModeContext — SOURCE UNIQUE ET DÉFINITIVE
+ *
+ * RÈGLES :
+ *   - Lit UNIQUEMENT getDispatchMode (backend → DispatchModeState)
+ *   - Subscribe UNIQUEMENT sur DispatchModeState (realtime)
+ *   - Écrit UNIQUEMENT via setDispatchMode (backend sécurisé, admin-only)
+ *   - ZÉRO référence à DispatchConfig, DispatchEngineV2, DispatchModeV2Context
+ *   - ZÉRO fallback "auto" automatique (null = loading, jamais forced auto)
+ *   - UN seul Provider dans App.jsx : <DispatchModeProvider>
+ */
+
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 
 const DispatchModeContext = createContext(null);
 
 export function DispatchModeProvider({ children }) {
-  const [mode, setMode] = useState(null); // "auto" | "manuel" | null (loading)
+  const [mode, setModeState] = useState(null);         // null = chargement en cours
   const [updatedAt, setUpdatedAt] = useState(null);
   const [updatedBy, setUpdatedBy] = useState(null);
   const [configId, setConfigId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [backendRaw, setBackendRaw] = useState(null);  // valeur brute retournée par backend
+  const [lastWriter, setLastWriter] = useState(null);  // dernière fonction ayant écrit
+  const [listenerActive, setListenerActive] = useState(false);
+  const [lastEventTs, setLastEventTs] = useState(null);
 
-  // Chargement initial + subscription temps réel
-  const loadMode = useCallback(async (source = 'init') => {
+  const modeRef = useRef(null); // ref synchrone pour éviter closures stales
+
+  // ── Chargement depuis backend ─────────────────────────────────────────────
+  const loadMode = useCallback(async (source = "init") => {
     try {
-      // Vérifier auth d'abord
-      const isAuthenticated = await base44.auth.isAuthenticated();
-      if (!isAuthenticated) {
-        console.log('[DispatchModeContext] loadMode SKIP — not authenticated');
-        setMode('auto');
+      console.log(`[DISPATCH_MODE] loadMode START | source=${source}`);
+      const isAuth = await base44.auth.isAuthenticated();
+      if (!isAuth) {
+        console.log("[DISPATCH_MODE] loadMode SKIP — non authentifié");
         setLoading(false);
         return;
       }
-      
-      // Cache buster: ajoute timestamp pour éviter cache HTTP
-      console.log(`[DispatchModeContext] loadMode [${source}] START`);
-      const res = await base44.functions.invoke('getDispatchMode', { _t: Date.now() });
+
+      const res = await base44.functions.invoke("getDispatchMode", { _t: Date.now() });
       const data = res.data;
-      console.log(`[DispatchModeContext] loadMode [${source}] SUCCESS | mode=${data.mode} | config_id=${data.config_id} | updated_at=${data.updated_at}`);
-      setMode(data.mode);
+      console.log(`[DISPATCH_MODE] loadMode RESPONSE | mode=${data.mode} | config_id=${data.config_id} | updated_by=${data.updated_by} | updated_at=${data.updated_at}`);
+
+      setBackendRaw(data);
+      setModeState(data.mode || null);
+      modeRef.current = data.mode || null;
       setUpdatedAt(data.updated_at);
       setUpdatedBy(data.updated_by);
       setConfigId(data.config_id);
+      setLastWriter(`getDispatchMode (${source})`);
     } catch (err) {
-      console.error('[DispatchModeContext] loadMode ERROR:', err.message);
-      // Retry une fois après 500ms (token peut être en cours de refresh)
-      if (source === 'init') {
-        console.log('[DispatchModeContext] loadMode RETRY in 500ms...');
-        setTimeout(() => loadMode('retry'), 500);
+      console.error("[DISPATCH_MODE] loadMode ERROR:", err.message);
+      // Retry unique sur init
+      if (source === "init") {
+        console.log("[DISPATCH_MODE] loadMode RETRY in 800ms...");
+        setTimeout(() => loadMode("retry"), 800);
         return;
       }
-      // Fallback safe: auto par défaut si erreur
-      setMode('auto');
+      // Pas de fallback "auto" — on garde l'état précédent
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // ── Subscription realtime sur DispatchModeState ───────────────────────────
   useEffect(() => {
-    loadMode('init');
+    loadMode("init");
 
-    // Subscription temps réel aux changements
     const unsubscribe = base44.entities.DispatchModeState.subscribe((event) => {
-      console.log('[DispatchModeContext] subscribe event:', event.type, event.data?.mode);
-      if ((event.type === 'update' || event.type === 'create') && event.data) {
-        setMode(event.data.mode);
+      const ts = new Date().toISOString();
+      console.log(`[DISPATCH_MODE] REALTIME event | type=${event.type} | mode=${event.data?.mode} | ts=${ts}`);
+      setLastEventTs(ts);
+
+      if ((event.type === "update" || event.type === "create") && event.data) {
+        const newMode = event.data.mode;
+        const prevMode = modeRef.current;
+
+        if (prevMode !== null && prevMode !== newMode) {
+          console.warn(`[DISPATCH_MODE] MODE CHANGE via realtime: ${prevMode} → ${newMode} | by=${event.data.updated_by}`);
+        }
+
+        modeRef.current = newMode;
+        setModeState(newMode);
         setUpdatedAt(event.data.updated_at);
         setUpdatedBy(event.data.updated_by);
         setConfigId(event.id);
-      } else if (event.type === 'delete') {
-        // Document supprimé → fallback sur auto (état sûr par défaut)
-        console.warn('[DispatchModeContext] DispatchModeState supprimé — fallback mode=auto');
-        setMode('auto');
+        setLastWriter(`realtime_${event.type}`);
+        setBackendRaw(event.data);
+      } else if (event.type === "delete") {
+        console.warn("[DISPATCH_MODE] DispatchModeState SUPPRIMÉ — mode=null (pas de fallback auto)");
+        modeRef.current = null;
+        setModeState(null);
         setUpdatedAt(null);
         setUpdatedBy(null);
         setConfigId(null);
+        setLastWriter("realtime_delete");
+        setBackendRaw(null);
       }
     });
 
+    setListenerActive(true);
     return () => {
       unsubscribe();
+      setListenerActive(false);
     };
   }, [loadMode]);
 
-  // Action: changer le mode (appelle la fonction sécurisée)
-  const setModeSecure = useCallback(async (newMode, skipRefresh = false) => {
-    if (!['auto', 'manuel'].includes(newMode)) {
-      const err = `Mode invalide: ${newMode}`;
-      console.error(`[DispatchModeContext] setModeSecure VALIDATION_ERROR | ${err}`);
-      throw new Error(err);
+  // ── Écriture sécurisée — admin-only via setDispatchMode ──────────────────
+  const setMode = useCallback(async (newMode) => {
+    if (!["auto", "manuel"].includes(newMode)) {
+      throw new Error(`[DISPATCH_MODE] Mode invalide: "${newMode}"`);
     }
 
-    try {
-      console.log(`[DispatchModeContext] setModeSecure START | newMode=${newMode} | timestamp=${Date.now()}`);
-      
-      // Cache buster
-      const res = await base44.functions.invoke('setDispatchMode', { mode: newMode, _t: Date.now() });
-      console.log(`[DispatchModeContext] setModeSecure RESPONSE | status=${res.status} | data=`, res.data);
-      
-      if (!res.data?.success) {
-        const errMsg = res.data?.error || 'setDispatchMode failed';
-        console.error(`[DispatchModeContext] setModeSecure FAILED | ${errMsg}`);
-        throw new Error(errMsg);
-      }
-      
-      // Mise à jour immédiate du state
-      console.log(`[DispatchModeContext] setModeSecure UPDATING STATE | mode=${newMode}`);
-      setMode(newMode);
-      setUpdatedAt(res.data.updated_at);
-      setUpdatedBy(res.data.updated_by);
-      setConfigId(res.data.config_id);
-      
-      // Refresh immédiat pour confirmer depuis BDD
-      if (!skipRefresh) {
-        console.log(`[DispatchModeContext] setModeSecure SCHEDULING REFRESH`);
-        setTimeout(() => loadMode('post-set'), 500);
-      }
-      
-      return { success: true, mode: newMode };
-    } catch (error) {
-      console.error('[DispatchModeContext] setModeSecure ERROR:', error.message, error.stack);
-      throw error;
+    console.log(`[DISPATCH_MODE] setMode CALLED | newMode=${newMode} | prevMode=${modeRef.current}`);
+
+    const res = await base44.functions.invoke("setDispatchMode", { mode: newMode, _t: Date.now() });
+    console.log(`[DISPATCH_MODE] setDispatchMode RESPONSE | success=${res.data?.success} | mode=${res.data?.mode}`);
+
+    if (!res.data?.success) {
+      throw new Error(res.data?.error || "setDispatchMode a échoué");
     }
-  }, [loadMode]);
+
+    // Mise à jour immédiate du state (avant que le realtime arrive)
+    modeRef.current = newMode;
+    setModeState(newMode);
+    setUpdatedAt(res.data.updated_at);
+    setUpdatedBy(res.data.updated_by);
+    setConfigId(res.data.config_id);
+    setLastWriter(`setDispatchMode (admin click)`);
+    setBackendRaw(res.data);
+
+    return { success: true, mode: newMode };
+  }, []);
 
   const value = {
     mode,
@@ -119,7 +140,14 @@ export function DispatchModeProvider({ children }) {
     updatedBy,
     configId,
     loading,
-    setMode: setModeSecure,
+    // Debug panel
+    backendRaw,
+    lastWriter,
+    listenerActive,
+    lastEventTs,
+    modeRef,
+    // Actions
+    setMode,
     refresh: loadMode,
   };
 
@@ -131,9 +159,7 @@ export function DispatchModeProvider({ children }) {
 }
 
 export function useDispatchMode() {
-  const context = useContext(DispatchModeContext);
-  if (!context) {
-    throw new Error('useDispatchMode must be used within DispatchModeProvider');
-  }
-  return context;
+  const ctx = useContext(DispatchModeContext);
+  if (!ctx) throw new Error("useDispatchMode doit être utilisé dans <DispatchModeProvider>");
+  return ctx;
 }

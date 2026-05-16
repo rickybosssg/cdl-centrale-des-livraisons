@@ -20,7 +20,6 @@ const INIT_ORDER = [
   'FcmTokenEngine',
   'BedouEngine',
   'NotificationEngine',
-  'DispatchEngine',
   'ProfileEngine',
   'CourseStatusEngine',
   'LocationEngine',
@@ -93,7 +92,7 @@ const EngineRegistry = {
         case 'FcmTokenEngine':    engine = (await import('./FcmTokenEngine')).default; break;
         case 'BedouEngine':       engine = (await import('./BedouEngine')).default; break;
         case 'NotificationEngine': engine = (await import('./NotificationEngine')).default; break;
-        case 'DispatchEngine':    engine = (await import('./DispatchEngine')).default; break;
+        case 'DispatchEngine':    engine = null; break; // Supprimé — dispatch géré par DispatchModeContext
         case 'ProfileEngine':     engine = (await import('./ProfileEngine')).default; break;
         case 'CourseStatusEngine': engine = (await import('./CourseStatusEngine')).default; break;
         case 'LocationEngine':    engine = (await import('./LocationEngine')).default; break;

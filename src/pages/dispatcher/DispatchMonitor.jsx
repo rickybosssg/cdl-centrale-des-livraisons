@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useDispatchMode } from "@/context/DispatchModeContext";
@@ -175,7 +175,7 @@ export default function DispatchMonitor() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
 
-  // SOURCE UNIQUE : context global
+  // SOURCE UNIQUE : DispatchModeContext → DispatchModeState
   const { mode: dispatchMode, setMode, refresh: refreshMode } = useDispatchMode();
 
   const load = useCallback(async () => {
@@ -202,31 +202,22 @@ export default function DispatchMonitor() {
     }
   }, []);
 
-  // Gestion changement mode — APPEL DIRECT setDispatchMode (sans context)
-  const [localMode, setLocalMode] = useState(dispatchMode);
-  
+  // Gestion changement mode — via DispatchModeContext (setMode sécurisé)
+  const [toggling, setToggling] = useState(false);
+
   const handleToggleMode = async () => {
-    const newMode = localMode === 'auto' ? 'manuel' : 'auto';
-    console.log(`[DISPATCH_MANUAL_BUTTON_CLICKED] ${localMode} → ${newMode}`);
-    
+    if (toggling || dispatchMode === null) return;
+    const newMode = dispatchMode === 'auto' ? 'manuel' : 'auto';
+    console.log(`[DISPATCH_MANUAL_BUTTON_CLICKED] ${dispatchMode} → ${newMode}`);
+    setToggling(true);
     try {
-      // Appel direct à la fonction backend
-      const res = await base44.functions.invoke('setDispatchMode', { mode: newMode, _t: Date.now() });
-      console.log(`[DISPATCH_MANUAL_BUTTON_SUCCESS] Response:`, res.data);
-      
-      if (!res.data?.success) {
-        throw new Error(res.data?.error || 'Échec de la commande');
-      }
-      
-      // Mise à jour immédiate de l'état local
-      setLocalMode(newMode);
+      await setMode(newMode);
       toast.success(`✅ Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
-      
-      // Refresh BDD pour confirmation
-      setTimeout(() => refreshMode(), 500);
     } catch (error) {
       console.error(`[DISPATCH_MANUAL_BUTTON_ERROR] ${error.message}`);
       toast.error(`❌ Erreur: ${error.message}`);
+    } finally {
+      setToggling(false);
     }
   };
 
@@ -329,9 +320,9 @@ export default function DispatchMonitor() {
     return () => { clearInterval(interval); unsubCourses(); unsubUsers(); };
   }, []);
 
-  // État local prioritaire (évite latence context)
-  const isManuel = localMode === 'manuel';
-  console.log(`[UI_MODE_BEFORE_RENDER] DispatchMonitor | localMode=${localMode} | isManuel=${isManuel}`);
+  // Utilise directement dispatchMode du context (source unique)
+  const isManuel = dispatchMode === 'manuel';
+  console.log(`[UI_MODE_BEFORE_RENDER] DispatchMonitor | dispatchMode=${dispatchMode} | isManuel=${isManuel}`);
   // Filtre SANS current_role — basé sur profil_valide + driver_online + non bloqué/suspendu
   const livreursOnline = livreurs.filter(l => !l.livreur_bloque && !l.livreur_suspendu);
   const livreursDispatchables = livreurs.filter(l =>

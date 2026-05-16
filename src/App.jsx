@@ -135,7 +135,7 @@ import FcmPermissionBanner from './components/FcmPermissionBanner';
 import FcmBootBanner from './components/FcmBootBanner';
 import { FcmReadyProvider } from '@/context/FcmReadyContext';
 import { DispatchModeProvider } from '@/context/DispatchModeContext';
-import DispatchV2Debug from './pages/dispatcher/DispatchV2Debug';
+import DispatchModeDebug from './pages/dispatcher/DispatchModeDebug';
 import KeyboardFeedbackProvider from './components/KeyboardFeedbackProvider';
 import FcmApkAudit from './pages/FcmApkAudit';
 import FcmRegisterAudit from './pages/FcmRegisterAudit';
@@ -472,7 +472,8 @@ const AuthenticatedApp = () => {
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
           <Route path="/dispatch-mode-settings" element={<DispatchModeSettings />} />
           <Route path="/admin-repair" element={<AdminRepair />} />
-          <Route path="/dispatch-v2-debug" element={<DispatchV2Debug />} />
+          <Route path="/dispatch-v2-debug" element={<DispatchModeDebug />} />
+          <Route path="/dispatch-mode-debug" element={<DispatchModeDebug />} />
           <Route path="/health-dashboard" element={<HealthDashboard />} />
           <Route path="/audit-complet" element={<AuditComplet />} />
           <Route path="/test-publicites" element={<TestPublicitesVisibilite />} />

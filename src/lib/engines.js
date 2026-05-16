@@ -19,7 +19,6 @@ export { default as AuditEngine }       from './AuditEngine';
 // ── Moteurs métier ─────────────────────────────────────────────────────────────
 export { default as BedouEngine }        from './BedouEngine';
 export { default as NotificationEngine } from './NotificationEngine';
-export { default as DispatchEngine }     from './DispatchEngine';
 export { default as ProfileEngine }      from './ProfileEngine';
 export { default as CourseStatusEngine } from './CourseStatusEngine';
 export { default as FcmTokenEngine }     from './FcmTokenEngine';
