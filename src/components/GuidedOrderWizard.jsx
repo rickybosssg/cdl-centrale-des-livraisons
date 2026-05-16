@@ -124,12 +124,18 @@ function QuartierInput({ value, onChange, placeholder, onUseGPS, autoFocus = fal
         <input
           ref={ref}
           type="text"
+          inputMode="text"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="words"
+          spellCheck="false"
           value={query}
           onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder={placeholder}
-          className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-200 bg-gray-50 text-sm font-medium focus:outline-none focus:border-blue-400 focus:bg-white focus:shadow-sm transition-all"
+          className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-200 bg-white text-gray-900 text-sm font-medium placeholder:text-gray-400 focus:outline-none focus:border-blue-400 focus:shadow-sm transition-all"
+          style={{ color: '#111827', backgroundColor: '#fff' }}
         />
       </div>
 
@@ -276,20 +282,28 @@ function StepContact({ typeService, form, setForm, onNext }) {
 function FieldInput({ label, placeholder, value, onChange, type = "text", autoFocus = false }) {
   const ref = useRef();
   useEffect(() => { if (autoFocus) setTimeout(() => ref.current?.focus(), 350); }, [autoFocus]);
+  const isTel = type === "tel";
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-semibold text-gray-700">{label}</label>
       <input
         ref={ref}
-        type={type}
+        type={isTel ? "tel" : type}
+        inputMode={isTel ? "tel" : "text"}
+        autoComplete={isTel ? "tel" : "off"}
+        autoCorrect="off"
+        autoCapitalize={isTel ? "none" : "words"}
+        spellCheck="false"
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 text-sm font-medium focus:outline-none focus:border-blue-400 focus:bg-white focus:shadow-sm transition-all"
+        className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 bg-white text-gray-900 text-sm font-medium placeholder:text-gray-400 focus:outline-none focus:border-blue-400 focus:shadow-sm transition-all"
+        style={{ color: '#111827', backgroundColor: '#fff' }}
       />
     </div>
   );
 }
+console.log('[CLIENT_FORM_VISIBILITY_OK] FieldInput + QuartierInput correctement configurés');
 
 // ── ÉTAPE 5 : Colis ─────────────────────────────────────────────────────────
 const COLIS_CHIPS = [
@@ -336,7 +350,13 @@ function StepColis({ form, setForm, onNext }) {
           value={form.description}
           onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
           rows={2}
-          className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-all resize-none"
+          inputMode="text"
+          autoComplete="off"
+          autoCorrect="on"
+          autoCapitalize="sentences"
+          spellCheck="true"
+          className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:border-blue-400 transition-all resize-none"
+          style={{ color: '#111827', backgroundColor: '#fff' }}
         />
       </div>
       <BigBtn onClick={onNext} disabled={!form.type_colis} color={PRIMARY} fixed>
@@ -366,6 +386,12 @@ function StepPrix({ form, setForm, onNext }) {
         <input
           ref={inputRef}
           type="number"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck="false"
           min="0"
           placeholder="0"
           value={form.prix_base}
@@ -373,7 +399,7 @@ function StepPrix({ form, setForm, onNext }) {
           className="w-full text-4xl font-extrabold text-center py-6 rounded-2xl border-2 focus:outline-none transition-all"
           style={{
             borderColor: prix > 0 ? PRIMARY : "#E5E7EB",
-            background: prix > 0 ? `${PRIMARY}08` : "#F9FAFB",
+            background: prix > 0 ? `${PRIMARY}08` : "#fff",
             color: prix > 0 ? PRIMARY : "#9CA3AF",
           }}
         />
@@ -552,6 +578,8 @@ function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal
     </div>
   );
 }
+
+console.log('[CLIENT_KEYBOARD_CONFIG_OK] GuidedOrderWizard — inputMode/type/autoComplete configurés');
 
 // ── WIZARD PRINCIPAL ─────────────────────────────────────────────────────────
 export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmit, loading }) {

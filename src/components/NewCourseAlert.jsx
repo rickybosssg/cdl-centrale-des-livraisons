@@ -37,8 +37,11 @@ export default function NewCourseAlert({ course, onClose, user }) {
   useEffect(() => {
     if (!course) return;
     setTimeLeft(TIMER_DURATION);
+    console.log(`[DRIVER_ASSIGNED_COURSE_MODAL_SHOWN] course_id=${course.id} | trajet=${course.quartier_depart}→${course.quartier_arrivee} | prix=${course.prix}`);
     playAlertSound();
     vibrateNotif();
+    // Vibration native via navigator.vibrate (fonctionne sur Android WebView/APK)
+    try { navigator.vibrate?.([200, 100, 200, 100, 200]); } catch (_) {}
 
     intervalRef.current = setInterval(() => {
       setTimeLeft(prev => {

@@ -122,19 +122,33 @@ export default function LivreurHome({ user }) {
 
     const unsub = base44.entities.Course.subscribe(ev => {
       if (!ev.data) return;
-      if (ev.data.livreur_email === user.email) {
+      const isForMe = ev.data.livreur_email === user.email;
+
+      if (isForMe) {
         if (ev.type === "create") {
           setCourses(p => [ev.data, ...p]);
-          if (ev.data.statut === "assignee_attente") setAlertCourse(ev.data);
+          if (ev.data.statut === "assignee_attente") {
+            console.log(`[DRIVER_ASSIGNED_COURSE_REALTIME_OK] create | course_id=${ev.id} | statut=assignee_attente`);
+            setAlertCourse(ev.data);
+          }
         } else if (ev.type === "update") {
-          setCourses(p => p.map(c => c.id === ev.id ? ev.data : c));
-          if (ev.data.statut === "assignee_attente") setAlertCourse(ev.data);
-          else setAlertCourse(p => p?.id === ev.id ? null : p);
+          setCourses(p => {
+            const exists = p.find(c => c.id === ev.id);
+            return exists ? p.map(c => c.id === ev.id ? ev.data : c) : [ev.data, ...p];
+          });
+          if (ev.data.statut === "assignee_attente") {
+            console.log(`[DRIVER_ASSIGNED_COURSE_REALTIME_OK] update | course_id=${ev.id} | statut=assignee_attente`);
+            setAlertCourse(ev.data);
+          } else {
+            setAlertCourse(p => p?.id === ev.id ? null : p);
+          }
         }
       } else {
+        // Course retirée de ce livreur (reassignée ou refusée)
         setAlertCourse(p => p?.id === ev.id ? null : p);
       }
     });
+    console.log('[DRIVER_ASSIGNED_COURSE_REALTIME_OK] subscription active | user=' + user.email);
     return unsub;
   }, [user?.email]);
 
