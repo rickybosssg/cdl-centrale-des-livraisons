@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
+import { isAdminUser } from '@/lib/activeProfile';
 
 export default function DispatcherGuard() {
   const [allowed, setAllowed] = useState(null);
 
   useEffect(() => {
     base44.auth.me().then(user => {
-      const ADMIN_EMAILS = ['weezyh2@gmail.com'];
-      setAllowed(
-        user?.role === 'admin' || ADMIN_EMAILS.includes(user?.email)
-      );
+      // Source unique: user.role === 'admin'
+      setAllowed(isAdminUser(user));
     });
   }, []);
 

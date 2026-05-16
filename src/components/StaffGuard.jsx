@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Shield, Loader2 } from "lucide-react";
+import { isAdminUser } from "@/lib/activeProfile";
 
 export default function StaffGuard({ requiredPerm }) {
   const [status, setStatus] = useState("loading");
@@ -10,7 +11,7 @@ export default function StaffGuard({ requiredPerm }) {
   useEffect(() => {
     const check = async () => {
       const me = await base44.auth.me();
-      const isAdmin = me?.role === "admin" || me?.email === "weezyh2@gmail.com";
+      const isAdmin = isAdminUser(me); // source unique: user.role === 'admin'
       if (isAdmin) { setStatus("ok"); return; }
       const perms = await base44.entities.StaffPermission.filter({ userEmail: me.email, isActive: true });
       const p = perms[0];

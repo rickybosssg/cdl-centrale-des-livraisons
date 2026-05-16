@@ -170,11 +170,11 @@ class RealtimeSyncEngine {
     return () => this._cleanup(key);
   }
 
-  /** Souscrire aux changements de dispatch */
+  /** Souscrire aux changements de dispatch — source unique: DispatchModeState */
   subscribeDispatch(callback) {
     const key = `dispatch:global`;
     this._cleanup(key);
-    const unsub = base44.entities.DispatchConfig.subscribe((event) => {
+    const unsub = base44.entities.DispatchModeState.subscribe((event) => {
       callback({ type: 'dispatch_update', data: event.data, event });
     });
     this._subscriptions.set(key, unsub);

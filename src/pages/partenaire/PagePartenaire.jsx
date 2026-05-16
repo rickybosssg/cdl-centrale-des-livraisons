@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { MapPin, Phone, Clock, ShoppingCart, MessageCircle, ArrowLeft, Plus, Minus, Trash2, X, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { vibrateLight, vibrateSuccess } from "@/lib/vibration";
-import { lancerDispatch } from "@/lib/dispatch";
 import QuartierSelect from "../../components/QuartierSelect";
 
 const TYPE_EMOJI = {

@@ -8,8 +8,9 @@
  */
 
 import { base44 } from '@/api/base44Client';
+import { getActiveProfileType as _getActiveProfileType, isAdminUser } from '@/lib/activeProfile';
 
-const ENGINE_VERSION = '1.0.0';
+const ENGINE_VERSION = '1.1.0'; // v1.1 — source unique active_profile_type
 let _cachedUser = null;
 let _cacheTs = 0;
 const USER_CACHE_TTL_MS = 30_000; // 30s
@@ -82,16 +83,14 @@ const AuthEngine = {
     return base44.auth.redirectToLogin(nextUrl);
   },
 
-  /** Obtenir le type de profil actif */
+  /** Obtenir le type de profil actif — délègue à la source unique */
   getActiveProfileType(user) {
-    if (!user) return null;
-    if (user.role === 'admin' || user.user_type === 'admin') return 'admin';
-    return user.active_profile_type || user.user_type || null;
+    return _getActiveProfileType(user);
   },
 
-  /** Vérifier si admin */
+  /** Vérifier si admin — source unique: user.role === 'admin' */
   isAdmin(user) {
-    return user?.role === 'admin' || user?.user_type === 'admin';
+    return isAdminUser(user);
   },
 
   /** Permissions liées au profil actif */

@@ -10,6 +10,7 @@
  */
 
 import { base44 } from '@/api/base44Client';
+import { getActiveProfileType as _getActiveProfileType, isAdminUser, logProfileSwitch } from '@/lib/activeProfile';
 
 const ENGINE_VERSION = '1.0.0';
 
@@ -53,16 +54,15 @@ const ProfileEngine = {
     });
   },
 
-  /** Obtenir le profil actif */
+  /** Obtenir le profil actif — délègue à la source unique */
   getActiveType(user) {
-    if (!user) return null;
-    if (user.role === 'admin' || user.user_type === 'admin') return 'admin';
-    return user.active_profile_type || user.user_type || null;
+    return _getActiveProfileType(user);
   },
 
   /** Changer de profil actif */
   async switchTo(profileType) {
     const res = await base44.functions.invoke('switchActiveProfile', { profile_type: profileType });
+    logProfileSwitch('?', null, profileType, 'ProfileEngine.switchTo');
     return res.data;
   },
 

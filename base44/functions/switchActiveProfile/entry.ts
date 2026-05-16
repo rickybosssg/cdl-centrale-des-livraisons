@@ -43,13 +43,13 @@ Deno.serve(async (req) => {
     await base44.asServiceRole.entities.UserProfile.update(targetProfile.id, { is_active_profile: true });
 
     // Réinitialiser TOUS les statuts en ligne + activer uniquement le rôle choisi
+    // SOURCE UNIQUE : active_profile_type — current_role n'est plus écrit (deprecated)
     const onlineFields = {
-      current_role: profile_type,
+      active_profile_type: profile_type,  // ← SOURCE UNIQUE DE VÉRITÉ
       driver_online: profile_type === 'livreur',
       client_online: profile_type === 'client',
       commercial_online: profile_type === 'commercial',
       partner_online: profile_type === 'partenaire',
-      active_profile_type: profile_type,
       last_seen: new Date().toISOString(),
     };
 

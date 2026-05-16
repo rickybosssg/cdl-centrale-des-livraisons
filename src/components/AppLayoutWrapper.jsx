@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { getActiveProfileType, isAdminUser } from "@/lib/activeProfile";
 import AppLayout from "./AppLayout";
 import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
@@ -38,8 +39,7 @@ export default function AppLayoutWrapper({ user }) {
         const me = user; // On a déjà le user depuis le parent
         if (!isMounted) return;
 
-        const ADMIN_EMAILS = ['weezyh2@gmail.com'];
-        const isAdmin = me.role === 'admin' || ADMIN_EMAILS.includes(me.email);
+        const isAdmin = isAdminUser(me);
 
         // Vérifier si nouvel user (pas de profil)
         if (!isAdmin) {
@@ -66,7 +66,7 @@ export default function AppLayoutWrapper({ user }) {
           }
         }
 
-        if (me.email === 'weezyh2@gmail.com' || me.role === 'admin') {
+        if (isAdminUser(me)) {
           setUserRole('admin');
         } else {
           // ── SOURCE DE VÉRITÉ UNIQUE : activeProfileId localStorage → UserProfile ──
@@ -78,23 +78,22 @@ export default function AppLayoutWrapper({ user }) {
             if (!isMounted) return;
 
             const storedId = localStorage.getItem('activeProfileId');
-            // P1 : profil mémorisé dans localStorage (mis à jour par Home au switch)
+            // P1 : localStorage (switch récent, avant BDD à jour)
             let resolved = storedId ? profs.find(p => p.id === storedId && !p.deleted) : null;
-            // P2 : current_role en BDD
-            if (!resolved && (me.current_role || me.active_profile_type)) {
-              const trueRole = me.current_role || me.active_profile_type;
-              resolved = profs.find(p => p.profile_type === trueRole && !p.deleted);
+            // P2 : active_profile_type BDD (SOURCE UNIQUE officielle)
+            if (!resolved && me.active_profile_type) {
+              resolved = profs.find(p => p.profile_type === me.active_profile_type && !p.deleted);
               if (resolved) localStorage.setItem('activeProfileId', resolved.id);
             }
-            // P3 : premier profil actif
+            // P3 : premier profil actif (nouvel utilisateur)
             if (!resolved) {
               resolved = profs.find(p => p.status === 'actif' && !p.deleted) || profs.find(p => !p.deleted);
               if (resolved) localStorage.setItem('activeProfileId', resolved.id);
             }
 
-            setUserRole(resolved?.profile_type || me.current_role || 'client');
+            setUserRole(resolved?.profile_type || getActiveProfileType(me) || 'client');
           } catch (_) {
-            setUserRole(me.current_role || me.active_profile_type || 'client');
+            setUserRole(getActiveProfileType(me) || 'client');
           }
         }
 
@@ -184,10 +183,10 @@ export default function AppLayoutWrapper({ user }) {
   if (needsRole) {
     return <RoleSetup onComplete={async () => {
       setNeedsRole(false);
-      // Relire le user depuis la BDD pour avoir current_role à jour
+      // Relire le user depuis la BDD pour avoir active_profile_type à jour
       try {
         const me = await base44.auth.me();
-        if (me?.current_role) setUserRole(me.current_role);
+        if (me?.active_profile_type) setUserRole(me.active_profile_type);
         setUserEmail(me.email);
       } catch (_) {}
       setInitialized(false); // Re-déclenche le useEffect principal

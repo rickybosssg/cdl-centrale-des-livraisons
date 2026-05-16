@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
+import { getActiveProfileType, isAdminUser, logProfileSwitch } from "@/lib/activeProfile";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { User, Trash2, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,25 +20,33 @@ import DashboardCommercial from "./commercial/DashboardCommercial";
 import DashboardAnnonceur from "./annonceur/DashboardAnnonceur";
 import AttentePage from "./AttentePage";
 
+// ADMIN_EMAILS conservé uniquement pour UI cosmétique (badge)
+// La vérification d'accès utilise exclusivement isAdminUser(user) → user.role === 'admin'
 const ADMIN_EMAILS = ["weezyh2@gmail.com", "admin@cdl.local"];
 
-function resolveActiveProfile(profiles, storedId, currentRole) {
+/**
+ * Résoudre le profil actif depuis la liste des profils.
+ * Source unique : user.active_profile_type
+ * Fallback localStorage UNIQUEMENT pour les switches récents en cours de persistance BDD.
+ */
+function resolveActiveProfile(profiles, storedId, activeProfileTypeFromUser) {
   if (!Array.isArray(profiles) || profiles.length === 0) return null;
-  // Priorité 1 : le profil correspondant au current_role BDD (source de vérité)
-  if (currentRole) {
-    const byRole = profiles.find(p => p?.profile_type === currentRole && !p?.deleted);
-    if (byRole) {
-      if (byRole.id !== storedId) localStorage.setItem('activeProfileId', byRole.id);
-      return byRole;
+
+  // Priorité 1 : active_profile_type BDD (source officielle)
+  if (activeProfileTypeFromUser) {
+    const byActive = profiles.find(p => p?.profile_type === activeProfileTypeFromUser && !p?.deleted);
+    if (byActive) {
+      if (byActive.id !== storedId) localStorage.setItem('activeProfileId', byActive.id);
+      return byActive;
     }
   }
-  // Priorité 2 : le profil mémorisé en localStorage
+  // Priorité 2 : localStorage (switch récent, avant que BDD soit à jour)
   if (storedId) {
     const byId = profiles.find(p => p?.id === storedId && !p?.deleted);
     if (byId) return byId;
     localStorage.removeItem('activeProfileId');
   }
-  // Priorité 3 : premier profil actif
+  // Priorité 3 : premier profil actif (nouvel utilisateur)
   const fallback = profiles.find(p => p?.status === 'actif' && !p?.deleted) || profiles.find(p => !p?.deleted);
   if (fallback?.id) localStorage.setItem('activeProfileId', fallback.id);
   return fallback || null;
@@ -78,34 +87,24 @@ export default function Home() {
       const profsArray = Array.isArray(profs) ? profs : [];
       setAllProfiles(profsArray);
 
-      const isAdminUser = me.role === 'admin' || ADMIN_EMAILS.includes(me.email);
+      const isAdmin = isAdminUser(me);
+      console.log(`[PROFILE_SOURCE] loadUser | email=${me.email} | role=${me.role} | active_profile_type=${me.active_profile_type} | isAdmin=${isAdmin}`);
 
-      if (!isAdminUser && profsArray.length > 0) {
-        // ── RÉSOLUTION DU PROFIL ACTIF (ordre de priorité) ──────────────
-        // P1 : activeProfileId déjà dans le state (switch récent en cours)
-        // P2 : localStorage (mis à jour par switchProfile)
-        // P3 : current_role BDD
-        // P4 : premier profil actif
+      if (!isAdmin && profsArray.length > 0) {
+        // ── RÉSOLUTION DU PROFIL ACTIF ──────────────────────────────────
+        // P1 : active_profile_type BDD (SOURCE UNIQUE officielle)
+        // P2 : localStorage (switch récent non encore persisté en BDD)
+        // P3 : premier profil actif (fallback nouvel utilisateur)
         const currentStoredId = localStorage.getItem('activeProfileId');
         const storedId = activeProfileId || currentStoredId;
 
-        let resolved = storedId ? profsArray.find(p => p.id === storedId && !p.deleted) : null;
-
-        if (!resolved) {
-          // P3 : current_role BDD
-          const trueRole = me.current_role || me.active_profile_type;
-          if (trueRole) resolved = profsArray.find(p => p.profile_type === trueRole && !p.deleted);
-        }
-        if (!resolved) {
-          // P4 : fallback premier profil actif
-          resolved = profsArray.find(p => p.status === 'actif' && !p.deleted) || profsArray.find(p => !p.deleted);
-        }
+        const resolved = resolveActiveProfile(profsArray, storedId, me.active_profile_type);
 
         if (resolved?.id) {
           localStorage.setItem('activeProfileId', resolved.id);
           setActiveProfileId(resolved.id);
-          // Synchroniser current_role en BDD uniquement si nécessaire et sans écraser un switch récent
-          if (resolved.profile_type && resolved.profile_type !== me.current_role && !currentStoredId) {
+          // Synchroniser active_profile_type en BDD si absent (première connexion)
+          if (resolved.profile_type && !me.active_profile_type) {
             base44.functions.invoke('switchActiveProfile', { profile_type: resolved.profile_type }).catch(() => {});
           }
         }
@@ -172,10 +171,12 @@ export default function Home() {
 
     const newRole = prof.profile_type;
 
-    // 1. Mettre à jour le state local IMMÉDIATEMENT — source de vérité pour le rendu
+    // 1. Mettre à jour le state local IMMÉDIATEMENT — reflète active_profile_type avant BDD
     localStorage.setItem('activeProfileId', profileId);
     setActiveProfileId(profileId);
-    setUser(prev => prev ? { ...prev, current_role: newRole, active_profile_type: newRole } : prev);
+    // Mettre à jour active_profile_type localement (sera confirmé par BDD via switchActiveProfile)
+    setUser(prev => prev ? { ...prev, active_profile_type: newRole } : prev);
+    logProfileSwitch(user?.email, getActiveProfileType(user), newRole, 'Home.switchProfile');
 
     // 2. Notifier AppLayoutWrapper (nav bas + header) du nouveau rôle
     window.dispatchEvent(new CustomEvent('cdl_profile_switch', { detail: { role: newRole } }));
@@ -208,9 +209,9 @@ export default function Home() {
     );
   }
 
-  // Admin
-  const isAdmin = user?.role === 'admin' || user?.user_type === 'admin' || ADMIN_EMAILS.includes(user?.email);
-  console.log('[HOME] IS ADMIN?', isAdmin);
+  // Admin — source unique: user.role === 'admin'
+  const isAdmin = isAdminUser(user);
+  console.log('[HOME] IS ADMIN?', isAdmin, '| source=user.role | value=', user?.role);
   if (isAdmin) {
     console.log('[HOME] Rendering AdminDashboardPro');
     return <AdminDashboardPro />;
@@ -219,21 +220,21 @@ export default function Home() {
   const profilesArray = Array.isArray(allProfiles) ? allProfiles : [];
 
   // ── SOURCE DE VÉRITÉ POUR LE RENDU ──────────────────────────────────────────
-  // activeProfileId (state local) est mis à jour IMMÉDIATEMENT lors d'un switch.
-  // Il prime sur TOUT, y compris current_role BDD (qui peut avoir du retard).
+  // P1 : activeProfileId local (switch récent, avant BDD à jour)
+  // P2 : user.active_profile_type BDD (source officielle)
+  // P3 : premier profil actif (fallback)
   const activeUserProfile = (() => {
-    // P1 : par ID local (mis à jour instantanément au switch)
+    // P1 : par ID local (mis à jour instantanément au switch, avant BDD)
     if (activeProfileId) {
       const byId = profilesArray.find(p => p?.id === activeProfileId && !p?.deleted);
       if (byId) return byId;
     }
-    // P2 : par current_role du state user (déjà mis à jour localement par switchProfile)
-    const localRole = user?.current_role || user?.active_profile_type;
-    if (localRole) {
-      const byRole = profilesArray.find(p => p?.profile_type === localRole && !p?.deleted);
-      if (byRole) return byRole;
+    // P2 : par active_profile_type BDD (SOURCE UNIQUE officielle)
+    if (user?.active_profile_type) {
+      const byActive = profilesArray.find(p => p?.profile_type === user.active_profile_type && !p?.deleted);
+      if (byActive) return byActive;
     }
-    // P3 : fallback premier profil actif
+    // P3 : fallback premier profil actif (nouvel utilisateur)
     return profilesArray.find(p => p?.status === 'actif' && !p?.deleted) || profilesArray.find(p => !p?.deleted) || null;
   })();
 
@@ -288,7 +289,7 @@ export default function Home() {
   }
 
   // Render dashboard selon profil
-  console.log('[HOME] renderDashboard — activeProfileId:', activeProfileId, '| activeProfileType:', activeProfileType, '| user.current_role:', user?.current_role);
+  console.log('[HOME] renderDashboard — activeProfileId:', activeProfileId, '| activeProfileType:', activeProfileType, '| user.active_profile_type:', user?.active_profile_type);
   const renderDashboard = () => {
     console.log('[HOME] Dashboard switch → rendering:', activeProfileType);
     switch (activeProfileType) {
