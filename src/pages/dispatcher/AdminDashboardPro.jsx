@@ -12,7 +12,7 @@ import {
   RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock,
   Package, Users, Truck, TrendingUp, Wallet, Megaphone,
   Zap, Settings, Bell, ChevronRight, Activity,
-  ToggleLeft, ToggleRight, MapPin, Star, Radio,
+  MapPin, Star, Radio,
   ShieldCheck, Store, Tag, Eye, Phone, MessageSquare
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,8 +93,10 @@ export default function AdminDashboardPro() {
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);
 
-  // SOURCE UNIQUE : context global — plus de state local pour le mode dispatch
-  const { mode: dispatchMode, toggle: toggleMode } = useDispatchMode();
+  // Lecture seule — le contrôle du mode est UNIQUEMENT dans /dispatch-monitor
+  const { mode: dispatchMode } = useDispatchMode();
+  console.log('[DASHBOARD_DISPATCH_READONLY_OK] Dashboard dispatch = lecture seule | mode=' + dispatchMode);
+  console.log('[DISPATCH_SINGLE_CONTROL_POINT_OK] Point de contrôle unique = /dispatch-monitor');
 
   // Data
   const [courses, setCourses] = useState([]);
@@ -251,8 +253,6 @@ export default function AdminDashboardPro() {
   if (demandesRetraitCount > 0) alerts.push({ level: "warning", title: `${demandesRetraitCount} retrait(s) Bedou en attente`, desc: "Validation des retraits requise", action: "/gestion-bedou", actionLabel: "Traiter" });
   if (livreursOnline.length < 3 && enAttente.length > 0) alerts.push({ level: "warning", title: `Peu de livreurs en ligne (${livreursOnline.length})`, desc: "Capacité de dispatch réduite", action: "/profils/livreurs", actionLabel: "Voir livreurs" });
 
-  // toggleMode vient du context — plus de logique locale
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -298,29 +298,26 @@ export default function AdminDashboardPro() {
         </div>
       </div>
 
-      {/* ── MODE DISPATCH ── */}
-      <div className={`rounded-2xl border-2 p-3 flex items-center justify-between gap-3 ${!isManuel ? "border-green-400 bg-green-50" : "border-amber-400 bg-amber-50"}`}>
-        <div className="flex items-center gap-2">
-          <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${!isManuel ? "bg-green-500 animate-pulse" : "bg-amber-500"}`} />
-          <div>
-            <p className={`text-xs font-bold ${!isManuel ? "text-green-800" : "text-amber-800"}`}>
-              {!isManuel ? "⚡ Dispatch automatique" : "🔧 Dispatch manuel"}
-            </p>
-            <p className={`text-[10px] ${!isManuel ? "text-green-700" : "text-amber-700"}`}>
-              {!isManuel ? `${livreursDispatchables.length} livreur(s) dispatchables` : "Assignation manuelle requise"}
-            </p>
+      {/* ── MODE DISPATCH — lecture seule, clic → /dispatch-monitor ── */}
+      <Link to="/dispatch-monitor">
+        <div className={`rounded-2xl border-2 p-3 flex items-center justify-between gap-3 active:scale-95 transition-all cursor-pointer ${!isManuel ? "border-green-400 bg-green-50" : "border-amber-400 bg-amber-50"}`}>
+          <div className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${!isManuel ? "bg-green-500 animate-pulse" : "bg-amber-500"}`} />
+            <div>
+              <p className={`text-xs font-bold ${!isManuel ? "text-green-800" : "text-amber-800"}`}>
+                {!isManuel ? "⚡ Dispatch AUTO" : "🔧 Dispatch MANUEL"}
+              </p>
+              <p className={`text-[10px] ${!isManuel ? "text-green-700" : "text-amber-700"}`}>
+                {!isManuel ? `${livreursDispatchables.length} livreur(s) dispatchables` : "Assignation manuelle requise"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-white border border-gray-200 text-gray-500">
+            <Eye className="h-3.5 w-3.5" />
+            Gérer
           </div>
         </div>
-        <button
-          onClick={toggleMode}
-          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border-2 transition-all active:scale-95 ${
-            !isManuel ? "border-amber-400 text-amber-700 bg-white" : "border-green-400 text-green-700 bg-white"
-          }`}
-        >
-          {!isManuel ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-          {!isManuel ? "Manuel" : "Auto"}
-        </button>
-      </div>
+      </Link>
 
       {/* ── ALERTES ── */}
       {alerts.length > 0 && (
