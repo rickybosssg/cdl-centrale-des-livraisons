@@ -288,18 +288,49 @@ export default function Home() {
     return <AttentePage profile={activeProfileType} docsEnvoyes={hasDocs || user?.docs_envoyes} motifRefus={activeUserProfile?.refusal_reason} status={activeUserProfile?.status} />;
   }
 
-  // Render dashboard selon profil
-  console.log('[HOME] renderDashboard — activeProfileId:', activeProfileId, '| activeProfileType:', activeProfileType, '| user.active_profile_type:', user?.active_profile_type);
+  // ── DÉCISION ROUTING PROFIL — SOURCE UNIQUE BDD ──────────────────────────────
+  // Priorité : activeProfileId local > user.active_profile_type BDD > premier profil actif
+  // JAMAIS forcer client par défaut si profil actif = livreur
   const renderDashboard = () => {
-    console.log('[HOME] Dashboard switch → rendering:', activeProfileType);
+    console.log(
+      `[PROFILE_ROUTE_DECISION] activeProfileType=${activeProfileType} | activeProfileId=${activeProfileId} | user.active_profile_type=${user?.active_profile_type} | user.email=${user?.email}`
+    );
     switch (activeProfileType) {
-      case 'client':     return <ClientHome user={user} />;
-      case 'livreur':    return <LivreurHome user={user} />;
-      case 'partenaire': return <DashboardPartenaire user={user} />;
-      case 'commercial': return <DashboardCommercial user={user} />;
-      case 'annonceur':  return <DashboardAnnonceur user={user} />;
+      case 'client':     
+        console.log('[PROFILE_ROUTE_DECISION] → ClientHome');
+        return <ClientHome user={user} />;
+      case 'livreur':    
+        console.log('[PROFILE_ROUTE_DECISION] → LivreurHome');
+        return <LivreurHome user={user} />;
+      case 'partenaire': 
+        console.log('[PROFILE_ROUTE_DECISION] → DashboardPartenaire');
+        return <DashboardPartenaire user={user} />;
+      case 'commercial': 
+        console.log('[PROFILE_ROUTE_DECISION] → DashboardCommercial');
+        return <DashboardCommercial user={user} />;
+      case 'annonceur':  
+        console.log('[PROFILE_ROUTE_DECISION] → DashboardAnnonceur');
+        return <DashboardAnnonceur user={user} />;
       default:
-        console.warn('[HOME] activeProfileType inconnu, fallback client. Valeur:', activeProfileType);
+        // ⚠️ JAMAIS forcer client si profil BDD dit autrement
+        // Si user.active_profile_type est défini, tenter de l'utiliser en fallback
+        if (user?.active_profile_type && user.active_profile_type !== activeProfileType) {
+          console.warn(`[PROFILE_ROUTE_DECISION] activeProfileType inconnu (${activeProfileType}) mais user.active_profile_type=${user.active_profile_type} — re-résolution`);
+          // Re-résoudre depuis BDD
+          const byBdd = profilesArray.find(p => p?.profile_type === user.active_profile_type && !p?.deleted);
+          if (byBdd) {
+            console.log(`[PROFILE_ROUTE_DECISION] Re-résolu depuis BDD → ${user.active_profile_type}`);
+            localStorage.setItem('activeProfileId', byBdd.id);
+            setActiveProfileId(byBdd.id);
+          }
+        }
+        console.warn(`[PROFILE_ROUTE_DECISION] activeProfileType inconnu: "${activeProfileType}" — FALLBACK client uniquement si aucun profil livreur`);
+        // Ne retourner ClientHome que s'il n'y a vraiment pas de profil livreur actif
+        const hasLivreurProfile = profilesArray.find(p => p?.profile_type === 'livreur' && p?.status === 'actif' && !p?.deleted);
+        if (hasLivreurProfile) {
+          console.warn('[PROFILE_ROUTE_DECISION] Profil livreur actif trouvé — routing vers LivreurHome au lieu de client');
+          return <LivreurHome user={user} />;
+        }
         return <ClientHome user={user} />;
     }
   };

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import DispatchStatsWidget from "@/components/DispatchStatsWidget";
 import DispatchDriversStats from "@/components/DispatchDriversStats";
+import DispatchableDriversModal from "@/components/DispatchableDriversModal";
 import { toast } from "sonner";
 import moment from "moment";
 
@@ -174,6 +175,7 @@ export default function DispatchMonitor() {
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [showDispatchableModal, setShowDispatchableModal] = useState(false);
 
   // SOURCE UNIQUE : DispatchModeContext → DispatchModeState
   const { mode: dispatchMode, setMode, refresh: refreshMode } = useDispatchMode();
@@ -428,13 +430,25 @@ export default function DispatchMonitor() {
             <p className="text-[10px] text-muted-foreground">En ligne</p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-teal-500">
-          <CardContent className="p-3 text-center">
-            <p className="text-2xl font-bold text-teal-600">{livreursDispatchables.length}</p>
-            <p className="text-[10px] text-muted-foreground">Dispatchables</p>
-          </CardContent>
-        </Card>
+        <button
+          onClick={() => setShowDispatchableModal(true)}
+          className="w-full text-left"
+        >
+          <Card className="border-l-4 border-l-teal-500 hover:shadow-md transition-shadow active:scale-95 cursor-pointer">
+            <CardContent className="p-3 text-center">
+              <p className="text-2xl font-bold text-teal-600">{livreursDispatchables.length}</p>
+              <p className="text-[10px] text-muted-foreground">Dispatchables</p>
+              <p className="text-[9px] text-teal-500 font-semibold mt-0.5">Cliquer pour détails →</p>
+            </CardContent>
+          </Card>
+        </button>
       </div>
+
+      {/* Modal détail dispatchables */}
+      <DispatchableDriversModal
+        open={showDispatchableModal}
+        onClose={() => setShowDispatchableModal(false)}
+      />
 
       {/* Vue détaillée livreurs */}
       <DispatchDriversStats />

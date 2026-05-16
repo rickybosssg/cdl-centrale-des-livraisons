@@ -25,6 +25,7 @@ export default function CoursesDisponibles() {
     setLoading(true);
     const me = await base44.auth.me();
     setUser(me);
+    console.log(`[COURSES_DISPO_LOAD] user=${me.email} | driver_online=${me.driver_online} | disponible=${me.disponible}`);
 
     // Charger le profil livreur pour vérifier le statut de validation
     try {
@@ -48,6 +49,22 @@ export default function CoursesDisponibles() {
   }, []);
 
   const { refreshing } = usePullToRefresh(loadData);
+
+  // ── Subscription temps réel USER — source unique pour driver_online + disponible ───
+  useEffect(() => {
+    let unsubUser = null;
+    base44.auth.me().then(me => {
+      if (!me?.email) return;
+      console.log(`[COURSES_DISPO_USER_SUBSCRIBE] user=${me.email}`);
+      unsubUser = base44.entities.User.subscribe((event) => {
+        if (event.data?.email === me.email) {
+          console.log(`[COURSES_DISPO_USER_REALTIME] driver_online=${event.data?.driver_online} | disponible=${event.data?.disponible}`);
+          setUser(event.data);
+        }
+      });
+    }).catch(() => {});
+    return () => { if (unsubUser) unsubUser(); };
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -140,7 +157,9 @@ export default function CoursesDisponibles() {
     );
   }
 
-  const enLigne = user?.disponible !== false && user?.driver_online;
+  // ── Source unique BDD confirmée (jamais d'état local optimiste) ─────────────
+  const enLigne = user?.driver_online === true && user?.disponible !== false;
+  console.log(`[COURSES_DISPO_RENDER] driver_online=${user?.driver_online} | disponible=${user?.disponible} | enLigne=${enLigne}`);
 
   return (
     <div className="space-y-4 pb-24">
