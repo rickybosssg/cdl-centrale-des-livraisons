@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
     }
     if (montant < 500) return Response.json({ error: 'Retrait minimum 500 F CFA' }, { status: 400 });
     // Bloquer le montant selon le type de rôle
-    const retaitUpdates = user.user_type === 'commercial'
+    const retaitUpdates = user.active_profile_type === 'commercial'
       ? {
           balance_blocked: Math.max(0, (bedou.balance_blocked || 0) - montant),
           solde: Math.max(0, (bedou.solde || 0) - montant),
