@@ -12,12 +12,13 @@ import {
   RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock,
   Package, Users, Truck, TrendingUp, Wallet, Megaphone,
   Zap, Settings, Bell, ChevronRight, Activity,
-  MapPin, Star, Radio,
+  MapPin, Star,
   ShieldCheck, Store, Tag, Eye, Phone, MessageSquare
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import ActiveCourseSummary from "@/components/dashboard/ActiveCourseSummary";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const TODAY = () => new Date().toDateString();
@@ -392,84 +393,8 @@ export default function AdminDashboardPro() {
         </div>
       </div>
 
-      {/* ── DISPATCH TEMPS RÉEL ── */}
-      {(enAttente.length > 0 || livreursOnline.length > 0) && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                Dispatch temps réel
-              </span>
-              <Link to="/dispatch-monitor">
-                <Button size="sm" variant="ghost" className="h-6 text-xs text-primary">
-                  Tout voir <ChevronRight className="h-3 w-3" />
-                </Button>
-              </Link>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {/* Courses critiques */}
-            {enAttente.slice(0, 3).map(c => {
-              const wait = Math.round((Date.now() - new Date(c.created_date).getTime()) / 60000);
-              return (
-                <div key={c.id} className={`flex items-center gap-2 p-2 rounded-xl border ${c.urgence === "tres_urgent" ? "bg-red-50 border-red-300" : c.urgence === "urgent" ? "bg-orange-50 border-orange-300" : "bg-muted/30"}`}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold truncate">{c.quartier_depart} → {c.quartier_arrivee}</p>
-                    <p className="text-[10px] text-muted-foreground">{c.prix} F · <span className={wait > 15 ? "text-red-600 font-bold" : "text-amber-600"}>{wait}min</span></p>
-                  </div>
-                  {c.urgence && c.urgence !== "normal" && (
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${c.urgence === "tres_urgent" ? "bg-red-200 text-red-800" : "bg-orange-200 text-orange-800"}`}>
-                      {c.urgence === "tres_urgent" ? "URGENT" : "Urgent"}
-                    </span>
-                  )}
-                  <Link to="/dispatch-monitor">
-                    <Button size="sm" className="h-6 text-[11px] flex-shrink-0"><Zap className="h-3 w-3" /></Button>
-                  </Link>
-                </div>
-              );
-            })}
-            {/* Livreurs dispo */}
-            {livreursDispatchables.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {livreursDispatchables.slice(0, 5).map(l => (
-                  <div key={l.id} className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-50 border border-green-200 text-green-800 text-[10px] font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                    {l.full_name?.split(" ")[0]}
-                    {l.gps_latitude && <MapPin className="h-2.5 w-2.5" />}
-                  </div>
-                ))}
-                {livreursDispatchables.length > 5 && (
-                  <span className="text-[10px] text-muted-foreground px-2 py-1">+{livreursDispatchables.length - 5}</span>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── ACTIVITÉS EN COURS ── */}
-      {enCours.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center justify-between">
-              <span>🚀 En livraison ({enCours.length})</span>
-              <Link to="/gerer-courses"><Button size="sm" variant="ghost" className="h-6 text-xs text-primary">Voir <ChevronRight className="h-3 w-3" /></Button></Link>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            {enCours.slice(0, 4).map(c => (
-              <div key={c.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border text-xs">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{c.quartier_depart} → {c.quartier_arrivee}</p>
-                  <p className="text-muted-foreground">{c.livreur_name || "—"} · {c.prix} F</p>
-                </div>
-                <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-bold">{c.statut}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      {/* ── ACTIVITÉ EN COURS — temps réel, lecture seule ── */}
+      <ActiveCourseSummary courses={courses} />
 
       {/* ── PROFILS À SURVEILLER ── */}
       {(profilesEnAttente.length > 0 || profilesIncomplets.length > 0) && (
