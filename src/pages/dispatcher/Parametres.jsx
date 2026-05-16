@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
-// getDispatchMode/setDispatchMode supprimés — mode géré via DispatchConfig BDD
+// Mode dispatch géré exclusivement via DispatchModeState (source unique)
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
@@ -50,12 +50,12 @@ export default function Parametres() {
   const [confirmText, setConfirmText] = useState("");
 
   useEffect(() => {
-    // LECTURE CANONIQUE STRICTE — uniquement mode_key=GLOBAL
-    base44.entities.DispatchConfig.list('-updated_date', 50).then(configs => {
-      const canonical = configs.find(c => c.mode_key === 'GLOBAL');
-      if (canonical) {
-        console.log(`[DISPATCH_CANONICAL_READ] Parametres | mode=${canonical.mode} | id=${canonical.id}`);
-        setParams(prev => ({ ...prev, mode_dispatch: canonical.mode || 'auto' }));
+    // SOURCE UNIQUE : DispatchModeState — zéro lecture DispatchConfig
+    base44.entities.DispatchModeState.list('-updated_date', 1).then(rows => {
+      const doc = rows[0];
+      if (doc?.mode) {
+        console.log(`[DISPATCH_MODE_READ] Parametres | mode=${doc.mode} | id=${doc.id} | source=DispatchModeState`);
+        setParams(prev => ({ ...prev, mode_dispatch: doc.mode }));
       }
     }).catch(() => {});
   }, []);
@@ -86,17 +86,19 @@ export default function Parametres() {
 
   const sauvegarder = async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(params));
-    // ÉCRITURE CANONIQUE OBLIGATOIRE — passe toujours par setDispatchModeCanonical
+    // ÉCRITURE DIRECTE SUR DispatchModeState — source unique, zéro legacy
     try {
-      const res = await base44.functions.invoke('setDispatchModeCanonical', {
-        mode: params.mode_dispatch,
-        source: 'admin_click',
-        reason: 'Sauvegarde depuis Parametres admin',
-      });
-      if (!res.data?.success) throw new Error(res.data?.error || 'setDispatchModeCanonical failed');
-      console.log(`[DISPATCH_CANONICAL_WRITE_ALLOWED] Parametres | mode=${params.mode_dispatch} | ok=true`);
+      const user = await base44.auth.me();
+      const rows = await base44.entities.DispatchModeState.list('-updated_date', 1);
+      const now = new Date().toISOString();
+      if (rows[0]) {
+        await base44.entities.DispatchModeState.update(rows[0].id, { mode: params.mode_dispatch, updated_by: user?.email || 'admin', updated_at: now });
+      } else {
+        await base44.entities.DispatchModeState.create({ mode: params.mode_dispatch, updated_by: user?.email || 'admin', updated_at: now });
+      }
+      console.log(`[DISPATCH_MODE_WRITE_OK] Parametres | mode=${params.mode_dispatch} | source=DispatchModeState`);
     } catch (e) {
-      console.error(`[DISPATCH_CANONICAL_WRITE_BLOCKED] Parametres | ${e.message}`);
+      console.error(`[DISPATCH_MODE_WRITE_ERROR] Parametres | ${e.message}`);
       toast.error("Erreur sauvegarde mode dispatch : " + e.message);
       return;
     }
