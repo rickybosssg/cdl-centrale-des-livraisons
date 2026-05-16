@@ -3,7 +3,7 @@
  * Source de vérité : UserProfile (profile_type)
  * Corrige user_type + onboarding_completed sur tous les comptes incohérents
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // Priorité des rôles si plusieurs profils existent
 const ROLE_PRIORITY = ['admin', 'partenaire', 'commercial', 'livreur', 'client'];
@@ -57,17 +57,17 @@ Deno.serve(async (req) => {
         }
 
         const primaryRole = pickPrimaryRole(profileTypes);
-        const needsFix = u.user_type !== primaryRole || !u.onboarding_completed;
+        const needsFix = u.active_profile_type !== primaryRole || !u.onboarding_completed;
 
         if (!needsFix) {
           results.alreadyOk++;
           continue;
         }
 
-        console.log(`[syncUserRoles] 🔧 Réparation ${u.email} : user_type=${u.user_type || 'null'} → ${primaryRole} (profils: [${profileTypes.join(', ')}])`);
+        console.log(`[syncUserRoles] 🔧 Réparation ${u.email} : active_profile_type=${u.active_profile_type || 'null'} → ${primaryRole} (profils: [${profileTypes.join(', ')}])`);
 
         await base44.asServiceRole.entities.User.update(u.id, {
-          user_type: primaryRole,
+          active_profile_type: primaryRole,
           onboarding_completed: true,
         });
 
@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
         } catch (_) {}
 
         results.fixed++;
-        fixedUsers.push({ email: u.email, oldRole: u.user_type, newRole: primaryRole, profiles: profileTypes });
+        fixedUsers.push({ email: u.email, oldRole: u.active_profile_type, newRole: primaryRole, profiles: profileTypes });
       } catch (err) {
         console.error(`[syncUserRoles] ❌ Erreur pour ${u.email}:`, err.message);
         results.errors++;

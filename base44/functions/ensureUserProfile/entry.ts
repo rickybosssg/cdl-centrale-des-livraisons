@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   try {
@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
     // pour éviter le problème de cache de session
     let body = {};
     try { body = await req.json(); } catch (_) {}
-    const userType = body.user_type || user.user_type;
+    const userType = body.user_type || user.active_profile_type;
 
     const ADMIN_EMAILS = ['weezyh2@gmail.com'];
     const isAdmin = user.role === 'admin' || ADMIN_EMAILS.includes(user.email);
