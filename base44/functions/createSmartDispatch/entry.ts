@@ -73,11 +73,12 @@ async function waitForResponse(base44, courseId, driverEmail, timeoutMs = 65000)
 }
 
 async function getCanonicalMode(base44) {
-  const allConfigs = await base44.asServiceRole.entities.DispatchConfig.list('-updated_date', 50).catch(() => []);
-  const canonical = allConfigs.find(c => c.mode_key === CANONICAL_KEY);
-  const mode = canonical?.mode === 'manuel' ? 'manuel' : canonical?.mode === 'auto' ? 'auto' : null;
-  console.log(`[DISPATCH_CANONICAL_READ] createSmartDispatch | CANONICAL=${!!canonical} | mode=${mode} | id=${canonical?.id || 'none'} | totalDocs=${allConfigs.length}`);
-  return { mode, configId: canonical?.id || null };
+  // SOURCE UNIQUE : DispatchModeState (aligné avec autoDispatch + setDispatchMode)
+  const modes = await base44.asServiceRole.entities.DispatchModeState.list('-updated_date', 1).catch(() => []);
+  const modeState = modes[0];
+  const mode = modeState?.mode === 'manuel' ? 'manuel' : modeState ? 'auto' : null;
+  console.log(`[DISPATCH_CANONICAL_READ] createSmartDispatch | source=DispatchModeState | mode=${mode} | id=${modeState?.id || 'none'}`);
+  return { mode, configId: modeState?.id || null };
 }
 
 async function offerCourseToDriver(base44, course, driver, position) {

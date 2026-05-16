@@ -13,7 +13,8 @@ Deno.serve(async (req) => {
     const { profile_type } = await req.json();
 
     // Vérifier que le profil existe et est actif pour cet utilisateur
-    const profiles = await base44.entities.UserProfile.filter({
+    // asServiceRole pour éviter tout blocage RLS sur les profils de l'utilisateur lui-même
+    const profiles = await base44.asServiceRole.entities.UserProfile.filter({
       user_email: user.email,
       profile_type,
       deleted: false,
@@ -24,24 +25,22 @@ Deno.serve(async (req) => {
     }
 
     // Accepter le profil actif en priorité, sinon le premier profil disponible
-    // (la vérification de validation est faite côté frontend avant d'appeler cette fonction)
     const targetProfile = profiles.find(p => p.status === 'actif') || profiles[0];
-    // targetProfile est toujours défini ici (profiles.length > 0 déjà vérifié au-dessus)
 
-    // Désactiver tous les anciens profils actifs
-    const oldActives = await base44.entities.UserProfile.filter({
+    // Désactiver tous les anciens profils actifs (asServiceRole pour éviter RLS)
+    const oldActives = await base44.asServiceRole.entities.UserProfile.filter({
       user_email: user.email,
       is_active_profile: true,
       deleted: false,
     });
     for (const p of oldActives) {
       if (p.id !== targetProfile.id) {
-        await base44.entities.UserProfile.update(p.id, { is_active_profile: false });
+        await base44.asServiceRole.entities.UserProfile.update(p.id, { is_active_profile: false });
       }
     }
 
     // Activer le nouveau profil
-    await base44.entities.UserProfile.update(targetProfile.id, { is_active_profile: true });
+    await base44.asServiceRole.entities.UserProfile.update(targetProfile.id, { is_active_profile: true });
 
     // Réinitialiser TOUS les statuts en ligne + activer uniquement le rôle choisi
     const onlineFields = {
@@ -61,9 +60,12 @@ Deno.serve(async (req) => {
 
     await base44.auth.updateMe(onlineFields);
 
+    // Retourner le user actualisé pour que le frontend rafraîchisse AuthContext
+    const updatedUser = await base44.auth.me().catch(() => null);
+
     console.log(`[SwitchProfile] ${user.email} → ${profile_type} | driver_online=${onlineFields.driver_online}`);
 
-    return Response.json({ success: true, activeProfileType: profile_type, onlineFields });
+    return Response.json({ success: true, activeProfileType: profile_type, onlineFields, user: updatedUser });
   } catch (error) {
     console.error('[SwitchProfile] Erreur:', error.message);
     return Response.json({ error: error.message }, { status: 500 });

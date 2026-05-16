@@ -52,16 +52,18 @@ export function DispatchModeProvider({ children }) {
     // Subscription temps réel aux changements
     const unsubscribe = base44.entities.DispatchModeState.subscribe((event) => {
       console.log('[DispatchModeContext] subscribe event:', event.type, event.data?.mode);
-      if (event.type === 'update' && event.data) {
+      if ((event.type === 'update' || event.type === 'create') && event.data) {
         setMode(event.data.mode);
         setUpdatedAt(event.data.updated_at);
         setUpdatedBy(event.data.updated_by);
         setConfigId(event.id);
-      } else if (event.type === 'create' && event.data) {
-        setMode(event.data.mode);
-        setUpdatedAt(event.data.updated_at);
-        setUpdatedBy(event.data.updated_by);
-        setConfigId(event.id);
+      } else if (event.type === 'delete') {
+        // Document supprimé → fallback sur auto (état sûr par défaut)
+        console.warn('[DispatchModeContext] DispatchModeState supprimé — fallback mode=auto');
+        setMode('auto');
+        setUpdatedAt(null);
+        setUpdatedBy(null);
+        setConfigId(null);
       }
     });
 

@@ -3,7 +3,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const COMMISSION_LIVREUR = 0.20; // 20% CDL
 const COMMISSION_PARTENAIRE = 0.05; // 5% CDL
 const BONUS_COMMERCIAL = 50; // 50 F CFA fixe
-const CDL_EMAIL = 'weezyh2@gmail.com'; // Compte Bedou CDL
+// CDL_EMAIL : compte wallet CDL — configurable via variable d'env ou fallback hardcodé
+const CDL_EMAIL = Deno.env.get('CDL_WALLET_EMAIL') || 'weezyh2@gmail.com';
 
 // Bonus sur les 3 premières recharges uniquement
 const BONUS_RECHARGE = [
@@ -356,6 +357,19 @@ Deno.serve(async (req) => {
   // ── ACTION: crediter_livreur (appelé après course validée) ────
   if (action === 'crediter_livreur') {
     const { livreur_email, livreur_nom, montant_course, course_id } = body;
+
+    // ANTI-DOUBLON : vérifier si une transaction gain existe déjà pour cette course
+    const existingGain = await base44.asServiceRole.entities.Transaction.filter({
+      reference_id: course_id,
+      type: 'gain',
+      user_email: livreur_email,
+    }).catch(() => []);
+    if (existingGain.length > 0) {
+      console.log(`[crediter_livreur] SKIP — gain déjà versé pour course ${course_id}`);
+      const commission = Math.round(montant_course * COMMISSION_LIVREUR);
+      return Response.json({ success: true, alreadyDone: true, gain: montant_course - commission, commission });
+    }
+
     const commission = Math.round(montant_course * COMMISSION_LIVREUR);
     const gain = montant_course - commission;
     const bedou = await ensureBedou(livreur_email, 'livreur', livreur_nom);

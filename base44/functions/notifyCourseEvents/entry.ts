@@ -37,31 +37,10 @@ Deno.serve(async (req) => {
       );
     };
 
-    // ── CRÉATION ──────────────────────────────────────────────────────────────
+    // ── CRÉATION — géré exclusivement par notifyNewCourse (éviter doublon) ───
     if (event?.type === 'create') {
-      const tasks = [];
-
-      // Confirmation client
-      if (course.client_email) {
-        tasks.push(notify({
-          user_email: course.client_email,
-          title: '✅ Course créée !',
-          body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${course.prix || 0} F. Recherche d'un livreur en cours...`,
-          data: { type: 'course_created', entity_id: courseId, entity_type: 'Course', target_role: 'client', deep_link: `/course/${courseId}/track`, notif_route: `/course/${courseId}/track` },
-        }));
-      }
-
-      // Notification admin
-      tasks.push(notify({
-        role: 'admin',
-        title: '🛵 Nouvelle course',
-        body: `${course.client_name || course.client_email || '?'} : ${course.quartier_depart} → ${course.quartier_arrivee} (${course.prix || 0} F)`,
-        data: { type: 'new_course', entity_id: courseId, entity_type: 'Course', target_role: 'admin', deep_link: '/gerer-courses', notif_route: '/gerer-courses' },
-      }));
-
-      await Promise.allSettled(tasks);
-      console.log(`[notifyCourseEvents] DONE create | +${Date.now() - t0}ms`);
-      return Response.json({ ok: true });
+      console.log(`[notifyCourseEvents] SKIP create — géré par notifyNewCourse | +${Date.now() - t0}ms`);
+      return Response.json({ ok: true, skipped: 'create_handled_by_notifyNewCourse' });
     }
 
     // ── UPDATE : seulement si statut a changé ─────────────────────────────────
@@ -71,17 +50,10 @@ Deno.serve(async (req) => {
 
     const tasks = [];
 
-    // Assignée au livreur
-    if (statut === 'assignee_attente' && course.livreur_email) {
-      const urgence = course.urgence || 'normal';
-      const emoji = urgence === 'tres_urgent' ? '🔥🔥' : urgence === 'urgent' ? '🔥' : '🛵';
-      tasks.push(notify({
-        user_email: course.livreur_email,
-        title: `${emoji} Nouvelle course${urgence !== 'normal' ? ' URGENTE' : ''} !`,
-        body: `${course.quartier_depart} → ${course.quartier_arrivee} — ${course.prix || 0} F. Répondez en 60s !`,
-        urgence,
-        data: { type: 'course_assigned', entity_id: courseId, entity_type: 'Course', target_role: 'livreur', deep_link: `/course-livreur/${courseId}`, notif_route: `/course-livreur/${courseId}` },
-      }));
+    // assignee_attente → push livreur déjà envoyé par autoDispatch/createSmartDispatch
+    // NE PAS renvoyer ici pour éviter le doublon
+    if (statut === 'assignee_attente') {
+      console.log(`[notifyCourseEvents] SKIP assignee_attente push livreur — déjà envoyé par autoDispatch`);
     }
 
     // Acceptée → client
