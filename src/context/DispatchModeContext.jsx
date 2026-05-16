@@ -61,21 +61,24 @@ export function DispatchModeProvider({ children }) {
     try {
       console.log(`[DISPATCH_MODE] loadMode START | source=${source} | attempt=${attempt}`);
 
-      // Attendre que l'auth soit prête (token disponible) — max 5s
-      let isAuth = false;
-      for (let i = 0; i < 10; i++) {
-        isAuth = await base44.auth.isAuthenticated();
-        if (isAuth) break;
-        console.log(`[DISPATCH_MODE] auth not ready, wait 500ms (${i + 1}/10)...`);
+      // Attendre que le token soit réellement prêt via me() — max 8s
+      let user = null;
+      for (let i = 0; i < 16; i++) {
+        try {
+          user = await base44.auth.me();
+          if (user?.email) break;
+        } catch (_) {}
+        console.log(`[DISPATCH_MODE] me() not ready, wait 500ms (${i + 1}/16)...`);
         await new Promise(r => setTimeout(r, 500));
       }
 
-      if (!isAuth) {
-        console.log("[DISPATCH_MODE] loadMode SKIP — non authentifié après attente");
+      if (!user?.email) {
+        console.log("[DISPATCH_MODE] loadMode SKIP — user non disponible après attente");
         setLoading(false);
         return;
       }
 
+      console.log(`[DISPATCH_MODE] auth ready | user=${user.email} | calling getDispatchMode...`);
       const res = await base44.functions.invoke("getDispatchMode", { _t: Date.now() });
       const data = res.data;
       console.log(`[DISPATCH_MODE] loadMode RESPONSE | mode=${data.mode} | config_id=${data.config_id} | updated_by=${data.updated_by} | updated_at=${data.updated_at}`);
@@ -88,10 +91,13 @@ export function DispatchModeProvider({ children }) {
       setConfigId(data.config_id);
       setLastWriter(`getDispatchMode (${source})`);
     } catch (err) {
-      console.error(`[DISPATCH_MODE] loadMode ERROR | source=${source} | attempt=${attempt} | ${err.message}`);
+      const httpStatus = err.response?.status || err.status || 'unknown';
+      console.error(`[DISPATCH_MODE] loadMode ERROR | source=${source} | attempt=${attempt} | status=${httpStatus} | msg=${err.message}`);
+      console.error(`[DISPATCH_MODE] ERROR DETAIL | stack=${err.stack}`);
+      console.error(`[DISPATCH_MODE] ERROR PAYLOAD | response=`, JSON.stringify(err.response?.data || err.response || null));
 
-      // Retry sur 403 (token pas encore prêt) et sur init — max 5 tentatives
-      const is403 = err.message?.includes("403") || err.response?.status === 403;
+      // Retry sur 403/401 (token pas encore prêt) et sur init — max 5 tentatives
+      const is403 = httpStatus === 403 || httpStatus === 401 || err.message?.includes("403") || err.message?.includes("401");
       if (attempt < 5 && (source === "init" || is403)) {
         const delay = attempt * 1000; // 1s, 2s, 3s, 4s
         console.log(`[DISPATCH_MODE] RETRY in ${delay}ms (attempt ${attempt + 1})...`);
