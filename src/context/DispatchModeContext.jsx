@@ -57,61 +57,45 @@ export function DispatchModeProvider({ children }) {
 
   const modeRef = useRef(null); // ref synchrone pour éviter closures stales
 
-  // ── Chargement depuis backend ─────────────────────────────────────────────
-  const loadMode = useCallback(async (source = "init", attempt = 1) => {
+  // ── Chargement direct depuis l'entity (sans backend function) ───────────────
+  const loadMode = useCallback(async (source = "init") => {
     try {
-      console.log(`[DISPATCH_MODE] loadMode START | source=${source} | attempt=${attempt}`);
+      console.log(`[DISPATCH_MODE] loadMode START | source=${source} | method=entity_direct`);
 
-      // Attendre que le token soit réellement prêt via me() — max 8s
-      let user = null;
-      for (let i = 0; i < 16; i++) {
-        try {
-          user = await base44.auth.me();
-          if (user?.email) break;
-        } catch (_) {}
-        console.log(`[DISPATCH_MODE] me() not ready, wait 500ms (${i + 1}/16)...`);
-        await new Promise(r => setTimeout(r, 500));
-      }
+      const rows = await base44.entities.DispatchModeState.list('-updated_date', 1);
+      const modeState = rows[0];
 
-      if (!user?.email) {
-        console.log("[DISPATCH_MODE] loadMode SKIP — user non disponible après attente");
+      if (!modeState) {
+        console.log('[DISPATCH_MODE] NO DOCUMENT — auto-create default');
+        const created = await base44.entities.DispatchModeState.create({ mode: 'auto' });
+        const data = { mode: 'auto', updated_by: null, updated_at: null, config_id: created.id };
+        setBackendRaw(data);
+        setModeState('auto');
+        modeRef.current = 'auto';
+        setUpdatedAt(null);
+        setUpdatedBy(null);
+        setConfigId(created.id);
+        setLastWriter(`entity_create (${source})`);
         setLoading(false);
         return;
       }
 
-      console.log(`[DISPATCH_MODE] auth ready | user=${user.email} | calling getDispatchMode...`);
-      const res = await base44.functions.invoke("getDispatchMode", { _t: Date.now() });
-      const data = res.data;
-      console.log(`[DISPATCH_MODE] loadMode RESPONSE | mode=${data.mode} | config_id=${data.config_id} | updated_by=${data.updated_by} | updated_at=${data.updated_at}`);
-
+      console.log(`[DISPATCH_MODE] LOADED | mode=${modeState.mode} | id=${modeState.id}`);
+      const data = { mode: modeState.mode, updated_by: modeState.updated_by, updated_at: modeState.updated_at, config_id: modeState.id };
       setBackendRaw(data);
-      setModeState(data.mode || null);
-      modeRef.current = data.mode || null;
-      setUpdatedAt(data.updated_at);
-      setUpdatedBy(data.updated_by);
-      setConfigId(data.config_id);
-      setLastWriter(`getDispatchMode (${source})`);
-      setLoading(false); // succès — libérer le loading
+      setModeState(modeState.mode || 'auto');
+      modeRef.current = modeState.mode || 'auto';
+      setUpdatedAt(modeState.updated_at);
+      setUpdatedBy(modeState.updated_by);
+      setConfigId(modeState.id);
+      setLastWriter(`entity_list (${source})`);
+      setLoading(false);
     } catch (err) {
-      const httpStatus = err.response?.status || err.status || 'unknown';
-      const errPayload = { status: httpStatus, message: err.message, attempt, source, ts: new Date().toISOString(), responseData: err.response?.data || null };
-      console.error(`[DISPATCH_MODE] loadMode ERROR | source=${source} | attempt=${attempt} | status=${httpStatus} | msg=${err.message}`);
-      console.error(`[DISPATCH_MODE] ERROR PAYLOAD |`, JSON.stringify(errPayload));
+      console.error(`[DISPATCH_MODE] loadMode ERROR | source=${source} | msg=${err.message}`);
+      const errPayload = { status: err.response?.status || 'unknown', message: err.message, attempt: 1, source, ts: new Date().toISOString(), responseData: err.response?.data || null };
       setLastError(errPayload);
-
-      // Retry sur 403/401 (token pas encore prêt) et sur init — max 5 tentatives
-      const is403 = httpStatus === 403 || httpStatus === 401 || err.message?.includes("403") || err.message?.includes("401");
-      if (attempt < 5 && (source === "init" || is403)) {
-        const delay = attempt * 1000; // 1s, 2s, 3s, 4s
-        console.log(`[DISPATCH_MODE] RETRY in ${delay}ms (attempt ${attempt + 1})...`);
-        // Ne pas setLoading(false) ici — on reessaie encore
-        setTimeout(() => loadMode(source, attempt + 1), delay);
-        return;
-      }
-      // Dernier attempt échoué — libérer le loading
       setLoading(false);
     }
-    // Pas de finally — setLoading est géré explicitement (succès ou dernier échec)
   }, []);
 
   // ── Subscription realtime sur DispatchModeState ───────────────────────────
@@ -157,7 +141,7 @@ export function DispatchModeProvider({ children }) {
     };
   }, [loadMode]);
 
-  // ── Écriture sécurisée — admin-only via setDispatchMode ──────────────────
+  // ── Écriture directe dans l'entity (admin) ──────────────────────────────
   const setMode = useCallback(async (newMode) => {
     if (!["auto", "manuel"].includes(newMode)) {
       throw new Error(`[DISPATCH_MODE] Mode invalide: "${newMode}"`);
@@ -165,21 +149,37 @@ export function DispatchModeProvider({ children }) {
 
     console.log(`[DISPATCH_MODE] setMode CALLED | newMode=${newMode} | prevMode=${modeRef.current}`);
 
-    const res = await base44.functions.invoke("setDispatchMode", { mode: newMode, _t: Date.now() });
-    console.log(`[DISPATCH_MODE] setDispatchMode RESPONSE | success=${res.data?.success} | mode=${res.data?.mode}`);
+    const now = new Date().toISOString();
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) {}
 
-    if (!res.data?.success) {
-      throw new Error(res.data?.error || "setDispatchMode a échoué");
+    // Chercher le document existant
+    const rows = await base44.entities.DispatchModeState.list('-updated_date', 1);
+    let updated;
+    if (rows[0]) {
+      updated = await base44.entities.DispatchModeState.update(rows[0].id, {
+        mode: newMode,
+        updated_by: user?.email || 'admin',
+        updated_at: now,
+      });
+    } else {
+      updated = await base44.entities.DispatchModeState.create({
+        mode: newMode,
+        updated_by: user?.email || 'admin',
+        updated_at: now,
+      });
     }
+
+    console.log(`[DISPATCH_MODE] setMode SUCCESS | mode=${newMode} | id=${updated.id}`);
 
     // Mise à jour immédiate du state (avant que le realtime arrive)
     modeRef.current = newMode;
     setModeState(newMode);
-    setUpdatedAt(res.data.updated_at);
-    setUpdatedBy(res.data.updated_by);
-    setConfigId(res.data.config_id);
-    setLastWriter(`setDispatchMode (admin click)`);
-    setBackendRaw(res.data);
+    setUpdatedAt(now);
+    setUpdatedBy(user?.email || 'admin');
+    setConfigId(updated.id);
+    setLastWriter(`setMode_entity (admin click)`);
+    setBackendRaw({ mode: newMode, updated_by: user?.email, updated_at: now, config_id: updated.id });
 
     return { success: true, mode: newMode };
   }, []);

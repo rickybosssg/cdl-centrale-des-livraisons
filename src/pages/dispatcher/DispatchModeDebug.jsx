@@ -90,16 +90,10 @@ export default function DispatchModeDebug() {
   const fetchRawBackend = async () => {
     setFetchingRaw(true);
     try {
-      const res = await base44.functions.invoke("getDispatchMode", { _t: Date.now() });
-      setRawBackendFetch({ ok: true, data: res.data, status: res.status });
+      const rows = await base44.entities.DispatchModeState.list('-updated_date', 1);
+      setRawBackendFetch({ ok: true, data: rows[0] || null, count: rows.length, source: 'entity_direct' });
     } catch (e) {
-      setRawBackendFetch({
-        ok: false,
-        error: e.message,
-        status: e.response?.status || 'unknown',
-        responseData: e.response?.data || null,
-        headers: e.response?.headers || null,
-      });
+      setRawBackendFetch({ ok: false, error: e.message, source: 'entity_direct' });
     } finally {
       setFetchingRaw(false);
     }
@@ -122,26 +116,16 @@ export default function DispatchModeDebug() {
         log.push({ step: 'me()', result: `ERREUR: ${e.message}`, error: true });
       }
 
-      // 3. getDispatchMode direct
-      try {
-        const res = await base44.functions.invoke("getDispatchMode", { _t: Date.now(), _diag: true });
-        log.push({ step: 'getDispatchMode()', result: `✅ status=${res.status} | mode=${res.data?.mode} | id=${res.data?.config_id}`, data: res.data });
-      } catch (e) {
-        log.push({
-          step: 'getDispatchMode()',
-          result: `❌ status=${e.response?.status || 'unknown'} | msg=${e.message}`,
-          error: true,
-          responseBody: JSON.stringify(e.response?.data || null),
-        });
-      }
-
-      // 4. DispatchModeState direct
+      // 3. DispatchModeState entity direct (méthode principale)
       try {
         const rows = await base44.entities.DispatchModeState.list('-updated_date', 5);
-        log.push({ step: 'DispatchModeState.list()', result: `✅ ${rows.length} ligne(s) | mode=${rows[0]?.mode ?? 'N/A'}`, data: rows });
+        log.push({ step: 'DispatchModeState.list()', result: `✅ ${rows.length} ligne(s) | mode=${rows[0]?.mode ?? 'N/A'} | id=${rows[0]?.id ?? 'N/A'}`, data: rows });
       } catch (e) {
         log.push({ step: 'DispatchModeState.list()', result: `❌ ${e.message}`, error: true });
       }
+
+      // 4. Test écriture (simulation) — on ne fait pas vraiment un update ici
+      log.push({ step: 'Source de données', result: 'Entity SDK direct (pas de fonction backend) ✅ Recommandé' });
 
     } catch (globalErr) {
       log.push({ step: 'GLOBAL', result: `CRASH: ${globalErr.message}`, error: true });
@@ -215,7 +199,7 @@ export default function DispatchModeDebug() {
         </CardHeader>
         <CardContent className="text-xs font-mono space-y-1.5">
           <Row label="Provider version" value={providerVersion || "?"} ok={!!providerVersion?.includes("v3")} />
-          <Row label="Source données" value="getDispatchMode → DispatchModeState" ok />
+          <Row label="Source données" value="Entity SDK direct → DispatchModeState" ok />
           <Row label="Listener realtime" value={listenerActive ? "✅ ACTIF (DispatchModeState.subscribe)" : "❌ INACTIF"} ok={listenerActive} />
           <Row label="Dernier writer" value={lastWriter || "—"} />
           <Row label="Dernier event realtime" value={lastEventTs ? moment(lastEventTs).format("HH:mm:ss.SSS") : "—"} />
@@ -272,11 +256,11 @@ export default function DispatchModeDebug() {
       {/* VALEUR BACKEND BRUTE */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">📦 Valeur backend brute (getDispatchMode)</CardTitle>
+          <CardTitle className="text-sm">📦 Valeur entity brute (DispatchModeState)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <Button size="sm" variant="outline" className="w-full" onClick={fetchRawBackend} disabled={fetchingRaw}>
-            {fetchingRaw ? "⏳ Fetching..." : "🔍 Fetch backend maintenant"}
+            {fetchingRaw ? "⏳ Fetching..." : "🔍 Lire DispatchModeState maintenant"}
           </Button>
           {rawBackendFetch && (
             <pre className={`rounded-xl p-3 text-xs overflow-x-auto whitespace-pre-wrap ${rawBackendFetch.ok ? 'bg-green-50' : 'bg-red-50'}`}>
