@@ -293,11 +293,29 @@ export default function FcmBootstrap({ userEmail }) {
     // Statut initial
     setFcmStatus('booting');
 
-    // 0. Vérification immédiate : si token actif déjà en BDD → boot rapide sans attendre Firebase
-    // (couvre le cas APK rouvert après courte absence — évite le délai d'affichage du banner)
-    // + soft check auto-repair en parallèle (silencieux, pas de blocage)
-    setTimeout(() => checkAndBootIfNeeded(userEmail), 300);
-    setTimeout(() => autoRepairExpiredToken(userEmail), 500);
+    // 0. Vérification immédiate BDD :
+    //    - Si bdd_active > 0 → boot rapide (token déjà valide)
+    //    - Si bdd_active = 0 → forcer register() IMMÉDIATEMENT sans attendre (couvre local_token=null)
+    //    - autoRepairExpiredToken en parallèle (silencieux)
+    const immediateCheck = async () => {
+      try {
+        const diag = await FcmTokenEngine.getDiagnostics(userEmail);
+        console.log(`[FCM_BOOT_DIAG] bdd_active=${diag.bdd_active} | bdd_total=${diag.bdd_total} | local_token=${diag.local_token ? 'SET' : 'NULL'} | user=${userEmail}`);
+        if (diag.bdd_active === 0) {
+          // Aucun token actif en BDD → register() forcé sans délai
+          console.warn(`[FCM_BOOT_RECOVERY] bdd_active=0 → register() forcé immédiatement | local=${diag.local_token ? 'SET' : 'NULL'} | user=${userEmail}`);
+          setFcmStatus('recovery');
+          await startNativeFcmRef.current?.(userEmail);
+        } else {
+          // Token actif en BDD → vérifier local aussi
+          checkAndBootIfNeeded(userEmail);
+        }
+      } catch (_) {
+        checkAndBootIfNeeded(userEmail);
+      }
+    };
+    setTimeout(immediateCheck, 300);
+    setTimeout(() => autoRepairExpiredToken(userEmail), 1000);
 
     // 1. Timeout de boot : si token jamais confirmé après BOOT_TIMEOUT_MS → recovery forcé
     bootTimerRef.current = setTimeout(async () => {
@@ -328,8 +346,9 @@ export default function FcmBootstrap({ userEmail }) {
       }
     }, BOOT_TIMEOUT_MS);
 
-    // 2. Init immédiate
-    const initTimer = setTimeout(() => startNativeFcm(userEmail), emailChanged ? 1500 : 500);
+    // 2. Init immédiate — délai plus long car immediateCheck peut déjà avoir lancé startNativeFcm
+    // emailChanged → 2s (nouvel user) | sinon 3s (laisse temps à immediateCheck de terminer)
+    const initTimer = setTimeout(() => startNativeFcm(userEmail), emailChanged ? 2000 : 3000);
 
     // 3. Heartbeat 8 min (+ auto-repair)
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);

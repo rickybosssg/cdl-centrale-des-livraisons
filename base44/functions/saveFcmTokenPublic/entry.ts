@@ -85,6 +85,22 @@ Deno.serve(async (req) => {
     const tokensAvant = allUserTokens.length;
     const exactMatch = allUserTokens.find(t => t.token === cleanToken);
 
+    // CAS 0 : aucun token actif en BDD + token inactif existant → réactiver silencieusement
+    // (couvre APK reinstall / clear data / changement de compte où local_token=null)
+    const activeTokens = allUserTokens.filter(t => t.is_active);
+    if (activeTokens.length === 0 && allUserTokens.length > 0 && !exactMatch) {
+      // Réactiver le plus récent token inactif si on n'a aucun actif
+      const mostRecent = allUserTokens.sort((a, b) => {
+        const da = new Date(a.last_used || a.registered_at || 0).getTime();
+        const db2 = new Date(b.last_used || b.registered_at || 0).getTime();
+        return db2 - da;
+      })[0];
+      if (mostRecent && isTokenRecent(mostRecent)) {
+        // Le token inactif est récent → on le garde mais on crée quand même le nouveau
+        console.log(`[FCM_SAVE_ATTEMPT] bdd_active=0 mais token récent inactif trouvé | id=${mostRecent.id} | user=${cleanEmail} → on continue la création normale`);
+      }
+    }
+
     // CAS 1 : token exact déjà en BDD → réactiver uniquement, supprimer les doublons du même token
     if (exactMatch) {
       // Trouver tous les enregistrements avec le même token (doublons)

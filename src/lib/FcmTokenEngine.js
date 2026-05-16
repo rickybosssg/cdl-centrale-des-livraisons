@@ -100,6 +100,7 @@ async function saveTokenToBackend(userEmail, token, deviceMeta) {
 // ── Vérification BDD ──────────────────────────────────────────────────────────
 async function verifyInBdd(userEmail, localToken) {
   try {
+    // Chercher d'abord les tokens actifs
     const tokens = await base44.entities.FcmToken.filter({ user_email: userEmail, is_active: true });
     const valid = (tokens || []).filter(t => {
       if (!t.is_active || !t.token) return false;
@@ -109,8 +110,21 @@ async function verifyInBdd(userEmail, localToken) {
     });
 
     if (valid.length === 0) {
-      console.error(`[FCM_ENGINE] verifyInBdd | 0 token actif | user=${userEmail}`);
-      return { verified: false, count: 0, tokens: [] };
+      // Fallback : chercher les tokens inactifs récents (couvre bdd_active=0 après désactivation)
+      const allTokens = await base44.entities.FcmToken.filter({ user_email: userEmail }, '-updated_date', 10);
+      const recentInactive = (allTokens || []).filter(t => {
+        const ref = t.last_used || t.registered_at;
+        if (!ref) return false;
+        return Date.now() - new Date(ref).getTime() < TOKEN_MAX_AGE_MS;
+      });
+      if (recentInactive.length > 0) {
+        console.warn(`[FCM_ENGINE] verifyInBdd | bdd_active=0 mais ${recentInactive.length} token(s) inactif(s) récent(s) → trigger repair | user=${userEmail}`);
+        // Déclencher repair sans bloquer
+        setTimeout(() => FcmTokenEngine.repair(userEmail, 'inactive_token_detected'), 100);
+      } else {
+        console.error(`[FCM_ENGINE] verifyInBdd | 0 token actif | user=${userEmail}`);
+      }
+      return { verified: false, count: 0, tokens: [], recentInactiveCount: recentInactive.length };
     }
 
     // Vérifier correspondance local vs BDD
