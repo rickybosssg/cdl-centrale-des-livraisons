@@ -16,6 +16,9 @@ import { base44 } from "@/api/base44Client";
 
 const PROVIDER_VERSION = "DispatchModeContext_v3_FINAL";
 
+// ── Guard singleton — détecte les doubles montages ────────────────────────────
+let _providerMountCount = 0;
+
 // ── Purge des clés legacy au chargement du module ────────────────────────────
 const LEGACY_CACHE_KEYS = [
   "dispatch_mode", "dispatchMode", "dispatch_config", "cdl_dispatch_mode",
@@ -32,7 +35,15 @@ try {
 const DispatchModeContext = createContext(null);
 
 export function DispatchModeProvider({ children }) {
-  console.log(`[${PROVIDER_VERSION}] MOUNTED — single instance check`);
+  useEffect(() => {
+    _providerMountCount++;
+    console.log(`[${PROVIDER_VERSION}] MOUNTED #${_providerMountCount} — ${_providerMountCount > 1 ? '⚠️ DOUBLE MOUNT DÉTECTÉ' : '✅ instance unique'}`);
+    return () => {
+      _providerMountCount--;
+      console.log(`[${PROVIDER_VERSION}] UNMOUNTED — instances restantes: ${_providerMountCount}`);
+    };
+  }, []);
+
   const [mode, setModeState] = useState(null);         // null = chargement en cours
   const [updatedAt, setUpdatedAt] = useState(null);
   const [updatedBy, setUpdatedBy] = useState(null);
@@ -46,12 +57,21 @@ export function DispatchModeProvider({ children }) {
   const modeRef = useRef(null); // ref synchrone pour éviter closures stales
 
   // ── Chargement depuis backend ─────────────────────────────────────────────
-  const loadMode = useCallback(async (source = "init") => {
+  const loadMode = useCallback(async (source = "init", attempt = 1) => {
     try {
-      console.log(`[DISPATCH_MODE] loadMode START | source=${source}`);
-      const isAuth = await base44.auth.isAuthenticated();
+      console.log(`[DISPATCH_MODE] loadMode START | source=${source} | attempt=${attempt}`);
+
+      // Attendre que l'auth soit prête (token disponible) — max 5s
+      let isAuth = false;
+      for (let i = 0; i < 10; i++) {
+        isAuth = await base44.auth.isAuthenticated();
+        if (isAuth) break;
+        console.log(`[DISPATCH_MODE] auth not ready, wait 500ms (${i + 1}/10)...`);
+        await new Promise(r => setTimeout(r, 500));
+      }
+
       if (!isAuth) {
-        console.log("[DISPATCH_MODE] loadMode SKIP — non authentifié");
+        console.log("[DISPATCH_MODE] loadMode SKIP — non authentifié après attente");
         setLoading(false);
         return;
       }
@@ -68,11 +88,14 @@ export function DispatchModeProvider({ children }) {
       setConfigId(data.config_id);
       setLastWriter(`getDispatchMode (${source})`);
     } catch (err) {
-      console.error("[DISPATCH_MODE] loadMode ERROR:", err.message);
-      // Retry unique sur init
-      if (source === "init") {
-        console.log("[DISPATCH_MODE] loadMode RETRY in 800ms...");
-        setTimeout(() => loadMode("retry"), 800);
+      console.error(`[DISPATCH_MODE] loadMode ERROR | source=${source} | attempt=${attempt} | ${err.message}`);
+
+      // Retry sur 403 (token pas encore prêt) et sur init — max 5 tentatives
+      const is403 = err.message?.includes("403") || err.response?.status === 403;
+      if (attempt < 5 && (source === "init" || is403)) {
+        const delay = attempt * 1000; // 1s, 2s, 3s, 4s
+        console.log(`[DISPATCH_MODE] RETRY in ${delay}ms (attempt ${attempt + 1})...`);
+        setTimeout(() => loadMode(source, attempt + 1), delay);
         return;
       }
       // Pas de fallback "auto" — on garde l'état précédent

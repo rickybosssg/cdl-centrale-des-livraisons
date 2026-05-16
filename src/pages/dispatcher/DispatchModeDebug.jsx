@@ -167,6 +167,7 @@ export default function DispatchModeDebug() {
           <Row label="Dernier event realtime" value={lastEventTs ? moment(lastEventTs).format("HH:mm:ss.SSS") : "—"} />
           <Row label="État React brut" value={mode === null ? "null (loading)" : mode} ok={mode !== null} />
           <Row label="Mode loading" value={String(loading)} ok={!loading} />
+          <Row label="backendRaw reçu" value={backendRaw ? `✅ mode=${backendRaw.mode}` : "❌ null — fetch échoué"} ok={!!backendRaw} />
           <Row label="Admin email" value={user?.email || "—"} />
           <Row label="Admin role" value={user?.role || "—"} ok={user?.role === "admin"} />
         </CardContent>
