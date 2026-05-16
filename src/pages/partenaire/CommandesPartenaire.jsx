@@ -6,7 +6,6 @@ import { ArrowLeft, CheckCircle2, XCircle, Clock, Package, RefreshCw } from "luc
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { vibrateSuccess, vibrateLight } from "@/lib/vibration";
-import { lancerDispatch } from "@/lib/dispatch";
 import moment from "moment";
 import ContactCard from "@/components/ContactCard";
 
@@ -128,7 +127,7 @@ export default function CommandesPartenaire({ user }) {
       toast.warning('Erreur assignation livreur - essai manuel en cours');
     }
     
-    lancerDispatch(courseData);
+    // Dispatch déclenché par automation entity Course.create → createSmartDispatch (backend uniquement)
     vibrateSuccess();
     toast.success("✅ Commande acceptée ! Livreur en recherche...");
     setProcessing(null);

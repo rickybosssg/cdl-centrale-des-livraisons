@@ -1,20 +1,45 @@
 /**
- * CDL — Moteur de dispatch frontend
- * Source de vérité : DispatchConfig en BDD.
+ * CDL — lib/dispatch.js v4 UNIFIÉ
  *
- * RÈGLE D'ÉLIGIBILITÉ (v2 — SANS current_role) :
- *   Un livreur est dispatchable si et seulement si :
- *     1. driver_online = true          → en ligne
- *     2. profil_valide = true          → profil livreur validé par admin
- *     3. !livreur_bloque               → non bloqué
- *     4. !livreur_suspendu             → non suspendu
- *     5. disponible = true             → disponible
- *     6. nombre_courses_actives < 2   → pas surchargé
+ * SOURCE UNIQUE : DispatchModeState
+ * SUPPRESSION : DispatchConfig, lancerDispatch (le frontend ne déclenche plus de dispatch)
  *
- *  ⚠️ current_role n'est JAMAIS utilisé pour le dispatch.
- *  Il sert uniquement à l'affichage de l'interface utilisateur.
+ * Le dispatch est EXCLUSIVEMENT déclenché par :
+ *   → Automation entity Course.create → createSmartDispatch (backend)
+ *
+ * Ce fichier conserve uniquement les utilitaires frontend :
+ *   - isDriverEligible()      : critères unifiés (affichage UI seulement)
+ *   - getDispatchMode()       : lecture DispatchModeState
+ *   - sortDriversByProximity(): tri affichage admin
+ *   - scoreDriver()           : score affichage admin
+ *   - classifyDriversForCourse()
+ *   - getDriversDispatchStats()
  */
 import { base44 } from "@/api/base44Client";
+
+// ── Critères d'éligibilité UNIFIÉS — identiques aux fonctions backend ─────────
+export function isDriverEligible(d) {
+  if (d.driver_online !== true) return false;
+  if (d.profil_valide !== true && d.statut_validation_livreur !== 'valide' && d.statut_validation_livreur !== 'actif') return false;
+  if (d.livreur_bloque) return false;
+  if (d.livreur_suspendu) return false;
+  if (d.disponible === false) return false;
+  if ((d.nombre_courses_actives || 0) >= 2) return false;
+  return true;
+}
+
+// Alias pour compatibilité composants UI existants
+export const isDriverDispatchable = isDriverEligible;
+
+export function getDriverDispatchReason(driver) {
+  if (!driver.driver_online) return 'hors ligne';
+  if (!driver.profil_valide && driver.statut_validation_livreur !== 'valide') return 'profil non validé';
+  if (driver.livreur_bloque) return 'compte bloqué';
+  if (driver.livreur_suspendu) return 'compte suspendu';
+  if (driver.disponible === false) return 'marqué indisponible';
+  if ((driver.nombre_courses_actives || 0) >= 2) return `occupé (${driver.nombre_courses_actives} courses actives)`;
+  return 'dispatchable';
+}
 
 export function distanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
@@ -26,43 +51,6 @@ export function distanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/**
- * FONCTION CENTRALE — source de vérité du dispatch.
- * N'utilise JAMAIS current_role.
- * Critères basés uniquement sur :
- *   - le statut opérationnel du profil livreur (profil_valide, non bloqué, non suspendu)
- *   - la disponibilité réelle (driver_online, disponible)
- *   - la charge actuelle (nombre_courses_actives)
- */
-export function isDriverDispatchable(driver) {
-  return (
-    driver.driver_online === true &&
-    driver.profil_valide === true &&
-    !driver.livreur_bloque &&
-    !driver.livreur_suspendu &&
-    driver.disponible !== false &&           // disponible = true par défaut si non défini
-    (driver.nombre_courses_actives || 0) < 2
-  );
-}
-
-/**
- * Raison humaine pourquoi un livreur n'est pas dispatchable.
- * N'utilise JAMAIS current_role comme critère.
- */
-export function getDriverDispatchReason(driver) {
-  if (!driver.driver_online) return 'hors ligne';
-  if (!driver.profil_valide) return 'profil non validé';
-  if (driver.livreur_bloque) return 'compte bloqué';
-  if (driver.livreur_suspendu) return 'compte suspendu';
-  if (driver.disponible === false) return 'marqué indisponible';
-  if ((driver.nombre_courses_actives || 0) >= 2) return `occupé (${driver.nombre_courses_actives} courses actives)`;
-  return 'dispatchable';
-}
-
-/**
- * Trie les livreurs éligibles par distance au point de départ.
- * Si GPS non dispo sur la course → tri par note puis par charge.
- */
 export function sortDriversByProximity(drivers, course) {
   const hasGPS = course?.latitude_depart && course?.longitude_depart;
   if (!hasGPS) {
@@ -72,25 +60,17 @@ export function sortDriversByProximity(drivers, course) {
       return (a.nombre_courses_actives || 0) - (b.nombre_courses_actives || 0);
     });
   }
-
   const lat1 = parseFloat(course.latitude_depart);
   const lng1 = parseFloat(course.longitude_depart);
-
   const avecGPS = drivers.filter(d => d.gps_latitude && d.gps_longitude);
   const sansGPS = drivers.filter(d => !d.gps_latitude || !d.gps_longitude);
-
-  avecGPS.sort((a, b) => {
-    const da = distanceKm(a.gps_latitude, a.gps_longitude, lat1, lng1);
-    const db = distanceKm(b.gps_latitude, b.gps_longitude, lat1, lng1);
-    return da - db;
-  });
-
+  avecGPS.sort((a, b) =>
+    distanceKm(a.gps_latitude, a.gps_longitude, lat1, lng1) -
+    distanceKm(b.gps_latitude, b.gps_longitude, lat1, lng1)
+  );
   return [...avecGPS, ...sansGPS];
 }
 
-/**
- * Score pour affichage admin (non bloquant pour dispatch).
- */
 export function scoreDriver(driver, course) {
   let score = 0;
   if (driver.gps_latitude && driver.gps_longitude && course?.latitude_depart && course?.longitude_depart) {
@@ -103,72 +83,47 @@ export function scoreDriver(driver, course) {
 }
 
 /**
- * Récupère le mode de dispatch CANONIQUE depuis la BDD.
- * LIT UNIQUEMENT le doc avec mode_key="GLOBAL".
- * Retourne null si aucun doc GLOBAL — JAMAIS de fallback vers 'auto'.
+ * Lecture exclusive DispatchModeState — JAMAIS DispatchConfig
  */
 export async function getDispatchMode() {
   try {
-    const configs = await base44.entities.DispatchConfig.list('-updated_date', 50);
-    const canonical = configs.find(c => c.mode_key === 'GLOBAL');
-    if (canonical) {
-      const mode = canonical.mode === 'manuel' ? 'manuel' : canonical.mode === 'auto' ? 'auto' : null;
-      console.log(`[DISPATCH_CANONICAL_READ] frontend | mode=${mode} | id=${canonical.id}`);
-      return mode;
-    }
-    // Aucun doc GLOBAL → retourner null, jamais fallback auto
-    console.warn(`[DISPATCH_CANONICAL_READ] frontend | Aucun doc GLOBAL | totalDocs=${configs.length} — dispatch bloqué`);
-    return null;
+    const rows = await base44.entities.DispatchModeState.list('-updated_date', 1);
+    const doc = rows[0];
+    const mode = doc?.mode === 'manuel' ? 'manuel' : 'auto';
+    console.log(`[DISPATCH_MODE_READ] source=DispatchModeState | fn=getDispatchMode | mode=${mode} | id=${doc?.id || 'none'}`);
+    return mode;
   } catch (err) {
-    console.warn(`[DISPATCH_CANONICAL_READ] frontend | Erreur lecture BDD — dispatch bloqué | err=${err?.message}`);
+    console.warn(`[DISPATCH_MODE_READ] Erreur lecture DispatchModeState — mode inconnu | err=${err?.message}`);
     return null;
   }
 }
 
 /**
- * Lance le dispatch depuis le frontend.
- * BLOQUÉ si mode = 'manuel'.
+ * Classifie les livreurs pour affichage admin — lecture seule, pas de dispatch
  */
-export async function lancerDispatch(course, excludeEmails = []) {
-  try {
-    const mode = await getDispatchMode();
-    if (mode !== 'auto') {
-      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] lancerDispatch BLOQUÉ — mode=${mode} | course=${course?.id}`);
-      console.log(`[MANUAL_MODE_PROTECTED] lancerDispatch bloqué — mode non-auto (${mode})`);
-      return null;
-    }
-  } catch (e) {
-    console.warn('[DISPATCH_CANONICAL_READ] Erreur lecture mode — dispatch bloqué:', e.message);
-    return null;
-  }
-
-  try {
-    const res = await base44.functions.invoke('autoDispatch', {
-      course_id: course.id,
-      exclude_emails: excludeEmails,
-    });
-    if (res.data?.success) return res.data.livreur;
-    return null;
-  } catch (e) {
-    console.error('[Dispatch] Erreur appel autoDispatch:', e);
-    return null;
-  }
+export async function classifyDriversForCourse(course) {
+  const allUsers = await base44.entities.User.list('-updated_date', 500);
+  const eligibles = allUsers.filter(d => isDriverEligible(d));
+  const sorted = sortDriversByProximity(eligibles, course);
+  return sorted.map(d => ({ driver: d, score: scoreDriver(d, course) }));
 }
 
 /**
- * Réassigne une course (exclut les livreurs ayant déjà refusé/no_response).
+ * Stats dispatch pour UI admin — lecture seule
  */
-export async function reassignerCourse(course) {
-  let exclure = [];
-  try {
-    const hist = course.historique_assignation ? JSON.parse(course.historique_assignation) : [];
-    exclure = hist.filter(h => ['refuse', 'no_response'].includes(h.statut)).map(h => h.livreur_email);
-  } catch (_) {}
-  return lancerDispatch(course, exclure);
+export async function getDriversDispatchStats() {
+  const allUsers = await base44.entities.User.list('-updated_date', 500);
+  const enLigne = allUsers.filter(d => d.driver_online);
+  const avecGPS = enLigne.filter(d => d.gps_latitude && d.gps_longitude);
+  const dispatchables = enLigne.filter(d => isDriverEligible(d));
+  const nonDispatchables = enLigne
+    .filter(d => !isDriverEligible(d))
+    .map(d => ({ email: d.email, nom: d.full_name, raison: getDriverDispatchReason(d) }));
+  return { enLigne: enLigne.length, avecGPS: avecGPS.length, dispatchables: dispatchables.length, nonDispatchables };
 }
 
 /**
- * Priorité des courses pour le dispatch.
+ * Priorité des courses pour affichage admin
  */
 export function priorityCourseScore(course) {
   const urgence = course.urgence || course.niveau_urgence;
@@ -177,29 +132,4 @@ export function priorityCourseScore(course) {
   else if (urgence === 'urgent') score += 500;
   score += (course.prix || 0);
   return score;
-}
-
-/**
- * Classifie et trie les livreurs pour une course donnée.
- * N'utilise JAMAIS current_role.
- */
-export async function classifyDriversForCourse(course) {
-  const allUsers = await base44.entities.User.list('-updated_date', 500);
-  const eligibles = allUsers.filter(d => isDriverDispatchable(d));
-  const sorted = sortDriversByProximity(eligibles, course);
-  return sorted.map(d => ({ driver: d, score: scoreDriver(d, course) }));
-}
-
-/**
- * Stats dispatch — N'utilise JAMAIS current_role.
- */
-export async function getDriversDispatchStats() {
-  const allUsers = await base44.entities.User.list('-updated_date', 500);
-  const enLigne = allUsers.filter(d => d.driver_online);
-  const avecGPS = enLigne.filter(d => d.gps_latitude && d.gps_longitude);
-  const dispatchables = enLigne.filter(d => isDriverDispatchable(d));
-  const nonDispatchables = enLigne
-    .filter(d => !isDriverDispatchable(d))
-    .map(d => ({ email: d.email, nom: d.full_name, raison: getDriverDispatchReason(d) }));
-  return { enLigne: enLigne.length, avecGPS: avecGPS.length, dispatchables: dispatchables.length, nonDispatchables };
 }

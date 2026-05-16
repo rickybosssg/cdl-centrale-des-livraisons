@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { vibrateSuccess } from "@/lib/vibration";
-import { lancerDispatch } from "@/lib/dispatch";
 import { triggerWhatsAppNotification, waMsgCourseCreatedClient } from "@/lib/whatsappNotifications";
 import { useBedouSync } from "@/lib/useBedouSync";
 import { toast } from "sonner";
@@ -118,7 +117,8 @@ export default function CreateCourse() {
         nombre_tentatives: 0,
       });
 
-      lancerDispatch(courseData);
+      // Dispatch déclenché exclusivement par automation entity Course.create → createSmartDispatch (backend)
+      // Ne pas appeler lancerDispatch ici — cela créerait un double dispatch parallèle
       triggerWhatsAppNotification({
         eventType: 'course_created',
         recipientRole: 'client',

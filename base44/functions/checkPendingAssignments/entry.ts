@@ -1,38 +1,40 @@
 /**
- * CDL — Vérification des assignations en attente (timeout 60s)
+ * CDL — checkPendingAssignments v4 UNIFIÉ
  *
- * VERROU MANUEL ABSOLU :
- *   Si mode GLOBAL = "manuel" → AUCUNE réassignation automatique.
- *   Pas de fallback vers 'auto'. Pas d'écriture de config.
+ * SOURCE UNIQUE : DispatchModeState
+ * CRITÈRES LIVREUR : isDriverEligible() — identiques à autoDispatch/createSmartDispatch
+ * VERROU ABSOLU mode=manuel : aucune réassignation automatique, même avec force_immediate
  *
- * LOGS OBLIGATOIRES :
- *   [DISPATCH_CANONICAL_READ]
+ * Déclenché : automation scheduled toutes les 5 minutes
+ *
+ * LOGS :
+ *   [DISPATCH_MODE_READ]
  *   [AUTO_DISPATCH_BLOCKED_MANUAL_MODE]
- *   [MANUAL_MODE_PROTECTED]
+ *   [CHECK_PENDING]
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const CANONICAL_KEY = 'GLOBAL';
-const TIMEOUT_MS = 60 * 1000; // 60 secondes
+const TAG = 'checkPendingAssignments';
+const TIMEOUT_MS = 60 * 1000;
 
-function isDriverStillValid(driver) {
-  return (
-    driver.driver_online === true &&
-    driver.profil_valide === true &&
-    !driver.livreur_bloque &&
-    !driver.livreur_suspendu &&
-    driver.disponible !== false &&
-    (driver.nombre_courses_actives || 0) < 2
-  );
+// ── Critères d'éligibilité UNIFIÉS ────────────────────────────────────────────
+function isDriverEligible(d) {
+  if (d.driver_online !== true) return false;
+  if (d.profil_valide !== true && d.statut_validation_livreur !== 'valide' && d.statut_validation_livreur !== 'actif') return false;
+  if (d.livreur_bloque) return false;
+  if (d.livreur_suspendu) return false;
+  if (d.disponible === false) return false;
+  if ((d.nombre_courses_actives || 0) >= 2) return false;
+  return true;
 }
 
-async function getCanonicalMode(base44) {
-  // SOURCE UNIQUE : DispatchModeState (aligné avec autoDispatch + setDispatchMode)
-  const modes = await base44.asServiceRole.entities.DispatchModeState.list('-updated_date', 1).catch(() => []);
-  const modeState = modes[0];
-  const mode = modeState?.mode === 'manuel' ? 'manuel' : modeState ? 'auto' : null;
-  console.log(`[DISPATCH_CANONICAL_READ] checkPendingAssignments | source=DispatchModeState | mode=${mode} | id=${modeState?.id || 'none'}`);
-  return { mode, configId: modeState?.id || null };
+// ── Lecture exclusive DispatchModeState ───────────────────────────────────────
+async function readDispatchMode(base44) {
+  const rows = await base44.asServiceRole.entities.DispatchModeState.list('-updated_date', 1).catch(() => []);
+  const doc = rows[0];
+  const mode = doc?.mode === 'manuel' ? 'manuel' : 'auto';
+  console.log(`[DISPATCH_MODE_READ] source=DispatchModeState | fn=${TAG} | mode=${mode} | id=${doc?.id || 'none'} | ts=${new Date().toISOString()}`);
+  return { mode, configId: doc?.id || null };
 }
 
 async function processOnePendingCourse(base44, course, now, forceImmediate) {
@@ -43,9 +45,9 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
   let livreurInvalide = false;
   if (livreurEmail) {
     const drivers = await base44.asServiceRole.entities.User.filter({ email: livreurEmail });
-    if (drivers.length > 0 && !isDriverStillValid(drivers[0])) {
+    if (drivers.length > 0 && !isDriverEligible(drivers[0])) {
       livreurInvalide = true;
-      console.log(`[CHECK] Livreur ${livreurEmail} invalide — passage au suivant`);
+      console.log(`[CHECK_PENDING] fn=${TAG} | Livreur ${livreurEmail} invalide — passage au suivant`);
     }
   }
 
@@ -53,18 +55,15 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
     return 'skipped';
   }
 
-  console.log(
-    `[CHECK] Course ${course.id} — ${livreurInvalide ? 'livreur invalide' : forceImmediate ? 'déclenché client' : `timeout (${Math.round(elapsed / 1000)}s)`}`
-  );
+  const raison = livreurInvalide ? 'livreur invalide' : forceImmediate ? 'force_immediate' : `timeout (${Math.round(elapsed / 1000)}s)`;
+  console.log(`[CHECK_PENDING] fn=${TAG} | course=${course.id} | raison=${raison} | ts=${new Date().toISOString()}`);
 
   let historique = [];
-  try {
-    if (course.historique_assignation) historique = JSON.parse(course.historique_assignation);
-  } catch (_) {}
+  try { if (course.historique_assignation) historique = JSON.parse(course.historique_assignation); } catch (_) {}
 
   const updatedHist = historique.map(h =>
     h.livreur_email === livreurEmail && h.statut === 'proposee'
-      ? { ...h, statut: 'no_response', note: livreurInvalide ? 'Livreur devenu invalide' : 'Timeout 60s' }
+      ? { ...h, statut: 'no_response', note: livreurInvalide ? 'Livreur invalide' : 'Timeout 60s' }
       : h
   );
 
@@ -117,7 +116,7 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
     .filter(h => ['refuse', 'no_response'].includes(h.statut))
     .map(h => h.livreur_email);
 
-  // Relancer autoDispatch — il vérifiera lui-même le mode canonique
+  // autoDispatch vérifiera lui-même le mode — pas besoin de re-vérifier ici
   await base44.asServiceRole.functions.invoke('autoDispatch', {
     course_id: course.id,
     exclude_emails: exclus,
@@ -127,49 +126,35 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
 }
 
 Deno.serve(async (req) => {
+  const ts = new Date().toISOString();
   try {
     const base44 = createClientFromRequest(req);
 
     let body = {};
-    try {
-      if (req.method === 'POST') body = await req.json();
-    } catch (_) {}
+    try { if (req.method === 'POST') body = await req.json(); } catch (_) {}
 
     const singleCourseId = body.course_id || null;
     const forceImmediateTrigger = body.force_immediate === true;
 
-    // ── VERROU CANONIQUE ABSOLU — AUCUN FALLBACK VERS AUTO ───────────────────
-    const { mode, configId } = await getCanonicalMode(base44);
-
-    // Si mode=null (aucun doc GLOBAL) → bloquer aussi
-    if (mode === null) {
-      console.error(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] checkPendingAssignments BLOQUÉ — aucun doc GLOBAL | function=checkPendingAssignments`);
-      return Response.json({ success: true, blocked: true, reason: 'no_canonical_config', reassigned: 0, skipped: 0 });
-    }
-
+    // ── VERROU ABSOLU — même avec force_immediate ─────────────────────────────
+    const { mode, configId } = await readDispatchMode(base44);
     if (mode === 'manuel') {
-      // VERROU ABSOLU — forceImmediateTrigger ne bypass JAMAIS le mode manuel
-      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] BLOQUÉ — mode=manuel | configId=${configId} | function=checkPendingAssignments | forceImmediate=${forceImmediateTrigger}`);
-      console.log(`[MANUAL_MODE_PROTECTED] checkPendingAssignments bloqué par verrou manuel — même avec forceImmediate`);
-      return Response.json({ success: true, blocked: true, reason: 'manual_mode_active', reassigned: 0, skipped: 0 });
+      console.log(`[AUTO_DISPATCH_BLOCKED_MANUAL_MODE] fn=${TAG} BLOQUÉ | configId=${configId} | forceImmediate=${forceImmediateTrigger} | ts=${ts}`);
+      return Response.json({ success: true, blocked: true, reason: 'manual_mode_active', reassigned: 0, skipped: 0, fn: TAG, ts });
     }
 
     let coursesToProcess = [];
 
     if (singleCourseId) {
       const user = await base44.auth.me();
-      if (!user?.email) {
-        return Response.json({ error: 'Authentification requise' }, { status: 401 });
-      }
+      if (!user?.email) return Response.json({ error: 'Authentification requise' }, { status: 401 });
       const one = await base44.asServiceRole.entities.Course.filter({ id: singleCourseId });
       const c = one?.[0];
       if (!c || c.statut !== 'assignee_attente') {
         return Response.json({ success: true, reassigned: 0, skipped: 1, total: 0, note: 'Course absente ou déjà traitée' });
       }
       const isAuthorized = user.role === 'admin' || user.email === c.livreur_email;
-      if (!isAuthorized) {
-        return Response.json({ error: 'Non autorisé' }, { status: 403 });
-      }
+      if (!isAuthorized) return Response.json({ error: 'Non autorisé' }, { status: 403 });
       coursesToProcess = [c];
     } else {
       coursesToProcess = await base44.asServiceRole.entities.Course.filter({ statut: 'assignee_attente' });
@@ -192,11 +177,11 @@ Deno.serve(async (req) => {
       if (r === 'reassigned') reassigned++;
     }
 
-    console.log(`[CHECK] ${reassigned} réassignées, ${skipped} encore en attente sur ${coursesToProcess.length} total`);
-    return Response.json({ success: true, reassigned, skipped, total: coursesToProcess.length });
+    console.log(`[CHECK_PENDING] fn=${TAG} | ${reassigned} réassignées | ${skipped} en attente | total=${coursesToProcess.length} | ts=${ts}`);
+    return Response.json({ success: true, reassigned, skipped, total: coursesToProcess.length, fn: TAG, ts });
 
   } catch (error) {
-    console.error('[CHECK] Erreur:', error.message);
+    console.error(`[CHECK_PENDING] fn=${TAG} | error=${error.message} | ts=${new Date().toISOString()}`);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
