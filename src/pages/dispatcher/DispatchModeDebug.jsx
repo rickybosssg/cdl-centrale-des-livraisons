@@ -34,6 +34,7 @@ export default function DispatchModeDebug() {
     lastWriter,
     listenerActive,
     lastEventTs,
+    lastError,
     providerVersion,
     setMode,
     refresh,
@@ -45,6 +46,8 @@ export default function DispatchModeDebug() {
   const [toggling, setToggling] = useState(false);
   const [rawBackendFetch, setRawBackendFetch] = useState(null);
   const [fetchingRaw, setFetchingRaw] = useState(false);
+  const [diagResult, setDiagResult] = useState(null);
+  const [diagRunning, setDiagRunning] = useState(false);
   const prevModeRef = useRef(null);
 
   useEffect(() => {
@@ -88,12 +91,63 @@ export default function DispatchModeDebug() {
     setFetchingRaw(true);
     try {
       const res = await base44.functions.invoke("getDispatchMode", { _t: Date.now() });
-      setRawBackendFetch(res.data);
+      setRawBackendFetch({ ok: true, data: res.data, status: res.status });
     } catch (e) {
-      setRawBackendFetch({ error: e.message });
+      setRawBackendFetch({
+        ok: false,
+        error: e.message,
+        status: e.response?.status || 'unknown',
+        responseData: e.response?.data || null,
+        headers: e.response?.headers || null,
+      });
     } finally {
       setFetchingRaw(false);
     }
+  };
+
+  const runFullDiag = async () => {
+    setDiagRunning(true);
+    const log = [];
+    try {
+      // 1. isAuthenticated
+      const isAuth = await base44.auth.isAuthenticated();
+      log.push({ step: 'isAuthenticated', result: String(isAuth) });
+
+      // 2. me()
+      let meResult = null;
+      try {
+        meResult = await base44.auth.me();
+        log.push({ step: 'me()', result: `email=${meResult?.email} | role=${meResult?.role}` });
+      } catch (e) {
+        log.push({ step: 'me()', result: `ERREUR: ${e.message}`, error: true });
+      }
+
+      // 3. getDispatchMode direct
+      try {
+        const res = await base44.functions.invoke("getDispatchMode", { _t: Date.now(), _diag: true });
+        log.push({ step: 'getDispatchMode()', result: `✅ status=${res.status} | mode=${res.data?.mode} | id=${res.data?.config_id}`, data: res.data });
+      } catch (e) {
+        log.push({
+          step: 'getDispatchMode()',
+          result: `❌ status=${e.response?.status || 'unknown'} | msg=${e.message}`,
+          error: true,
+          responseBody: JSON.stringify(e.response?.data || null),
+        });
+      }
+
+      // 4. DispatchModeState direct
+      try {
+        const rows = await base44.entities.DispatchModeState.list('-updated_date', 5);
+        log.push({ step: 'DispatchModeState.list()', result: `✅ ${rows.length} ligne(s) | mode=${rows[0]?.mode ?? 'N/A'}`, data: rows });
+      } catch (e) {
+        log.push({ step: 'DispatchModeState.list()', result: `❌ ${e.message}`, error: true });
+      }
+
+    } catch (globalErr) {
+      log.push({ step: 'GLOBAL', result: `CRASH: ${globalErr.message}`, error: true });
+    }
+    setDiagResult(log);
+    setDiagRunning(false);
   };
 
   const handleToggle = async () => {
@@ -170,6 +224,48 @@ export default function DispatchModeDebug() {
           <Row label="backendRaw reçu" value={backendRaw ? `✅ mode=${backendRaw.mode}` : "❌ null — fetch échoué"} ok={!!backendRaw} />
           <Row label="Admin email" value={user?.email || "—"} />
           <Row label="Admin role" value={user?.role || "—"} ok={user?.role === "admin"} />
+          {lastError && (
+            <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-300 space-y-0.5">
+              <p className="font-bold text-red-700 text-[11px]">⚠️ DERNIÈRE ERREUR loadMode</p>
+              <p className="text-red-600">status: <strong>{lastError.status}</strong></p>
+              <p className="text-red-600">msg: {lastError.message}</p>
+              <p className="text-red-600">attempt: {lastError.attempt} | source: {lastError.source}</p>
+              <p className="text-red-600">ts: {moment(lastError.ts).format("HH:mm:ss.SSS")}</p>
+              {lastError.responseData && (
+                <pre className="text-[10px] text-red-500 bg-red-100 rounded p-1 overflow-x-auto">
+                  {JSON.stringify(lastError.responseData, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* DIAGNOSTIC COMPLET */}
+      <Card className="border-orange-300">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">🧪 Diagnostic complet (auth + fetch + entities)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Button size="sm" className="w-full bg-orange-500 hover:bg-orange-600 text-white" onClick={runFullDiag} disabled={diagRunning}>
+            {diagRunning ? "⏳ Diagnostic en cours..." : "🚀 Lancer diagnostic complet"}
+          </Button>
+          {diagResult && (
+            <div className="space-y-1.5">
+              {diagResult.map((step, i) => (
+                <div key={i} className={`rounded-lg p-2 text-xs font-mono border ${step.error ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                  <p className={`font-bold ${step.error ? 'text-red-700' : 'text-green-700'}`}>{step.step}</p>
+                  <p className={step.error ? 'text-red-600' : 'text-green-600'}>{step.result}</p>
+                  {step.responseBody && <p className="text-red-500 text-[10px] mt-0.5">body: {step.responseBody}</p>}
+                  {step.data && !step.error && (
+                    <pre className="text-[10px] text-green-700 bg-green-100 rounded p-1 mt-1 overflow-x-auto">
+                      {JSON.stringify(step.data, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -183,7 +279,7 @@ export default function DispatchModeDebug() {
             {fetchingRaw ? "⏳ Fetching..." : "🔍 Fetch backend maintenant"}
           </Button>
           {rawBackendFetch && (
-            <pre className="bg-muted rounded-xl p-3 text-xs overflow-x-auto whitespace-pre-wrap">
+            <pre className={`rounded-xl p-3 text-xs overflow-x-auto whitespace-pre-wrap ${rawBackendFetch.ok ? 'bg-green-50' : 'bg-red-50'}`}>
               {JSON.stringify(rawBackendFetch, null, 2)}
             </pre>
           )}

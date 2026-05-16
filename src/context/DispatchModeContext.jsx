@@ -53,6 +53,7 @@ export function DispatchModeProvider({ children }) {
   const [lastWriter, setLastWriter] = useState(null);  // dernière fonction ayant écrit
   const [listenerActive, setListenerActive] = useState(false);
   const [lastEventTs, setLastEventTs] = useState(null);
+  const [lastError, setLastError] = useState(null); // { status, message, attempt, ts }
 
   const modeRef = useRef(null); // ref synchrone pour éviter closures stales
 
@@ -90,24 +91,27 @@ export function DispatchModeProvider({ children }) {
       setUpdatedBy(data.updated_by);
       setConfigId(data.config_id);
       setLastWriter(`getDispatchMode (${source})`);
+      setLoading(false); // succès — libérer le loading
     } catch (err) {
       const httpStatus = err.response?.status || err.status || 'unknown';
+      const errPayload = { status: httpStatus, message: err.message, attempt, source, ts: new Date().toISOString(), responseData: err.response?.data || null };
       console.error(`[DISPATCH_MODE] loadMode ERROR | source=${source} | attempt=${attempt} | status=${httpStatus} | msg=${err.message}`);
-      console.error(`[DISPATCH_MODE] ERROR DETAIL | stack=${err.stack}`);
-      console.error(`[DISPATCH_MODE] ERROR PAYLOAD | response=`, JSON.stringify(err.response?.data || err.response || null));
+      console.error(`[DISPATCH_MODE] ERROR PAYLOAD |`, JSON.stringify(errPayload));
+      setLastError(errPayload);
 
       // Retry sur 403/401 (token pas encore prêt) et sur init — max 5 tentatives
       const is403 = httpStatus === 403 || httpStatus === 401 || err.message?.includes("403") || err.message?.includes("401");
       if (attempt < 5 && (source === "init" || is403)) {
         const delay = attempt * 1000; // 1s, 2s, 3s, 4s
         console.log(`[DISPATCH_MODE] RETRY in ${delay}ms (attempt ${attempt + 1})...`);
+        // Ne pas setLoading(false) ici — on reessaie encore
         setTimeout(() => loadMode(source, attempt + 1), delay);
         return;
       }
-      // Pas de fallback "auto" — on garde l'état précédent
-    } finally {
+      // Dernier attempt échoué — libérer le loading
       setLoading(false);
     }
+    // Pas de finally — setLoading est géré explicitement (succès ou dernier échec)
   }, []);
 
   // ── Subscription realtime sur DispatchModeState ───────────────────────────
@@ -191,6 +195,7 @@ export function DispatchModeProvider({ children }) {
     lastWriter,
     listenerActive,
     lastEventTs,
+    lastError,
     modeRef,
     providerVersion: PROVIDER_VERSION,
     // Actions
