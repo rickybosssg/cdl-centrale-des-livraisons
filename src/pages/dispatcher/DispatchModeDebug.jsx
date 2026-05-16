@@ -34,6 +34,7 @@ export default function DispatchModeDebug() {
     lastWriter,
     listenerActive,
     lastEventTs,
+    providerVersion,
     setMode,
     refresh,
   } = useDispatchMode();
@@ -159,7 +160,7 @@ export default function DispatchModeDebug() {
           </CardTitle>
         </CardHeader>
         <CardContent className="text-xs font-mono space-y-1.5">
-          <Row label="Provider utilisé" value="DispatchModeContext (v3 final)" ok />
+          <Row label="Provider version" value={providerVersion || "?"} ok={!!providerVersion?.includes("v3")} />
           <Row label="Source données" value="getDispatchMode → DispatchModeState" ok />
           <Row label="Listener realtime" value={listenerActive ? "✅ ACTIF (DispatchModeState.subscribe)" : "❌ INACTIF"} ok={listenerActive} />
           <Row label="Dernier writer" value={lastWriter || "—"} />
@@ -256,8 +257,8 @@ export default function DispatchModeDebug() {
         </CardContent>
       </Card>
 
-      <div className="text-center text-[10px] text-muted-foreground pt-2 pb-4">
-        DispatchModeDebug v3 · Provider: DispatchModeContext · Entity: DispatchModeState · admin: {user?.email || "?"}
+      <div className="text-center text-[10px] text-muted-foreground pt-2 pb-4 font-mono">
+        {providerVersion} · Entity: DispatchModeState · admin: {user?.email || "?"}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 /**
- * DispatchModeContext — SOURCE UNIQUE ET DÉFINITIVE
+ * DispatchModeContext — SOURCE UNIQUE ET DÉFINITIVE v3.0
  *
  * RÈGLES :
  *   - Lit UNIQUEMENT getDispatchMode (backend → DispatchModeState)
@@ -8,14 +8,31 @@
  *   - ZÉRO référence à DispatchConfig, DispatchEngineV2, DispatchModeV2Context
  *   - ZÉRO fallback "auto" automatique (null = loading, jamais forced auto)
  *   - UN seul Provider dans App.jsx : <DispatchModeProvider>
+ *   - PURGE cache localStorage/sessionStorage dispatch au montage
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 
+const PROVIDER_VERSION = "DispatchModeContext_v3_FINAL";
+
+// ── Purge des clés legacy au chargement du module ────────────────────────────
+const LEGACY_CACHE_KEYS = [
+  "dispatch_mode", "dispatchMode", "dispatch_config", "cdl_dispatch_mode",
+  "cdl_dispatch_config", "dispatch_mode_v2", "dispatchModeV2",
+];
+try {
+  LEGACY_CACHE_KEYS.forEach(k => {
+    localStorage.removeItem(k);
+    sessionStorage.removeItem(k);
+  });
+  console.log(`[${PROVIDER_VERSION}] LEGACY CACHE PURGED (${LEGACY_CACHE_KEYS.length} keys)`);
+} catch (_) {}
+
 const DispatchModeContext = createContext(null);
 
 export function DispatchModeProvider({ children }) {
+  console.log(`[${PROVIDER_VERSION}] MOUNTED — single instance check`);
   const [mode, setModeState] = useState(null);         // null = chargement en cours
   const [updatedAt, setUpdatedAt] = useState(null);
   const [updatedBy, setUpdatedBy] = useState(null);
@@ -146,6 +163,7 @@ export function DispatchModeProvider({ children }) {
     listenerActive,
     lastEventTs,
     modeRef,
+    providerVersion: PROVIDER_VERSION,
     // Actions
     setMode,
     refresh: loadMode,
