@@ -126,6 +126,7 @@ import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
 import FcmTestFull from './pages/FcmTestFull';
 import FcmTokenRefresh from './pages/FcmTokenRefresh';
 import FcmNativeDebug from './pages/FcmNativeDebug';
+import FcmDispatchAuditTest from './pages/FcmDispatchAuditTest';
 import EmailLogin from './pages/EmailLogin';
 import AppPublicLink from './pages/AppPublicLink';
 import TrackingPublic from './pages/TrackingPublic';
@@ -427,6 +428,7 @@ const AuthenticatedApp = () => {
         <Route path="/fcm-register-audit" element={<FcmRegisterAudit />} />
         <Route path="/fcm-persistent-diag" element={<FcmPersistentDiag />} />
         <Route path="/fcm-engine" element={<FcmEngineDashboard />} />
+        <Route path="/fcm-dispatch-audit" element={<FcmDispatchAuditTest />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />

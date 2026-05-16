@@ -96,16 +96,42 @@ function useBedou(userEmail) {
 }
 
 // ── Composant principal ───────────────────────────────────────────────────────
-export default function LivreurHome({ user }) {
+export default function LivreurHome({ user: initialUser }) {
   const [courses, setCourses] = useState([]);
-  const [disponible, setDisponible] = useState(user?.disponible !== false);
+  const [user, setUser] = useState(initialUser); // État User synchronisé temps réel
   const [toggling, setToggling] = useState(false);
   const [alertCourse, setAlertCourse] = useState(null);
   const [showMessages, setShowMessages] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [syncError, setSyncError] = useState(null); // Alerte désynchronisation
 
   const { gpsMsg, gpsLoading, requestGPS } = useGPS(user?.email);
   const { bedou, loadingBedou } = useBedou(user?.email);
+
+  // Valeur réelle confirmée en BDD (pas optimiste, pas d'état local)
+  const driverOnlineConfirmed = user?.driver_online === true;
+  const disponibleConfirmed = user?.disponible !== false;
+
+  // ── Subscription temps réel USER (source unique pour driver_online, disponible, GPS, profil) ────
+  useEffect(() => {
+    if (!initialUser?.email) return;
+    console.log(`[DRIVER_USER_SUBSCRIBE_START] user=${initialUser.email}`);
+
+    const unsubUser = base44.entities.User.subscribe((event) => {
+      if (event.data?.email === initialUser.email) {
+        console.log(
+          `[DRIVER_USER_REALTIME_UPDATE] event=${event.type} | driver_online=${event.data?.driver_online} | disponible=${event.data?.disponible} | gps=${event.data?.gps_latitude},${event.data?.gps_longitude}`
+        );
+        setUser(event.data);
+        setSyncError(null); // Réinitialiser alerte synchro
+      }
+    });
+
+    return () => {
+      console.log(`[DRIVER_USER_UNSUBSCRIBE] user=${initialUser.email}`);
+      if (unsubUser) unsubUser();
+    };
+  }, [initialUser?.email]);
 
   // ── Chargement courses ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -152,20 +178,25 @@ export default function LivreurHome({ user }) {
     return unsub;
   }, [user?.email]);
 
-  // ── Toggle en ligne ─────────────────────────────────────────────────────────
+  // ── Toggle en ligne — Valeur confirmée BDD uniquement ────────────────────────
   const toggleOnline = async () => {
-    const next = !disponible;
+    const next = !driverOnlineConfirmed;
+    console.log(`[DRIVER_ONLINE_CLICK] current=${driverOnlineConfirmed} | next=${next}`);
     setToggling(true);
-    setDisponible(next);
+
     try {
+      console.log(`[DRIVER_ONLINE_SAVE_START] user=${user.email} | driver_online=${next}`);
       await base44.auth.updateMe({
         disponible: next,
         driver_online: next,
         last_seen: new Date().toISOString(),
       });
-      toast.success(next ? "🟢 Vous êtes en ligne" : "🔴 Vous êtes hors ligne");
-    } catch {
-      setDisponible(!next);
+      console.log(`[DRIVER_ONLINE_SAVE_SUCCESS] user=${user.email} | driver_online=${next}`);
+      // ❌ NE PAS modifier l'état local ici — attendre la souscription temps réel User
+      toast.success(next ? "🟢 Synchronisation en cours..." : "🔴 Synchronisation en cours...");
+    } catch (err) {
+      console.error(`[DRIVER_ONLINE_SAVE_ERROR] user=${user.email} | error=${err.message}`);
+      setSyncError(`Erreur de synchronisation: ${err.message}`);
       toast.error("Erreur de mise à jour");
     }
     setToggling(false);
@@ -180,12 +211,21 @@ export default function LivreurHome({ user }) {
   const completedToday = arr.filter(c => c.statut === "livree" && new Date(c.updated_date || c.date_livraison).toDateString() === today);
   const gainsJour = completedToday.reduce((s, c) => s + (c.gain_livreur || 0), 0);
   const totalLivrees = arr.filter(c => c.statut === "livree").length;
-  const dispatchable = isDriverDispatchable({ ...user, disponible });
+  const dispatchable = isDriverDispatchable({ ...user, disponible: disponibleConfirmed });
 
   return (
     <div className="space-y-4 pb-24">
       {/* Alerte course */}
       <NewCourseAlert course={alertCourse} onClose={() => setAlertCourse(null)} user={user} />
+
+      {/* Alerte désynchronisation */}
+      {syncError && (
+        <div className="rounded-xl p-3 bg-red-50 border border-red-200 flex items-center gap-2">
+          <span className="text-lg flex-shrink-0">⚠️</span>
+          <p className="text-xs text-red-800 flex-1">{syncError}</p>
+          <button onClick={() => setSyncError(null)} className="text-xs font-bold text-red-600">Fermer</button>
+        </div>
+      )}
 
       {/* Bandeau GPS */}
       {gpsMsg && (
@@ -212,34 +252,34 @@ export default function LivreurHome({ user }) {
         </Link>
       </div>
 
-      {/* Bouton EN LIGNE / HORS LIGNE */}
+      {/* Bouton EN LIGNE / HORS LIGNE — Valeur BDD confirmée UNIQUEMENT */}
       <button
         onClick={toggleOnline}
         disabled={toggling}
         className={`w-full rounded-2xl p-5 flex items-center justify-between border-2 transition-all active:scale-[0.97] shadow-md ${
-          disponible
+          driverOnlineConfirmed
             ? "bg-gradient-to-r from-green-500 to-emerald-600 border-green-500 text-white"
             : "bg-white border-gray-200 text-gray-800"
         }`}
       >
         <div className="flex items-center gap-4">
-          <div className={`h-14 w-14 rounded-full flex items-center justify-center text-3xl shadow-inner ${disponible ? "bg-white/20" : "bg-gray-100"}`}>
+          <div className={`h-14 w-14 rounded-full flex items-center justify-center text-3xl shadow-inner ${driverOnlineConfirmed ? "bg-white/20" : "bg-gray-100"}`}>
             {toggling
-              ? <div className={`h-7 w-7 border-[3px] rounded-full animate-spin ${disponible ? "border-white/30 border-t-white" : "border-gray-300 border-t-gray-600"}`} />
-              : disponible ? "🟢" : "🔴"
+              ? <div className={`h-7 w-7 border-[3px] rounded-full animate-spin ${driverOnlineConfirmed ? "border-white/30 border-t-white" : "border-gray-300 border-t-gray-600"}`} />
+              : driverOnlineConfirmed ? "🟢" : "🔴"
             }
           </div>
           <div className="text-left">
-            <p className="text-2xl font-extrabold tracking-tight">{disponible ? "EN LIGNE" : "HORS LIGNE"}</p>
-            <p className={`text-xs mt-0.5 ${disponible ? "text-white/80" : "text-gray-500"}`}>
-              {disponible
+            <p className="text-2xl font-extrabold tracking-tight">{driverOnlineConfirmed ? "EN LIGNE" : "HORS LIGNE"}</p>
+            <p className={`text-xs mt-0.5 ${driverOnlineConfirmed ? "text-white/80" : "text-gray-500"}`}>
+              {driverOnlineConfirmed
                 ? (activeCourse ? "🚀 Course en cours" : "⚡ Prêt à recevoir des courses")
                 : "Appuyez pour recevoir des courses"}
             </p>
           </div>
         </div>
-        <div className={`h-8 w-14 rounded-full relative transition-all ${disponible ? "bg-white/30" : "bg-gray-200"}`}>
-          <div className={`absolute top-1 h-6 w-6 rounded-full shadow transition-all ${disponible ? "right-1 bg-white" : "left-1 bg-gray-400"}`} />
+        <div className={`h-8 w-14 rounded-full relative transition-all ${driverOnlineConfirmed ? "bg-white/30" : "bg-gray-200"}`}>
+          <div className={`absolute top-1 h-6 w-6 rounded-full shadow transition-all ${driverOnlineConfirmed ? "right-1 bg-white" : "left-1 bg-gray-400"}`} />
         </div>
       </button>
 
@@ -313,7 +353,7 @@ export default function LivreurHome({ user }) {
       ) : null}
 
       {/* Message si hors ligne */}
-      {!disponible && (
+      {!driverOnlineConfirmed && (
         <div className="rounded-2xl p-4 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-center">
           <p className="font-extrabold">💰 Passez en ligne pour recevoir des courses !</p>
         </div>
