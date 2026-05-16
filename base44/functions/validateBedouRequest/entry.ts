@@ -58,23 +58,12 @@ Deno.serve(async (req) => {
   let isAdmin = isAdminByEmail; // court-circuit immédiat si email principal
 
   if (!isAdmin) {
-    // Checks rapides JWT
-    isAdmin = user.role === 'admin'
-      || user.user_type === 'admin'
-      || user.current_role === 'admin'
-      || user.role_actuel === 'admin'
-      || (Array.isArray(user.profils) && user.profils.includes('admin'));
+    // Source unique: user.role === 'admin' (JWT)
+    isAdmin = user.role === 'admin';
   }
 
   if (!isAdmin) {
-    // Fallback BDD — seulement si JWT insuffisant
-    try {
-      const usersBDD = await base44.asServiceRole.entities.User.filter({ email: user.email });
-      isAdmin = usersBDD?.some(u => u.role === 'admin') || false;
-    } catch(_) {}
-  }
-
-  if (!isAdmin) {
+    // Fallback staff CDL uniquement
     try {
       const staffPerms = await base44.asServiceRole.entities.StaffPermission.filter({ userEmail: user.email, isActive: true });
       isAdmin = staffPerms?.some(p => p.staffAccessActive === true && p.isStaff === true) || false;
