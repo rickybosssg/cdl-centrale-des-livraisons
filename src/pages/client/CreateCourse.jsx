@@ -11,6 +11,7 @@ import AdBanner from "../../components/AdBanner";
 import GuidedOrderWizard from "@/components/GuidedOrderWizard";
 import GpsLocationManager from "@/components/GpsLocationManager";
 import AucunLivreurPanel from "@/components/AucunLivreurPanel";
+import SearchingLivreurScreen from "@/components/SearchingLivreurScreen";
 
 export default function CreateCourse() {
   const navigate = useNavigate();
@@ -154,90 +155,28 @@ export default function CreateCourse() {
 
   // Écran recherche livreur
   if (searchingCourse) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 space-y-6 text-center">
-        <div className="w-full max-w-sm">
-          <AdBanner placement="attente_livreur" userRole="client" />
-        </div>
-        {livreurTrouve ? (
-          <>
-            <div className="h-24 w-24 rounded-full bg-green-100 flex items-center justify-center">
-              <span className="text-5xl">🛵</span>
-            </div>
-            <div className="space-y-1">
-              <p className="text-2xl font-extrabold text-green-600">✅ Livreur trouvé !</p>
-              <p className="text-base font-semibold">{livreurTrouve.livreur_name}</p>
-              {livreurTrouve.telephone_livreur && (
-                <a href={`tel:${livreurTrouve.telephone_livreur}`} className="text-primary underline text-sm block">
-                  {livreurTrouve.telephone_livreur}
-                </a>
-              )}
-              <p className="text-sm text-muted-foreground mt-2">Votre livreur est en route pour récupérer votre colis.</p>
-            </div>
-            <Button className="w-full max-w-xs" onClick={() => navigate('/mes-courses')}>Suivre ma course</Button>
-          </>
-        ) : aucunLivreur ? (
+    if (aucunLivreur) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-5">
           <div className="w-full max-w-sm space-y-3">
             <AucunLivreurPanel
               course={searchingCourse}
-              onCourseUpdate={(updated) => {
-                setSearchingCourse(updated);
-                setAucunLivreur(false);
-              }}
+              onCourseUpdate={(updated) => { setSearchingCourse(updated); setAucunLivreur(false); }}
               onCancel={() => { setSearchingCourse(null); setAucunLivreur(false); navigate("/mes-courses"); }}
             />
-            <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => navigate('/mes-courses')}>
+            <button className="w-full text-xs text-muted-foreground text-center py-2" onClick={() => navigate('/mes-courses')}>
               Voir toutes mes courses
-            </Button>
+            </button>
           </div>
-        ) : (
-          <>
-            {/* Moto animée */}
-            <div className="relative flex items-center justify-center w-36 h-36">
-              <div className="absolute inset-0 rounded-full border-4 border-blue-100 border-t-blue-500 animate-spin" />
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-b-blue-200 animate-spin" style={{ animationDirection: "reverse", animationDuration: "1.5s" }} />
-              <div className="absolute inset-4 rounded-full bg-blue-50 flex items-center justify-center">
-                <motion.span
-                  className="text-4xl"
-                  animate={{ x: [0, 6, 0, -6, 0] }}
-                  transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut" }}
-                >
-                  🛵
-                </motion.span>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-center">
-              <p className="text-2xl font-extrabold text-gray-900">Recherche d'un livreur...</p>
-              <p className="text-sm text-gray-400">CDL cherche le meilleur livreur disponible près de vous.</p>
-            </div>
-
-            {/* Message rassurant */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="w-full max-w-xs p-4 rounded-2xl text-center"
-              style={{ background: "#EFF6FF", border: "1.5px solid #BFDBFE" }}
-            >
-              <p className="text-sm font-semibold text-blue-700">⚡ Un livreur va accepter sous quelques secondes.</p>
-              <p className="text-xs text-blue-400 mt-1">Restez sur cette page — vous serez notifié immédiatement.</p>
-            </motion.div>
-
-            <div className="flex flex-col gap-2 w-full max-w-xs text-xs text-gray-500">
-              <div className="flex items-center gap-2 p-2.5 rounded-xl" style={{ background: "#F0FDF4" }}>
-                <span className="text-green-500 font-bold">✓</span>
-                <span className="text-green-700 font-medium">Course créée avec succès</span>
-              </div>
-              <div className="flex items-center gap-2 p-2.5 rounded-xl" style={{ background: "#EFF6FF" }}>
-                <div className="h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
-                <span className="text-blue-600 font-medium">Analyse GPS en cours...</span>
-              </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => navigate('/mes-courses')}>Voir mes courses</Button>
-          </>
-        )}
-      </div>
+        </div>
+      );
+    }
+    return (
+      <SearchingLivreurScreen
+        course={searchingCourse}
+        livreurTrouve={livreurTrouve}
+        aucunLivreur={aucunLivreur}
+      />
     );
   }
 
