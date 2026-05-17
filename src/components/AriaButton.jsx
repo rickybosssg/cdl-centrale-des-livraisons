@@ -70,9 +70,21 @@ export default function AriaButton({ userRole = "client" }) {
   const [conversation, setConversation] = useState(null);
   const [initDone, setInitDone] = useState(false);
   const [showTooltip, setShowTooltip] = useState(true);
+  const [hasStickyCta, setHasStickyCta] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const inactivityTimer = useRef(null);
+
+  // Détecter si une page a un CTA sticky actif → remonter le FAB
+  useEffect(() => {
+    const check = () => {
+      setHasStickyCta(document.body.getAttribute('data-sticky-cta') === '1');
+    };
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['data-sticky-cta'] });
+    return () => observer.disconnect();
+  }, []);
 
   const role = userRole || "client";
   const suggestions = SUGGESTIONS[role] || SUGGESTIONS.client;
@@ -194,7 +206,10 @@ export default function AriaButton({ userRole = "client" }) {
 
       {/* ── Tooltip contextuel ── */}
       {showTooltip && !open && (
-        <div className="aria-tooltip fixed bottom-32 right-4 z-40 bg-gradient-to-r from-primary to-blue-700 text-white px-4 py-2.5 rounded-2xl shadow-xl text-sm font-semibold whitespace-nowrap pointer-events-none">
+        <div
+          className="aria-tooltip fixed right-4 z-40 bg-gradient-to-r from-primary to-blue-700 text-white px-4 py-2.5 rounded-2xl shadow-xl text-sm font-semibold whitespace-nowrap pointer-events-none"
+          style={{ bottom: hasStickyCta ? "calc(env(safe-area-inset-bottom) + 160px)" : "8rem" }}
+        >
           {contextLabel}
           <div className="absolute -bottom-1 right-6 w-3 h-3 bg-gradient-to-r from-primary to-blue-700 rotate-45" />
         </div>
@@ -206,12 +221,13 @@ export default function AriaButton({ userRole = "client" }) {
           setOpen(v => !v);
           setShowTooltip(false);
         }}
-        className={`aria-fab fixed bottom-24 right-5 z-50 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 flex-shrink-0 ${
+        className={`aria-fab fixed right-5 z-50 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 flex-shrink-0 ${
           open
             ? "h-12 w-12 bg-gray-800 text-white"
             : "h-16 w-16 bg-gradient-to-br from-primary via-blue-600 to-violet-600 text-white hover:scale-110"
         }`}
         style={{
+          bottom: hasStickyCta ? "calc(env(safe-area-inset-bottom) + 160px)" : "6rem",
           boxShadow: open
             ? "0 4px 16px rgba(0,0,0,0.2)"
             : "0 8px 32px rgba(29,113,205,0.45), 0 0 20px rgba(29,113,205,0.3)",
@@ -228,8 +244,12 @@ export default function AriaButton({ userRole = "client" }) {
       {/* ── Panel chat ── */}
        {open && (
         <div
-          className="fixed bottom-32 right-5 z-50 w-[calc(100vw-2.5rem)] max-w-sm bg-white rounded-3xl shadow-2xl border border-border flex flex-col overflow-hidden"
-          style={{ height: "480px", animation: "slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}
+          className="fixed right-5 z-50 w-[calc(100vw-2.5rem)] max-w-sm bg-white rounded-3xl shadow-2xl border border-border flex flex-col overflow-hidden"
+          style={{
+            height: "480px",
+            bottom: hasStickyCta ? "calc(env(safe-area-inset-bottom) + 240px)" : "9rem",
+            animation: "slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+          }}
         >
 
 

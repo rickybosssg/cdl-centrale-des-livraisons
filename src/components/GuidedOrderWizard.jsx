@@ -70,9 +70,59 @@ function ProgressBar({ step, total }) {
   );
 }
 
-// ── Bouton principal fixe en bas ─────────────────────────────────────────────
+// ── Footer CTA sticky (Uber-style) ───────────────────────────────────────────
+// Hauteur totale réservée : 80px bouton + padding + safe-area
+export const STICKY_FOOTER_HEIGHT = 88; // px, utilisé pour le padding-bottom du contenu
+
+function StickyFooter({ onClick, disabled, loading, children, color = PRIMARY }) {
+  const vibrate = () => { try { navigator.vibrate?.(30); } catch (_) {} };
+  return (
+    <div
+      className="fixed bottom-0 left-0 right-0 z-40"
+      style={{
+        background: "rgba(255,255,255,0.97)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderTop: "1px solid rgba(0,0,0,0.06)",
+        boxShadow: "0 -4px 24px rgba(0,0,0,0.08)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+        /* Safe area Android/iOS — bottom nav ~56px + safe-area */
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 72px)",
+        paddingTop: "12px",
+      }}
+    >
+      <div className="px-5">
+        <motion.button
+          onClick={() => { if (!disabled && !loading) { vibrate(); onClick?.(); } }}
+          disabled={disabled || loading}
+          whileTap={disabled || loading ? {} : { scale: 0.97 }}
+          transition={{ duration: 0.1 }}
+          className="w-full flex items-center justify-center gap-2 h-14 rounded-2xl text-white text-base font-bold"
+          style={{
+            background: disabled ? "#D1D5DB" : `linear-gradient(135deg, ${color}, ${color}CC)`,
+            boxShadow: disabled ? "none" : `0 4px 20px ${color}40`,
+          }}
+        >
+          {loading ? (
+            <span className="flex items-center gap-2">
+              <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }} className="inline-block text-xl">⏳</motion.span>
+              Création en cours...
+            </span>
+          ) : children}
+        </motion.button>
+      </div>
+    </div>
+  );
+}
+
+// BigBtn conservé pour compat (fixed ignoré, toujours StickyFooter)
 function BigBtn({ onClick, disabled, loading, children, color = PRIMARY, fixed = false }) {
-  const btn = (
+  if (fixed) {
+    return <StickyFooter onClick={onClick} disabled={disabled} loading={loading} color={color}>{children}</StickyFooter>;
+  }
+  const vibrate = () => { try { navigator.vibrate?.(30); } catch (_) {} };
+  return (
     <PressBtn
       onClick={onClick}
       disabled={disabled || loading}
@@ -90,14 +140,6 @@ function BigBtn({ onClick, disabled, loading, children, color = PRIMARY, fixed =
       ) : children}
     </PressBtn>
   );
-  if (fixed) {
-    return (
-      <div className="fixed bottom-0 left-0 right-0 z-30 px-5 pb-6 pt-3 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-        {btn}
-      </div>
-    );
-  }
-  return btn;
 }
 
 // ── Autocomplétion quartier ──────────────────────────────────────────────────
@@ -214,7 +256,7 @@ function StepType({ onSelect }) {
 // ── ÉTAPE 2 & 3 : Quartier ───────────────────────────────────────────────────
 function StepQuartier({ title, subtitle, icon, value, onChange, onNext, onUseGPS }) {
   return (
-    <div className="px-5 pt-2 pb-32 space-y-5">
+    <div className="px-5 pt-2 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 160px)" }}>
       <div>
         <div className="text-3xl mb-2">{icon}</div>
         <h2 className="text-2xl font-extrabold text-gray-900">{title}</h2>
@@ -236,7 +278,7 @@ function StepContact({ typeService, form, setForm, onNext }) {
   const valid = isDepl ? true : isEnvoyer ? (form.nom_destinataire && form.telephone_destinataire) : form.telephone_expediteur;
 
   return (
-    <div className="px-5 pt-2 pb-32 space-y-5">
+    <div className="px-5 pt-2 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 160px)" }}>
       <div>
         <div className="text-3xl mb-2">📞</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Contact</h2>
@@ -317,7 +359,7 @@ const COLIS_CHIPS = [
 
 function StepColis({ form, setForm, onNext }) {
   return (
-    <div className="px-5 pt-2 pb-32 space-y-5">
+    <div className="px-5 pt-2 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 160px)" }}>
       <div>
         <div className="text-3xl mb-2">📦</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Nature du colis</h2>
@@ -374,7 +416,7 @@ function StepPrix({ form, setForm, onNext }) {
   const inputRef = useRef();
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 350); }, []);
   return (
-    <div className="px-5 pt-2 pb-32 space-y-5">
+    <div className="px-5 pt-2 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 160px)" }}>
       <div>
         <div className="text-3xl mb-2">💰</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Prix proposé</h2>
@@ -520,7 +562,7 @@ function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal
   ].filter(Boolean);
 
   return (
-    <div className="px-5 pt-2 pb-32 space-y-5">
+    <div className="px-5 pt-2 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 160px)" }}>
       <div>
         <div className="text-3xl mb-2">📋</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Récapitulatif</h2>
@@ -585,6 +627,12 @@ console.log('[CLIENT_KEYBOARD_CONFIG_OK] GuidedOrderWizard — inputMode/type/au
 export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmit, loading }) {
   const [step, setStep]           = useState(1);
   const [dir, setDir]             = useState(1);
+
+  // Signaler au layout qu'un CTA sticky est actif → bouton chat doit remonter
+  useEffect(() => {
+    document.body.setAttribute('data-sticky-cta', step >= 2 ? '1' : '0');
+    return () => { document.body.removeAttribute('data-sticky-cta'); };
+  }, [step]);
   const [typeService, setType]    = useState(null);
   const [urgence, setUrgence]     = useState("normal");
   const [form, setForm]           = useState({
@@ -644,9 +692,9 @@ export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmi
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-white">
+    <div className="flex flex-col bg-white" style={{ minHeight: "100dvh" }}>
       {/* Header sticky */}
-      <div className="sticky top-0 bg-white z-20 border-b border-gray-100 shadow-sm">
+      <div className="sticky top-0 bg-white z-20 border-b border-gray-100 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3 px-4 py-3.5">
           {step > 1 && (
             <PressBtn onClick={back}
@@ -674,8 +722,8 @@ export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmi
         {step > 1 && <ProgressBar step={displayStep - 1} total={totalSteps - 1} />}
       </div>
 
-      {/* Contenu animé */}
-      <div className="flex-1 overflow-x-hidden">
+      {/* Contenu scrollable — indépendant du footer CTA */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         <AnimatePresence mode="wait" custom={dir}>
           <motion.div
             key={step}
