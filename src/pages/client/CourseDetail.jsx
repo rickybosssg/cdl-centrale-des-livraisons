@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
+import AucunLivreurPanel from "@/components/AucunLivreurPanel";
 import { ArrowLeft, MapPin, Phone, Package, Navigation, Map, AlertTriangle, RefreshCw, Bike } from "lucide-react";
 import NotationCourse from "../../components/NotationCourse";
 import MiniChat from "../../components/MiniChat";
@@ -34,11 +34,6 @@ export default function CourseDetail() {
   const navigate = useNavigate();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [nouveauPrix, setNouveauPrix] = useState("");
-  const [relancant, setRelancant] = useState(false);
-  const [relancantSeul, setRelancantSeul] = useState(false);
-  const [showPrixForm, setShowPrixForm] = useState(false);
-  const [prixErreur, setPrixErreur] = useState("");
   const [cancelDialog, setCancelDialog] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [user, setUser] = useState(null);
@@ -86,35 +81,6 @@ export default function CourseDetail() {
       })
       .catch(() => {});
   }, [course?.livreur_email, course?.statut, course?.livreur_photo]);
-
-  const relancerSeul = async () => {
-    setRelancantSeul(true);
-    await base44.entities.Course.update(course.id, { statut: 'en_attente', nombre_tentatives: 0 });
-    try { await base44.functions.invoke('autoDispatch', { course_id: course.id }); } catch (_) {}
-    setCourse(prev => ({ ...prev, statut: 'en_attente' }));
-    setRelancantSeul(false);
-  };
-
-  const relancerAvecNouveauPrix = async () => {
-    const px = parseInt(nouveauPrix, 10);
-    if (!px || px <= 0) { setPrixErreur("Prix invalide"); return; }
-    if (px <= (course.prix || 0)) { setPrixErreur(`Le nouveau prix doit être supérieur à ${course.prix} FCFA`); return; }
-    setPrixErreur("");
-    setRelancant(true);
-    await base44.entities.Course.update(course.id, {
-      prix: px,
-      montant_total: px,
-      commission_cdl: Math.round(px * 0.2),
-      gain_livreur: Math.round(px * 0.8),
-      statut: "en_attente",
-      nombre_tentatives: 0,
-    });
-    try { await base44.functions.invoke('autoDispatch', { course_id: course.id }); } catch (_) {}
-    setCourse(prev => ({ ...prev, prix: px, statut: "en_attente" }));
-    setNouveauPrix("");
-    setShowPrixForm(false);
-    setRelancant(false);
-  };
 
   if (loading) {
     return (
@@ -350,37 +316,13 @@ export default function CourseDetail() {
       {/* Boost panel */}
       <CourseBoostPanel course={course} onBoosted={() => load(true)} />
 
-      {/* Aucun livreur */}
+      {/* Aucun livreur — panel complet */}
       {course.statut === "aucun_livreur" && (
-        <Card className="border-red-300 bg-red-50">
-          <CardContent className="p-5 space-y-4">
-            <div className="text-center space-y-1">
-              <p className="text-base font-bold text-red-800">😔 Aucun livreur disponible</p>
-              <p className="text-xs text-red-700">Aucun livreur n'est disponible pour le moment.</p>
-              {course.nombre_tentatives > 0 && (
-                <p className="text-xs text-red-600">{course.nombre_tentatives} tentative(s) effectuée(s)</p>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 border-red-300 text-red-700 text-xs" onClick={relancerSeul} disabled={relancantSeul}>
-                {relancantSeul ? '⏳...' : '🔄 Relancer'}
-              </Button>
-              <Button className="flex-1 bg-amber-600 hover:bg-amber-700 text-xs" onClick={() => { setShowPrixForm(true); setNouveauPrix(String(Math.round((course.prix || 0) * 1.3))); }}>
-                💰 Nouveau prix
-              </Button>
-            </div>
-            {showPrixForm && (
-              <div className="space-y-2">
-                <Input type="number" placeholder={`Nouveau prix (min: ${(course.prix || 0) + 1} FCFA)`} value={nouveauPrix} onChange={e => { setNouveauPrix(e.target.value); setPrixErreur(''); }} />
-                {prixErreur && <p className="text-xs text-red-600">{prixErreur}</p>}
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1" onClick={() => { setShowPrixForm(false); setPrixErreur(''); }}>Annuler</Button>
-                  <Button className="flex-1 bg-amber-600" onClick={relancerAvecNouveauPrix} disabled={relancant || !nouveauPrix}>{relancant ? '⏳...' : 'Confirmer'}</Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <AucunLivreurPanel
+          course={course}
+          onCourseUpdate={(updated) => setCourse(updated)}
+          onCancel={() => setCourse(prev => ({ ...prev, statut: "annulee" }))}
+        />
       )}
 
       {/* Notation */}

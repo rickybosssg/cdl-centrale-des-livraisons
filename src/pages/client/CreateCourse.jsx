@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import AdBanner from "../../components/AdBanner";
 import GuidedOrderWizard from "@/components/GuidedOrderWizard";
 import GpsLocationManager from "@/components/GpsLocationManager";
+import AucunLivreurPanel from "@/components/AucunLivreurPanel";
 
 export default function CreateCourse() {
   const navigate = useNavigate();
@@ -176,19 +177,19 @@ export default function CreateCourse() {
             <Button className="w-full max-w-xs" onClick={() => navigate('/mes-courses')}>Suivre ma course</Button>
           </>
         ) : aucunLivreur ? (
-          <>
-            <div className="h-24 w-24 rounded-full bg-red-100 flex items-center justify-center">
-              <span className="text-5xl">😕</span>
-            </div>
-            <div className="space-y-1">
-              <p className="text-2xl font-extrabold text-red-600">Aucun livreur disponible</p>
-              <p className="text-sm text-muted-foreground">Réessayez plus tard ou augmentez le prix de la course.</p>
-            </div>
-            <div className="flex gap-3 w-full max-w-xs">
-              <Button variant="outline" className="flex-1" onClick={() => navigate('/mes-courses')}>Voir ma course</Button>
-              <Button className="flex-1" onClick={() => { setSearchingCourse(null); setAucunLivreur(false); }}>Modifier</Button>
-            </div>
-          </>
+          <div className="w-full max-w-sm space-y-3">
+            <AucunLivreurPanel
+              course={searchingCourse}
+              onCourseUpdate={(updated) => {
+                setSearchingCourse(updated);
+                setAucunLivreur(false);
+              }}
+              onCancel={() => { setSearchingCourse(null); setAucunLivreur(false); navigate("/mes-courses"); }}
+            />
+            <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => navigate('/mes-courses')}>
+              Voir toutes mes courses
+            </Button>
+          </div>
         ) : (
           <>
             {/* Moto animée */}
