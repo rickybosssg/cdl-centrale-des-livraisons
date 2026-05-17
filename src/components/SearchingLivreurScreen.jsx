@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
 
-// ── Durée par carte : entre 3s et 4.5s (variation dynamique) ─────────────
+// ── Durée par carte : entre 5s et 6s (lecture confortable, premium) ───────
 function nextDuration() {
-  return 3000 + Math.random() * 1500;
+  return 5000 + Math.random() * 1000;
 }
 
 // ── Vibreur léger "livreur notifié" ──────────────────────────────────────
@@ -300,11 +300,11 @@ function GhostDriverCard({ driver }) {
 
 // ── Variants Framer Motion pour les cartes ────────────────────────────────
 const cardVariants = {
-  enter: { opacity: 0, y: 14, scale: 0.97 },
+  enter: { opacity: 0, y: 18, scale: 0.96 },
   center: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -10, scale: 0.97 },
+  exit: { opacity: 0, y: -12, scale: 0.97 },
 };
-const cardTransition = { duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] };
+const cardTransition = { duration: 0.7, ease: [0.22, 1, 0.36, 1] };
 
 // ── Carte info individuelle ────────────────────────────────────────────────
 function InfoCard({ icon: Icon, iconColor, bgColor, label, value, accent }) {
