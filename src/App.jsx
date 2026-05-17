@@ -273,7 +273,6 @@ const AuthenticatedApp = () => {
     if (isAuthenticated) return; // Auth déjà OK → inutile
     const t = setTimeout(() => {
       if (isLoadingAuth || isLoadingPublicSettings) {
-        console.warn('[APP] HARD UNBLOCK après 20s — forcer affichage login');
         setHardUnblock(true);
       }
     }, 20000);
@@ -520,12 +519,9 @@ class ErrorBoundary extends Component {
     this.state = { hasError: false, error: null };
   }
   static getDerivedStateFromError(error) {
-    console.error('[ERROR] REACT ERROR BOUNDARY:', error?.message);
     return { hasError: true, error };
   }
-  componentDidCatch(error, info) {
-    console.error('[ERROR] COMPONENT STACK:', info?.componentStack);
-  }
+  componentDidCatch() {}
   render() {
     if (this.state.hasError) {
       return (

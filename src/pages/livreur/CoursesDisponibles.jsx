@@ -25,7 +25,7 @@ export default function CoursesDisponibles() {
     setLoading(true);
     const me = await base44.auth.me();
     setUser(me);
-    console.log(`[COURSES_DISPO_LOAD] user=${me.email} | driver_online=${me.driver_online} | disponible=${me.disponible}`);
+
 
     // Charger le profil livreur pour vérifier le statut de validation
     try {
@@ -55,12 +55,8 @@ export default function CoursesDisponibles() {
     let unsubUser = null;
     base44.auth.me().then(me => {
       if (!me?.email) return;
-      console.log(`[COURSES_DISPO_USER_SUBSCRIBE] user=${me.email}`);
       unsubUser = base44.entities.User.subscribe((event) => {
-        if (event.data?.email === me.email) {
-          console.log(`[COURSES_DISPO_USER_REALTIME] driver_online=${event.data?.driver_online} | disponible=${event.data?.disponible}`);
-          setUser(event.data);
-        }
+        if (event.data?.email === me.email) setUser(event.data);
       });
     }).catch(() => {});
     return () => { if (unsubUser) unsubUser(); };
@@ -68,32 +64,24 @@ export default function CoursesDisponibles() {
 
   useEffect(() => {
     loadData();
-    console.log('[REALTIME_DRIVER_LIST_START] subscription courses disponibles activée');
 
     const unsub = base44.entities.Course.subscribe((event) => {
       if (!event.data && event.type !== "delete") return;
-
       if (event.type === "create" && event.data?.statut === "en_attente") {
-        console.log(`[REALTIME_DRIVER_LIST_UPDATE] nouvelle course reçue | id=${event.id} | statut=en_attente`);
         setCourses(prev => {
           if (prev.find(c => c.id === event.id)) return prev;
           return [event.data, ...prev];
         });
       } else if (event.type === "update") {
         if (event.data?.statut !== "en_attente") {
-          console.log(`[REALTIME_DRIVER_LIST_UPDATE] course retirée | id=${event.id} | statut=${event.data?.statut}`);
           setCourses(prev => prev.filter(c => c.id !== event.id));
         }
       } else if (event.type === "delete") {
-        console.log(`[REALTIME_DRIVER_LIST_UPDATE] course supprimée | id=${event.id}`);
         setCourses(prev => prev.filter(c => c.id !== event.id));
       }
     });
 
-    return () => {
-      console.log('[REALTIME_DRIVER_LIST_UNSUBSCRIBE] désinscription subscription courses disponibles');
-      unsub?.();
-    };
+    return () => unsub?.();
   }, []);
 
   const accepter = async (course) => {
@@ -159,7 +147,6 @@ export default function CoursesDisponibles() {
 
   // ── Source unique BDD confirmée (jamais d'état local optimiste) ─────────────
   const enLigne = user?.driver_online === true && user?.disponible !== false;
-  console.log(`[COURSES_DISPO_RENDER] driver_online=${user?.driver_online} | disponible=${user?.disponible} | enLigne=${enLigne}`);
 
   return (
     <div className="space-y-4 pb-24">

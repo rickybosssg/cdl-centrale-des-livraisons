@@ -62,7 +62,6 @@ const PROFILE_CFG = {
 };
 
 export default function Home() {
-  console.log('[HOME] Render start');
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [user, setUser] = useState(null);
@@ -88,7 +87,7 @@ export default function Home() {
       setAllProfiles(profsArray);
 
       const isAdmin = isAdminUser(me);
-      console.log(`[PROFILE_SOURCE] loadUser | email=${me.email} | role=${me.role} | active_profile_type=${me.active_profile_type} | isAdmin=${isAdmin}`);
+
 
       if (!isAdmin && profsArray.length > 0) {
         // ── RÉSOLUTION DU PROFIL ACTIF ──────────────────────────────────
@@ -109,8 +108,7 @@ export default function Home() {
           }
         }
       }
-    } catch (err) {
-      console.error('[Home] Erreur chargement:', err);
+    } catch {
       setUser(null);
       setAllProfiles([]);
     } finally {
@@ -120,7 +118,6 @@ export default function Home() {
 
   // Mount: charger user si authentifié
   useEffect(() => {
-    console.log('[HOME] useEffect MOUNT - isAuth:', isAuthenticated);
     if (isAuthenticated) {
       loadUser();
     } else {
@@ -130,13 +127,10 @@ export default function Home() {
 
   // Souscription temps réel
   useEffect(() => {
-    console.log('[HOME] useEffect SUBSCRIBE - user:', user?.email);
     if (!user?.email) return;
     
     const unsubscribe = base44.entities.UserProfile.subscribe((event) => {
-      console.log('[HOME] UserProfile event:', event.type, event?.data?.id);
       if (event?.data?.user_email === user.email) {
-        console.log('[HOME] setAllProfiles mutation triggered');
         setAllProfiles(prev => {
           const arr = Array.isArray(prev) ? prev : [];
           if (event.type === 'delete') {
@@ -182,25 +176,18 @@ export default function Home() {
     window.dispatchEvent(new CustomEvent('cdl_profile_switch', { detail: { role: newRole } }));
 
     // 3. Persister en BDD en arrière-plan (sans bloquer l'UI)
-    base44.functions.invoke('switchActiveProfile', { profile_type: newRole })
-      .catch(err => {
-        console.error('[Home] Erreur switchActiveProfile BDD:', err);
-      });
+    base44.functions.invoke('switchActiveProfile', { profile_type: newRole }).catch(() => {});
   };
 
   if (loading) {
-    console.log('[HOME] Still loading...');
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
-  console.log('[HOME] Loading done, user:', user?.email, 'profiles:', allProfiles.length);
-
   // Pas authentifié → redirection immédiate vers /connexion
   if (!user) {
-    console.log('[HOME] NOT AUTHENTICATED - redirecting to /connexion');
     window.location.replace('/connexion');
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-primary to-blue-700">
@@ -209,13 +196,8 @@ export default function Home() {
     );
   }
 
-  // Admin — source unique: user.role === 'admin'
   const isAdmin = isAdminUser(user);
-  console.log('[HOME] IS ADMIN?', isAdmin, '| source=user.role | value=', user?.role);
-  if (isAdmin) {
-    console.log('[HOME] Rendering AdminDashboardPro');
-    return <AdminDashboardPro />;
-  }
+  if (isAdmin) return <AdminDashboardPro />;
 
   const profilesArray = Array.isArray(allProfiles) ? allProfiles : [];
 
@@ -240,7 +222,6 @@ export default function Home() {
 
   // Pas de profil
   if (!activeUserProfile) {
-    console.log('[HOME] NO ACTIVE PROFILE - rendering RoleSetup');
     return <RoleSetup onComplete={loadUser} />;
   }
 
@@ -292,53 +273,30 @@ export default function Home() {
   // Priorité : activeProfileId local > user.active_profile_type BDD > premier profil actif
   // JAMAIS forcer client par défaut si profil actif = livreur
   const renderDashboard = () => {
-    console.log(
-      `[PROFILE_ROUTE_DECISION] activeProfileType=${activeProfileType} | activeProfileId=${activeProfileId} | user.active_profile_type=${user?.active_profile_type} | user.email=${user?.email}`
-    );
     switch (activeProfileType) {
-      case 'client':     
-        console.log('[PROFILE_ROUTE_DECISION] → ClientHome');
-        return <ClientHome user={user} />;
-      case 'livreur':    
-        console.log('[PROFILE_ROUTE_DECISION] → LivreurHome');
-        return <LivreurHome user={user} />;
-      case 'partenaire': 
-        console.log('[PROFILE_ROUTE_DECISION] → DashboardPartenaire');
-        return <DashboardPartenaire user={user} />;
-      case 'commercial': 
-        console.log('[PROFILE_ROUTE_DECISION] → DashboardCommercial');
-        return <DashboardCommercial user={user} />;
-      case 'annonceur':  
-        console.log('[PROFILE_ROUTE_DECISION] → DashboardAnnonceur');
-        return <DashboardAnnonceur user={user} />;
-      default:
-        // ⚠️ JAMAIS forcer client si profil BDD dit autrement
-        // Si user.active_profile_type est défini, tenter de l'utiliser en fallback
+      case 'client':     return <ClientHome user={user} />;
+      case 'livreur':    return <LivreurHome user={user} />;
+      case 'partenaire': return <DashboardPartenaire user={user} />;
+      case 'commercial': return <DashboardCommercial user={user} />;
+      case 'annonceur':  return <DashboardAnnonceur user={user} />;
+      default: {
         if (user?.active_profile_type && user.active_profile_type !== activeProfileType) {
-          console.warn(`[PROFILE_ROUTE_DECISION] activeProfileType inconnu (${activeProfileType}) mais user.active_profile_type=${user.active_profile_type} — re-résolution`);
-          // Re-résoudre depuis BDD
           const byBdd = profilesArray.find(p => p?.profile_type === user.active_profile_type && !p?.deleted);
           if (byBdd) {
-            console.log(`[PROFILE_ROUTE_DECISION] Re-résolu depuis BDD → ${user.active_profile_type}`);
             localStorage.setItem('activeProfileId', byBdd.id);
             setActiveProfileId(byBdd.id);
           }
         }
-        console.warn(`[PROFILE_ROUTE_DECISION] activeProfileType inconnu: "${activeProfileType}" — FALLBACK client uniquement si aucun profil livreur`);
-        // Ne retourner ClientHome que s'il n'y a vraiment pas de profil livreur actif
         const hasLivreurProfile = profilesArray.find(p => p?.profile_type === 'livreur' && p?.status === 'actif' && !p?.deleted);
-        if (hasLivreurProfile) {
-          console.warn('[PROFILE_ROUTE_DECISION] Profil livreur actif trouvé — routing vers LivreurHome au lieu de client');
-          return <LivreurHome user={user} />;
-        }
+        if (hasLivreurProfile) return <LivreurHome user={user} />;
         return <ClientHome user={user} />;
+      }
     }
   };
 
   const activeProfiles = profilesArray.filter(p => p?.status === 'actif');
   const pendingProfiles = profilesArray.filter(p => p?.status === 'en_attente');
   const incompleteProfiles = profilesArray.filter(p => p?.status === 'incomplet');
-  console.log('[HOME] FINAL RENDER - active:', activeProfiles.length, 'pending:', pendingProfiles.length, 'incomplete:', incompleteProfiles.length);
 
   return (
     <div className="space-y-0">
@@ -485,9 +443,7 @@ export default function Home() {
                         setShowSwitch(false);
                         await loadUser();
                       }
-                    } catch (err) { 
-                      console.error('[Home] Erreur annulation:', err); 
-                    }
+                    } catch { /* silencieux */ }
                   }}
                   className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-red-600 text-white"
                 >
