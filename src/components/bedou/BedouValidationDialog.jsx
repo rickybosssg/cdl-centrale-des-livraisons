@@ -5,7 +5,6 @@
  */
 import { useState } from "react";
 import { toast } from "sonner";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 
@@ -201,7 +200,31 @@ export default function BedouValidationDialog({ request, onClose, onSuccess }) {
           {/* Commentaire */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-gray-600">Commentaire (obligatoire pour refus)</label>
-            <Textarea placeholder="Motif de refus ou note interne..." value={comment} onChange={e => setComment(e.target.value)} rows={2} disabled={processing} />
+            <textarea
+              placeholder="Motif de refus ou note interne..."
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              rows={3}
+              disabled={processing}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '10px',
+                border: '1.5px solid #d1d5db',
+                background: '#ffffff',
+                color: '#111827',
+                caretColor: '#111827',
+                WebkitTextFillColor: '#111827',
+                opacity: 1,
+                fontSize: '14px',
+                lineHeight: '1.5',
+                resize: 'vertical',
+                outline: 'none',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
+                cursor: processing ? 'not-allowed' : 'text',
+              }}
+            />
           </div>
 
           {/* Diagnostic v4 */}
