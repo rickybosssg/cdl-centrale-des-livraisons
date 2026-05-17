@@ -148,6 +148,7 @@ import PushV2Audit from './pages/dispatcher/PushV2Audit';
 import SystemHealth from './pages/dispatcher/SystemHealth';
 import AdminLogs from './pages/dispatcher/AdminLogs';
 import IntegrityDashboard from './pages/dispatcher/IntegrityDashboard';
+import AuthFlowAudit from './pages/AuthFlowAudit';
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -380,6 +381,7 @@ const AuthenticatedApp = () => {
         <Route path="/track/:courseId" element={<TrackingPublic />} />
         <Route path="/telecharger-app" element={<DownloadApp />} />
         <Route path="/reset-admin" element={<ResetAdmin />} />
+        <Route path="/auth-flow-audit" element={<AuthFlowAudit />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />
 

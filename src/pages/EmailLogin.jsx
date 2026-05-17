@@ -111,49 +111,81 @@ export default function EmailLogin() {
 
   // ── Inscription ────────────────────────────────────────────────────────────
   const handleRegister = async () => {
+    // ── Validation ──────────────────────────────────────────────────────────
     if (!prenom.trim()) { setMessage("Prénom requis"); return; }
     if (!nom.trim()) { setMessage("Nom requis"); return; }
     if (!telephone.trim()) { setMessage("Numéro de téléphone requis"); return; }
-    if (!email) { setMessage("Email requis"); return; }
+    if (!email.trim()) { setMessage("Adresse email requise"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setMessage("Adresse email invalide"); return; }
     if (!password) { setMessage("Mot de passe requis"); return; }
-    if (password.length < 6) { setMessage("Mot de passe trop court (6 caractères minimum)"); return; }
+    if (password.length < 6) { setMessage("Mot de passe trop court — 6 caractères minimum"); return; }
     if (password !== confirmPassword) { setMessage("Les mots de passe ne correspondent pas"); return; }
+
+    console.log("[SIGNUP_START] email=" + email.trim().toLowerCase());
+    console.log("[SIGNUP_VALIDATION_OK] tous les champs validés");
 
     setLoading(true); clear();
     try {
       const fullName = `${prenom.trim()} ${nom.trim()}`;
       const cleanEmail = email.trim().toLowerCase();
 
+      // ── Appel API inscription ────────────────────────────────────────────
+      console.log("[SIGNUP_API_CALL] POST /register | email=" + cleanEmail);
       const { ok, status, data } = await authFetch("/register", {
         email: cleanEmail,
         password,
         full_name: fullName,
       });
+      console.log("[SIGNUP_API_RESPONSE] ok=" + ok + " | status=" + status + " | hasToken=" + !!(data?.access_token || data?.token));
 
       const token = data?.access_token || data?.token;
 
       if (ok && token) {
+        // ── Token reçu → connexion automatique ──────────────────────────
         saveToken(token);
-        // Sauvegarder téléphone + nom complet sur le profil
-        try {
-          await base44.auth.updateMe({ full_name: fullName, telephone: telephone.trim() });
-        } catch (_) {}
+        saveCredentials(cleanEmail, password);
+        try { localStorage.setItem('cdl_admin_pwd', password); } catch(_) {}
+
+        // Sauvegarder téléphone + nom complet (non bloquant)
+        base44.auth.updateMe({ full_name: fullName, telephone: telephone.trim() }).catch(e => {
+          console.warn("[SIGNUP] updateMe non-bloquant:", e?.message);
+        });
+
+        // Force re-enregistrement FCM
+        try { window.dispatchEvent(new CustomEvent('cdl_fcm_force_register', { detail: { email: cleanEmail } })); } catch (_) {}
+
+        startSessionPing();
+        console.log("[SIGNUP_SUCCESS] token OK | navigation → /");
+        setLoggedIn({ email: cleanEmail });
         setLoading(false);
         navigateHome();
-      } else if (ok) {
-        setSuccessMsg("Compte créé ! Connectez-vous avec votre email et mot de passe.");
+
+      } else if (ok && !token) {
+        // ── Compte créé mais pas de token → demander connexion manuelle ──
+        console.log("[SIGNUP_SUCCESS] compte créé sans token → mode login");
+        setSuccessMsg("✅ Compte créé ! Connectez-vous avec votre email et mot de passe.");
         goTo("login");
         setLoading(false);
+
       } else {
-        const msg = data?.error || data?.detail || "";
+        // ── Erreur API ─────────────────────────────────────────────────
+        const msg = data?.error || data?.detail || data?.message || "";
+        console.error("[SIGNUP_ERROR] status=" + status + " | msg=" + msg);
+        const isExist = msg.toLowerCase().includes("exist") || msg.toLowerCase().includes("already") || status === 409;
+        const isNetwork = status === 0 || status >= 500;
         setMessage(
-          msg.toLowerCase().includes("exist") || msg.toLowerCase().includes("already")
-            ? "Un compte existe déjà avec cet email"
-            : "Erreur lors de la création — réessayez"
+          isExist   ? "Un compte existe déjà avec cet email. Connectez-vous !" :
+          isNetwork ? "Erreur serveur — réessayez dans un instant" :
+                      "Erreur lors de la création — vérifiez vos informations"
         );
         setLoading(false);
       }
-    } catch { setMessage("Erreur réseau — vérifiez votre connexion"); setLoading(false); }
+    } catch (err) {
+      console.error("[SIGNUP_ERROR] Exception:", err?.message || err);
+      const isOffline = !navigator.onLine || err?.message?.toLowerCase().includes("network") || err?.message?.toLowerCase().includes("fetch");
+      setMessage(isOffline ? "Connexion internet indisponible — vérifiez votre réseau" : "Erreur serveur — réessayez");
+      setLoading(false);
+    }
   };
 
   // ── Mot de passe oublié ────────────────────────────────────────────────────
