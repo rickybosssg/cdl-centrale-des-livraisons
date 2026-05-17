@@ -17,7 +17,15 @@ function getAuthToken() {
 
 export default function AppLayoutWrapper({ user }) {
   // ⚠️ Tous les hooks d'abord — jamais après un return conditionnel (Rules of Hooks)
-  const [userRole, setUserRole] = useState("client");
+  // Initialiser userRole depuis localStorage immédiatement pour éviter le flash "client"
+  const [userRole, setUserRole] = useState(() => {
+    try {
+      // Lire active_profile_type stocké en session si disponible (plus fiable que localStorage seul)
+      const stored = sessionStorage.getItem('cdl_active_role') || localStorage.getItem('cdl_active_role');
+      if (stored && ['livreur', 'client', 'partenaire', 'commercial', 'annonceur', 'admin'].includes(stored)) return stored;
+    } catch (_) {}
+    return "client";
+  });
   const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [prenom, setPrenom] = useState("");
@@ -91,7 +99,10 @@ export default function AppLayoutWrapper({ user }) {
               if (resolved) localStorage.setItem('activeProfileId', resolved.id);
             }
 
-            setUserRole(resolved?.profile_type || getActiveProfileType(me) || 'client');
+            const role = resolved?.profile_type || getActiveProfileType(me) || 'client';
+            setUserRole(role);
+            // Persister le rôle pour initialisation rapide au prochain mount
+            try { sessionStorage.setItem('cdl_active_role', role); localStorage.setItem('cdl_active_role', role); } catch (_) {}
           } catch (_) {
             setUserRole(getActiveProfileType(me) || 'client');
           }
@@ -146,8 +157,12 @@ export default function AppLayoutWrapper({ user }) {
   // Home.jsx dispatch cet event après avoir mis à jour localStorage + state local
   useEffect(() => {
     const onProfileSwitch = (e) => {
-    const newRole = e.detail?.role;
-    if (newRole) setUserRole(newRole);
+      const newRole = e.detail?.role;
+      if (newRole) {
+        setUserRole(newRole);
+        // Persister pour initialisation rapide au prochain mount
+        try { sessionStorage.setItem('cdl_active_role', newRole); localStorage.setItem('cdl_active_role', newRole); } catch (_) {}
+      }
     };
     window.addEventListener('cdl_profile_switch', onProfileSwitch);
     return () => window.removeEventListener('cdl_profile_switch', onProfileSwitch);

@@ -107,21 +107,30 @@ export default function LivreurHome({ user: initialUser }) {
   const { gpsMsg, gpsLoading, requestGPS } = useGPS(user?.email);
   const { bedou, loadingBedou } = useBedou(user?.email);
 
-  // Valeur réelle confirmée en BDD (pas optimiste, pas d'état local)
+  // Valeur réelle confirmée en BDD (source unique — jamais optimiste)
   const driverOnlineConfirmed = user?.driver_online === true;
-  const disponibleConfirmed = user?.disponible !== false;
 
-  // ── Subscription temps réel USER (source unique pour driver_online, disponible, GPS, profil) ────
+  // ── Re-lecture BDD au mount pour avoir l'état frais (évite valeur périmée du parent) ──
+  useEffect(() => {
+    if (!initialUser?.email) return;
+    base44.auth.me().then(fresh => {
+      if (fresh?.email === initialUser.email) setUser(fresh);
+    }).catch(() => {});
+  }, [initialUser?.email]);
+
+  // ── Subscription temps réel USER (source unique pour driver_online, GPS, profil) ──
   useEffect(() => {
     if (!initialUser?.email) return;
     const unsubUser = base44.entities.User.subscribe((event) => {
-      if (event.data?.email === initialUser.email) {
+      if (!event.data) return;
+      // Matcher par email OU par id pour être robuste
+      if (event.data?.email === initialUser.email || event.id === initialUser.id) {
         setUser(event.data);
         setSyncError(null);
       }
     });
     return () => { if (unsubUser) unsubUser(); };
-  }, [initialUser?.email]);
+  }, [initialUser?.email, initialUser?.id]);
 
   // ── Chargement courses ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -167,20 +176,30 @@ export default function LivreurHome({ user: initialUser }) {
 
   // ── Toggle en ligne — Valeur confirmée BDD uniquement ────────────────────────
   const toggleOnline = async () => {
+    if (toggling) return; // Anti double-clic
     const next = !driverOnlineConfirmed;
+    console.log('[DRIVER_ONLINE_TOGGLE_CLICK]', { from: driverOnlineConfirmed, to: next, email: user?.email });
     setToggling(true);
     try {
       await base44.auth.updateMe({
-        disponible: next,
         driver_online: next,
+        disponible: next,
         last_seen: new Date().toISOString(),
       });
-      toast.success(next ? "🟢 En ligne" : "🔴 Hors ligne");
+      // Relire la BDD pour afficher la vraie valeur confirmée (pas optimiste)
+      const fresh = await base44.auth.me();
+      if (fresh) setUser(fresh);
+      const confirmed = fresh?.driver_online === true;
+      console.log('[DRIVER_ONLINE_SAVE_SUCCESS]', { saved: next, confirmed, email: user?.email });
+      setSyncError(null);
+      toast.success(confirmed ? "🟢 En ligne" : "🔴 Hors ligne");
     } catch (err) {
-      setSyncError(`Erreur de synchronisation: ${err.message}`);
-      toast.error("Erreur de mise à jour");
+      console.log('[DRIVER_ONLINE_SAVE_ERROR]', { err: err.message, email: user?.email });
+      setSyncError(null);
+      toast.error("Impossible de changer votre disponibilité. Réessayez.");
+    } finally {
+      setToggling(false);
     }
-    setToggling(false);
   };
 
   if (!user?.email) return null;
@@ -192,7 +211,7 @@ export default function LivreurHome({ user: initialUser }) {
   const completedToday = arr.filter(c => c.statut === "livree" && new Date(c.updated_date || c.date_livraison).toDateString() === today);
   const gainsJour = completedToday.reduce((s, c) => s + (c.gain_livreur || 0), 0);
   const totalLivrees = arr.filter(c => c.statut === "livree").length;
-  const dispatchable = isDriverDispatchable({ ...user, disponible: disponibleConfirmed });
+  const dispatchable = isDriverDispatchable(user);
 
   return (
     <div className="space-y-4 pb-24">

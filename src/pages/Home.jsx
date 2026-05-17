@@ -23,29 +23,48 @@ import AttentePage from "./AttentePage";
 
 /**
  * Résoudre le profil actif depuis la liste des profils.
- * Source unique : user.active_profile_type
- * Fallback localStorage UNIQUEMENT pour les switches récents en cours de persistance BDD.
+ * Ordre de priorité strict :
+ *   P1 : localStorage activeProfileId (switch récent, toujours le plus récent)
+ *   P2 : user.active_profile_type BDD
+ *   P3 : premier profil 'actif' (nouvel utilisateur uniquement — jamais forcer client)
+ *
+ * RÈGLE ABSOLUE : si un profil livreur actif existe, on ne bascule JAMAIS vers client.
  */
 function resolveActiveProfile(profiles, storedId, activeProfileTypeFromUser) {
   if (!Array.isArray(profiles) || profiles.length === 0) return null;
 
-  // Priorité 1 : active_profile_type BDD (source officielle)
+  // Priorité 1 : localStorage (switch récent — toujours respecter le dernier choix utilisateur)
+  if (storedId) {
+    const byId = profiles.find(p => p?.id === storedId && !p?.deleted);
+    if (byId) {
+      console.log('[PROFILE_ROUTE_DECISION] P1 localStorage', byId.profile_type, storedId);
+      return byId;
+    }
+    // ID périmé (profil supprimé) → nettoyer
+    localStorage.removeItem('activeProfileId');
+  }
+
+  // Priorité 2 : active_profile_type BDD (source officielle post-switch)
   if (activeProfileTypeFromUser) {
     const byActive = profiles.find(p => p?.profile_type === activeProfileTypeFromUser && !p?.deleted);
     if (byActive) {
-      if (byActive.id !== storedId) localStorage.setItem('activeProfileId', byActive.id);
+      localStorage.setItem('activeProfileId', byActive.id);
+      console.log('[PROFILE_ROUTE_DECISION] P2 BDD active_profile_type', byActive.profile_type);
       return byActive;
     }
   }
-  // Priorité 2 : localStorage (switch récent, avant que BDD soit à jour)
-  if (storedId) {
-    const byId = profiles.find(p => p?.id === storedId && !p?.deleted);
-    if (byId) return byId;
-    localStorage.removeItem('activeProfileId');
+
+  // Priorité 3 : fallback uniquement si aucune source connue (premier login)
+  // Préférer livreur > client pour ne jamais basculer silencieusement vers client
+  const livreurActif = profiles.find(p => p?.profile_type === 'livreur' && p?.status === 'actif' && !p?.deleted);
+  if (livreurActif) {
+    localStorage.setItem('activeProfileId', livreurActif.id);
+    console.log('[PROFILE_ROUTE_DECISION] P3 fallback livreur actif trouvé');
+    return livreurActif;
   }
-  // Priorité 3 : premier profil actif (nouvel utilisateur)
   const fallback = profiles.find(p => p?.status === 'actif' && !p?.deleted) || profiles.find(p => !p?.deleted);
   if (fallback?.id) localStorage.setItem('activeProfileId', fallback.id);
+  console.log('[PROFILE_ROUTE_DECISION] P3 fallback générique', fallback?.profile_type);
   return fallback || null;
 }
 
@@ -88,13 +107,13 @@ export default function Home() {
 
       if (!isAdmin && profsArray.length > 0) {
         // ── RÉSOLUTION DU PROFIL ACTIF ──────────────────────────────────
-        // P1 : active_profile_type BDD (SOURCE UNIQUE officielle)
-        // P2 : localStorage (switch récent non encore persisté en BDD)
-        // P3 : premier profil actif (fallback nouvel utilisateur)
+        // P1 : localStorage (choix le plus récent de l'utilisateur)
+        // P2 : active_profile_type BDD
+        // P3 : fallback (livreur actif prioritaire sur client)
+        // RÈGLE : on ne bascule JAMAIS silencieusement vers client si livreur actif
         const currentStoredId = localStorage.getItem('activeProfileId');
-        const storedId = activeProfileId || currentStoredId;
 
-        const resolved = resolveActiveProfile(profsArray, storedId, me.active_profile_type);
+        const resolved = resolveActiveProfile(profsArray, currentStoredId, me.active_profile_type);
 
         if (resolved?.id) {
           localStorage.setItem('activeProfileId', resolved.id);
@@ -164,6 +183,7 @@ export default function Home() {
 
     // 1. Mettre à jour le state local IMMÉDIATEMENT — reflète active_profile_type avant BDD
     localStorage.setItem('activeProfileId', profileId);
+    try { sessionStorage.setItem('cdl_active_role', newRole); localStorage.setItem('cdl_active_role', newRole); } catch (_) {}
     setActiveProfileId(profileId);
     // Mettre à jour active_profile_type localement (sera confirmé par BDD via switchActiveProfile)
     setUser(prev => prev ? { ...prev, active_profile_type: newRole } : prev);
@@ -267,9 +287,10 @@ export default function Home() {
   }
 
   // ── DÉCISION ROUTING PROFIL — SOURCE UNIQUE BDD ──────────────────────────────
-  // Priorité : activeProfileId local > user.active_profile_type BDD > premier profil actif
-  // JAMAIS forcer client par défaut si profil actif = livreur
+  // activeProfileType vient de activeUserProfile qui est résolu par resolveActiveProfile()
+  // JAMAIS basculer silencieusement vers client si profil actif = livreur
   const renderDashboard = () => {
+    console.log('[PROFILE_ROUTE_DECISION] renderDashboard', activeProfileType, { activeProfileId });
     switch (activeProfileType) {
       case 'client':     return <ClientHome user={user} />;
       case 'livreur':    return <LivreurHome user={user} />;
@@ -277,15 +298,17 @@ export default function Home() {
       case 'commercial': return <DashboardCommercial user={user} />;
       case 'annonceur':  return <DashboardAnnonceur user={user} />;
       default: {
-        if (user?.active_profile_type && user.active_profile_type !== activeProfileType) {
-          const byBdd = profilesArray.find(p => p?.profile_type === user.active_profile_type && !p?.deleted);
-          if (byBdd) {
-            localStorage.setItem('activeProfileId', byBdd.id);
-            setActiveProfileId(byBdd.id);
-          }
+        // Jamais forcer client — chercher livreur en priorité
+        const hasLivreurActif = profilesArray.find(p => p?.profile_type === 'livreur' && p?.status === 'actif' && !p?.deleted);
+        if (hasLivreurActif) {
+          localStorage.setItem('activeProfileId', hasLivreurActif.id);
+          console.log('[PROFILE_ROUTE_DECISION] default fallback → livreur actif trouvé');
+          return <LivreurHome user={user} />;
         }
-        const hasLivreurProfile = profilesArray.find(p => p?.profile_type === 'livreur' && p?.status === 'actif' && !p?.deleted);
-        if (hasLivreurProfile) return <LivreurHome user={user} />;
+        const hasClientActif = profilesArray.find(p => p?.profile_type === 'client' && p?.status === 'actif' && !p?.deleted);
+        if (hasClientActif) {
+          localStorage.setItem('activeProfileId', hasClientActif.id);
+        }
         return <ClientHome user={user} />;
       }
     }
