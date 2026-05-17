@@ -89,11 +89,8 @@ export async function getDispatchMode() {
   try {
     const rows = await base44.entities.DispatchModeState.list('-updated_date', 1);
     const doc = rows[0];
-    const mode = doc?.mode === 'manuel' ? 'manuel' : 'auto';
-    console.log(`[DISPATCH_MODE_READ] source=DispatchModeState | fn=getDispatchMode | mode=${mode} | id=${doc?.id || 'none'}`);
-    return mode;
-  } catch (err) {
-    console.warn(`[DISPATCH_MODE_READ] Erreur lecture DispatchModeState — mode inconnu | err=${err?.message}`);
+    return doc?.mode === 'manuel' ? 'manuel' : 'auto';
+  } catch {
     return null;
   }
 }

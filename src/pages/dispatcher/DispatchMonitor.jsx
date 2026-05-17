@@ -576,6 +576,21 @@ export default function DispatchMonitor() {
         <span><strong className="text-green-700">{livreesToday.length}</strong> livraison(s) effectuée(s) aujourd'hui</span>
       </div>
 
+      {/* Audit courses actives */}
+      <button
+        onClick={() => navigate('/admin/audit-courses-actives')}
+        className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-orange-300 bg-orange-50 hover:bg-orange-100 active:scale-95 transition-all"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-base">🔍</span>
+          <div className="text-left">
+            <p className="text-sm font-bold text-orange-800">Audit livreurs "faux occupés"</p>
+            <p className="text-[10px] text-orange-600">Détecter & corriger les compteurs divergents</p>
+          </div>
+        </div>
+        <span className="text-orange-500 text-sm font-bold">→</span>
+      </button>
+
       {/* Stats d'optimisation */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">📈 Analyse & optimisation</p>

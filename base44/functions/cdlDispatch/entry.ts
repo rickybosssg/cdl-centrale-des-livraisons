@@ -13,15 +13,35 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// ── Statuts de course réellement actifs ──────────────────────────────────────
+const ACTIVE_COURSE_STATUTS = new Set([
+  'assignee_attente', 'acceptee', 'driver_en_route_pickup',
+  'arrived_pickup', 'en_cours', 'arrived_dropoff',
+]);
+
 // ── Éligibilité livreur (critères unifiés) ────────────────────────────────────
-function isEligible(driver, excluded = new Set()) {
+function isEligible(driver, excluded = new Set(), realActiveCount = null) {
   if (excluded.has(driver.email)) return false;
   if (driver.driver_online !== true) return false;
   if (!driver.profil_valide && driver.statut_validation_livreur !== 'valide' && driver.statut_validation_livreur !== 'actif') return false;
   if (driver.livreur_bloque || driver.livreur_suspendu) return false;
   if (driver.disponible === false) return false;
-  if ((driver.nombre_courses_actives || 0) >= 2) return false;
+  // Utiliser le vrai compteur BDD si disponible, sinon le champ User (fallback)
+  const activeCount = realActiveCount !== null ? realActiveCount : (driver.nombre_courses_actives || 0);
+  if (activeCount >= 2) return false;
   return true;
+}
+
+// ── Recalcul des vrais compteurs actifs depuis les courses ────────────────────
+async function getRealActiveCountsFromDB(base44) {
+  const courses = await base44.asServiceRole.entities.Course.list('-created_date', 500);
+  const counts = {};
+  for (const c of courses) {
+    if (c.livreur_email && ACTIVE_COURSE_STATUTS.has(c.statut)) {
+      counts[c.livreur_email] = (counts[c.livreur_email] || 0) + 1;
+    }
+  }
+  return counts;
 }
 
 // ── Score simple GPS (comme Uber) ─────────────────────────────────────────────
@@ -102,9 +122,23 @@ Deno.serve(async (req) => {
       ...historique.filter(h => ['refuse', 'no_response', 'timeout'].includes(h.statut)).map(h => h.livreur_email),
     ]);
 
-    // ── 4. Livreurs éligibles ─────────────────────────────────────────────────
-    const allUsers = await base44.asServiceRole.entities.User.list('-updated_date', 300);
-    const eligible = allUsers.filter(d => isEligible(d, excluded));
+    // ── 4. Livreurs éligibles — vérification depuis la BDD (pas le cache User) ─
+    const [allUsers, realCounts] = await Promise.all([
+      base44.asServiceRole.entities.User.list('-updated_date', 300),
+      getRealActiveCountsFromDB(base44),
+    ]);
+
+    // Corriger silencieusement les compteurs divergents (fire & forget)
+    for (const d of allUsers) {
+      const real = realCounts[d.email] || 0;
+      const stored = d.nombre_courses_actives || 0;
+      if (stored !== real) {
+        base44.asServiceRole.entities.User.update(d.id, { nombre_courses_actives: real }).catch(() => {});
+        d.nombre_courses_actives = real; // mettre à jour l'objet local
+      }
+    }
+
+    const eligible = allUsers.filter(d => isEligible(d, excluded, realCounts[d.email] ?? null));
 
     console.log(`[CDL_DISPATCH] course=${courseId} | total=${allUsers.length} | online=${allUsers.filter(d=>d.driver_online).length} | eligible=${eligible.length}`);
 

@@ -118,6 +118,7 @@ import PubCommercial from './pages/staff/PubCommercial';
 import StaffAdmin from './pages/staff/StaffAdmin';
 import AuditLogs from './pages/staff/AuditLogs';
 import AdminDiagnostics from './pages/dispatcher/AdminDiagnostics';
+import AuditCoursesActives from './pages/dispatcher/AuditCoursesActives';
 import AdminAuthDiagnostics from './pages/dispatcher/AdminAuthDiagnostics';
 import TestNotifications from './pages/dispatcher/TestNotifications';
 import FcmDiagnostic from './pages/FcmDiagnostic';
@@ -472,6 +473,7 @@ const AuthenticatedApp = () => {
           <Route path="/playstore-validation" element={<PlayStoreValidationFinal />} />
           <Route path="/whatsapp-alerts" element={<WhatsAppAlerts />} />
           <Route path="/admin-diagnostics" element={<AdminDiagnostics />} />
+          <Route path="/admin/audit-courses-actives" element={<AuditCoursesActives />} />
           <Route path="/admin-auth-diagnostics" element={<AdminAuthDiagnostics />} />
           <Route path="/test-notifications" element={<TestNotifications />} />
           <Route path="/admin/notif-coverage" element={<NotifCoverage />} />

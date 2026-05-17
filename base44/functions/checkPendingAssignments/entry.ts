@@ -17,14 +17,27 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const TAG = 'checkPendingAssignments';
 const TIMEOUT_MS = 60 * 1000;
 
+// ── Statuts réellement actifs ─────────────────────────────────────────────────
+const ACTIVE_STATUTS = new Set([
+  'assignee_attente', 'acceptee', 'driver_en_route_pickup',
+  'arrived_pickup', 'en_cours', 'arrived_dropoff',
+]);
+
+// ── Recalcul réel depuis BDD ──────────────────────────────────────────────────
+async function getRealActiveCount(base44, email) {
+  const courses = await base44.asServiceRole.entities.Course.filter({ livreur_email: email });
+  return courses.filter(c => ACTIVE_STATUTS.has(c.statut)).length;
+}
+
 // ── Critères d'éligibilité UNIFIÉS ────────────────────────────────────────────
-function isDriverEligible(d) {
+function isDriverEligible(d, realCount = null) {
   if (d.driver_online !== true) return false;
   if (d.profil_valide !== true && d.statut_validation_livreur !== 'valide' && d.statut_validation_livreur !== 'actif') return false;
   if (d.livreur_bloque) return false;
   if (d.livreur_suspendu) return false;
   if (d.disponible === false) return false;
-  if ((d.nombre_courses_actives || 0) >= 2) return false;
+  const count = realCount !== null ? realCount : (d.nombre_courses_actives || 0);
+  if (count >= 2) return false;
   return true;
 }
 
@@ -45,9 +58,12 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
   let livreurInvalide = false;
   if (livreurEmail) {
     const drivers = await base44.asServiceRole.entities.User.filter({ email: livreurEmail });
-    if (drivers.length > 0 && !isDriverEligible(drivers[0])) {
-      livreurInvalide = true;
-      console.log(`[CHECK_PENDING] fn=${TAG} | Livreur ${livreurEmail} invalide — passage au suivant`);
+    if (drivers.length > 0) {
+      // Vérifier avec le vrai compteur BDD (pas le cache User)
+      const realCount = await getRealActiveCount(base44, livreurEmail);
+      if (!isDriverEligible(drivers[0], realCount)) {
+        livreurInvalide = true;
+      }
     }
   }
 
@@ -70,8 +86,10 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
   if (livreurEmail) {
     const drivers = await base44.asServiceRole.entities.User.filter({ email: livreurEmail });
     if (drivers.length > 0) {
+      // Recalculer depuis la BDD (pas décrementer un cache qui peut être faux)
+      const realCount = await getRealActiveCount(base44, livreurEmail);
       await base44.asServiceRole.entities.User.update(drivers[0].id, {
-        nombre_courses_actives: Math.max(0, (drivers[0].nombre_courses_actives || 0) - 1),
+        nombre_courses_actives: realCount,
         courses_refusees_consecutives: (drivers[0].courses_refusees_consecutives || 0) + 1,
       }).catch(() => {});
     }
