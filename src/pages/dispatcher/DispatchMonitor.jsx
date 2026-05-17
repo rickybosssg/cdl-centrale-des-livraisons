@@ -4,8 +4,8 @@ import { base44 } from "@/api/base44Client";
 import { useDispatchMode } from "@/context/DispatchModeContext";
 import { classifyDriversForCourse } from "@/lib/dispatch";
 import {
-  ArrowLeft, RefreshCw, Zap, Users, AlertCircle, Clock,
-  MapPin, TrendingUp, ToggleLeft, ToggleRight, Lock,
+  ArrowLeft, RefreshCw, Zap, AlertCircle, Clock,
+  MapPin, TrendingUp, ToggleLeft, ToggleRight,
   UserCheck, ChevronDown, ChevronUp, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -210,14 +210,12 @@ export default function DispatchMonitor() {
   const handleToggleMode = async () => {
     if (toggling || dispatchMode === null) return;
     const newMode = dispatchMode === 'auto' ? 'manuel' : 'auto';
-    console.log(`[DISPATCH_MANUAL_BUTTON_CLICKED] ${dispatchMode} → ${newMode}`);
     setToggling(true);
     try {
       await setMode(newMode);
       toast.success(`✅ Mode ${newMode === 'auto' ? 'automatique' : 'manuel'} activé`);
-    } catch (error) {
-      console.error(`[DISPATCH_MANUAL_BUTTON_ERROR] ${error.message}`);
-      toast.error(`❌ Erreur: ${error.message}`);
+    } catch {
+      toast.error("Une erreur est survenue. Réessayez.");
     } finally {
       setToggling(false);
     }
@@ -322,9 +320,7 @@ export default function DispatchMonitor() {
     return () => { clearInterval(interval); unsubCourses(); unsubUsers(); };
   }, []);
 
-  // Utilise directement dispatchMode du context (source unique)
   const isManuel = dispatchMode === 'manuel';
-  console.log(`[UI_MODE_BEFORE_RENDER] DispatchMonitor | dispatchMode=${dispatchMode} | isManuel=${isManuel}`);
   // Filtre SANS current_role — basé sur profil_valide + driver_online + non bloqué/suspendu
   const livreursOnline = livreurs.filter(l => !l.livreur_bloque && !l.livreur_suspendu);
   const livreursDispatchables = livreurs.filter(l =>
@@ -380,9 +376,7 @@ export default function DispatchMonitor() {
               <p className={`text-xs ${!isManuel ? 'text-green-700' : 'text-amber-700'}`}>
                 {!isManuel ? 'Courses assignées automatiquement selon le score' : 'Toutes les courses attendent votre assignation manuelle'}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                <Lock className="h-2.5 w-2.5" /> Contrôle direct via setDispatchMode
-              </p>
+    
             </div>
           </div>
           <button

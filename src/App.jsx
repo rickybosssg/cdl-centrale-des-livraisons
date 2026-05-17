@@ -236,42 +236,23 @@ const AuthenticatedApp = () => {
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   const [hardUnblock, setHardUnblock] = useState(false);
 
-  // Réinitialiser hardUnblock si l'auth réussit (évite faux positif login)
+  // Réinitialiser hardUnblock si l'auth réussit
   useEffect(() => {
-    if (isAuthenticated && hardUnblock) {
-      console.log('[APP] Auth OK après timeout — reset hardUnblock');
-      setHardUnblock(false);
-    }
+    if (isAuthenticated && hardUnblock) setHardUnblock(false);
   }, [isAuthenticated, hardUnblock]);
 
-  // Log démarrage + capture erreurs globales
+  // Capture erreurs globales — empêche crash WebView Capacitor
   useEffect(() => {
-    console.log('[APP] mounted');
-
-    // Capture erreurs JS globales — LOG SEULEMENT, jamais de throw
     const onError = (event) => {
-      try {
-        console.error('[CRASH-GUARD] JS error:', event?.message, '|', event?.filename, ':', event?.lineno);
-      } catch (_) {}
-      // CRITIQUE : empêcher la propagation qui fermerait la WebView Capacitor
-      try { event?.preventDefault?.(); } catch (_) {}
-      return true; // Marquer l'event comme géré
-    };
-    const onUnhandled = (event) => {
-      try {
-        const reason = event?.reason;
-        const msg = reason?.message || (typeof reason === 'string' ? reason : JSON.stringify(reason));
-        console.error('[CRASH-GUARD] Unhandled rejection:', msg);
-      } catch (_) {}
-      // CRITIQUE : empêcher les unhandled rejections de crasher la WebView Capacitor
       try { event?.preventDefault?.(); } catch (_) {}
       return true;
     };
-    window.addEventListener('error', onError, true); // capture phase = intercepte avant tout
+    const onUnhandled = (event) => {
+      try { event?.preventDefault?.(); } catch (_) {}
+      return true;
+    };
+    window.addEventListener('error', onError, true);
     window.addEventListener('unhandledrejection', onUnhandled, true);
-
-    console.log('[WEBVIEW] loaded | protocol:', window.location?.protocol, '| url:', window.location?.href);
-
     return () => {
       window.removeEventListener('error', onError, true);
       window.removeEventListener('unhandledrejection', onUnhandled, true);
@@ -361,10 +342,6 @@ const AuthenticatedApp = () => {
     return <EmailLogin />;
   }
 
-  // Log rendu principal
-  console.log('[APP] RENDER MAIN UI | user:', user?.email || 'none');
-  console.log('[ROUTE] CURRENT ROUTE:', window.location.pathname);
-
   return (
     <>
       <FcmBootstrap userEmail={user?.email || ''} />
@@ -381,7 +358,7 @@ const AuthenticatedApp = () => {
         <Route path="/track/:courseId" element={<TrackingPublic />} />
         <Route path="/telecharger-app" element={<DownloadApp />} />
         <Route path="/reset-admin" element={<ResetAdmin />} />
-        <Route path="/auth-flow-audit" element={<AuthFlowAudit />} />
+        <Route path="/auth-flow-audit" element={<Navigate to="/" replace />} />
       <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
       <Route path="/debug-admin" element={<DebugAdmin />} />
 
@@ -431,7 +408,7 @@ const AuthenticatedApp = () => {
         <Route path="/fcm-register-audit" element={<FcmRegisterAudit />} />
         <Route path="/fcm-persistent-diag" element={<FcmPersistentDiag />} />
         <Route path="/fcm-engine" element={<FcmEngineDashboard />} />
-        <Route path="/fcm-dispatch-audit" element={<FcmDispatchAuditTest />} />
+        <Route path="/fcm-dispatch-audit" element={<Navigate to="/" replace />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />
@@ -476,7 +453,7 @@ const AuthenticatedApp = () => {
           <Route path="/profils-admin" element={<ProfilsAdmin />} />
           <Route path="/test-upload" element={<TestUpload />} />
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
-          <Route path="/ops" element={<UberOpsView />} />
+          <Route path="/ops" element={<AdminDashboard />} />
           <Route path="/dispatch-mode-settings" element={<DispatchModeSettings />} />
           <Route path="/admin-repair" element={<AdminRepair />} />
           <Route path="/dispatch-v2-debug" element={<DispatchModeDebug />} />

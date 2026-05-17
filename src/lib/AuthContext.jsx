@@ -22,17 +22,14 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
 
   const checkAppState = useCallback(async () => {
-    console.log('[AUTH] INIT START');
     setIsLoadingAuth(true);
     setAuthError(null);
 
     let settled = false;
 
-    // Timeout de sécurité — jamais bloquer l'APK indéfiniment
     const timeoutId = setTimeout(() => {
       if (settled) return;
       settled = true;
-      console.warn('[AUTH] TIMEOUT — forcing app unblock after', AUTH_TIMEOUT_MS, 'ms');
       setIsAuthenticated(false);
       setUser(null);
       setIsLoadingAuth(false);
@@ -45,22 +42,18 @@ export const AuthProvider = ({ children }) => {
       try {
         currentUser = await base44.auth.me();
       } catch (firstErr) {
-        // Premier échec — si on a des credentials, tenter refresh silencieux avant d'abandonner
         const errReason = firstErr?.data?.extra_data?.reason || '';
         const isAuthError = firstErr?.status === 403 || firstErr?.status === 401
           || errReason === 'auth_required'
           || firstErr?.message?.includes('logged in');
 
         if (isAuthError && hasCredentials()) {
-          console.warn('[AUTH] auth.me() échoué — tentative refresh silencieux...');
           const refreshed = await silentRefresh();
           if (refreshed) {
             syncTokenToSDK();
-            currentUser = await base44.auth.me(); // Réessayer après refresh
-            console.log('[AUTH] Re-auth réussie après refresh silencieux');
+            currentUser = await base44.auth.me();
           } else {
-            console.warn('[AUTH] Refresh silencieux échoué — session non récupérable');
-            throw firstErr; // Laisser le catch principal gérer
+            throw firstErr;
           }
         } else {
           throw firstErr;
@@ -73,7 +66,6 @@ export const AuthProvider = ({ children }) => {
       setUser(currentUser);
       setIsAuthenticated(true);
       startSessionPing();
-      console.log('[AUTH] INIT SUCCESS | user:', currentUser?.email);
     } catch (error) {
       if (settled) return;
       settled = true;
@@ -83,7 +75,6 @@ export const AuthProvider = ({ children }) => {
       if (error?.data?.extra_data?.reason === 'user_not_registered') {
         setAuthError({ type: 'user_not_registered', message: 'User not registered for this app' });
       }
-      console.warn('[AUTH] INIT ERROR:', error?.message || 'unknown');
     } finally {
       setIsLoadingAuth(false);
     }

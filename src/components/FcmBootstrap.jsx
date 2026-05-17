@@ -51,7 +51,6 @@ export default function FcmBootstrap({ userEmail }) {
 
   // ── Marquer boot complet ────────────────────────────────────────────────
   const markBootReady = useCallback((source = 'verified') => {
-    console.log(`[FCM_BOOT_READY] ✅ FCM prêt | source=${source} | user=${lastEmailRef.current}`);
     setFcmStatus('ready');
     setFcmReady(true);
     if (bootTimerRef.current) {
@@ -73,34 +72,22 @@ export default function FcmBootstrap({ userEmail }) {
           email = me?.email || null;
         } catch (_) {}
       }
-      if (!email) {
-        console.error(`[FCM_SAVE_FAILED] email indisponible | source=${source}`);
-        return;
-      }
+      if (!email) return;
 
-      console.log(`[FCM_TOKEN_RECEIVED] source=${source} | preview=${token.slice(0, 30)}... | user=${email}`);
-
-      // Tout délégué à FcmTokenEngine (save + verify)
       const result = await FcmTokenEngine.saveToken(email, token, source);
 
       if (result?.success && result?.verified) {
-        console.log(`[FCM_AUTO_RECOVERY_SUCCESS] token enregistré et vérifié BDD | user=${email} | source=${source}`);
         markBootReady('post_save_verify');
       } else if (result?.success && !result?.verified) {
-        // Sauvé mais verify failed → re-register
-        console.error(`[FCM_BOOT_RECOVERY] verify échoué → re-register | user=${email}`);
         setFcmStatus('recovery');
         setTimeout(() => startNativeFcmRef.current?.(email), 2000);
       } else if (result?.action !== 'debounced') {
-        console.error(`[FCM_SAVE_FAILED] échec save | error=${result?.error} | retry 30s`);
         setTimeout(() => FcmTokenEngine.saveToken(email, token, 'retry').catch(() => {}), 30_000);
       } else {
-        // Debounce → vérifier BDD quand même
         const { verified } = await FcmTokenEngine.verify(email);
         if (verified) markBootReady('debounced_verify_ok');
       }
-    } catch (e) {
-      console.error(`[FCM_SAVE_FAILED] onTokenReceived: ${e?.message}`);
+    } catch {
     }
   }, [markBootReady, setFcmStatus]);
 
@@ -109,12 +96,8 @@ export default function FcmBootstrap({ userEmail }) {
 
   // ── Init FCM natif ────────────────────────────────────────────────────────
   const startNativeFcm = useCallback(async (email) => {
-    if (initInProgressRef.current) {
-      console.log('[FCM_BOOT_RECOVERY] init déjà en cours — skip');
-      return;
-    }
+    if (initInProgressRef.current) return;
     initInProgressRef.current = true;
-    console.log(`[FCM_BOOT_START] startNativeFcm | user=${email}`);
     setFcmStatus('registering');
 
     try {
@@ -132,14 +115,12 @@ export default function FcmBootstrap({ userEmail }) {
             const sentAt = notif?.data?.notification_sent_at || null;
             const delayMs = sentAt ? Date.now() - new Date(sentAt).getTime() : null;
 
-            console.log(`[FCM_FOREGROUND] title="${title}" | type=${notifType} | delay=${delayMs != null ? delayMs + 'ms' : 'N/A'} | at=${receivedAt}`);
             try { localStorage.setItem('cdl_last_push_received', receivedAt); } catch (_) {}
             try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
 
             if (notifType === 'bedou_recharge_approved') {
               try { window.dispatchEvent(new CustomEvent('bedou_recharge_approved')); } catch (_) {}
               try { window.dispatchEvent(new CustomEvent('bedou_updated')); } catch (_) {}
-              console.log(`[BEDOU_SYNC_EVENT_RECEIVED] foreground bedou_recharge_approved | user=${email}`);
             }
 
             import('sonner').then(({ toast }) => {
@@ -160,11 +141,9 @@ export default function FcmBootstrap({ userEmail }) {
         onNotificationTap: ({ route, data }) => {
           try {
             const notifType = data?.type || '';
-            console.log(`[FCM_TAP] route=${route} | type=${notifType}`);
             if (notifType === 'bedou_recharge_approved') {
               try { window.dispatchEvent(new CustomEvent('bedou_recharge_approved')); } catch (_) {}
               try { window.dispatchEvent(new CustomEvent('bedou_updated')); } catch (_) {}
-              console.log(`[BEDOU_SYNC_EVENT_RECEIVED] tap bedou_recharge_approved | user=${email}`);
             }
             if (route?.startsWith('/')) {
               try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
@@ -174,15 +153,13 @@ export default function FcmBootstrap({ userEmail }) {
         },
 
         onPermissionDenied: () => {
-          console.warn(`[FCM_PERMISSION_DENIED] push impossible | user=${email}`);
           // Permission refusée = on considère le boot "prêt" (dégradé) pour ne pas bloquer l'app
           setFcmStatus('permission_denied');
           setFcmReady(true);
           if (bootTimerRef.current) { clearTimeout(bootTimerRef.current); bootTimerRef.current = null; }
         },
       });
-    } catch (e) {
-      console.error(`[FCM_SAVE_FAILED] startNativeFcm error: ${e?.message}`);
+    } catch {
     } finally {
       initInProgressRef.current = false;
     }
@@ -195,35 +172,25 @@ export default function FcmBootstrap({ userEmail }) {
   const autoRepairExpiredToken = useCallback(async (email) => {
     if (!email) return;
     try {
-      const { count, tokens } = await FcmTokenEngine.getActiveTokens(email);
-      if (count > 0) {
-        console.log(`[FCM_AUTO_REPAIR] tokens valides trouvés | count=${count} | user=${email}`);
-        return;
-      }
-      // Vérifier si il y avait des tokens avant (inactifs)
+      const { count } = await FcmTokenEngine.getActiveTokens(email);
+      if (count > 0) return;
       const allTokens = await base44.entities.FcmToken.filter({ user_email: email }, null, 5);
       const cause = (allTokens?.length || 0) > 0 ? 'all_tokens_expired' : 'no_token_ever_saved';
-      console.warn(`[FCM_AUTO_REPAIR] Token absent/expiré | cause=${cause} | user=${email} → re-register silencieux`);
       setFcmStatus('auto_repair');
-      // FcmTokenEngine.repair dispatche l'event → startNativeFcm le capte
       await FcmTokenEngine.repair(email, cause);
-    } catch (e) {
-      console.error(`[FCM_AUTO_REPAIR] error: ${e?.message}`);
+    } catch {
     }
   }, [setFcmStatus]);
 
   // ── Recovery silencieux ────────────────────────────────────────────────────
-  const silentRecovery = useCallback(async (source = 'heartbeat') => {
+  const silentRecovery = useCallback(async () => {
     const email = lastEmailRef.current;
     if (!email) return;
     const exists = await hasActiveBddToken(email);
     if (!exists) {
-      console.warn(`[FCM_BOOT_RECOVERY] token absent BDD | source=${source} | user=${email} → re-register`);
       setFcmStatus('recovery');
       await startNativeFcm(email);
     } else {
-      console.log(`[FCM_TOKEN_VERIFY_SUCCESS] token BDD confirmé | source=${source} | user=${email}`);
-      // S'assurer que le contexte est bien prêt
       setFcmReady(true);
       setFcmStatus('ready');
     }
@@ -233,17 +200,14 @@ export default function FcmBootstrap({ userEmail }) {
   const checkAndBootIfNeeded = useCallback(async (email) => {
     if (!email) return;
     try {
-      const { verified, count } = await FcmTokenEngine.verify(email);
+      const { verified } = await FcmTokenEngine.verify(email);
       if (!verified) {
-        console.warn(`[FCM_BOOT_RECOVERY] Aucun token actif au démarrage → re-register immédiat | user=${email}`);
         setFcmStatus('recovery');
         await startNativeFcmRef.current?.(email);
       } else {
-        console.log(`[FCM_TOKEN_VERIFY_SUCCESS] Token actif confirmé au démarrage | user=${email} | count=${count}`);
         markBootReady('startup_check');
       }
-    } catch (e) {
-      console.warn(`[FCM_BOOT_RECOVERY] checkAndBootIfNeeded error: ${e?.message} → proceeding with normal boot`);
+    } catch {
     }
   }, [markBootReady, setFcmStatus]);
 
@@ -254,7 +218,7 @@ export default function FcmBootstrap({ userEmail }) {
     const emailChanged = lastEmailRef.current !== userEmail;
     lastEmailRef.current = userEmail;
 
-    console.log(`[FCM_BOOT_START] Bootstrap V5 | native=${native} | email=${userEmail} | emailChanged=${emailChanged}`);
+
 
     // ── WEB / PWA ──
     if (!native) {
@@ -278,8 +242,7 @@ export default function FcmBootstrap({ userEmail }) {
               toast(n.title || 'CDL', { description: n.body || '', duration: 8000 });
             }).catch(() => {});
           });
-        } catch (err) {
-          console.error(`[FCM_SAVE_FAILED] Web init: ${err?.message}`);
+        } catch {
           setFcmStatus('web_error');
           setFcmReady(true); // Ne pas bloquer l'app sur le web
         }
@@ -300,17 +263,13 @@ export default function FcmBootstrap({ userEmail }) {
     const immediateCheck = async () => {
       try {
         const diag = await FcmTokenEngine.getDiagnostics(userEmail);
-        console.log(`[FCM_BOOT_DIAG] bdd_active=${diag.bdd_active} | bdd_total=${diag.bdd_total} | local_token=${diag.local_token ? 'SET' : 'NULL'} | user=${userEmail}`);
         if (diag.bdd_active === 0) {
-          // Aucun token actif en BDD → register() forcé sans délai
-          console.warn(`[FCM_BOOT_RECOVERY] bdd_active=0 → register() forcé immédiatement | local=${diag.local_token ? 'SET' : 'NULL'} | user=${userEmail}`);
           setFcmStatus('recovery');
           await startNativeFcmRef.current?.(userEmail);
         } else {
-          // Token actif en BDD → vérifier local aussi
           checkAndBootIfNeeded(userEmail);
         }
-      } catch (_) {
+      } catch {
         checkAndBootIfNeeded(userEmail);
       }
     };
@@ -321,24 +280,17 @@ export default function FcmBootstrap({ userEmail }) {
     bootTimerRef.current = setTimeout(async () => {
       const email = lastEmailRef.current;
       if (!email) return;
-      console.error(`[FCM_BOOT_RECOVERY] ⛔ BOOT TIMEOUT ${BOOT_TIMEOUT_MS}ms — token non confirmé | user=${email} → recovery forcé`);
       setFcmStatus('recovery');
-      // Tentative recovery : vérifier BDD d'abord, puis re-register
       const exists = await hasActiveBddToken(email);
       if (exists) {
-        console.log(`[FCM_BOOT_READY] Token trouvé après timeout | user=${email}`);
         markBootReady('timeout_recovery_bdd_ok');
       } else {
-        console.warn(`[FCM_BOOT_RECOVERY] BDD vide après timeout → re-register | user=${email}`);
         await startNativeFcm(email);
-        // Deuxième chance : vérifier BDD après 10s
         setTimeout(async () => {
           const exists2 = await hasActiveBddToken(email);
           if (exists2) {
             markBootReady('timeout_recovery_2nd_chance');
           } else {
-            // Dernier recours : marquer prêt en mode dégradé pour ne pas bloquer l'app
-            console.error(`[FCM_BOOT_RECOVERY] Échec recovery définitif → boot dégradé | user=${email}`);
             setFcmStatus('degraded');
             setFcmReady(true);
           }
@@ -370,7 +322,6 @@ export default function FcmBootstrap({ userEmail }) {
       const targetEmail = e?.detail?.email || lastEmailRef.current;
       if (targetEmail) {
         lastEmailRef.current = targetEmail;
-        console.log(`[FCM_BOOT_RECOVERY] force_register event | user=${targetEmail}`);
         setFcmStatus('recovery');
         startNativeFcm(targetEmail);
       }
