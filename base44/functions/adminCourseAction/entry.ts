@@ -61,8 +61,15 @@ Deno.serve(async (req) => {
         telephone_livreur: null,
       };
 
-      // Libérer le livreur si assigné (statuts assignee_attente, acceptee, en_cours)
-      const livreurAssigne = ['assignee_attente', 'acceptee', 'en_cours', 'driver_en_route_pickup', 'arrived_pickup'].includes(ancienStatut);
+      // Libérer le livreur si assigné — TOUS les statuts avec un livreur actif
+      // Couvre : assignee_attente, acceptee, en_cours, driver_en_route_pickup, arrived_pickup, arrived_dropoff
+      // + alias alternatifs : pickup, livraison, pending, assigned
+      const STATUTS_AVEC_LIVREUR = [
+        'assignee_attente', 'acceptee', 'en_cours',
+        'driver_en_route_pickup', 'arrived_pickup', 'arrived_dropoff',
+        'pickup', 'livraison', 'pending', 'assigned',
+      ];
+      const livreurAssigne = STATUTS_AVEC_LIVREUR.includes(ancienStatut) || !!course.livreur_email;
       if (course.livreur_email && livreurAssigne) {
         const livreurs = await base44.asServiceRole.entities.User.filter({ email: course.livreur_email });
         if (livreurs.length > 0) {

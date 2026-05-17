@@ -51,7 +51,8 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
   };
 
   return (
-    <>
+    // stopPropagation : empêche le clic sur les boutons d'ouvrir les dialogs parents (détail, card, row)
+    <div onClick={(e) => e.stopPropagation()}>
       {/* ── Boutons inline ── */}
       <div className="flex gap-1.5">
         {!isAlreadyCancelled && (
@@ -59,7 +60,7 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
             size={size}
             variant="outline"
             className="border-orange-300 text-orange-700 hover:bg-orange-50 gap-1"
-            onClick={() => { setMode("cancel"); setRaison(""); }}
+            onClick={(e) => { e.stopPropagation(); setMode("cancel"); setRaison(""); }}
           >
             <XCircle className="h-3.5 w-3.5" />
             {size !== "sm" && "Annuler"}
@@ -69,7 +70,7 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
           size={size}
           variant="outline"
           className="border-red-300 text-red-700 hover:bg-red-50 gap-1"
-          onClick={() => { setMode("delete"); setRaison(""); }}
+          onClick={(e) => { e.stopPropagation(); setMode("delete"); setRaison(""); }}
         >
           <Trash2 className="h-3.5 w-3.5" />
           {size !== "sm" && "Supprimer"}
@@ -77,8 +78,8 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
       </div>
 
       {/* ── Modal confirmation ── */}
-      <Dialog open={!!mode} onOpenChange={(open) => { if (!open) setMode(null); }}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={!!mode} onOpenChange={(v) => { if (!loading) setMode(v ? mode : null); }}>
+        <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {mode === "cancel" ? (
@@ -93,11 +94,9 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
             {/* Résumé course */}
             <div className="p-3 rounded-xl bg-muted/50 border text-sm space-y-1">
               <p className="font-semibold text-xs text-muted-foreground">Course concernée</p>
-              <p className="font-medium">
-                {course.quartier_depart} → {course.quartier_arrivee}
-              </p>
+              <p className="font-medium">{course.quartier_depart} → {course.quartier_arrivee}</p>
               <p className="text-xs text-muted-foreground">
-                {course.client_name} · {course.prix?.toLocaleString()} FCFA · {course.statut}
+                {course.client_name} · {course.prix?.toLocaleString()} FCFA · <span className="font-mono">{course.statut}</span>
               </p>
               {course.livreur_name && (
                 <p className="text-xs text-muted-foreground">🛵 {course.livreur_name}</p>
@@ -106,9 +105,7 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
 
             {/* Impact */}
             <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
-              mode === "cancel"
-                ? "bg-orange-50 border-orange-200 text-orange-800"
-                : "bg-red-50 border-red-200 text-red-800"
+              mode === "cancel" ? "bg-orange-50 border-orange-200 text-orange-800" : "bg-red-50 border-red-200 text-red-800"
             }`}>
               <div className="flex items-center gap-1.5 font-bold">
                 <AlertTriangle className="h-3.5 w-3.5" />
@@ -116,7 +113,7 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
               </div>
               {mode === "cancel" ? (
                 <ul className="space-y-1 ml-5 list-disc">
-                  <li>Statut → <strong>annulee_par_admin</strong></li>
+                  <li>Statut → <strong>annulee</strong> (annulée par admin)</li>
                   <li>Dispatch en cours stoppé immédiatement</li>
                   {course.livreur_name && <li>Livreur <strong>{course.livreur_name}</strong> libéré</li>}
                   <li>Client et livreur notifiés</li>
@@ -127,7 +124,6 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
                   <li>Masquée des listes standards</li>
                   <li>Suppression <strong>logique</strong> (données préservées)</li>
                   <li>Traçabilité admin conservée</li>
-                  <li>Aucune relation brisée</li>
                 </ul>
               )}
             </div>
@@ -138,38 +134,38 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
                 Raison {mode === "cancel" ? "d'annulation" : "de suppression"} *
               </label>
               <Textarea
-                placeholder={
-                  mode === "cancel"
-                    ? "Ex: Course en double, erreur de saisie, demande client..."
-                    : "Ex: Test, doublon, données incorrectes..."
-                }
+                placeholder={mode === "cancel" ? "Ex: Course en double, erreur de saisie, demande client..." : "Ex: Test, doublon, données incorrectes..."}
                 value={raison}
                 onChange={(e) => setRaison(e.target.value)}
                 rows={3}
                 className="text-sm"
+                disabled={loading}
               />
             </div>
 
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => setMode(null)} disabled={loading}>
-                Annuler
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={(e) => { e.stopPropagation(); setMode(null); }}
+                disabled={loading}
+              >
+                Fermer
               </Button>
               <Button
+                type="button"
                 className={`flex-1 gap-2 ${
-                  mode === "cancel"
-                    ? "bg-orange-600 hover:bg-orange-700 text-white"
-                    : "bg-red-600 hover:bg-red-700 text-white"
+                  mode === "cancel" ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"
                 }`}
-                onClick={handleConfirm}
+                onClick={(e) => { e.stopPropagation(); handleConfirm(); }}
                 disabled={loading || !raison.trim()}
               >
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {loading ? "Traitement..." : mode === "cancel" ? "Confirmer l'annulation" : "Confirmer la suppression"}
+                {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Traitement...</> : mode === "cancel" ? "Confirmer l'annulation" : "Confirmer la suppression"}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
