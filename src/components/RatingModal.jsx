@@ -85,39 +85,50 @@ export default function RatingModal({ open, onOpenChange, course, user }) {
   if (!open) return null;
 
   return (
-    // Overlay : fixed, couvre tout, z-index max, fond sombre
+    // Overlay : fixed, couvre tout, z-index max, fond sombre + flou
     <div
-      className="fixed inset-0 flex items-center justify-center"
-      style={{
-        zIndex: 9999,
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-      }}
+      className="fixed inset-0 flex flex-col"
+      style={{ zIndex: 9999 }}
     >
-      {/* Fond sombre — clic ferme */}
+      {/* Fond sombre semi-opaque — clic ferme */}
       <div
-        className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}
+        className={`absolute inset-0 transition-opacity duration-250 ${visible ? "opacity-100" : "opacity-0"}`}
+        style={{ background: "rgba(0,0,0,0.72)" }}
         onClick={handleClose}
       />
 
-      {/* Panneau centré */}
+      {/* Panneau positionné dans le tiers supérieur — jamais caché par le clavier */}
+      <div className="relative flex-1 flex items-start justify-center overflow-y-auto"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top) + 10vh)",
+          paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)",
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
+        }}
+      >
       <div
-        className={`relative w-full max-w-sm mx-4 bg-card rounded-2xl shadow-2xl overflow-hidden transition-all duration-200 ${
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-4"
+        className={`relative w-full max-w-sm mx-4 bg-card rounded-3xl shadow-2xl overflow-hidden transition-all duration-250 ${
+          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 -translate-y-4"
         }`}
-        style={{ maxHeight: "90vh" }}
+        style={{ marginBottom: "auto" }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Scroll interne si petit écran */}
-        <div className="overflow-y-auto" style={{ maxHeight: "90vh" }}>
+        {/* Trait décoratif Uber-style en haut */}
+        <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-amber-500 to-orange-400" />
+
+        {/* Scroll interne si très petit écran */}
+        <div className="overflow-y-auto" style={{ maxHeight: "78vh" }}>
 
           {/* Header */}
-          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div className="flex items-center justify-between px-4 pt-5 pb-2">
             <div className="flex items-center gap-2">
-              <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
-              <span className="font-bold text-base">Noter votre livreur</span>
+              <div className="h-8 w-8 rounded-xl bg-amber-100 flex items-center justify-center">
+                <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
+              </div>
+              <div>
+                <p className="font-extrabold text-base leading-tight">🎉 Course livrée !</p>
+                <p className="text-xs text-muted-foreground leading-tight">Notez votre livreur</p>
+              </div>
             </div>
             <button
               onClick={handleClose}
@@ -218,6 +229,7 @@ export default function RatingModal({ open, onOpenChange, course, user }) {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
