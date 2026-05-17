@@ -48,22 +48,29 @@ Deno.serve(async (req) => {
 
     // ── 3. ANNULATION ──────────────────────────────────────────────────────
     if (action === 'cancel') {
+      console.log(`[ADMIN_CANCEL_START] course=${course_id} | statut=${ancienStatut} | admin=${user.email} | livreur=${course.livreur_email || 'aucun'} | raison=${raison.trim()}`);
+
       const updates = {
         statut: 'annulee',
         annulee_par_admin: true,
         admin_cancel_reason: raison.trim(),
         admin_cancel_by: user.email,
         admin_cancel_at: now,
+        livreur_email: null,
+        livreur_name: null,
+        telephone_livreur: null,
       };
 
-      // Libérer le livreur si assigné
-      if (course.livreur_email) {
+      // Libérer le livreur si assigné (statuts assignee_attente, acceptee, en_cours)
+      const livreurAssigne = ['assignee_attente', 'acceptee', 'en_cours', 'driver_en_route_pickup', 'arrived_pickup'].includes(ancienStatut);
+      if (course.livreur_email && livreurAssigne) {
         const livreurs = await base44.asServiceRole.entities.User.filter({ email: course.livreur_email });
         if (livreurs.length > 0) {
           const l = livreurs[0];
           await base44.asServiceRole.entities.User.update(l.id, {
             nombre_courses_actives: Math.max(0, (l.nombre_courses_actives || 1) - 1),
           }).catch(() => {});
+          console.log(`[ADMIN_CANCEL_START] livreur libéré: ${course.livreur_email}`);
         }
 
         // Notifier le livreur
@@ -113,8 +120,8 @@ Deno.serve(async (req) => {
         }),
       }).catch(() => {});
 
-      console.log(`[adminCourseAction] CANCEL — course ${course_id} par ${user.email} — ${raison}`);
-      return Response.json({ success: true, action: 'cancel', course_id, nouveau_statut: 'annulee' });
+      console.log(`[ADMIN_CANCEL_SUCCESS] course=${course_id} | ancien_statut=${ancienStatut} | admin=${user.email}`);
+      return Response.json({ success: true, action: 'cancel', course_id, nouveau_statut: 'annulee', ancien_statut: ancienStatut });
     }
 
     // ── 4. SUPPRESSION LOGIQUE ─────────────────────────────────────────────
@@ -148,7 +155,7 @@ Deno.serve(async (req) => {
     }
 
   } catch (error) {
-    console.error('[adminCourseAction] Erreur:', error.message);
+    console.error(`[ADMIN_CANCEL_ERROR] backend | err=${error.message}`);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });

@@ -375,6 +375,7 @@ export default function GererCourses() {
                       <Button size="sm" variant="outline" className="h-8 text-xs text-green-600 border-green-300" onClick={() => changerStatut(course.id, "acceptee")}>
                         Forcer acceptation
                       </Button>
+                      <AdminCourseActions course={course} onDone={loadData} />
                     </>
                   }
                 />

@@ -27,6 +27,8 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
 
   const handleConfirm = async () => {
     if (!raison.trim()) { toast.error("Veuillez saisir une raison"); return; }
+    if (loading) return;
+    console.log(`[ADMIN_CANCEL_START] frontend | course=${course.id} | statut=${course.statut} | mode=${mode} | raison=${raison.trim()}`);
     setLoading(true);
     try {
       const res = await base44.functions.invoke("adminCourseAction", {
@@ -34,13 +36,15 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
         action: mode,
         raison: raison.trim(),
       });
+      console.log(`[ADMIN_CANCEL_SUCCESS] frontend | course=${course.id} | response=`, res?.data);
       if (!res?.data?.success) throw new Error(res?.data?.error || "Erreur inconnue");
-      toast.success(mode === "cancel" ? "✅ Course annulée" : "✅ Course supprimée");
+      toast.success(mode === "cancel" ? "✅ Course annulée avec succès" : "✅ Course supprimée");
       setMode(null);
       setRaison("");
       onDone?.();
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      console.error(`[ADMIN_CANCEL_ERROR] frontend | course=${course.id} | err=`, err.message);
+      toast.error("❌ Erreur annulation : " + (err.message || "inconnue"));
     } finally {
       setLoading(false);
     }
