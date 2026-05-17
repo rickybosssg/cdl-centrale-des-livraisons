@@ -6,6 +6,8 @@ import NotificationPermissionBanner from "../../components/NotificationPermissio
 import usePullToRefresh from "../../hooks/usePullToRefresh";
 import CourseCardSimple from "@/components/CourseCardSimple";
 import LivreurValidationGate from "@/components/LivreurValidationGate";
+import NewCourseAlert from "@/components/NewCourseAlert";
+import { useDriverCourseAlert } from "@/hooks/useDriverCourseAlert";
 import { toast } from "sonner";
 import { vibrateSuccess } from "@/lib/vibration";
 import { triggerWhatsAppNotification, waMsgCourseAcceptedByDriver, waMsgCourseAcceptedDriver } from "@/lib/whatsappNotifications";
@@ -20,6 +22,9 @@ export default function CoursesDisponibles() {
   const [coursesJour, setCoursesJour] = useState(0);
   const [accepting, setAccepting] = useState(null);
   const navigate = useNavigate();
+
+  // ── Alerte course proposée — source BDD, indépendante des onglets ──
+  const { alertCourse, clearAlert, user: alertUser } = useDriverCourseAlert();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -150,6 +155,8 @@ export default function CoursesDisponibles() {
 
   return (
     <div className="space-y-4 pb-24">
+      {/* Alerte course proposée — temps réel BDD */}
+      <NewCourseAlert course={alertCourse} onClose={clearAlert} user={alertUser || user} />
       <NotificationPermissionBanner />
 
       {/* Header */}

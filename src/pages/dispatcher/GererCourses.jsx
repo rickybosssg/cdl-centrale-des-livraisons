@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { ArrowLeft, UserPlus, X, RefreshCw, Eye, Clock, Zap, User } from "lucide-react";
 import AdminCourseActions from "../../components/AdminCourseActions";
+import ManualDispatchAlert from "@/components/ManualDispatchAlert";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -325,6 +326,11 @@ export default function GererCourses() {
         </TabsList>
 
         <TabsContent value="courses" className="space-y-3 mt-3">
+          {/* Dispatch manuel — bloc temps réel */}
+          <ManualDispatchAlert
+            onAssign={(course) => { setSelectedCourse(course); setAssignDialog(true); }}
+          />
+
           <Tabs defaultValue="attente" className="w-full">
             <TabsList className="w-full grid grid-cols-4">
               <TabsTrigger value="attente" className="text-xs">Attente ({enAttente.length})</TabsTrigger>

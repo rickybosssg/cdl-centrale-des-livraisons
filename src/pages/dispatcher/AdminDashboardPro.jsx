@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import ActiveCourseSummary from "@/components/dashboard/ActiveCourseSummary";
+import ManualDispatchAlert from "@/components/ManualDispatchAlert";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const TODAY = () => new Date().toDateString();
@@ -312,6 +313,9 @@ export default function AdminDashboardPro() {
           ))}
         </div>
       )}
+
+      {/* ── DISPATCH MANUEL — courses à assigner en temps réel ── */}
+      <ManualDispatchAlert />
 
       {/* ── KPIs COURSES ── */}
       <div>
