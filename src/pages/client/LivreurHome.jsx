@@ -12,7 +12,6 @@ import {
 import { fmt } from "@/lib/formatMoney";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import NewCourseAlert from "../../components/NewCourseAlert";
 import ChatAdmin from "@/components/ChatAdmin";
 import PubCDLBanner from "@/components/PubCDLBanner";
 import moment from "moment";
@@ -99,7 +98,6 @@ export default function LivreurHome({ user: initialUser }) {
   const [courses, setCourses] = useState([]);
   const [user, setUser] = useState(initialUser); // État User synchronisé temps réel
   const [toggling, setToggling] = useState(false);
-  const [alertCourse, setAlertCourse] = useState(null);
   const [showMessages, setShowMessages] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncError, setSyncError] = useState(null); // Alerte désynchronisation
@@ -145,65 +143,21 @@ export default function LivreurHome({ user: initialUser }) {
       .then(data => {
         const arr = Array.isArray(data) ? data : [];
         setCourses(arr);
-        const pending = arr.find(c => c.statut === "assignee_attente" && c.livreur_email === myEmail);
-        if (pending) {
-          console.log('[COURSE_ALERT_RENDERED] LivreurHome initial fetch found pending course:', pending.id);
-          setAlertCourse(pending);
-        } else {
-          console.log('[COURSE_ALERT_RECEIVED] LivreurHome initial fetch: no assignee_attente');
-        }
       })
-      .catch((e) => console.log('[COURSE_ALERT_HIDDEN_REASON] LivreurHome fetch error:', e?.message))
+      .catch(() => {})
       .finally(() => setLoading(false));
 
     const unsub = base44.entities.Course.subscribe(ev => {
-      // Toujours lire depuis le ref pour éviter la closure stale
       const email = emailRef.current || myEmail;
-      const hasData = !!ev.data;
-
-      console.log('[COURSE_ALERT_RECEIVED] LivreurHome sub event:', ev.type, 'id:', ev.id,
-        '| livreur_email:', ev.data?.livreur_email, '| statut:', ev.data?.statut,
-        '| myEmail:', email);
-
-      if (!hasData) {
-        setAlertCourse(p => p?.id === ev.id ? null : p);
-        return;
-      }
-
+      if (!ev.data) return;
       const isForMe = ev.data.livreur_email === email;
-
-      if (isForMe) {
-        if (ev.type === "create") {
-          setCourses(p => [ev.data, ...p]);
-          if (ev.data.statut === "assignee_attente") {
-            console.log('[COURSE_ALERT_RENDERED] LivreurHome: showing alert (create)', ev.id);
-            setAlertCourse(ev.data);
-          }
-        } else if (ev.type === "update") {
-          setCourses(p => {
-            const exists = p.find(c => c.id === ev.id);
-            return exists ? p.map(c => c.id === ev.id ? ev.data : c) : [ev.data, ...p];
-          });
-          if (ev.data.statut === "assignee_attente") {
-            console.log('[COURSE_ALERT_RENDERED] LivreurHome: showing alert (update)', ev.id);
-            setAlertCourse(ev.data);
-          } else {
-            setAlertCourse(p => {
-              if (p?.id === ev.id) {
-                console.log('[COURSE_ALERT_HIDDEN_REASON] LivreurHome: course status changed, closing', ev.id, ev.data.statut);
-                return null;
-              }
-              return p;
-            });
-          }
-        }
-      } else {
-        setAlertCourse(p => {
-          if (p?.id === ev.id) {
-            console.log('[COURSE_ALERT_HIDDEN_REASON] LivreurHome: course reassigned to someone else', ev.id);
-            return null;
-          }
-          return p;
+      if (!isForMe) return;
+      if (ev.type === "create") {
+        setCourses(p => [ev.data, ...p]);
+      } else if (ev.type === "update") {
+        setCourses(p => {
+          const exists = p.find(c => c.id === ev.id);
+          return exists ? p.map(c => c.id === ev.id ? ev.data : c) : [ev.data, ...p];
         });
       }
     });
@@ -251,9 +205,6 @@ export default function LivreurHome({ user: initialUser }) {
 
   return (
     <div className="space-y-4 pb-24">
-      {/* Alerte course */}
-      <NewCourseAlert course={alertCourse} onClose={() => setAlertCourse(null)} user={user} />
-
       {/* Alerte désynchronisation */}
       {syncError && (
         <div className="rounded-xl p-3 bg-red-50 border border-red-200 flex items-center gap-2">

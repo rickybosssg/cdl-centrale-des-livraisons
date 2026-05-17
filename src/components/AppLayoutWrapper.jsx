@@ -7,12 +7,34 @@ import SplashWelcome from "./SplashWelcome";
 import RoleSetup from "./RoleSetup";
 import PromoCodeStep from "../pages/PromoCodeStep";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
+import NewCourseAlert from "./NewCourseAlert";
+import ManualDispatchAlert from "./ManualDispatchAlert";
+import { useDriverCourseAlert } from "@/hooks/useDriverCourseAlert";
 
 import PermissionsOnboarding, { needsPermissionsOnboarding, markPermissionsConfigured } from "./PermissionsOnboarding";
 
 // Récupère le token d'auth depuis localStorage pour le fallback APK natif
 function getAuthToken() {
   try { return localStorage.getItem('base44_access_token') || ''; } catch (_) { return ''; }
+}
+
+// ── Alerte globale livreur — montée UNE SEULE FOIS au niveau layout ───────
+function GlobalDriverAlert({ userEmail }) {
+  const { alertCourse, clearAlert, user } = useDriverCourseAlert();
+  if (!alertCourse) return null;
+  return <NewCourseAlert course={alertCourse} onClose={clearAlert} user={user} />;
+}
+
+// ── Alerte globale admin (mode manuel) — montée au niveau layout ──────────
+function GlobalAdminAlert() {
+  return (
+    <div className="fixed top-0 left-0 right-0 z-[9990] px-3 pt-2 space-y-2 pointer-events-none"
+         style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}>
+      <div className="pointer-events-auto">
+        <ManualDispatchAlert />
+      </div>
+    </div>
+  );
 }
 
 export default function AppLayoutWrapper({ user }) {
@@ -218,7 +240,6 @@ export default function AppLayoutWrapper({ user }) {
   return (
     <>
       {/* PermissionsOnboarding DOIT s'afficher en premier — AVANT AppLayout */}
-      {/* Cela garantit que FCM demande la permission SEUL et avant FcmBootstrap */}
       {showPermissions && (
         <PermissionsOnboarding onDone={() => setShowPermissions(false)} />
       )}
@@ -230,6 +251,15 @@ export default function AppLayoutWrapper({ user }) {
           {showSplash && (
             <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />
           )}
+
+          {/* ── Alertes globales — actives peu importe l'onglet ── */}
+          {userRole === "livreur" && userEmail && (
+            <GlobalDriverAlert userEmail={userEmail} />
+          )}
+          {(userRole === "admin" || isAdminUser(user)) && (
+            <GlobalAdminAlert />
+          )}
+
           <AppLayout userRole={userRole} userEmail={userEmail} />
         </>
       )}

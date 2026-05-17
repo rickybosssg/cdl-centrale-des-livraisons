@@ -4,16 +4,10 @@ import { base44 } from "@/api/base44Client";
 import { Package } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CourseCard from "../../components/CourseCard";
-import NewCourseAlert from "@/components/NewCourseAlert";
-import { useDriverCourseAlert } from "@/hooks/useDriverCourseAlert";
-
 export default function MesLivraisons() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState(null);
-
-  // ── Alerte course proposée — source BDD, indépendante des onglets ──
-  const { alertCourse, clearAlert, user: alertUser } = useDriverCourseAlert();
 
   useEffect(() => {
     const load = async () => {
@@ -58,8 +52,6 @@ export default function MesLivraisons() {
 
   return (
     <div className="space-y-4">
-      {/* Alerte course proposée — temps réel BDD */}
-      <NewCourseAlert course={alertCourse} onClose={clearAlert} user={alertUser} />
       <h1 className="text-xl font-bold">Mes livraisons</h1>
 
       <Tabs defaultValue="actives">

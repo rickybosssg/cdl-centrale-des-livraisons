@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import AdminNotificationSystem from "@/components/AdminNotificationSystem";
 import SurgeZonesWidget from "@/components/SurgeZonesWidget";
 import AdminBadge from "@/components/AdminBadge";
-import ManualDispatchAlert from "@/components/ManualDispatchAlert";
 import moment from "moment";
 
 export default function AdminDashboard() {
@@ -246,11 +245,6 @@ export default function AdminDashboard() {
 
       <div className="px-4">
         <AdminNotificationSystem />
-      </div>
-
-      {/* Dispatch manuel — bloc temps réel courses en attente */}
-      <div className="px-4">
-        <ManualDispatchAlert onAssign={(course) => navigate(`/gerer-courses`)} />
       </div>
 
       <div className="px-4">
