@@ -128,10 +128,10 @@ const LocationEngine = {
     return { minutes, label: minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)}h` };
   },
 
-  /** Sauvegarder la position du livreur en BDD */
+  /** Sauvegarder la position du livreur en BDD — SOURCE UNIQUE : gps_latitude/gps_longitude */
   async saveDriverPosition(userId, lat, lng) {
     try {
-      await base44.auth.updateMe({ livreur_lat: lat, livreur_lng: lng });
+      await base44.auth.updateMe({ gps_latitude: lat, gps_longitude: lng });
       console.log(`[ENGINE_MIGRATION_OK] LocationEngine.saveDriverPosition | user=${userId} | lat=${lat.toFixed(4)}`);
     } catch (e) {
       console.error(`[ENGINE_ERROR] LocationEngine.saveDriverPosition | ${e.message}`);

@@ -102,8 +102,8 @@ Deno.serve(async (req) => {
       .filter((h) => ['refuse', 'no_response'].includes(String(h.statut)))
       .map((h) => h.livreur_email);
 
-    // autoDispatch vérifie lui-même le mode — jamais force=true
-    const result = await base44.asServiceRole.functions.invoke('autoDispatch', {
+    // cdlDispatch (moteur unifié) — jamais force=true
+    const result = await base44.asServiceRole.functions.invoke('cdlDispatch', {
       course_id: courseId,
       exclude_emails: exclus,
     });

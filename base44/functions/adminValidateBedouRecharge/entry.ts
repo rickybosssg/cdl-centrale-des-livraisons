@@ -1,20 +1,14 @@
 /**
- * adminValidateBedouRecharge — Validation Bedou admin
+ * CDL — adminValidateBedouRecharge v4 STUB
  *
- * AUTH DÉSACTIVÉE pour test APK — accès direct au traitement Bedou.
- * Le 403 venait de Base44 plateforme (vérification rôle avant Deno).
- * Solution : toutes les opérations via asServiceRole uniquement.
+ * ⚠️ DÉPRÉCIÉ — NE PAS MODIFIER
+ * Redirige vers bedouEngine.valider_recharge (source unique Bedou).
  *
- * ⚠️ NE PAS MODIFIER sendCdlNotification, FCM, FcmToken, channel_id
+ * RISQUE ÉLIMINÉ : ce fichier dupliquait le crédit Bedou hors bedouEngine,
+ * créant un risque de double-crédit si appelé en parallèle avec bedouEngine.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const ADMIN_EMAIL = 'weezyh2@gmail.com';
-const APP_ID = Deno.env.get('BASE44_APP_ID') || '69c3c74fc4b62396dca61751';
-// URL directe inter-fonctions (pas via /api/apps/)
-const CDL_NOTIF_URL = `https://cdl.base44.app/functions/sendCdlNotification`;
-
-// Headers CORS pour autoriser capacitor:// et les apps natives
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -22,369 +16,30 @@ const CORS_HEADERS = {
 };
 
 Deno.serve(async (req) => {
-  // Répondre aux preflight CORS immédiatement
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  const t0 = Date.now();
-
-  // Lire Authorization header AVANT de consommer le body
-  const rawAuth = req.headers.get('Authorization') || req.headers.get('authorization') || '';
-  const tokenFromHeader = rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
-
-  // Lire le body
-  let body = {};
-  try { body = await req.json(); } catch(_) {}
-
-  const { request_id, action, comment } = body;
-  console.log(`[BEDOU_RECHARGE_APPROVED_V3_START] request_id=${request_id} | action=${action} | token_present=${!!tokenFromHeader}`);
-
-  // Toutes les opérations passent par asServiceRole — pas de vérification de rôle nécessaire
   const base44 = createClientFromRequest(req);
+  const body = await req.json().catch(() => ({}));
+  const { request_id, action, comment } = body;
 
-  // Validation des paramètres
+  console.log('[adminValidateBedouRecharge] STUB → redirection vers bedouEngine');
+
   if (!request_id || !action) {
     return Response.json({ error: 'request_id et action requis' }, { status: 400, headers: CORS_HEADERS });
   }
-  if (!['validate', 'refuse'].includes(action)) {
-    return Response.json({ error: 'action invalide' }, { status: 400, headers: CORS_HEADERS });
-  }
-  if (action === 'refuse' && !comment?.trim()) {
-    return Response.json({ error: 'Commentaire obligatoire pour refus' }, { status: 400, headers: CORS_HEADERS });
-  }
 
-  // Charger la demande via service role (pas de vérification user)
-  let demande = null;
-  try {
-    demande = await base44.asServiceRole.entities.DemandeRecharge.get(request_id);
-  } catch(e) {
-    console.warn('[ADMIN_VALIDATE_GET_ERROR]', e.message);
-  }
+  const bedouAction = action === 'refuse' ? 'refuser_recharge' : 'valider_recharge';
 
-  if (!demande) {
-    try {
-      const list = await base44.asServiceRole.entities.DemandeRecharge.filter({}, null, 500);
-      demande = list?.find(d => d.id === request_id) || null;
-    } catch(e) {
-      console.warn('[ADMIN_VALIDATE_FILTER_ERROR]', e.message);
-    }
-  }
-
-  console.log('[ADMIN_VALIDATE_DEMANDE]', { found: !!demande, id: demande?.id, statut: demande?.statut });
-
-  if (!demande) {
-    return Response.json({ error: 'Demande introuvable', request_id }, { status: 404, headers: CORS_HEADERS });
-  }
-
-  if (demande.statut !== 'en_attente') {
-    return Response.json({
-      error: `Demande déjà traitée (statut: ${demande.statut})`,
-      already_processed: true,
-      statut: demande.statut,
-    }, { status: 409, headers: CORS_HEADERS });
-  }
-
-  // Helper notification — via asServiceRole pour garantir l'accès BDD (FcmToken)
-  const notify = async (payload) => {
-    const clientEmail = payload.user_email || '';
-    const eventType = payload.data?.type || '';
-    console.log('[BEDOU_VALIDATE_PUSH] START', { request_id, client_email: clientEmail, event_type: eventType });
-    try {
-      const res = await base44.asServiceRole.functions.invoke('sendCdlNotification', payload);
-      const d = res?.data || {};
-      console.log('[BEDOU_VALIDATE_PUSH] RESULT', {
-        request_id,
-        client_email: clientEmail,
-        event_type: eventType,
-        fcm_sent: d.sent ?? 0,
-        fcm_failed: d.failed ?? 0,
-        bdd: d.bdd ?? 0,
-        channel_id: d.channel_id || 'cdl_critical_alerts_v3',
-        firebase_message_id: d.firebase_message_id || null,
-        error: d.error || null,
-        note: d.note || null,
-      });
-      return d;
-    } catch(e) {
-      console.error('[BEDOU_VALIDATE_PUSH] ERROR', { request_id, client_email: clientEmail, error: e.message });
-      return {};
-    }
-  };
-
-  // ── REFUS ──────────────────────────────────────────────────────────────────
-  if (action === 'refuse') {
-    await base44.asServiceRole.entities.DemandeRecharge.update(request_id, {
-      statut: 'refuse',
-      motif_refus: comment.trim(),
-      date_validation: new Date().toISOString(),
-      valide_par: ADMIN_EMAIL,
-    });
-
-    await notify({
-      user_email: demande.user_email,
-      title: '❌ Recharge Bedou refusée',
-      body: `Votre rechargement de ${(demande.montant || 0).toLocaleString()} F CFA a été refusé. Motif : ${comment.trim()}`,
-      data: {
-        type: 'bedou_recharge_rejected',
-        entity_id: request_id,
-        entity_type: 'DemandeRecharge',
-        notif_route: '/mon-bedou',
-      },
-    });
-
-    console.log('[ADMIN_VALIDATE_DONE]', { action: 'refuse', request_id, delay_ms: Date.now() - t0 });
-    return Response.json({ success: true, action: 'refuse' }, { headers: CORS_HEADERS });
-  }
-
-  // ── VALIDATION ─────────────────────────────────────────────────────────────
-  const montantBase = demande.montant || 0;
-  const bonusAmount = demande.bonus || 0;
-  // Toujours calculer montant + bonus explicitement pour éviter un montant_total manquant
-  const montantCredite = montantBase + bonusAmount;
-  const userName = demande.user_nom || demande.user_name || demande.user_email;
-
-  let bedouList = [];
-  try {
-    bedouList = await base44.asServiceRole.entities.Bedou.filter({ user_email: demande.user_email });
-  } catch(e) {
-    console.warn('[ADMIN_VALIDATE_BEDOU_FILTER_ERROR]', e.message);
-  }
-  let b = bedouList?.[0];
-
-  if (!b) {
-    b = await base44.asServiceRole.entities.Bedou.create({
-      user_email: demande.user_email,
-      user_id: demande.user_id || '',
-      user_nom: userName,
-      role: 'client',
-      solde: 0,
-      solde_disponible: 0,
-      solde_bloque: 0,
-      solde_bonus: 0,
-      bonus: 0,
-      gains_totaux: 0,
-      depenses_totales: 0,
-      statut_bedou: 'actif',
-      date_creation: new Date().toISOString(),
-    });
-    console.log('[ADMIN_VALIDATE_BEDOU_CREATED]', b.id);
-  }
-
-  const ancienSolde = b.solde || 0;
-  const ancienDisponible = b.solde_disponible || 0;
-  const ancienSoldeBonus = b.solde_bonus || 0;
-  const ancienBonus = b.bonus || 0;
-  const ancienBonusCount = b.bonus_recharge_count || 0;
-
-  // Même logique que bedouEngine.valider_recharge :
-  // - montantBase crédité dans solde_disponible (retirable)
-  // - bonusAmount crédité dans solde_bonus (non retirable, courses uniquement)
-  const nouveauSolde = ancienSolde + montantCredite;
-  const nouveauDisponible = ancienDisponible + montantBase;       // montant seul, sans bonus
-  const nouveauSoldeBonus = ancienSoldeBonus + bonusAmount;
-  const nouveauBonus = ancienBonus + bonusAmount;
-  const nouveauBonusCount = bonusAmount > 0 ? ancienBonusCount + 1 : ancienBonusCount;
-
-  // Log de vérification solde
-  console.log('[BEDOU_BALANCE_CHECK]', {
-    client_email: demande.user_email,
-    solde_avant: ancienSolde,
-    montant_recharge: montantBase,
-    bonus: bonusAmount,
-    montant_total_credit: montantCredite,
-    solde_apres: nouveauSolde,
-    solde_disponible_apres: nouveauDisponible,
-    solde_bonus_apres: nouveauSoldeBonus,
+  const result = await base44.asServiceRole.functions.invoke('bedouEngine', {
+    action: bedouAction,
+    demande_id: request_id,
+    ...(comment ? { motif: comment } : {}),
   });
 
-  // Mise à jour wallet — mêmes champs que bedouEngine.valider_recharge
-  const walletUpdates = {
-    solde: nouveauSolde,
-    solde_disponible: nouveauDisponible,
-    solde_bonus: nouveauSoldeBonus,
-    bonus: nouveauBonus,
-    bonus_recharge_count: nouveauBonusCount,
-  };
-
-  await base44.asServiceRole.entities.Bedou.update(b.id, walletUpdates);
-
-  console.log('[BEDOU_DISPLAY_CHECK]', {
-    client_email: demande.user_email,
-    client_user_id: demande.user_id || 'N/A',
-    solde_bdd_avant: ancienSolde,
-    montant_credite: montantCredite,
-    solde_bdd_apres: nouveauSolde,
-    solde_disponible_apres: nouveauDisponible,
-    solde_bonus_apres: nouveauSoldeBonus,
-    champ_solde_mis_a_jour: 'Bedou.solde + Bedou.solde_disponible + Bedou.solde_bonus + Bedou.bonus + Bedou.bonus_recharge_count',
-    champ_solde_lu_par_client: 'bedouEngine.get_bedou → Bedou.filter({user_email}) → solde / solde_disponible',
-  });
-
-  await base44.asServiceRole.entities.Transaction.create({
-    user_email: demande.user_email,
-    user_nom: userName,
-    role: 'client',
-    type: 'recharge',
-    montant: montantCredite,
-    sens: 'credit',
-    source: 'bedou',
-    methode: demande.methode_paiement || 'interne',
-    statut: 'valide',
-    date_validation: new Date().toISOString(),
-    valide_par: ADMIN_EMAIL,
-    reference_id: request_id,
-    description: `Recharge Bedou validée par admin`,
-    source_validation: 'validation_admin',
-  });
-
-  await base44.asServiceRole.entities.DemandeRecharge.update(request_id, {
-    statut: 'valide',
-    date_validation: new Date().toISOString(),
-    valide_par: ADMIN_EMAIL,
-  });
-
-  // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
-  const clientEmail = (demande.user_email || '').toLowerCase().trim();
-  const adminEmail  = ADMIN_EMAIL;
-  const notifMsg    = `Recharge de ${montantCredite.toLocaleString()} F CFA${bonusAmount > 0 ? ` (dont ${bonusAmount.toLocaleString()} F bonus)` : ''}`;
-
-  // 1. Notification interne CLIENT
-  let internalClientCreated = false;
-  try {
-    await base44.asServiceRole.entities.Notification.create({
-      destinataire_email: clientEmail,
-      destinataire_role: 'client',
-      titre: '✅ Recharge Bedou validée',
-      message: `Votre compte a été crédité de ${notifMsg}.`,
-      type: 'success',
-      lue: false,
-      target_entity_id: request_id,
-      target_entity_type: 'DemandeRecharge',
-      target_screen: '/mon-bedou',
-    });
-    internalClientCreated = true;
-  } catch(e) {
-    console.warn('[RECHARGE_NOTIFY_PIPELINE] internal_client_error:', e.message);
-  }
-
-  // 2. Notification interne ADMIN
-  let internalAdminCreated = false;
-  try {
-    await base44.asServiceRole.entities.Notification.create({
-      destinataire_email: adminEmail,
-      destinataire_role: 'admin',
-      titre: '✅ Recharge Bedou validée',
-      message: `${userName} — ${notifMsg} validé avec succès.`,
-      type: 'success',
-      lue: false,
-      target_entity_id: request_id,
-      target_entity_type: 'DemandeRecharge',
-      target_screen: '/gestion-bedou',
-    });
-    internalAdminCreated = true;
-  } catch(e) {
-    console.warn('[RECHARGE_NOTIFY_PIPELINE] internal_admin_error:', e.message);
-  }
-
-  // 3. Push FCM CLIENT — vérification token avant envoi
-  let clientFcmTokens = [];
-  try {
-    clientFcmTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: clientEmail, is_active: true });
-  } catch(e) {
-    console.warn('[CLIENT_PUSH_ONLY_CHECK] token_fetch_error:', e.message);
-  }
-  const clientToken = clientFcmTokens?.[0];
-  console.log('[CLIENT_PUSH_ONLY_CHECK]', {
-    client_email: clientEmail,
-    client_user_id: demande.user_id || 'N/A',
-    fcm_token_found: clientFcmTokens.length > 0,
-    fcm_token_count: clientFcmTokens.length,
-    fcm_token_preview: clientToken ? clientToken.token.slice(0, 30) + '...' : 'AUCUN TOKEN',
-    token_device_type: clientToken?.device_type || 'N/A',
-    token_last_used: clientToken?.last_used || clientToken?.registered_at || 'N/A',
-    push_called: true,
-  });
-
-  console.log(`[PUSH_V3_PIPELINE_CLIENT] START | target=${clientEmail} | montant=${montantCredite} | channel=cdl_critical_alerts_v3`);
-  const notifClientResult = await notify({
-    user_email: clientEmail,
-    title: '✅ Recharge Bedou validée',
-    body: `Votre compte a été crédité de ${notifMsg}.`,
-    data: {
-      type: 'bedou_recharge_approved',
-      entity_id: request_id,
-      entity_type: 'DemandeRecharge',
-      notif_route: '/mon-bedou',
-      amount: String(montantCredite),
-      user_id: demande.user_id || clientEmail,
-    },
-  });
-  console.log(`[PUSH_V3_PIPELINE_CLIENT] DONE | sent=${notifClientResult.sent ?? 0} | failed=${notifClientResult.failed ?? 0} | token_found=${(notifClientResult.sent ?? 0) + (notifClientResult.failed ?? 0) > 0} | firebase_message_id=${notifClientResult.firebase_message_id || 'N/A'} | error=${notifClientResult.error || 'none'}`);
-
-  console.log('[CLIENT_PUSH_ONLY_CHECK] push_response:', {
-    push_response: JSON.stringify(notifClientResult).slice(0, 200),
-    fcm_sent: notifClientResult.sent || 0,
-    fcm_failed: notifClientResult.failed || 0,
-    error_code: notifClientResult.error || null,
-    error_message: notifClientResult.note || null,
-  });
-
-  // 4. Push FCM ADMIN
-  console.log(`[PUSH_V3_PIPELINE_ADMIN] START | target=${adminEmail} | channel=cdl_critical_alerts_v3`);
-  const notifAdminResult = await notify({
-    user_email: adminEmail,
-    title: '💰 Recharge validée',
-    body: `${userName} — ${notifMsg}`,
-    data: {
-      type: 'bedou_recharge_approved_admin',
-      entity_id: request_id,
-      entity_type: 'DemandeRecharge',
-      notif_route: '/gestion-bedou',
-    },
-  });
-
-  console.log(`[PUSH_V3_PIPELINE_ADMIN] DONE | sent=${notifAdminResult.sent ?? 0} | failed=${notifAdminResult.failed ?? 0} | token_found=${(notifAdminResult.sent ?? 0) + (notifAdminResult.failed ?? 0) > 0} | firebase_message_id=${notifAdminResult.firebase_message_id || 'N/A'} | error=${notifAdminResult.error || 'none'}`);
-
-  const elapsed = Date.now() - t0;
-  const fcmClientSent = notifClientResult.sent || 0;
-  const fcmAdminSent  = notifAdminResult.sent || 0;
-
-  console.log('[BEDOU_RECHARGE_FLOW_END]', {
-    request_id,
-    client_email: clientEmail,
-    admin_email: adminEmail,
-    solde_avant: ancienSolde,
-    solde_apres: nouveauSolde,
-    montant_credite: montantCredite,
-    internal_client_created: internalClientCreated,
-    internal_admin_created: internalAdminCreated,
-    push_v3_client_sent: fcmClientSent,
-    push_v3_admin_sent: fcmAdminSent,
-    firebase_message_id_client: notifClientResult.firebase_message_id || null,
-    firebase_message_id_admin: notifAdminResult.firebase_message_id || null,
-    channel_id: 'cdl_critical_alerts_v3',
-    error_client: notifClientResult.note || notifClientResult.error || null,
-    error_admin: notifAdminResult.note || notifAdminResult.error || null,
-    delay_ms: elapsed,
-  });
-
-  return Response.json({
-    success: true,
-    action: 'validate',
-    request_id,
-    client_email: demande.user_email,
-    user_email: demande.user_email,
-    ancien_solde: ancienSolde,
-    nouveau_solde: nouveauSolde,
-    solde: nouveauSolde,
-    solde_disponible: nouveauDisponible,
-    solde_bonus: nouveauSoldeBonus,
-    bonus: bonusAmount,
-    montant_credite: montantCredite,
-    fcm_sent: fcmClientSent,
-    fcm_failed: notifClientResult.failed || 0,
-    notification_client_sent: fcmClientSent > 0,
-    delay_ms: elapsed,
-  }, { headers: CORS_HEADERS });
+  return Response.json(
+    result?.data || { success: true, redirected: true },
+    { headers: CORS_HEADERS }
+  );
 });

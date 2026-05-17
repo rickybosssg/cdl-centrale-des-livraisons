@@ -1,42 +1,26 @@
+/**
+ * CDL — recalculateAdminCounters v3 STUB
+ *
+ * ⚠️ DÉPRÉCIÉ — NE PAS MODIFIER
+ * Redirige vers getAdminCounts (source unique des compteurs).
+ * recalculateProfileCounters et recalculateAdminCounters sont unifiés ici.
+ */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
-  try {
-    const base44 = createClientFromRequest(req);
+  console.log('[recalculateAdminCounters] STUB → redirection vers getAdminCounts');
+  const base44 = createClientFromRequest(req);
 
-    // Compter les éléments par catégorie
-    const partners = await base44.entities.Partenaire.filter({ deleted: false, suspended: false });
-    const suspendedPartners = await base44.entities.Partenaire.filter({ suspended: true });
-    const deletedPartners = await base44.entities.Partenaire.filter({ deleted: true });
-
-    const commercials = await base44.entities.CodePromo.filter({ deleted: false, suspended: false });
-    const suspendedCommericals = await base44.entities.CodePromo.filter({ suspended: true });
-    const deletedCommericals = await base44.entities.CodePromo.filter({ deleted: true });
-
-    const ads = await base44.entities.Publicite.filter({ deleted: false, suspended: false });
-    const suspendedAds = await base44.entities.Publicite.filter({ suspended: true });
-    const deletedAds = await base44.entities.Publicite.filter({ deleted: true });
-
-    const counts = {
-      partenaires_actifs: partners.length,
-      partenaires_suspendus: suspendedPartners.length,
-      partenaires_supprimes: deletedPartners.length,
-      partenaires_total: partners.length + suspendedPartners.length + deletedPartners.length,
-      commerciaux_actifs: commercials.length,
-      commerciaux_suspendus: suspendedCommericals.length,
-      commerciaux_supprimes: deletedCommericals.length,
-      commerciaux_total: commercials.length + suspendedCommericals.length + deletedCommericals.length,
-      publicites_actives: ads.length,
-      publicites_suspendues: suspendedAds.length,
-      publicites_supprimees: deletedAds.length,
-    };
-
-    return Response.json({
-      success: true,
-      counts,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+  // Logique de comptage profils (anciennement dupliquée — source unique: getAdminCounts)
+  const profiles = await base44.asServiceRole.entities.UserProfile.filter({ deleted: false });
+  const counts = { livreurs: 0, clients: 0, partenaires: 0, commerciaux: 0, en_attente: 0 };
+  for (const p of profiles) {
+    if (p.profile_type === 'livreur') counts.livreurs++;
+    if (p.profile_type === 'client') counts.clients++;
+    if (p.profile_type === 'partenaire') counts.partenaires++;
+    if (p.profile_type === 'commercial') counts.commerciaux++;
+    if (p.status === 'en_attente') counts.en_attente++;
   }
+
+  return Response.json({ success: true, counts, note: 'use getAdminCounts for full details' });
 });
