@@ -153,6 +153,151 @@ function NotifiedPulse({ count }) {
   );
 }
 
+// ── Pool de micro-événements réseau (toasts éphémères) ───────────────────
+const MICRO_EVENTS = [
+  { icon: "📍", text: "Livreur proche détecté…" },
+  { icon: "🔄", text: "Vérification disponibilité…" },
+  { icon: "📐", text: "Analyse distance optimale…" },
+  { icon: "⚡", text: "Recherche d'un livreur plus rapide…" },
+  { icon: "📡", text: "Signal réseau CDL actif…" },
+  { icon: "🗺️", text: "Calcul de l'itinéraire…" },
+  { icon: "🔍", text: "Scan zone étendue…" },
+  { icon: "✉️", text: "Notification renvoyée…" },
+];
+
+// Pool de faux prénoms + avatars emoji (100% fictifs, clairement visuels)
+const GHOST_DRIVERS = [
+  { initial: "K", color: "bg-orange-400", name: "K.", dist: "1.2 km", note: 4.8 },
+  { initial: "A", color: "bg-blue-500",   name: "A.", dist: "0.9 km", note: 4.9 },
+  { initial: "M", color: "bg-green-500",  name: "M.", dist: "1.8 km", note: 4.7 },
+  { initial: "S", color: "bg-purple-500", name: "S.", dist: "2.1 km", note: 4.6 },
+  { initial: "I", color: "bg-rose-400",   name: "I.", dist: "0.7 km", note: 5.0 },
+];
+
+// Hook : déclenche micro-événements à intervalles aléatoires
+function useMicroEvents(active) {
+  const [microToast, setMicroToast] = useState(null);   // { icon, text }
+  const [ghostDriver, setGhostDriver] = useState(null); // driver fantôme actif
+  const toastTimer = useRef(null);
+  const ghostTimer = useRef(null);
+
+  useEffect(() => {
+    if (!active) return;
+
+    // Toast réseau — toutes les 6-11s
+    const scheduleToast = () => {
+      toastTimer.current = setTimeout(() => {
+        const ev = MICRO_EVENTS[Math.floor(Math.random() * MICRO_EVENTS.length)];
+        setMicroToast(ev);
+        // Auto-dismiss après 2.8s
+        setTimeout(() => setMicroToast(null), 2800);
+        scheduleToast();
+      }, 6000 + Math.random() * 5000);
+    };
+
+    // Carte livreur fantôme — toutes les 14-22s, visible 4s
+    const scheduleGhost = () => {
+      ghostTimer.current = setTimeout(() => {
+        const driver = GHOST_DRIVERS[Math.floor(Math.random() * GHOST_DRIVERS.length)];
+        setGhostDriver(driver);
+        setTimeout(() => setGhostDriver(null), 4000);
+        scheduleGhost();
+      }, 14000 + Math.random() * 8000);
+    };
+
+    scheduleToast();
+    // Premier fantôme après 10s minimum
+    ghostTimer.current = setTimeout(() => {
+      const driver = GHOST_DRIVERS[Math.floor(Math.random() * GHOST_DRIVERS.length)];
+      setGhostDriver(driver);
+      setTimeout(() => setGhostDriver(null), 4000);
+      scheduleGhost();
+    }, 10000);
+
+    return () => {
+      clearTimeout(toastTimer.current);
+      clearTimeout(ghostTimer.current);
+    };
+  }, [active]);
+
+  return { microToast, ghostDriver };
+}
+
+// ── Toast micro-événement réseau ──────────────────────────────────────────
+function MicroEventToast({ event }) {
+  return (
+    <motion.div
+      key={event.text}
+      initial={{ opacity: 0, x: 40, scale: 0.92 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 40, scale: 0.92 }}
+      transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/95 shadow-lg shadow-black/10 border border-white/80 text-xs font-semibold text-gray-700 max-w-[220px]"
+    >
+      <span className="text-base">{event.icon}</span>
+      <span>{event.text}</span>
+    </motion.div>
+  );
+}
+
+// ── Carte livreur fantôme (100% visuel, clairement "en analyse") ──────────
+function GhostDriverCard({ driver }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+      transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="w-full rounded-2xl px-4 py-3.5 bg-white shadow-md shadow-black/8 border border-gray-100"
+    >
+      {/* Label disclaimer discret en haut */}
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Livreur analysé</span>
+        <motion.div
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-100"
+          animate={{ opacity: [1, 0.5, 1] }}
+          transition={{ duration: 1.4, repeat: Infinity }}
+        >
+          <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          <span className="text-[10px] text-amber-600 font-semibold">En cours d'analyse</span>
+        </motion.div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {/* Avatar initial */}
+        <div className={`h-11 w-11 rounded-full ${driver.color} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+          <span className="text-white font-black text-base">{driver.initial}</span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-bold text-gray-800 text-sm">Livreur {driver.name}</p>
+            {/* Note étoile */}
+            <div className="flex items-center gap-0.5">
+              <span className="text-amber-400 text-xs">★</span>
+              <span className="text-xs font-semibold text-gray-600">{driver.note}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 mt-0.5">
+            <MapPin className="h-3 w-3 text-gray-400" />
+            <span className="text-xs text-gray-500">{driver.dist} de vous</span>
+          </div>
+        </div>
+
+        {/* Indicateur "vérification" */}
+        <div className="flex flex-col items-center gap-1">
+          <motion.div
+            className="h-8 w-8 rounded-full border-2 border-blue-200 border-t-blue-500 flex items-center justify-center"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+          />
+          <span className="text-[9px] text-gray-400 font-medium">Vérif.</span>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Variants Framer Motion pour les cartes ────────────────────────────────
 const cardVariants = {
   enter: { opacity: 0, y: 14, scale: 0.97 },
@@ -206,6 +351,8 @@ export default function SearchingLivreurScreen({ course, livreurTrouve, aucunLiv
   const countRef = useRef(0);
   const liveStatus = useLiveStatus();
   const etaSecs = useEtaCountdown(90000);
+  const isSearching = !livreurTrouve && !aucunLivreur;
+  const { microToast, ghostDriver } = useMicroEvents(isSearching);
 
   // ── Construire les séquences de cartes à partir des données course ──────
   const buildCards = useCallback(() => {
@@ -316,6 +463,13 @@ export default function SearchingLivreurScreen({ course, livreurTrouve, aucunLiv
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-blue-600 via-blue-500 to-white relative overflow-hidden">
       <RadarBg />
 
+      {/* Toast micro-événement réseau — coin bas droit, overlay */}
+      <div className="fixed bottom-20 right-4 z-50 pointer-events-none">
+        <AnimatePresence>
+          {microToast && <MicroEventToast key={microToast.text} event={microToast} />}
+        </AnimatePresence>
+      </div>
+
       {/* Zone haute : spinner + titre */}
       <div className="relative z-10 flex flex-col items-center pt-12 pb-5 px-6 text-white text-center space-y-3">
         <MotoSpinner />
@@ -398,6 +552,13 @@ export default function SearchingLivreurScreen({ course, livreurTrouve, aucunLiv
             />
           ))}
         </div>
+
+        {/* Carte livreur fantôme — apparaît/disparaît de façon autonome */}
+        <AnimatePresence mode="wait">
+          {ghostDriver && (
+            <GhostDriverCard key={ghostDriver.name + ghostDriver.dist} driver={ghostDriver} />
+          )}
+        </AnimatePresence>
 
         {/* Étapes de progression — évoluent avec liveStatus */}
         <div className="space-y-2 mt-2">
