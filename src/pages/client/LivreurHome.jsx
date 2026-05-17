@@ -2,7 +2,7 @@
  * CDL — Dashboard Livreur PRO
  * Design optimisé, fluide, temps réel.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { isDriverDispatchable } from "@/lib/dispatch";
@@ -133,26 +133,50 @@ export default function LivreurHome({ user: initialUser }) {
   }, [initialUser?.email, initialUser?.id]);
 
   // ── Chargement courses ──────────────────────────────────────────────────────
+  // emailRef évite la closure stale sur user.email dans la subscription
+  const emailRef = useRef(null);
+  useEffect(() => { emailRef.current = user?.email || null; }, [user?.email]);
+
   useEffect(() => {
     if (!user?.email) return;
-    base44.entities.Course.filter({ livreur_email: user.email }, "-created_date", 20)
+    const myEmail = user.email;
+
+    base44.entities.Course.filter({ livreur_email: myEmail }, "-created_date", 20)
       .then(data => {
         const arr = Array.isArray(data) ? data : [];
         setCourses(arr);
-        const pending = arr.find(c => c.statut === "assignee_attente" && c.livreur_email === user.email);
-        if (pending) setAlertCourse(pending);
+        const pending = arr.find(c => c.statut === "assignee_attente" && c.livreur_email === myEmail);
+        if (pending) {
+          console.log('[COURSE_ALERT_RENDERED] LivreurHome initial fetch found pending course:', pending.id);
+          setAlertCourse(pending);
+        } else {
+          console.log('[COURSE_ALERT_RECEIVED] LivreurHome initial fetch: no assignee_attente');
+        }
       })
-      .catch(() => {})
+      .catch((e) => console.log('[COURSE_ALERT_HIDDEN_REASON] LivreurHome fetch error:', e?.message))
       .finally(() => setLoading(false));
 
     const unsub = base44.entities.Course.subscribe(ev => {
-      if (!ev.data) return;
-      const isForMe = ev.data.livreur_email === user.email;
+      // Toujours lire depuis le ref pour éviter la closure stale
+      const email = emailRef.current || myEmail;
+      const hasData = !!ev.data;
+
+      console.log('[COURSE_ALERT_RECEIVED] LivreurHome sub event:', ev.type, 'id:', ev.id,
+        '| livreur_email:', ev.data?.livreur_email, '| statut:', ev.data?.statut,
+        '| myEmail:', email);
+
+      if (!hasData) {
+        setAlertCourse(p => p?.id === ev.id ? null : p);
+        return;
+      }
+
+      const isForMe = ev.data.livreur_email === email;
 
       if (isForMe) {
         if (ev.type === "create") {
           setCourses(p => [ev.data, ...p]);
           if (ev.data.statut === "assignee_attente") {
+            console.log('[COURSE_ALERT_RENDERED] LivreurHome: showing alert (create)', ev.id);
             setAlertCourse(ev.data);
           }
         } else if (ev.type === "update") {
@@ -161,14 +185,26 @@ export default function LivreurHome({ user: initialUser }) {
             return exists ? p.map(c => c.id === ev.id ? ev.data : c) : [ev.data, ...p];
           });
           if (ev.data.statut === "assignee_attente") {
+            console.log('[COURSE_ALERT_RENDERED] LivreurHome: showing alert (update)', ev.id);
             setAlertCourse(ev.data);
           } else {
-            setAlertCourse(p => p?.id === ev.id ? null : p);
+            setAlertCourse(p => {
+              if (p?.id === ev.id) {
+                console.log('[COURSE_ALERT_HIDDEN_REASON] LivreurHome: course status changed, closing', ev.id, ev.data.statut);
+                return null;
+              }
+              return p;
+            });
           }
         }
       } else {
-        // Course retirée de ce livreur (reassignée ou refusée)
-        setAlertCourse(p => p?.id === ev.id ? null : p);
+        setAlertCourse(p => {
+          if (p?.id === ev.id) {
+            console.log('[COURSE_ALERT_HIDDEN_REASON] LivreurHome: course reassigned to someone else', ev.id);
+            return null;
+          }
+          return p;
+        });
       }
     });
     return unsub;

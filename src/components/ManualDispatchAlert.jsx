@@ -110,30 +110,33 @@ export default function ManualDispatchAlert({ onAssign }) {
   const [dismissed, setDismissed] = useState(new Set());
   const navigate = useNavigate();
 
-  // Charger les courses en attente au mount (mode manuel uniquement)
+  // Charger les courses en attente — relancé dès que le mode est connu
   useEffect(() => {
-    if (modeLoading || mode !== "manuel") return;
+    // Toujours charger (même si mode auto) pour avoir les données prêtes
     base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 10)
       .then(data => {
         const arr = Array.isArray(data) ? data.filter(c => !c.is_deleted && !c.moyen_transport) : [];
+        console.log('[COURSE_ALERT_RECEIVED] ManualDispatchAlert initial load:', arr.length, 'courses | mode:', mode);
         setPendingCourses(arr);
       })
-      .catch(() => {});
-  }, [mode, modeLoading]);
+      .catch((e) => console.log('[COURSE_ALERT_HIDDEN_REASON] ManualDispatchAlert load error:', e?.message));
+  }, [mode]); // re-déclenche si mode change
 
-  // Subscription BDD temps réel
+  // Subscription BDD temps réel — démarre immédiatement, indépendamment du mode
   useEffect(() => {
     const unsub = base44.entities.Course.subscribe((ev) => {
-      if (!ev.data) return;
+      console.log('[COURSE_ALERT_RECEIVED] ManualDispatchAlert subscription event:', ev.type, 'id:', ev.id, 'statut:', ev.data?.statut);
 
-      if (ev.type === "create" && ev.data.statut === "en_attente" && !ev.data.moyen_transport) {
-        setPendingCourses(prev => {
-          if (prev.find(c => c.id === ev.id)) return prev;
-          return [ev.data, ...prev];
-        });
+      if (ev.type === "create") {
+        if (ev.data?.statut === "en_attente" && !ev.data?.moyen_transport) {
+          setPendingCourses(prev => {
+            if (prev.find(c => c.id === ev.id)) return prev;
+            console.log('[COURSE_ALERT_RENDERED] ManualDispatchAlert: new course added', ev.id);
+            return [ev.data, ...prev];
+          });
+        }
       } else if (ev.type === "update") {
-        if (ev.data.statut !== "en_attente") {
-          // Course assignée ou annulée → retirer du bloc
+        if (!ev.data || ev.data.statut !== "en_attente") {
           setPendingCourses(prev => prev.filter(c => c.id !== ev.id));
         } else {
           setPendingCourses(prev => prev.map(c => c.id === ev.id ? ev.data : c));
@@ -143,7 +146,7 @@ export default function ManualDispatchAlert({ onAssign }) {
       }
     });
     return () => { if (unsub) unsub(); };
-  }, []);
+  }, []); // subscription permanente, pas de dépendance mode
 
   const handleDismiss = (id) => {
     setDismissed(prev => new Set([...prev, id]));
@@ -157,12 +160,22 @@ export default function ManualDispatchAlert({ onAssign }) {
     }
   };
 
-  // Afficher uniquement en mode manuel
-  if (modeLoading || mode !== "manuel") return null;
+  // Afficher uniquement en mode manuel (mais subscription toujours active)
+  if (modeLoading || mode !== "manuel") {
+    if (!modeLoading && mode !== "manuel") {
+      console.log('[COURSE_ALERT_HIDDEN_REASON] ManualDispatchAlert hidden: mode is', mode);
+    }
+    return null;
+  }
 
   const visible = pendingCourses.filter(c => !dismissed.has(c.id));
-  if (visible.length === 0) return null;
 
+  if (visible.length === 0) {
+    console.log('[COURSE_ALERT_HIDDEN_REASON] ManualDispatchAlert: no visible pending courses (total:', pendingCourses.length, 'dismissed:', dismissed.size, ')');
+    return null;
+  }
+
+  console.log('[COURSE_ALERT_RENDERED] ManualDispatchAlert: rendering', visible.length, 'course(s)');
   return (
     <div className="space-y-2">
       <p className="text-xs font-bold uppercase tracking-wide text-purple-700 flex items-center gap-1">
