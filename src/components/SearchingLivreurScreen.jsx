@@ -62,17 +62,90 @@ function MotoSpinner() {
   );
 }
 
+// ── Séquence de statuts progressifs ──────────────────────────────────────
+// Chaque phase a un délai (ms depuis le début) et un ton rassurant
+const STATUS_PHASES = [
+  { at: 0,     text: "Recherche des livreurs proches…",         sub: "Analyse de votre zone en cours" },
+  { at: 5000,  text: "Vérification des livreurs disponibles…",  sub: "CDL consulte son réseau en temps réel" },
+  { at: 12000, text: "2 livreurs ont reçu la notification…",    sub: "En attente d'une réponse" },
+  { at: 20000, text: "Un livreur consulte votre course…",       sub: "Restez ici, vous serez averti immédiatement" },
+  { at: 30000, text: "Recherche étendue à une zone proche…",    sub: "Nous élargissons le rayon pour vous" },
+  { at: 42000, text: "Nouvelle tentative de dispatch…",         sub: "CDL relance la recherche pour vous" },
+  { at: 55000, text: "Plusieurs livreurs analysent votre trajet…", sub: "La réponse arrive bientôt" },
+  { at: 70000, text: "Recherche active en cours…",              sub: "CDL travaille pour vous trouver un livreur" },
+];
+
+// Estimation du délai moyen de réponse (s restantes, décroissante)
+function useEtaCountdown(startMs = 90000) {
+  const [secs, setSecs] = useState(Math.round(startMs / 1000));
+  const ref = useRef(null);
+  useEffect(() => {
+    ref.current = setInterval(() => {
+      setSecs(s => (s > 1 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(ref.current);
+  }, []);
+  return secs;
+}
+
+// ── Statut progressif basé sur l'elapsed time ────────────────────────────
+function useLiveStatus() {
+  const startRef = useRef(Date.now());
+  const [phaseIdx, setPhaseIdx] = useState(0);
+
+  useEffect(() => {
+    const timers = STATUS_PHASES.slice(1).map((phase, i) => {
+      const delay = phase.at - (Date.now() - startRef.current);
+      if (delay < 0) return null;
+      return setTimeout(() => setPhaseIdx(i + 1), delay);
+    });
+    return () => timers.forEach(t => t && clearTimeout(t));
+  }, []);
+
+  return STATUS_PHASES[phaseIdx] || STATUS_PHASES[STATUS_PHASES.length - 1];
+}
+
+// ── Barre de progression animée ───────────────────────────────────────────
+function ProgressBar({ totalMs = 90000 }) {
+  const [pct, setPct] = useState(2);
+  const startRef = useRef(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => {
+      const elapsed = Date.now() - startRef.current;
+      // Progression logarithmique — avance vite au début, ralentit après 60%
+      const raw = Math.min((elapsed / totalMs) * 100, 92);
+      const smoothed = raw < 60 ? raw : 60 + (raw - 60) * 0.4;
+      setPct(Math.round(smoothed));
+    }, 800);
+    return () => clearInterval(id);
+  }, [totalMs]);
+
+  const color = pct < 40 ? "#3b82f6" : pct < 70 ? "#6366f1" : "#8b5cf6";
+
+  return (
+    <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
+      <motion.div
+        className="h-full rounded-full"
+        animate={{ width: `${pct}%` }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        style={{ background: color }}
+      />
+    </div>
+  );
+}
+
 // ── Indicateur "livreurs contactés" ──────────────────────────────────────
 function NotifiedPulse({ count }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold"
+      key={count}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 text-white text-xs font-semibold"
     >
       <motion.div
-        className="h-2 w-2 rounded-full bg-blue-500"
-        animate={{ scale: [1, 1.5, 1], opacity: [1, 0.4, 1] }}
+        className="h-2 w-2 rounded-full bg-white"
+        animate={{ scale: [1, 1.5, 1], opacity: [1, 0.3, 1] }}
         transition={{ duration: 1.2, repeat: Infinity }}
       />
       {count > 0 ? `${count} livreur${count > 1 ? "s" : ""} contacté${count > 1 ? "s" : ""}` : "Analyse du réseau…"}
@@ -131,6 +204,8 @@ export default function SearchingLivreurScreen({ course, livreurTrouve, aucunLiv
   const [nearbyMsg, setNearbyMsg] = useState(false);
   const timerRef = useRef(null);
   const countRef = useRef(0);
+  const liveStatus = useLiveStatus();
+  const etaSecs = useEtaCountdown(90000);
 
   // ── Construire les séquences de cartes à partir des données course ──────
   const buildCards = useCallback(() => {
@@ -242,31 +317,44 @@ export default function SearchingLivreurScreen({ course, livreurTrouve, aucunLiv
       <RadarBg />
 
       {/* Zone haute : spinner + titre */}
-      <div className="relative z-10 flex flex-col items-center pt-14 pb-6 px-6 text-white text-center space-y-4">
+      <div className="relative z-10 flex flex-col items-center pt-12 pb-5 px-6 text-white text-center space-y-3">
         <MotoSpinner />
-        <div className="space-y-1">
-          <p className="text-xl font-black tracking-tight">Recherche d'un livreur…</p>
-          <p className="text-sm text-blue-100">CDL travaille activement pour vous</p>
-        </div>
-        <NotifiedPulse count={notifiedCount} />
 
-        {/* Message "livreur proche" — apparaît après quelques secondes */}
-        <AnimatePresence>
-          {nearbyMsg && (
+        {/* Statut dynamique progressif */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={liveStatus.text}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="space-y-0.5"
+          >
+            <p className="text-lg font-black tracking-tight leading-snug">{liveStatus.text}</p>
+            <p className="text-sm text-blue-100">{liveStatus.sub}</p>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Barre de progression */}
+        <div className="w-full max-w-xs px-2">
+          <ProgressBar totalMs={90000} />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <NotifiedPulse count={notifiedCount} />
+          {/* ETA */}
+          {etaSecs > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 text-white text-xs font-semibold"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 3 }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 text-white/80 text-xs"
             >
-              <motion.span
-                animate={{ scale: [1, 1.3, 1] }}
-                transition={{ duration: 0.8, repeat: Infinity, repeatDelay: 1.5 }}
-              >📍</motion.span>
-              Un livreur proche consulte votre course
+              <Clock className="h-3 w-3" />
+              ~{etaSecs > 60 ? `${Math.ceil(etaSecs / 60)} min` : `${etaSecs}s`}
             </motion.div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
 
       {/* Zone cartes animées */}
@@ -311,11 +399,20 @@ export default function SearchingLivreurScreen({ course, livreurTrouve, aucunLiv
           ))}
         </div>
 
-        {/* Étapes de progression */}
+        {/* Étapes de progression — évoluent avec liveStatus */}
         <div className="space-y-2 mt-2">
           <StepRow icon="✅" label="Course créée avec succès" done />
-          <StepRow icon="📡" label="Livreurs proches notifiés" done={notifiedCount > 0} active={notifiedCount === 0} />
-          <StepRow icon="⏳" label="En attente d'une réponse" active={notifiedCount > 0} />
+          <StepRow
+            icon="📡"
+            label={notifiedCount > 0 ? `${notifiedCount} livreur${notifiedCount > 1 ? "s" : ""} notifié${notifiedCount > 1 ? "s" : ""}` : "Notification aux livreurs proches"}
+            done={notifiedCount > 0}
+            active={notifiedCount === 0}
+          />
+          <StepRow
+            icon="🔍"
+            label={liveStatus.text}
+            active={notifiedCount > 0}
+          />
         </div>
 
         {/* Bouton discret */}
