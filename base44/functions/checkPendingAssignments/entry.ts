@@ -116,8 +116,8 @@ async function processOnePendingCourse(base44, course, now, forceImmediate) {
     .filter(h => ['refuse', 'no_response'].includes(h.statut))
     .map(h => h.livreur_email);
 
-  // autoDispatch vérifiera lui-même le mode — pas besoin de re-vérifier ici
-  await base44.asServiceRole.functions.invoke('autoDispatch', {
+  // cdlDispatch (moteur unifié) vérifiera lui-même le mode
+  await base44.asServiceRole.functions.invoke('cdlDispatch', {
     course_id: course.id,
     exclude_emails: exclus,
   });

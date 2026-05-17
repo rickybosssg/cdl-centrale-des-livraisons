@@ -299,6 +299,20 @@ export default function AdminDashboardPro() {
         </div>
       </div>
 
+      {/* ── VUE OPS UBER — accès direct ── */}
+      <Link to="/ops">
+        <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-3 active:scale-95 transition-all cursor-pointer">
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-sm font-bold text-primary">🚀 Vue Opérations CDL</p>
+              <p className="text-[10px] text-primary/70">Livreurs · Dispatch · Courses — tout en un</p>
+            </div>
+          </div>
+          <ChevronRight className="h-5 w-5 text-primary/50 flex-shrink-0" />
+        </div>
+      </Link>
+
       {/* ── MODE DISPATCH — lecture seule, clic → /dispatch-monitor ── */}
       <Link to="/dispatch-monitor">
         <div className={`rounded-2xl border-2 p-3 flex items-center justify-between gap-3 active:scale-95 transition-all cursor-pointer ${!isManuel ? "border-green-400 bg-green-50" : "border-amber-400 bg-amber-50"}`}>

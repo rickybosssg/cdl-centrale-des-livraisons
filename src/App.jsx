@@ -127,6 +127,7 @@ import FcmTestFull from './pages/FcmTestFull';
 import FcmTokenRefresh from './pages/FcmTokenRefresh';
 import FcmNativeDebug from './pages/FcmNativeDebug';
 import FcmDispatchAuditTest from './pages/FcmDispatchAuditTest';
+import UberOpsView from './pages/dispatcher/UberOpsView';
 import EmailLogin from './pages/EmailLogin';
 import AppPublicLink from './pages/AppPublicLink';
 import TrackingPublic from './pages/TrackingPublic';
@@ -473,6 +474,7 @@ const AuthenticatedApp = () => {
           <Route path="/profils-admin" element={<ProfilsAdmin />} />
           <Route path="/test-upload" element={<TestUpload />} />
           <Route path="/dispatch-monitor" element={<DispatchMonitor />} />
+          <Route path="/ops" element={<UberOpsView />} />
           <Route path="/dispatch-mode-settings" element={<DispatchModeSettings />} />
           <Route path="/admin-repair" element={<AdminRepair />} />
           <Route path="/dispatch-v2-debug" element={<DispatchModeDebug />} />
