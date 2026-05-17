@@ -126,7 +126,7 @@ import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
 import FcmTestFull from './pages/FcmTestFull';
 import FcmTokenRefresh from './pages/FcmTokenRefresh';
 import FcmNativeDebug from './pages/FcmNativeDebug';
-import FcmDispatchAuditTest from './pages/FcmDispatchAuditTest';
+
 import UberOpsView from './pages/dispatcher/UberOpsView';
 import EmailLogin from './pages/EmailLogin';
 import AppPublicLink from './pages/AppPublicLink';
@@ -148,7 +148,7 @@ import PushV2Audit from './pages/dispatcher/PushV2Audit';
 import SystemHealth from './pages/dispatcher/SystemHealth';
 import AdminLogs from './pages/dispatcher/AdminLogs';
 import IntegrityDashboard from './pages/dispatcher/IntegrityDashboard';
-import AuthFlowAudit from './pages/AuthFlowAudit';
+
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
 // Doit être exécuté après les imports (ESM) mais avant le mount
@@ -358,8 +358,8 @@ const AuthenticatedApp = () => {
         <Route path="/telecharger-app" element={<DownloadApp />} />
         <Route path="/reset-admin" element={<ResetAdmin />} />
         <Route path="/auth-flow-audit" element={<Navigate to="/" replace />} />
-      <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
-      <Route path="/debug-admin" element={<DebugAdmin />} />
+        <Route path="/admin-role-correction" element={<AdminRoleCorrection />} />
+        <Route path="/debug-admin" element={<DebugAdmin />} />
 
       {/* Toutes les routes avec layout */}
       <Route element={<AppLayoutWithUser />}>
@@ -408,6 +408,7 @@ const AuthenticatedApp = () => {
         <Route path="/fcm-persistent-diag" element={<FcmPersistentDiag />} />
         <Route path="/fcm-engine" element={<FcmEngineDashboard />} />
         <Route path="/fcm-dispatch-audit" element={<Navigate to="/" replace />} />
+        <Route path="/fcm-dispatch-audit-test" element={<Navigate to="/" replace />} />
 
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
         <Route path="/cgu" element={<CGU />} />

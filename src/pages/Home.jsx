@@ -13,16 +13,13 @@ import IncompleteProfileGuard from "../components/IncompleteProfileGuard";
 import NotificationPermissionBanner from "../components/NotificationPermissionBanner";
 import ClientHome from "./client/ClientHome";
 import LivreurHome from "./client/LivreurHome.jsx";
-import DispatcherDashboard from "./dispatcher/DispatcherDashboard";
 import AdminDashboardPro from "./dispatcher/AdminDashboardPro";
 import DashboardPartenaire from "./partenaire/DashboardPartenaire";
 import DashboardCommercial from "./commercial/DashboardCommercial";
 import DashboardAnnonceur from "./annonceur/DashboardAnnonceur";
 import AttentePage from "./AttentePage";
 
-// ADMIN_EMAILS conservé uniquement pour UI cosmétique (badge)
-// La vérification d'accès utilise exclusivement isAdminUser(user) → user.role === 'admin'
-const ADMIN_EMAILS = ["weezyh2@gmail.com", "admin@cdl.local"];
+
 
 /**
  * Résoudre le profil actif depuis la liste des profils.

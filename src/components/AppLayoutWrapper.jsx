@@ -113,8 +113,7 @@ export default function AppLayoutWrapper({ user }) {
         if (needsPermissionsOnboarding()) {
           setShowPermissions(true);
         }
-      } catch (error) {
-        console.error('[AppLayoutWrapper] Load error:', error);
+      } catch (_) {
         if (isMounted) setLoading(false);
         return;
       } finally {
@@ -147,11 +146,8 @@ export default function AppLayoutWrapper({ user }) {
   // Home.jsx dispatch cet event après avoir mis à jour localStorage + state local
   useEffect(() => {
     const onProfileSwitch = (e) => {
-      const newRole = e.detail?.role;
-      if (newRole) {
-        console.log('[AppLayoutWrapper] Profile switch →', newRole);
-        setUserRole(newRole);
-      }
+    const newRole = e.detail?.role;
+    if (newRole) setUserRole(newRole);
     };
     window.addEventListener('cdl_profile_switch', onProfileSwitch);
     return () => window.removeEventListener('cdl_profile_switch', onProfileSwitch);
@@ -209,10 +205,7 @@ export default function AppLayoutWrapper({ user }) {
       {/* PermissionsOnboarding DOIT s'afficher en premier — AVANT AppLayout */}
       {/* Cela garantit que FCM demande la permission SEUL et avant FcmBootstrap */}
       {showPermissions && (
-        <PermissionsOnboarding onDone={() => {
-          console.log('[AppLayoutWrapper] Permissions done');
-          setShowPermissions(false);
-        }} />
+        <PermissionsOnboarding onDone={() => setShowPermissions(false)} />
       )}
 
       {/* Après permissions OK → afficher l'app */}

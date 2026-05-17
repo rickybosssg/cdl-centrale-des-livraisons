@@ -57,7 +57,6 @@ export default function FcmDiagnostic() {
   const addLog = (msg, type = 'info') => {
     const ts = new Date().toLocaleTimeString('fr-FR');
     setLogs(prev => [...prev.slice(-30), { ts, msg, type }]);
-    console.log(`[FcmDiag][${type}] ${msg}`);
   };
 
   const [chain, setChain] = useState({
@@ -140,7 +139,6 @@ export default function FcmDiagnostic() {
         try {
           const errHandle = await PushNotifications.addListener('registrationError', (err) => {
             const msg = JSON.stringify(err);
-            console.error('[FcmDiag] registrationError natif:', msg);
             setRegistrationError(msg);
             addLog('registrationError: ' + msg, 'error');
           });

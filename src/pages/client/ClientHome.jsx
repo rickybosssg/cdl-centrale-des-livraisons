@@ -137,8 +137,7 @@ export default function ClientHome({ user }) {
           20
         );
         if (isMounted) setCourses(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error('[ClientHome] Load error:', err);
+      } catch (_) {
         if (isMounted) setCourses([]);
       } finally {
         if (isMounted) setLoading(false);

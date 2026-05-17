@@ -13,12 +13,6 @@ export default function DebugAdmin() {
   const loadUser = async () => {
     try {
       const me = await base44.auth.me();
-      console.log('[DebugAdmin] User loaded:', {
-        email: me.email,
-        role: me.role,
-        user_type: me.user_type,
-        active_profile_type: me.active_profile_type,
-      });
       setUser(me);
     } catch (err) {
       toast.error("Erreur chargement user: " + err.message);
@@ -43,10 +37,7 @@ export default function DebugAdmin() {
         target_email: user.email,
       });
 
-      console.log('[DebugAdmin] forceAdminRole result:', res.data);
-
       if (res.data?.success) {
-        console.log('[DebugAdmin] ✅ Rôle admin forcé avec succès');
         toast.success('✅ Rôle admin forcé! Rechargement complet...');
         // Vider TOUT le localStorage/sessionStorage pour forcer un refetch complet
         try {
@@ -66,7 +57,6 @@ export default function DebugAdmin() {
         toast.error(res.data?.error || 'Erreur');
       }
     } catch (err) {
-      console.error('[DebugAdmin] Error:', err);
       toast.error('Erreur: ' + err.message);
     }
     setFixing(false);

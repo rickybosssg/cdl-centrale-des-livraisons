@@ -96,11 +96,7 @@ export default function AppLayout({ userRole, userEmail }) {
             }
           } catch (_) {}
         });
-      } catch (err) {
-        console.warn('[AppLayout] Course subscribe error (non-fatal):', err?.message);
-      }
-    } else {
-      console.log('[AppLayout] Course WebSocket SKIPPED on native (polling only)');
+      } catch (_) {}
     }
 
     return () => {

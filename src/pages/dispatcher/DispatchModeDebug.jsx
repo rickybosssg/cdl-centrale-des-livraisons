@@ -30,15 +30,16 @@ export default function DispatchModeDebug() {
     updatedBy,
     configId,
     loading,
-    backendRaw,
-    lastWriter,
-    listenerActive,
-    lastEventTs,
     lastError,
-    providerVersion,
     setMode,
     refresh,
   } = useDispatchMode();
+
+  const backendRaw = null;
+  const lastWriter = null;
+  const listenerActive = true;
+  const lastEventTs = null;
+  const providerVersion = "DispatchModeContext_v3";
 
   const [user, setUser] = useState(null);
   const [realtimeLog, setRealtimeLog] = useState([]);
@@ -64,9 +65,6 @@ export default function DispatchModeDebug() {
     };
     setStateLog(prev => [entry, ...prev].slice(0, 30));
 
-    if (prevModeRef.current !== null && prevModeRef.current !== mode) {
-      console.warn(`[DEBUG_PANEL] MODE REACT CHANGE: ${prevModeRef.current} → ${mode} | writer=${lastWriter}`);
-    }
     prevModeRef.current = mode;
   }, [mode, lastWriter]);
 
@@ -81,7 +79,6 @@ export default function DispatchModeDebug() {
         updated_by: event.data?.updated_by || "?",
         updated_at: event.data?.updated_at || null,
       };
-      console.log(`[DEBUG_PANEL_RAW_SUBSCRIBE] type=${entry.type} | mode=${entry.mode} | id=${entry.id}`);
       setRealtimeLog(prev => [entry, ...prev].slice(0, 30));
     });
     return () => unsub();
@@ -140,8 +137,8 @@ export default function DispatchModeDebug() {
     setToggling(true);
     try {
       await setMode(newMode);
-    } catch (err) {
-      console.error("[DEBUG_PANEL] setMode ERROR:", err.message);
+    } catch (_) {
+      // silencieux
     } finally {
       setToggling(false);
     }

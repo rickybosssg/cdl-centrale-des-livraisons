@@ -58,8 +58,7 @@ function useGPS(userEmail) {
         },
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
       );
-    } catch (err) {
-      console.warn('[GPS] useGPS request error (non-fatal):', err?.message);
+    } catch (_) {
       setGpsLoading(false);
     }
   }, []);
@@ -115,22 +114,13 @@ export default function LivreurHome({ user: initialUser }) {
   // ── Subscription temps réel USER (source unique pour driver_online, disponible, GPS, profil) ────
   useEffect(() => {
     if (!initialUser?.email) return;
-    console.log(`[DRIVER_USER_SUBSCRIBE_START] user=${initialUser.email}`);
-
     const unsubUser = base44.entities.User.subscribe((event) => {
       if (event.data?.email === initialUser.email) {
-        console.log(
-          `[DRIVER_USER_REALTIME_UPDATE] event=${event.type} | driver_online=${event.data?.driver_online} | disponible=${event.data?.disponible} | gps=${event.data?.gps_latitude},${event.data?.gps_longitude}`
-        );
         setUser(event.data);
-        setSyncError(null); // Réinitialiser alerte synchro
+        setSyncError(null);
       }
     });
-
-    return () => {
-      console.log(`[DRIVER_USER_UNSUBSCRIBE] user=${initialUser.email}`);
-      if (unsubUser) unsubUser();
-    };
+    return () => { if (unsubUser) unsubUser(); };
   }, [initialUser?.email]);
 
   // ── Chargement courses ──────────────────────────────────────────────────────
@@ -154,7 +144,6 @@ export default function LivreurHome({ user: initialUser }) {
         if (ev.type === "create") {
           setCourses(p => [ev.data, ...p]);
           if (ev.data.statut === "assignee_attente") {
-            console.log(`[DRIVER_ASSIGNED_COURSE_REALTIME_OK] create | course_id=${ev.id} | statut=assignee_attente`);
             setAlertCourse(ev.data);
           }
         } else if (ev.type === "update") {
@@ -163,7 +152,6 @@ export default function LivreurHome({ user: initialUser }) {
             return exists ? p.map(c => c.id === ev.id ? ev.data : c) : [ev.data, ...p];
           });
           if (ev.data.statut === "assignee_attente") {
-            console.log(`[DRIVER_ASSIGNED_COURSE_REALTIME_OK] update | course_id=${ev.id} | statut=assignee_attente`);
             setAlertCourse(ev.data);
           } else {
             setAlertCourse(p => p?.id === ev.id ? null : p);
@@ -174,28 +162,21 @@ export default function LivreurHome({ user: initialUser }) {
         setAlertCourse(p => p?.id === ev.id ? null : p);
       }
     });
-    console.log('[DRIVER_ASSIGNED_COURSE_REALTIME_OK] subscription active | user=' + user.email);
     return unsub;
   }, [user?.email]);
 
   // ── Toggle en ligne — Valeur confirmée BDD uniquement ────────────────────────
   const toggleOnline = async () => {
     const next = !driverOnlineConfirmed;
-    console.log(`[DRIVER_ONLINE_CLICK] current=${driverOnlineConfirmed} | next=${next}`);
     setToggling(true);
-
     try {
-      console.log(`[DRIVER_ONLINE_SAVE_START] user=${user.email} | driver_online=${next}`);
       await base44.auth.updateMe({
         disponible: next,
         driver_online: next,
         last_seen: new Date().toISOString(),
       });
-      console.log(`[DRIVER_ONLINE_SAVE_SUCCESS] user=${user.email} | driver_online=${next}`);
-      // ❌ NE PAS modifier l'état local ici — attendre la souscription temps réel User
-      toast.success(next ? "🟢 Synchronisation en cours..." : "🔴 Synchronisation en cours...");
+      toast.success(next ? "🟢 En ligne" : "🔴 Hors ligne");
     } catch (err) {
-      console.error(`[DRIVER_ONLINE_SAVE_ERROR] user=${user.email} | error=${err.message}`);
       setSyncError(`Erreur de synchronisation: ${err.message}`);
       toast.error("Erreur de mise à jour");
     }
