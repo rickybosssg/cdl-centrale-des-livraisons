@@ -75,27 +75,46 @@ export default function SandboxDispatchTests({ onLog, sandboxCourses, onReload }
     onLog("⚡ Test auto dispatch démarré...", "info");
     const start = Date.now();
     try {
+      // Diagnostic auth
+      const user = await base44.auth.me();
+      onLog(`👤 Auth: ${user?.email} | role: ${user?.role}`, "info");
+
       const course = await createSandboxCourse({ mode_assignation: "auto" });
       onLog(`📦 Course sandbox créée: ${course.id.slice(-6)}`, "info");
-      // Lancer le dispatch
-      const res = await base44.functions.invoke("autoDispatch", {
-        course_id: course.id,
-        sandbox: true,
-      });
+
+      // Appel cdlDispatch (moteur réel) via autoDispatch stub
+      let res, endpoint;
+      try {
+        endpoint = "autoDispatch";
+        res = await base44.functions.invoke("autoDispatch", { course_id: course.id, force: false });
+        onLog(`📡 Endpoint: ${endpoint} → HTTP OK`, "info");
+      } catch (e403) {
+        onLog(`⛔ ${endpoint} → ${e403.message} — tentative cdlDispatch direct...`, "warn");
+        try {
+          endpoint = "cdlDispatch";
+          res = await base44.functions.invoke("cdlDispatch", { course_id: course.id, force: false });
+          onLog(`📡 Endpoint: ${endpoint} → HTTP OK`, "info");
+        } catch (e2) {
+          throw new Error(`autoDispatch: ${e403.message} | cdlDispatch: ${e2.message}`);
+        }
+      }
+
       const elapsed = Date.now() - start;
-      const success = res?.data?.success !== false;
+      const data = res?.data || res;
+      const success = data?.success !== false && !data?.error;
       setResult("auto", {
         success,
         elapsed,
         message: success
-          ? `Dispatch lancé pour la course ${course.id.slice(-6)} — ${res?.data?.drivers_notified || 0} livreur(s) notifiés`
-          : "Aucun livreur disponible ou erreur dispatch",
-        details: res?.data,
+          ? `Dispatch via ${endpoint}: ${data?.livreur?.email || "aucun livreur"} (${data?.eligible_count ?? 0} éligibles)`
+          : `Résultat: ${data?.reason || data?.error || JSON.stringify(data)}`,
+        details: data,
       });
-      onLog(`${success ? "✅" : "⚠️"} Auto dispatch: ${elapsed}ms | ${res?.data?.drivers_notified || 0} livreurs notifiés`, success ? "success" : "warn");
+      onLog(`${success ? "✅" : "⚠️"} Dispatch ${endpoint}: ${elapsed}ms | raison: ${data?.reason || "OK"}`, success ? "success" : "warn");
       onReload();
     } catch (e) {
-      setResult("auto", { success: false, message: e.message, elapsed: Date.now() - start });
+      const elapsed = Date.now() - start;
+      setResult("auto", { success: false, message: e.message, elapsed });
       onLog("❌ Auto dispatch erreur: " + e.message, "error");
     }
     setLoad("auto", false);

@@ -1,10 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trash2, Zap, FlaskConical } from "lucide-react";
+import { Trash2, Zap, FlaskConical, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import SandboxCourseGenerator from "@/components/sandbox/SandboxCourseGenerator";
 import SandboxFakeDrivers from "@/components/sandbox/SandboxFakeDrivers";
 import SandboxDispatchTests from "@/components/sandbox/SandboxDispatchTests";
@@ -14,12 +14,57 @@ export default function SandboxTest() {
   const [logs, setLogs] = useState([]);
   const [sandboxCourses, setSandboxCourses] = useState([]);
   const [purging, setPurging] = useState(false);
+  const [authStatus, setAuthStatus] = useState(null); // { email, role, realtimeOk, status }
 
   const addLog = useCallback((msg, type = "info") => {
     setLogs((prev) => [
       ...prev,
       { msg, type, ts: new Date().toISOString() },
     ]);
+  }, []);
+
+  // Diagnostic auth + realtime au mount
+  useEffect(() => {
+    let unsub = null;
+    let realtimeOk = false;
+
+    const run = async () => {
+      try {
+        const user = await base44.auth.me();
+        if (!user) { setAuthStatus({ status: "AUTH_ERROR", detail: "auth.me() → null" }); return; }
+
+        // Test subscription realtime
+        const subTimer = setTimeout(() => {
+          if (!realtimeOk) setAuthStatus(prev => ({ ...prev, realtimeOk: false }));
+        }, 4000);
+
+        unsub = base44.entities.Course.subscribe((ev) => {
+          if (!realtimeOk) {
+            realtimeOk = true;
+            clearTimeout(subTimer);
+            setAuthStatus(prev => ({ ...prev, realtimeOk: true }));
+          }
+        });
+
+        setAuthStatus({
+          status: user.role === "admin" ? "CONNECTED" : "DENIED",
+          email: user.email,
+          role: user.role,
+          realtimeOk: null, // pending
+        });
+
+        if (user.role !== "admin") {
+          addLog(`⛔ role=${user.role} — autoDispatch/cdlDispatch nécessite admin`, "error");
+        } else {
+          addLog(`✅ Auth OK: ${user.email} (${user.role})`, "success");
+        }
+      } catch (e) {
+        setAuthStatus({ status: "AUTH_ERROR", detail: e.message });
+        addLog("❌ Auth error: " + e.message, "error");
+      }
+    };
+    run();
+    return () => { unsub?.(); };
   }, []);
 
   const reloadCourses = useCallback(async () => {
@@ -96,6 +141,56 @@ export default function SandboxTest() {
         </div>
         <Badge className="bg-violet-100 text-violet-700 text-xs">🧪 Sandbox</Badge>
       </div>
+
+      {/* Auth + Realtime status badges */}
+      <Card>
+        <CardContent className="p-3 flex flex-wrap gap-2 items-center">
+          {/* Auth badge */}
+          {!authStatus ? (
+            <Badge className="bg-gray-100 text-gray-600 gap-1 animate-pulse">
+              <div className="w-2 h-2 rounded-full bg-gray-400" />
+              Vérification auth...
+            </Badge>
+          ) : authStatus.status === "CONNECTED" ? (
+            <Badge className="bg-green-100 text-green-800 gap-1">
+              <Wifi className="h-3 w-3" /> CONNECTED · {authStatus.email} ({authStatus.role})
+            </Badge>
+          ) : authStatus.status === "DENIED" ? (
+            <Badge className="bg-red-100 text-red-700 gap-1">
+              <WifiOff className="h-3 w-3" /> DENIED · role={authStatus.role} (admin requis)
+            </Badge>
+          ) : (
+            <Badge className="bg-red-200 text-red-800 gap-1">
+              <AlertCircle className="h-3 w-3" /> AUTH_ERROR · {authStatus.detail}
+            </Badge>
+          )}
+
+          {/* Realtime badge */}
+          {authStatus && (
+            authStatus.realtimeOk === null ? (
+              <Badge className="bg-blue-50 text-blue-600 gap-1 animate-pulse">
+                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                REALTIME testing...
+              </Badge>
+            ) : authStatus.realtimeOk ? (
+              <Badge className="bg-green-100 text-green-700 gap-1">
+                <Wifi className="h-3 w-3" /> REALTIME OK
+              </Badge>
+            ) : (
+              <Badge className="bg-amber-100 text-amber-700 gap-1">
+                <WifiOff className="h-3 w-3" /> REALTIME TIMEOUT
+              </Badge>
+            )
+          )}
+
+          {/* Avertissement si non-admin */}
+          {authStatus?.status === "DENIED" && (
+            <p className="text-xs text-red-600 w-full mt-1">
+              ⚠️ Le dispatch (autoDispatch/cdlDispatch) nécessite le rôle <strong>admin</strong>. Le test sandbox essaiera quand même les deux endpoints et affichera la raison exacte du refus.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Actions globales */}
       <div className="flex gap-2">
