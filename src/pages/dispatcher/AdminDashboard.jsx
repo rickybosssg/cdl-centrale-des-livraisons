@@ -618,6 +618,13 @@ export default function AdminDashboard() {
           </Button>
         </Link>
 
+        <Link to="/sandbox-test">
+          <Button className="w-full justify-start gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold">
+            <Sparkles className="h-4 w-4" />
+            🧪 Mode Sandbox / Tests
+          </Button>
+        </Link>
+
         {/* ── NOUVEAUX MODULES BEDOU ── */}
         <div className="pt-1">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">📊 Intelligence Bedou</p>

@@ -149,6 +149,7 @@ import PushV2Audit from './pages/dispatcher/PushV2Audit';
 import SystemHealth from './pages/dispatcher/SystemHealth';
 import AdminLogs from './pages/dispatcher/AdminLogs';
 import IntegrityDashboard from './pages/dispatcher/IntegrityDashboard';
+import SandboxTest from './pages/dispatcher/SandboxTest.jsx';
 
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
@@ -481,6 +482,7 @@ const AuthenticatedApp = () => {
           <Route path="/system-health" element={<SystemHealth />} />
           <Route path="/admin/logs" element={<AdminLogs />} />
           <Route path="/integrity-dashboard" element={<IntegrityDashboard />} />
+          <Route path="/sandbox-test" element={<SandboxTest />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
