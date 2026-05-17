@@ -5,7 +5,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { useDispatchMode } from "@/context/DispatchModeContext";
 import { isDriverDispatchable } from "@/lib/dispatch";
 import moment from "moment";
 import {
@@ -94,11 +93,6 @@ export default function AdminDashboardPro() {
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);
 
-  // Lecture seule — le contrôle du mode est UNIQUEMENT dans /dispatch-monitor
-  const { mode: dispatchMode } = useDispatchMode();
-  console.log('[DASHBOARD_DISPATCH_READONLY_OK] Dashboard dispatch = lecture seule | mode=' + dispatchMode);
-  console.log('[DISPATCH_SINGLE_CONTROL_POINT_OK] Point de contrôle unique = /dispatch-monitor');
-
   // Data
   const [courses, setCourses] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -113,7 +107,7 @@ export default function AdminDashboardPro() {
     try {
       const [
         coursesRes, usersRes, profilesRes, bedouRes, retraitRes,
-        partenaireRes, pubRes, dispatchRes
+        partenaireRes, pubRes,
       ] = await Promise.allSettled([
         base44.entities.Course.list("-created_date", 100),
         base44.entities.User.list("-updated_date", 100),
@@ -122,7 +116,6 @@ export default function AdminDashboardPro() {
         base44.entities.DemandeRetrait.filter({ statut: "en_attente" }),
         base44.entities.Partenaire.list("-created_date", 200),
         base44.entities.Publicite.filter({ deleted: false }),
-        base44.entities.DispatchConfig.list("-updated_date", 1),
       ]);
 
       if (coursesRes.status === "fulfilled") setCourses(coursesRes.value || []);
@@ -132,8 +125,6 @@ export default function AdminDashboardPro() {
       if (retraitRes.status === "fulfilled") setDemandesRetrait(retraitRes.value || []);
       if (partenaireRes.status === "fulfilled") setPartenaires(partenaireRes.value || []);
       if (pubRes.status === "fulfilled") setPublicites(pubRes.value || []);
-      // NOTE: dispatchMode géré par DispatchModeContext — pas de setDispatchMode ici
-
       setLastSync(new Date());
       console.log('[DASHBOARD] sync success');
     } catch (err) {
@@ -262,9 +253,6 @@ export default function AdminDashboardPro() {
     );
   }
 
-  const isManuel = dispatchMode === "manuel";
-  console.log(`[UI_MODE_BEFORE_RENDER] AdminDashboardPro | dispatchMode=${dispatchMode} | isManuel=${isManuel}`);
-
   return (
     <div className="space-y-4 pb-24">
       {/* ── EN-TÊTE ── */}
@@ -310,27 +298,6 @@ export default function AdminDashboardPro() {
             </div>
           </div>
           <ChevronRight className="h-5 w-5 text-primary/50 flex-shrink-0" />
-        </div>
-      </Link>
-
-      {/* ── MODE DISPATCH — lecture seule, clic → /dispatch-monitor ── */}
-      <Link to="/dispatch-monitor">
-        <div className={`rounded-2xl border-2 p-3 flex items-center justify-between gap-3 active:scale-95 transition-all cursor-pointer ${!isManuel ? "border-green-400 bg-green-50" : "border-amber-400 bg-amber-50"}`}>
-          <div className="flex items-center gap-2">
-            <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${!isManuel ? "bg-green-500 animate-pulse" : "bg-amber-500"}`} />
-            <div>
-              <p className={`text-xs font-bold ${!isManuel ? "text-green-800" : "text-amber-800"}`}>
-                {!isManuel ? "⚡ Dispatch AUTO" : "🔧 Dispatch MANUEL"}
-              </p>
-              <p className={`text-[10px] ${!isManuel ? "text-green-700" : "text-amber-700"}`}>
-                {!isManuel ? `${livreursDispatchables.length} livreur(s) dispatchables` : "Assignation manuelle requise"}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-white border border-gray-200 text-gray-500">
-            <Eye className="h-3.5 w-3.5" />
-            Gérer
-          </div>
         </div>
       </Link>
 
