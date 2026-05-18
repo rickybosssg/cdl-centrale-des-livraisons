@@ -349,19 +349,65 @@ Deno.serve(async (req) => {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // ACTION : SUPPRESSION LOGIQUE ADMIN
+  // ACTION : SUPPRESSION LOGIQUE ADMIN (nettoyage complet)
   // ──────────────────────────────────────────────────────────────────────────
   if (action === 'delete_admin') {
     if (c.is_deleted) {
       return Response.json({ error: 'Course déjà supprimée' }, { status: 409 });
     }
 
+    // 1. Mettre le statut à 'annulee' + is_deleted SIMULTANÉMENT
+    //    → bloque tout re-dispatch futur (cdlDispatch vérifie ELIGIBLE_STATUTS)
+    //    → bloque checkPendingAssignments (filtre assignee_attente)
     await base44.asServiceRole.entities.Course.update(courseId, {
       is_deleted: true,
+      statut: 'annulee',
       deleted_at: now,
       deleted_by_admin: user.email,
       delete_reason: raison.trim(),
+      livreur_email: null,
+      livreur_name: null,
+      telephone_livreur: null,
     });
+
+    // 2. Libérer le livreur si assigné
+    if (c.livreur_email) {
+      const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
+      if (livs?.[0]) {
+        const realCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: c.livreur_email });
+        const realActive = realCourses.filter(rc =>
+          ['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff'].includes(rc.statut) && !rc.is_deleted && rc.id !== courseId
+        ).length;
+        await base44.asServiceRole.entities.User.update(livs[0].id, {
+          nombre_courses_actives: realActive,
+        }).catch(() => {});
+      }
+      // Notifier le livreur
+      await base44.asServiceRole.entities.Notification.create({
+        destinataire_email: c.livreur_email,
+        destinataire_role: 'livreur',
+        titre: '🚫 Course supprimée par l\'admin',
+        message: `La course ${c.quartier_depart}→${c.quartier_arrivee} a été supprimée. Raison : ${raison.trim()}`,
+        type: 'warning', lue: false, course_id: courseId,
+      }).catch(() => {});
+    }
+
+    // 3. Notifier le client
+    if (c.client_email) {
+      await base44.asServiceRole.entities.Notification.create({
+        destinataire_email: c.client_email,
+        destinataire_role: 'client',
+        titre: '❌ Votre course a été supprimée',
+        message: `Votre course ${c.quartier_depart}→${c.quartier_arrivee} a été retirée par CDL. Raison : ${raison.trim()}`,
+        type: 'danger', lue: false, course_id: courseId,
+      }).catch(() => {});
+    }
+
+    // 4. Marquer les notifications liées comme lues (nettoyage UI)
+    const notifs = await base44.asServiceRole.entities.Notification.filter({ course_id: courseId }).catch(() => []);
+    for (const n of notifs) {
+      await base44.asServiceRole.entities.Notification.update(n.id, { lue: true }).catch(() => {});
+    }
 
     await base44.asServiceRole.entities.AdminActionLog.create({
       admin_email: user.email,
@@ -369,13 +415,12 @@ Deno.serve(async (req) => {
       action_type: 'COURSE_DELETED',
       entity_type: 'Course',
       entity_id: courseId,
-      details: `Suppression logique — Raison: ${raison.trim()} | Statut: ${ancienStatut}`,
-      metadata_json: JSON.stringify({ statut_au_moment: ancienStatut, raison, client_email: c.client_email, prix: c.prix }),
+      details: `Suppression complète — Raison: ${raison.trim()} | Statut avant: ${ancienStatut} | Livreur libéré: ${c.livreur_email || 'aucun'}`,
+      metadata_json: JSON.stringify({ statut_au_moment: ancienStatut, raison, client_email: c.client_email, livreur_email: c.livreur_email, prix: c.prix }),
     }).catch(() => {});
 
-    console.log(`[COURSE_UPDATED] delete_admin | course=${courseId} | is_deleted=true | admin=${user.email} | ts=${new Date().toISOString()}`);
-    console.log(`[DELETE_ADMIN_SUCCESS] | course=${courseId} | admin=${user.email}`);
-    return Response.json({ success: true, action: 'delete_admin', courseId });
+    console.log(`[DELETE_ADMIN_SUCCESS] course=${courseId} | statut_avant=${ancienStatut} | livreur_libere=${c.livreur_email||'none'} | admin=${user.email} | ts=${now}`);
+    return Response.json({ success: true, action: 'delete_admin', courseId, livreur_libere: c.livreur_email || null });
   }
 
   return Response.json({ error: `Action inconnue: ${action}` }, { status: 400 });

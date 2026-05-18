@@ -168,14 +168,17 @@ Deno.serve(async (req) => {
       if (!user?.email) return Response.json({ error: 'Authentification requise' }, { status: 401 });
       const one = await base44.asServiceRole.entities.Course.filter({ id: singleCourseId });
       const c = one?.[0];
-      if (!c || c.statut !== 'assignee_attente') {
-        return Response.json({ success: true, reassigned: 0, skipped: 1, total: 0, note: 'Course absente ou déjà traitée' });
+      // GARDE : cours supprimée ou non dispatchable → skip immédiat
+      if (!c || c.is_deleted || c.statut !== 'assignee_attente') {
+        return Response.json({ success: true, reassigned: 0, skipped: 1, total: 0, note: 'Course absente, supprimée ou déjà traitée' });
       }
       const isAuthorized = user.role === 'admin' || user.email === c.livreur_email;
       if (!isAuthorized) return Response.json({ error: 'Non autorisé' }, { status: 403 });
       coursesToProcess = [c];
     } else {
-      coursesToProcess = await base44.asServiceRole.entities.Course.filter({ statut: 'assignee_attente' });
+      const raw = await base44.asServiceRole.entities.Course.filter({ statut: 'assignee_attente' });
+      // GARDE : exclure les cours supprimées logiquement
+      coursesToProcess = raw.filter(c => !c.is_deleted);
     }
 
     const URGENCE_SCORE = { tres_urgent: 3, urgent: 2, normal: 1 };

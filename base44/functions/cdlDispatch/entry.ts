@@ -109,6 +109,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Course introuvable' }, { status: 404 });
     }
 
+    // GARDE : jamais dispatcher une course supprimée ou annulée
+    if (course.is_deleted) {
+      console.log(`[CDL_DISPATCH] BLOCKED — course is_deleted=true | course=${courseId}`);
+      return Response.json({ success: false, message: 'Course supprimée, dispatch annulé' });
+    }
     const ELIGIBLE_STATUTS = ['en_attente', 'aucun_livreur'];
     if (!ELIGIBLE_STATUTS.includes(course.statut)) {
       return Response.json({ success: false, message: `Statut non dispatchable: ${course.statut}` });
