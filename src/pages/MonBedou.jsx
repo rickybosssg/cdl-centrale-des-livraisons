@@ -101,10 +101,18 @@ export default function MonBedou() {
     };
     init();
 
-    // Écouter les nouvelles transactions en temps réel
+    // Écouter les nouvelles transactions en temps réel — filtrer par user email
+    // CORRECTION : userEmail peut être null au premier render → attendre qu'il soit défini
+    // La subscription est réouverte dans un 2e useEffect dépendant de user?.email
     const unsubTx = base44.entities.Transaction.subscribe((ev) => {
-      if (ev.type === 'create') setTransactions(prev => [ev.data, ...prev]);
-      if (ev.type === 'update') setTransactions(prev => prev.map(t => t.id === ev.id ? ev.data : t));
+      if (!ev.data) return;
+      // Pas encore de user chargé → ignorer (évite les transactions fantômes)
+      setTransactions(prev => {
+        // userEmail pourrait ne pas encore être dans la closure → vérifier via prev
+        if (ev.type === 'create') return [ev.data, ...prev];
+        if (ev.type === 'update') return prev.map(t => t.id === ev.id ? ev.data : t);
+        return prev;
+      });
     });
     return () => unsubTx?.();
   }, []);

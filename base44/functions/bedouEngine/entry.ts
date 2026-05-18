@@ -285,6 +285,8 @@ Deno.serve(async (req) => {
     const { demande_id } = body;
     const [demande] = await base44.asServiceRole.entities.DemandeRetrait.filter({ id: demande_id });
     if (!demande) return Response.json({ error: 'Demande introuvable' }, { status: 404 });
+    // IDEMPOTENCE : rejeter si déjà traitée (évite double débit en cas de double-clic admin)
+    if (demande.statut !== 'en_attente') return Response.json({ error: 'Demande déjà traitée', statut: demande.statut }, { status: 400 });
     const bedou = await getBedou(demande.user_email);
     if (!bedou) return Response.json({ error: 'Bedou introuvable' }, { status: 404 });
     await updateBedou(bedou.id, {
