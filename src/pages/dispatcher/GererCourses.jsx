@@ -27,7 +27,8 @@ export default function GererCourses() {
   const loadData = async () => {
     try {
       const coursesData = await base44.entities.Course.list("-created_date", 200);
-      setCourses(coursesData);
+      // GARDE DÉFINITIVE : jamais afficher une course supprimée après refresh
+      setCourses(coursesData.filter(c => !c.is_deleted));
     } catch (err) {
       console.error('[GererCourses] Load error:', err);
       toast.error('Erreur lors du chargement: ' + (err?.message || ''));
@@ -157,15 +158,16 @@ export default function GererCourses() {
     });
   };
 
-  // Exclure les courses supprimées logiquement des listes normales
+  // Exclure les courses supprimées logiquement des listes normales (double garde)
   const visibles = courses.filter(c => !c.is_deleted);
   const enAttente = sortByUrgence(filterCourses(visibles.filter(c => ["en_attente", "aucun_livreur"].includes(c.statut) && !c.moyen_transport)));
   const assignees = filterCourses(visibles.filter(c => c.statut === "assignee_attente" && !c.moyen_transport));
   const enCours = filterCourses(visibles.filter(c => ["acceptee", "en_cours"].includes(c.statut) && !c.moyen_transport));
   const terminees = filterCourses(visibles.filter(c => ["livree", "annulee", "annulee_par_admin"].includes(c.statut) && !c.moyen_transport));
 
-  const deplacementsMoto = courses.filter(c => c.moyen_transport === "moto");
-  const deplotementsVehicule = courses.filter(c => c.moyen_transport === "vehicule");
+  // Déplacements : exclure aussi les supprimés
+  const deplacementsMoto = visibles.filter(c => c.moyen_transport === "moto");
+  const deplotementsVehicule = visibles.filter(c => c.moyen_transport === "vehicule");
 
   if (loading) {
     return (

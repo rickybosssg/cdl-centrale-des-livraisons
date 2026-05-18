@@ -46,16 +46,28 @@ export default function CourseDetail() {
     if (!id || id === ':id') { setLoading(false); return; }
     if (!silent) setLoading(true); else setRefreshing(true);
     const courses = await base44.entities.Course.filter({ id });
-    if (courses.length > 0) setCourse(courses[0]);
+    const c = courses[0];
+    // GARDE : ne jamais afficher une course supprimée après refresh/visibilitychange
+    if (c && !c.is_deleted) setCourse(c);
+    else if (c?.is_deleted) navigate(-1); // course supprimée → retour silencieux
     if (!silent) setLoading(false); else setRefreshing(false);
   }, [id]);
 
   useEffect(() => {
     load();
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.id === id && event.data) setCourse(event.data);
+      if (event.id !== id) return;
+      // GARDE : course supprimée ou event sans data → retirer de la vue
+      if (!event.data || event.data.is_deleted || event.type === 'delete') {
+        console.log(`[CourseDetail] course supprimée détectée id=${id}, navigation arrière`);
+        navigate(-1);
+        return;
+      }
+      setCourse(event.data);
     });
-    const onVisible = () => { if (document.visibilityState === "visible") load(true); };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load(true);
+    };
     document.addEventListener("visibilitychange", onVisible);
     return () => { unsub(); document.removeEventListener("visibilitychange", onVisible); };
   }, [load]);

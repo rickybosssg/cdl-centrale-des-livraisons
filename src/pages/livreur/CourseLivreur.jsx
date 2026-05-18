@@ -43,8 +43,14 @@ export default function CourseLivreur() {
   useEffect(() => {
     const load = async () => {
       const courses = await base44.entities.Course.filter({ id });
-      if (courses.length > 0) {
-        const c = courses[0];
+      const c = courses[0];
+      if (c) {
+        // GARDE : course supprimée au chargement → retour immédiat
+        if (c.is_deleted) {
+          setLoading(false);
+          navigate('/mes-livraisons');
+          return;
+        }
         if (c.statut === "livree") livreeVerrouilleRef.current = true;
         setCourse(c);
       }
@@ -54,8 +60,20 @@ export default function CourseLivreur() {
 
     // Subscription temps réel
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.id !== id || !event.data) return;
+      if (event.id !== id) return;
+      // GARDE : course supprimée ou delete → quitter la vue immédiatement
+      if (!event.data || event.data.is_deleted || event.type === 'delete') {
+        console.log(`[CourseLivreur] course supprimée id=${id}, retour automatique`);
+        navigate('/mes-livraisons');
+        return;
+      }
       const incoming = event.data;
+      // GARDE : course annulée → quitter aussi
+      if (incoming.statut === 'annulee') {
+        toast.info("Cette course a été annulée.");
+        navigate('/mes-livraisons');
+        return;
+      }
       if (livreeVerrouilleRef.current && incoming.statut !== "livree") {
         return;
       }
