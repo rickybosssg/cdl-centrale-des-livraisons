@@ -70,13 +70,22 @@ Deno.serve(async (req) => {
     heure_assignation: c.heure_assignation || now,
   });
 
-  // Mettre à jour les stats livreur
+  // Mettre à jour les stats livreur — recalcul réel depuis BDD pour nombre_courses_actives
+  // CORRECTION : incrémenter depuis la BDD fraîche, pas depuis user (snapshot au moment de l'auth)
   try {
-    await base44.asServiceRole.entities.User.update(user.id, {
-      nombre_courses_actives: (user.nombre_courses_actives || 0) + 1,
-      courses_acceptees: (user.courses_acceptees || 0) + 1,
-      courses_refusees_consecutives: 0,
-    });
+    const freshUsers = await base44.asServiceRole.entities.User.filter({ email: user.email });
+    const freshUser = freshUsers?.[0];
+    if (freshUser) {
+      const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
+      const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: user.email });
+      // Inclure la course qu'on vient d'accepter (statut = 'acceptee' maintenant en BDD)
+      const realCount = allCourses.filter(x => ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
+      await base44.asServiceRole.entities.User.update(freshUser.id, {
+        nombre_courses_actives: realCount,
+        courses_acceptees: (freshUser.courses_acceptees || 0) + 1,
+        courses_refusees_consecutives: 0,
+      });
+    }
   } catch (_) {}
 
   // Notifier le client

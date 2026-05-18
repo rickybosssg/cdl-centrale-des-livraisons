@@ -64,13 +64,22 @@ Deno.serve(async (req) => {
     historique_assignation: JSON.stringify(historique),
   });
 
-  // Mettre à jour les stats livreur
+  // Mettre à jour les stats livreur — recalcul réel depuis BDD (cohérent avec updateCourseDelivered)
+  // CORRECTION : ne jamais décrémenter par cache — recalcul depuis la BDD fraîche
   try {
-    await base44.asServiceRole.entities.User.update(user.id, {
-      nombre_courses_actives: Math.max(0, (user.nombre_courses_actives || 1) - 1),
-      courses_refusees: (user.courses_refusees || 0) + 1,
-      courses_refusees_consecutives: (user.courses_refusees_consecutives || 0) + 1,
-    });
+    const freshUsers = await base44.asServiceRole.entities.User.filter({ email: user.email });
+    const freshUser = freshUsers?.[0];
+    if (freshUser) {
+      const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
+      const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: user.email });
+      // La course vient d'être remise à en_attente (livreur_email = null), donc elle n'est plus dans ACTIVE_STATUTS
+      const realCount = allCourses.filter(x => ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
+      await base44.asServiceRole.entities.User.update(freshUser.id, {
+        nombre_courses_actives: realCount,
+        courses_refusees: (freshUser.courses_refusees || 0) + 1,
+        courses_refusees_consecutives: (freshUser.courses_refusees_consecutives || 0) + 1,
+      });
+    }
   } catch (_) {}
 
   // Re-dispatcher via moteur unifié (respecte le mode auto/manuel)
