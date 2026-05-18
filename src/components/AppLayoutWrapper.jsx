@@ -253,7 +253,9 @@ export default function AppLayoutWrapper({ user }) {
           )}
 
           {/* ── Alertes globales — actives peu importe l'onglet ── */}
-          {userRole === "livreur" && userEmail && (
+          {/* GlobalDriverAlert monté si rôle actif=livreur OU si l'user a un profil livreur
+              (couvre le cas où le rôle UI est décalé vs le rôle BDD) */}
+          {userEmail && (userRole === "livreur" || user?.active_profile_type === "livreur" || user?.current_role === "livreur") && (
             <GlobalDriverAlert userEmail={userEmail} />
           )}
           {(userRole === "admin" || isAdminUser(user)) && (

@@ -102,50 +102,79 @@ export default function NewCourseAlert({ course, onClose, user }) {
   };
 
   const handleAccept = async () => {
-    if (!course || !user) return;
+    if (!course) return;
+    console.log('[ACCEPT_CLICK] course_id:', course.id, '| user prop:', user?.email);
     setAccepting(true);
     clearInterval(intervalRef.current);
 
     try {
+      // Résoudre le user — fallback sur auth.me() si la prop n'est pas encore résolue
+      let me = user;
+      if (!me?.email) {
+        console.log('[ACCEPT_CLICK] user prop null — fallback auth.me()');
+        me = await base44.auth.me();
+      }
+      if (!me?.email) {
+        toast.error("Impossible d'identifier votre compte. Réessayez.");
+        setAccepting(false);
+        return;
+      }
+
       // Lire la course en temps réel pour vérifier qu'elle est encore disponible
+      console.log('[ACCEPT_API_START] fetching fresh course:', course.id);
       const fresh = await base44.entities.Course.filter({ id: course.id });
       const c = fresh?.[0];
 
-      if (!c || (c.statut !== "en_attente" && c.statut !== "assignee_attente")) {
-        toast.error("Course déjà attribuée à un autre livreur");
+      console.log('[ACCEPT_PAYLOAD] course statut:', c?.statut, '| livreur_email:', c?.livreur_email, '| me:', me.email);
+
+      const ACCEPTABLE_STATUTS = ["en_attente", "assignee_attente", "proposee", "pending_driver_acceptance", "en_attente_acceptation"];
+      if (!c || !ACCEPTABLE_STATUTS.includes(c.statut)) {
+        console.log('[ACCEPT_API_ERROR] statut not acceptable:', c?.statut);
+        toast.error("Course déjà attribuée ou annulée");
+        onClose();
+        return;
+      }
+
+      // Si la course est assignée à un autre livreur, bloquer
+      if (c.livreur_email && c.livreur_email !== me.email && c.statut === "assignee_attente") {
+        console.log('[ACCEPT_API_ERROR] course assigned to different driver:', c.livreur_email, '!= me:', me.email);
+        toast.error("Cette course a été attribuée à un autre livreur");
         onClose();
         return;
       }
 
       // Assigner le livreur
       const now = new Date().toISOString();
-      await base44.entities.Course.update(course.id, {
+      const payload = {
         statut: "acceptee",
-        livreur_email: user.email,
-        livreur_name: user.full_name,
-        telephone_livreur: user.telephone || "",
+        livreur_email: me.email,
+        livreur_name: me.full_name || me.email,
+        telephone_livreur: me.telephone || "",
         date_acceptation: now,
-        mode_assignation: "auto",
-        heure_assignation: now,
-      });
+        mode_assignation: c.mode_assignation || "auto",
+        heure_assignation: c.heure_assignation || now,
+      };
+      console.log('[ACCEPT_API_START] updating course with payload:', JSON.stringify(payload));
+      await base44.entities.Course.update(course.id, payload);
+      console.log('[ACCEPT_API_SUCCESS] course updated to acceptee');
 
       // Notifier le client
-      try {
-        await base44.entities.Notification.create({
-          destinataire_email: c.client_email,
-          destinataire_role: "client",
-          titre: "🛵 Votre livreur est en route !",
-          message: `${user.full_name} a accepté votre course et arrive bientôt.`,
-          type: "success",
-          course_id: course.id,
-          lue: false,
-        });
-      } catch (_) {}
+      base44.entities.Notification.create({
+        destinataire_email: c.client_email,
+        destinataire_role: "client",
+        titre: "🛵 Votre livreur est en route !",
+        message: `${me.full_name || me.email} a accepté votre course et arrive bientôt.`,
+        type: "success",
+        course_id: course.id,
+        lue: false,
+      }).catch(() => {});
 
+      console.log('[ACCEPT_STATUS_AFTER] statut=acceptee | navigating to /course-livreur/' + course.id);
       toast.success("✅ Course acceptée !");
       onClose();
       navigate(`/course-livreur/${course.id}`);
     } catch (err) {
+      console.log('[ACCEPT_API_ERROR]', err.message);
       toast.error("Erreur : " + err.message);
       setAccepting(false);
     }
