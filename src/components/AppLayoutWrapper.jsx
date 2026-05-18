@@ -8,10 +8,12 @@ import RoleSetup from "./RoleSetup";
 import PromoCodeStep from "../pages/PromoCodeStep";
 import NotificationPermissionBanner from "./NotificationPermissionBanner";
 import NewCourseAlert from "./NewCourseAlert";
-import ManualDispatchAlert from "./ManualDispatchAlert";
+import ManualDispatchAlertBlock from "./ManualDispatchAlertBlock";
 import { useDriverCourseAlert } from "@/hooks/useDriverCourseAlert";
+import { useManualDispatchAlert } from "@/hooks/useManualDispatchAlert";
 
 import PermissionsOnboarding, { needsPermissionsOnboarding, markPermissionsConfigured } from "./PermissionsOnboarding";
+import { Bell } from "lucide-react";
 
 // Récupère le token d'auth depuis localStorage pour le fallback APK natif
 function getAuthToken() {
@@ -26,12 +28,27 @@ function GlobalDriverAlert({ userEmail }) {
 }
 
 // ── Alerte globale admin (mode manuel) — montée au niveau layout ──────────
+// Visible sur TOUTES les pages admin : Dashboard, Courses, Dispatch, Profils, Messages...
 function GlobalAdminAlert() {
+  const { shouldDisplay, visibleCourses, handleDismiss } = useManualDispatchAlert();
+  
+  if (!shouldDisplay) return null;
+
   return (
     <div className="fixed top-0 left-0 right-0 z-[9990] px-3 pt-2 space-y-2 pointer-events-none"
          style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}>
-      <div className="pointer-events-auto">
-        <ManualDispatchAlert />
+      <div className="pointer-events-auto max-w-sm mx-auto">
+        <p className="text-xs font-black uppercase tracking-wide text-purple-700 flex items-center gap-1 mb-2">
+          <Bell className="h-3.5 w-3.5" />
+          {visibleCourses.length} course{visibleCourses.length > 1 ? "s" : ""} à assigner manuellement
+        </p>
+        {visibleCourses.slice(0, 5).map(course => (
+          <ManualDispatchAlertBlock
+            key={course.id}
+            course={course}
+            onDismiss={() => handleDismiss(course.id)}
+          />
+        ))}
       </div>
     </div>
   );
@@ -258,6 +275,7 @@ export default function AppLayoutWrapper({ user }) {
           {userEmail && (userRole === "livreur" || user?.active_profile_type === "livreur" || user?.current_role === "livreur") && (
             <GlobalDriverAlert userEmail={userEmail} />
           )}
+          {/* GlobalAdminAlert monté si admin — visible sur TOUTES les pages admin */}
           {(userRole === "admin" || isAdminUser(user)) && (
             <GlobalAdminAlert />
           )}
