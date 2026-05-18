@@ -1,68 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Package, Truck, Zap, Loader2, RefreshCw, Phone, MapPin, Clock, Star, Users } from "lucide-react";
+import { ArrowLeft, Package, Truck, Zap, Loader2, RefreshCw, Phone, MapPin, Clock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import StaffStatCard from "@/components/StaffStatCard";
+import AssignDriverModal from "@/components/AssignDriverModal";
 import moment from "moment";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const ZONES_PROCHES = {
-  "Ouaga 2000": ["Patte d'Oie", "Zone 1", "Kossodo", "Pissy"],
-  "Zone 1": ["Koulouba", "Zogona", "Gounghin", "Ouaga 2000"],
-  "Cissin": ["Karpala", "Wemtenga", "Dassasgho", "Zone 1"],
-  "Karpala": ["Cissin", "Wemtenga", "Balkuy", "Dassasgho"],
-  "Pissy": ["Gounghin", "Patte d'Oie", "Somgandé", "Ouaga 2000"],
-  "Gounghin": ["Zone 1", "Pissy", "Zogona", "Tanghin"],
-  "Tampouy": ["Tanghin", "Zogona", "Nagrin", "Koulouba"],
-  "Tanghin": ["Tampouy", "Zogona", "Koulouba", "Gounghin"],
-  "Zogona": ["Zone 1", "Tanghin", "Gounghin", "Koulouba"],
-  "Koulouba": ["Zone 1", "Tanghin", "Zogona", "Tampouy"],
-  "Kossodo": ["Ouaga 2000", "Nagrin", "Tampouy"],
-  "Wemtenga": ["Cissin", "Karpala", "Dassasgho"],
-  "Balkuy": ["Karpala", "Dassasgho", "Wemtenga"],
-  "Dassasgho": ["Cissin", "Wemtenga", "Balkuy", "Karpala"],
-  "Patte d'Oie": ["Ouaga 2000", "Pissy", "Somgandé"],
-  "Somgandé": ["Patte d'Oie", "Pissy", "Ouaga 2000"],
-  "Nagrin": ["Kossodo", "Tampouy", "Tanghin"],
-};
-
-function distanceKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function getNearbyDrivers(course, livreurs) {
-  return livreurs
-    .map(l => {
-      let score = 0;
-      let distLabel = null;
-      if (l.gps_latitude && l.gps_longitude && course.latitude_depart && course.longitude_depart) {
-        const d = distanceKm(l.gps_latitude, l.gps_longitude, course.latitude_depart, course.longitude_depart);
-        distLabel = d < 1 ? `< 1 km` : `${d.toFixed(1)} km`;
-        score += Math.max(0, 30 - d * 3);
-      }
-      if (l.quartier === course.quartier_depart) { score += 50; distLabel = distLabel || "Même zone"; }
-      else if (ZONES_PROCHES[course.quartier_depart]?.includes(l.quartier)) { score += 25; distLabel = distLabel || "Zone proche"; }
-      score -= (l.nombre_courses_actives || 0) * 10;
-      return { ...l, _score: score, _distLabel: distLabel };
-    })
-    .filter(l => l._score > 0 || l.quartier === course.quartier_depart || ZONES_PROCHES[course.quartier_depart]?.includes(l.quartier))
-    .sort((a, b) => b._score - a._score)
-    .slice(0, 3);
-}
-
 function countNearbyDrivers(course, livreurs) {
+  const ZONES = {
+    "Ouaga 2000": ["Patte d'Oie", "Zone 1", "Kossodo", "Pissy"],
+    "Zone 1": ["Koulouba", "Zogona", "Gounghin", "Ouaga 2000"],
+    "Pissy": ["Gounghin", "Patte d'Oie", "Somgandé", "Ouaga 2000"],
+    "Gounghin": ["Zone 1", "Pissy", "Zogona", "Tanghin"],
+    "Patte d'Oie": ["Ouaga 2000", "Pissy", "Somgandé"],
+  };
   return livreurs.filter(l =>
     l.quartier === course.quartier_depart ||
-    ZONES_PROCHES[course.quartier_depart]?.includes(l.quartier)
+    ZONES[course.quartier_depart]?.includes(l.quartier)
   ).length;
 }
 
@@ -80,10 +38,6 @@ function playAlert() {
       osc.stop(ctx.currentTime + i * 0.15 + 0.2);
     });
   } catch (_) {}
-}
-
-async function logAction(actor, action, target, details) {
-  await base44.entities.AuditLog.create({ actorEmail: actor.email, actorName: actor.full_name, actorRoleLabel: "Dispatcher Manuel", actionType: action, targetType: "course", targetId: target.id, targetName: target.name, details }).catch(() => {});
 }
 
 // ── Badges ───────────────────────────────────────────────────────────────────
@@ -104,6 +58,7 @@ export default function ManualDispatch() {
   const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [search, setSearch] = useState("");
   const prevCountRef = useRef(0);
@@ -170,30 +125,9 @@ export default function ManualDispatch() {
     return unsub;
   }, []);
 
-  const handleAssign = async (livreur, course = selectedCourse) => {
-    if (!window.confirm(`Affecter ${livreur.full_name} ?`)) return;
-    setProcessing(true);
-    const now = new Date().toISOString();
-    await base44.entities.Course.update(course.id, {
-      livreur_email: livreur.email, livreur_name: livreur.full_name,
-      telephone_livreur: livreur.telephone, statut: "assignee_attente",
-      mode_assignation: "manuel", heure_assignation: now,
-    });
-    // Aligné sur autoDispatch : la proposition compte dans la charge livreur
-    await base44.entities.User.update(livreur.id, {
-      nombre_courses_actives: (livreur.nombre_courses_actives || 0) + 1,
-      courses_proposees: (livreur.courses_proposees || 0) + 1,
-      derniere_proposition_at: now,
-    }).catch(() => {});
-    await base44.entities.Notification.create({ destinataire_email: livreur.email, destinataire_role: "livreur", titre: "📦 Nouvelle course assignée", message: `Course de ${course.quartier_depart} → ${course.quartier_arrivee} (${course.prix} F). Ouvrez l'app pour accepter.`, type: "info", lue: false, course_id: course.id, target_screen: `/course-livreur/${course.id}` });
-    if (course.client_email) {
-      await base44.entities.Notification.create({ destinataire_email: course.client_email, destinataire_role: "client", titre: "🛵 Livreur trouvé !", message: `${livreur.full_name} a été assigné à votre course.`, type: "success", lue: false, course_id: course.id, target_screen: `/course/${course.id}` });
-    }
-    await logAction(me, "COURSE_ASSIGNED", { id: course.id, name: course.id?.slice(0, 8) }, `Assigné à ${livreur.full_name}`);
-    toast.success(`✅ Course assignée à ${livreur.full_name}`);
-    setSelectedCourse(null);
-    load();
-    setProcessing(false);
+  const openAssign = (course) => {
+    setSelectedCourse(course);
+    setAssignModalOpen(true);
   };
 
   const filteredCourses = courses.filter(c => {
@@ -209,7 +143,6 @@ export default function ManualDispatch() {
   const CourseCard = ({ course }) => {
     const waitMin = Math.round((Date.now() - new Date(course.created_date).getTime()) / 60000);
     const nearbyCount = countNearbyDrivers(course, livreurs);
-    const recommended = getNearbyDrivers(course, livreurs);
     const isCritical = course.statut === "aucun_livreur" || waitMin > 15;
 
     return (
@@ -255,29 +188,10 @@ export default function ManualDispatch() {
             <span>{course.type_colis || "Colis"}</span>
           </div>
 
-          {/* Ligne 3: suggestion rapide (top 1) */}
-          {recommended.length > 0 && (
-            <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-green-50 border border-green-200">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <div className="h-6 w-6 rounded-full bg-green-200 flex items-center justify-center text-[10px] font-bold text-green-800 flex-shrink-0">
-                  {recommended[0].full_name?.charAt(0)}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-green-800 truncate">{recommended[0].full_name}</p>
-                  <p className="text-[10px] text-green-700">{recommended[0]._distLabel || recommended[0].quartier || "—"}</p>
-                </div>
-              </div>
-              <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 flex-shrink-0"
-                onClick={() => handleAssign(recommended[0], course)} disabled={processing}>
-                <Zap className="h-3 w-3 mr-0.5" /> Affecter
-              </Button>
-            </div>
-          )}
-
           {/* Actions */}
           <div className="flex gap-2">
-            <Button size="sm" className="flex-1 h-8 text-xs" variant="outline" onClick={() => setSelectedCourse(course)}>
-              <Truck className="h-3 w-3 mr-1" /> Voir tous les livreurs
+            <Button size="sm" className="flex-1 h-8 text-xs" onClick={() => openAssign(course)}>
+              <Truck className="h-3 w-3 mr-1" /> Assigner
             </Button>
             {course.telephone_expediteur && (
               <a href={`tel:${course.telephone_expediteur}`}>
@@ -351,75 +265,13 @@ export default function ManualDispatch() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog: voir tous les livreurs avec suggestions top 3 */}
-      <Dialog open={!!selectedCourse} onOpenChange={v => { if (!v) setSelectedCourse(null); }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Affecter un livreur</DialogTitle></DialogHeader>
-          {selectedCourse && (() => {
-            const recommended = getNearbyDrivers(selectedCourse, livreurs);
-            const others = livreurs.filter(l => !recommended.find(r => r.id === l.id));
-            return (
-              <div className="space-y-4">
-                {/* Résumé course */}
-                <div className="p-3 rounded-xl bg-muted/40 text-sm space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <StatutBadge statut={selectedCourse.statut} />
-                    {selectedCourse.urgence && selectedCourse.urgence !== "normal" && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold">⚡ Urgent</span>
-                    )}
-                  </div>
-                  <p className="font-semibold">{selectedCourse.quartier_depart} → {selectedCourse.quartier_arrivee}</p>
-                  <p className="text-muted-foreground text-xs">{selectedCourse.prix} F · {selectedCourse.type_colis} · {moment(selectedCourse.created_date).fromNow()}</p>
-                </div>
-
-                {/* Recommandés */}
-                {recommended.length > 0 && (
-                  <div>
-                    <p className="text-xs font-bold text-green-700 mb-2 flex items-center gap-1"><Star className="h-3 w-3" /> Recommandés (les plus proches)</p>
-                    <div className="space-y-2">
-                      {recommended.map((l, i) => (
-                        <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-green-200 bg-green-50">
-                          <div className="h-9 w-9 rounded-full bg-green-200 flex items-center justify-center font-bold text-green-800 flex-shrink-0 text-sm">{i + 1}</div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-sm">{l.full_name}</p>
-                            <p className="text-xs text-muted-foreground">{l._distLabel || l.quartier || "—"} · {l.nombre_courses_actives || 0} actives</p>
-                          </div>
-                          <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 flex-shrink-0" onClick={() => handleAssign(l)} disabled={processing}>
-                            <Zap className="h-3 w-3 mr-1" /> Affecter
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Autres livreurs */}
-                {others.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">Autres livreurs disponibles</p>
-                    <div className="space-y-2">
-                      {others.map(l => (
-                        <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl border hover:bg-muted/30">
-                          <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center font-bold text-muted-foreground flex-shrink-0">{l.full_name?.charAt(0)}</div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-sm">{l.full_name}</p>
-                            <p className="text-xs text-muted-foreground">{l.quartier || "—"} · {l.nombre_courses_actives || 0} actives</p>
-                          </div>
-                          <Button size="sm" variant="outline" className="h-8 text-xs flex-shrink-0" onClick={() => handleAssign(l)} disabled={processing}>
-                            Affecter
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {livreurs.length === 0 && <p className="text-center text-sm text-muted-foreground py-4">Aucun livreur disponible en ce moment</p>}
-              </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+      {/* Modal d'assignation global — source unique */}
+      <AssignDriverModal
+        course={selectedCourse}
+        open={assignModalOpen}
+        onClose={() => setAssignModalOpen(false)}
+        onDone={() => { setSelectedCourse(null); load(); }}
+      />
     </div>
   );
 }

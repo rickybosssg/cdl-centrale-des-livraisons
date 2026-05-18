@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, UserPlus, X, RefreshCw, Eye, Clock, Zap, User } from "lucide-react";
+import { ArrowLeft, UserPlus, RefreshCw, Eye, Clock, Zap, User } from "lucide-react";
 import AdminCourseActions from "../../components/AdminCourseActions";
+import AssignDriverModal from "../../components/AssignDriverModal";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,7 +15,6 @@ import moment from "moment";
 export default function GererCourses() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
-  const [livreurs, setLivreurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [assignDialog, setAssignDialog] = useState(false);
@@ -26,15 +26,8 @@ export default function GererCourses() {
 
   const loadData = async () => {
     try {
-      // Charger les courses d'abord
       const coursesData = await base44.entities.Course.list("-created_date", 200);
       setCourses(coursesData);
-      
-      // Petite pause avant de charger les livreurs (évite rate limit)
-      await new Promise(r => setTimeout(r, 300));
-      
-      const livreursData = await base44.entities.User.filter({ user_type: "livreur" });
-      setLivreurs(livreursData);
     } catch (err) {
       console.error('[GererCourses] Load error:', err);
       toast.error('Erreur lors du chargement: ' + (err?.message || ''));
@@ -61,45 +54,16 @@ export default function GererCourses() {
     };
   }, []);
 
-  const assignerLivreur = async (livreur) => {
-    try {
-      const now = new Date().toISOString();
-      const hist = selectedCourse.historique_assignation ? JSON.parse(selectedCourse.historique_assignation) : [];
-      hist.push({ livreur_email: livreur.email, livreur_nom: livreur.full_name, heure: now, statut: "manuel" });
-      await base44.entities.Course.update(selectedCourse.id, {
-        statut: "acceptee",
-        livreur_email: livreur.email,
-        livreur_name: livreur.full_name,
-        date_acceptation: now,
-        telephone_livreur: livreur.telephone || "",
-        heure_assignation: now,
-        mode_assignation: "manuel",
-        historique_assignation: JSON.stringify(hist),
-        livreur_photo: livreur.photo_profil || null,
-        livreur_note_moyenne: livreur.note_moyenne || null,
-        livreur_note_semaine: livreur.note_semaine || null,
-      });
-      toast.success(`Course assignée à ${livreur.full_name}`);
-      setAssignDialog(false);
-      setSelectedCourse(null);
-      setTimeout(loadData, 500);
-    } catch (err) {
-      console.error('[assignerLivreur]', err);
-      toast.error('Erreur assignation: ' + (err?.message || ''));
-    }
-  };
-
   const relancerDispatch = async (course) => {
     toast.info("Re-dispatch en cours...");
     try {
-      const result = await base44.functions.invoke('autoDispatch', { course_id: course.id });
+      const result = await base44.functions.invoke('assignCourseAction', { course_id: course.id, mode: 'redispatch' });
       if (result?.data?.success) {
         toast.success(`Course envoyée à ${result.data.livreur?.nom}`);
       } else {
-        toast.error("Aucun livreur disponible");
+        toast.error(result?.data?.reason || "Aucun livreur disponible");
       }
     } catch (e) {
-      console.error('[relancerDispatch]', e);
       toast.error("Erreur lors du dispatch");
     }
     setTimeout(loadData, 500);
@@ -438,34 +402,13 @@ export default function GererCourses() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog assigner manuellement */}
-      <Dialog open={assignDialog} onOpenChange={setAssignDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Assigner un livreur</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-            {livreurs.filter(l => l.disponible && l.statut_validation_livreur === "valide" && !l.livreur_bloque).length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Aucun livreur disponible et validé</p>
-            ) : (
-              livreurs.filter(l => l.disponible && l.statut_validation_livreur === "valide" && !l.livreur_bloque).map((livreur) => (
-                <div
-                  key={livreur.id}
-                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted cursor-pointer"
-                  onClick={() => assignerLivreur(livreur)}
-                >
-                  <div>
-                    <p className="font-medium text-sm">{livreur.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{livreur.quartier} • {livreur.telephone}</p>
-                    <p className="text-xs text-muted-foreground">{livreur.nombre_courses_actives || 0} course(s) active(s)</p>
-                  </div>
-                  <div className="h-2 w-2 rounded-full bg-green-500" />
-                </div>
-              ))
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Modal d'assignation global — source unique */}
+      <AssignDriverModal
+        course={selectedCourse}
+        open={assignDialog}
+        onClose={() => { setAssignDialog(false); }}
+        onDone={() => { setSelectedCourse(null); setTimeout(loadData, 500); }}
+      />
 
       {/* Dialog détails course */}
       <Dialog open={detailDialog} onOpenChange={setDetailDialog}>
@@ -514,7 +457,7 @@ export default function GererCourses() {
               )}
               {/* Actions admin dans le détail */}
               <div className="pt-2 border-t flex gap-2">
-                <Button size="sm" variant="outline" className="flex-1" onClick={() => { setDetailDialog(false); setSelectedCourse(selectedCourse); setAssignDialog(true); }}>
+                <Button size="sm" variant="outline" className="flex-1" onClick={() => { setDetailDialog(false); setAssignDialog(true); }}>
                   <UserPlus className="h-3.5 w-3.5 mr-1" />Assigner
                 </Button>
                 <AdminCourseActions course={selectedCourse} size="default" onDone={() => { setDetailDialog(false); loadData(); }} />
