@@ -12,7 +12,7 @@
 import { base44 } from '@/api/base44Client';
 
 const APP_BASE_URL = 'https://cdl.base44.app';
-const TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;   // 7 jours
+const TOKEN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;  // 30 jours
 const SAVE_DEBOUNCE_MS = 10_000;                       // 10s anti-doublon
 const VERIFY_RETRIES = 3;
 const ENGINE_VERSION = '1.0.0';
