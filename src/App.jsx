@@ -124,6 +124,7 @@ import TestNotifications from './pages/dispatcher/TestNotifications';
 import FcmDiagnostic from './pages/FcmDiagnostic';
 import FcmQuickTest from './pages/FcmQuickTest';
 import FcmTokenDebug from './pages/dispatcher/FcmTokenDebug';
+import FcmAuditDashboard from './pages/dispatcher/FcmAuditDashboard';
 import FcmTestFull from './pages/FcmTestFull';
 import FcmTokenRefresh from './pages/FcmTokenRefresh';
 import FcmNativeDebug from './pages/FcmNativeDebug';
@@ -486,6 +487,7 @@ const AuthenticatedApp = () => {
           <Route path="/sandbox-test" element={<SandboxTest />} />
           <Route path="/course-alert-proof" element={<CourseAlertProofTest />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
+          <Route path="/fcm-audit" element={<FcmAuditDashboard />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
           <Route path="/profils" element={<ProfilsHub />} />

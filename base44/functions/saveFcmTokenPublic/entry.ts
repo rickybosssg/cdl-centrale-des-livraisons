@@ -40,9 +40,9 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { user_email, token, device_type = 'android_native' } = body;
+    const { user_email, token, device_type = 'android_native', device_id = null, platform = 'android' } = body;
 
-    console.log(`[FCM_SAVE_ATTEMPT] user=${user_email || 'VIDE'} | token_len=${token?.length || 0} | device=${device_type}`);
+    console.log(`[FCM_SAVE_ATTEMPT] user=${user_email || 'VIDE'} | token_len=${token?.length || 0} | device=${device_type} | device_id=${device_id || 'null'}`);
 
     if (!user_email || !token) {
       const missing = !user_email ? 'user_email' : 'token';
@@ -133,6 +133,8 @@ Deno.serve(async (req) => {
         is_active: true,
         last_used: new Date().toISOString(),
         device_type,
+        ...(device_id ? { device_id } : {}),
+        ...(platform ? { platform } : {}),
       });
 
       console.log(`[FCM_SAVE_SUCCESS] action=reactivated | user=${cleanEmail} | token_id=${exactMatch.id} | doublons_supprimés=${suppriméDoublons} | desactivés=${desactivés} | delay=${Date.now() - t0}ms`);
@@ -164,6 +166,8 @@ Deno.serve(async (req) => {
         user_email: cleanEmail,
         token: cleanToken,
         device_type,
+        platform,
+        ...(device_id ? { device_id } : {}),
         registered_at: new Date().toISOString(),
         last_used: new Date().toISOString(),
         is_active: true,
