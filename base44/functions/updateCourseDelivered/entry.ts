@@ -43,8 +43,10 @@ Deno.serve(async (req) => {
   const c = courses[0];
   const isAdmin = user.role === 'admin' || user.role === 'dispatcher';
 
-  if (!isAdmin && c.livreur_email !== user.email) {
-    console.error(`[DELIVERY_BACKEND_ERROR] 403 | livreur_email=${c.livreur_email} | user=${user.email}`);
+  const livreurEmailNorm = (c.livreur_email || '').toLowerCase().trim();
+  const userEmailNorm = (user.email || '').toLowerCase().trim();
+  if (!isAdmin && livreurEmailNorm !== userEmailNorm) {
+    console.error(`[DELIVERY_BACKEND_ERROR] 403 | livreur_email=${livreurEmailNorm} | user=${userEmailNorm}`);
     return Response.json({ error: 'Non autorisé — vous n\'êtes pas le livreur de cette course' }, { status: 403 });
   }
 

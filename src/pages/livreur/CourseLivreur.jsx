@@ -98,13 +98,16 @@ export default function CourseLivreur() {
     const validNext = LIVREUR_TRANSITIONS[course?.statut] || [];
     if (!validNext.includes(newStatut)) return;
     setUpdating(true);
+    console.log(`[STATUT_CLICK] ${course?.statut} → ${newStatut} | course=${id}`);
     try {
-      const update = { statut: newStatut, ...extra };
-      setCourse(prev => ({ ...prev, ...update }));
-      await base44.entities.Course.update(id, update);
+      setCourse(prev => ({ ...prev, statut: newStatut, ...extra }));
+      await base44.functions.invoke('updateCourseStatut', { course_id: id, new_statut: newStatut, extra });
       vibrateSuccess();
     } catch (err) {
+      console.error(`[STATUT_ERROR] ${newStatut} | ${err?.message}`);
       toast.error("Erreur : " + (err?.message || "réessayez"));
+      // Rollback UI
+      setCourse(prev => ({ ...prev, statut: course?.statut }));
     } finally {
       setUpdating(false);
     }
@@ -526,29 +529,18 @@ export default function CourseLivreur() {
             <button
               disabled={updating}
               onClick={async () => {
+                console.log(`[REFUSE_CLICK] course=${id} | statut=${course?.statut}`);
                 setUpdating(true);
-                const me = await base44.auth.me();
-                let historique = [];
-                try { if (course.historique_assignation) historique = JSON.parse(course.historique_assignation); } catch (_) {}
-                historique = historique.map(h =>
-                  h.livreur_email === me.email && h.statut === 'proposee'
-                    ? { ...h, statut: 'refuse', heure_refus: new Date().toISOString() }
-                    : h
-                );
-                await base44.entities.Course.update(id, {
-                  statut: 'en_attente', livreur_email: null, livreur_name: null,
-                  telephone_livreur: null, heure_assignation: null,
-                  historique_assignation: JSON.stringify(historique),
-                });
-                await base44.auth.updateMe({
-                  nombre_courses_actives: Math.max(0, (me.nombre_courses_actives || 1) - 1),
-                  courses_refusees: (me.courses_refusees || 0) + 1,
-                  courses_refusees_consecutives: (me.courses_refusees_consecutives || 0) + 1,
-                }).catch(() => {});
-                base44.functions.invoke('autoDispatch', { course_id: id, exclude_emails: [me.email], force: true }).catch(() => {});
-                toast.info("Course refusée");
-                navigate(-1);
-                setUpdating(false);
+                try {
+                  await base44.functions.invoke('refuseCourseAction', { course_id: id });
+                  toast.info("Course refusée");
+                  navigate(-1);
+                } catch (err) {
+                  console.error(`[REFUSE_ERROR] ${err?.message}`);
+                  toast.error("Erreur refus : " + (err?.message || "réessayez"));
+                } finally {
+                  setUpdating(false);
+                }
               }}
               className="flex-1 py-4 rounded-xl border-2 border-gray-200 text-gray-500 text-sm font-medium active:scale-95 transition-all"
             >
@@ -557,49 +549,19 @@ export default function CourseLivreur() {
             <button
               disabled={updating}
               onClick={async () => {
-                console.log('[ACCEPT_CLICK] CourseLivreur | course_id:', id, '| statut:', course?.statut);
+                console.log(`[ACCEPT_CLICK] course=${id} | statut=${course?.statut}`);
                 setUpdating(true);
                 try {
-                  const me = await base44.auth.me();
-                  console.log('[ACCEPT_PAYLOAD] me:', me?.email, '| course.livreur_email:', course?.livreur_email);
-                  if (!me?.email) {
-                    toast.error("Session expirée, reconnectez-vous.");
-                    setUpdating(false);
-                    return;
+                  const res = await base44.functions.invoke('acceptCourseAction', { course_id: id });
+                  if (res?.data?.success) {
+                    console.log(`[ACCEPT_SUCCESS] course=${id}`);
+                    toast.success("✅ Course acceptée !");
+                  } else {
+                    toast.error("Course non disponible (statut: " + (res?.data?.statut || "?") + ")");
                   }
-                  // Vérif fraîcheur de la course
-                  console.log('[ACCEPT_API_START] fetching fresh course...');
-                  const fresh = await base44.entities.Course.filter({ id });
-                  const c = fresh?.[0];
-                  const ACCEPTABLE = ["en_attente", "assignee_attente", "proposee", "pending_driver_acceptance", "en_attente_acceptation"];
-                  console.log('[ACCEPT_PAYLOAD] fresh statut:', c?.statut, '| livreur_email:', c?.livreur_email);
-                  if (!c || !ACCEPTABLE.includes(c.statut)) {
-                    console.log('[ACCEPT_API_ERROR] statut non acceptable:', c?.statut);
-                    toast.error("Course non disponible (statut: " + (c?.statut || "?") + ")");
-                    setUpdating(false);
-                    return;
-                  }
-                  const now = new Date().toISOString();
-                  await base44.entities.Course.update(id, {
-                    statut: "acceptee",
-                    livreur_email: me.email,
-                    livreur_name: me.full_name || me.email,
-                    telephone_livreur: me.telephone || "",
-                    date_acceptation: now,
-                    mode_assignation: c.mode_assignation || "auto",
-                    heure_assignation: c.heure_assignation || now,
-                  });
-                  console.log('[ACCEPT_API_SUCCESS] statut → acceptee');
-                  await base44.auth.updateMe({
-                    nombre_courses_actives: (me.nombre_courses_actives || 0) + 1,
-                    courses_acceptees: (me.courses_acceptees || 0) + 1,
-                    courses_refusees_consecutives: 0,
-                  }).catch(() => {});
-                  console.log('[ACCEPT_STATUS_AFTER] acceptee | course_id:', id);
-                  toast.success("✅ Course acceptée !");
                 } catch (err) {
-                  console.log('[ACCEPT_API_ERROR]', err.message);
-                  toast.error("Erreur : " + err.message);
+                  console.error(`[ACCEPT_ERROR] ${err?.message}`);
+                  toast.error("Erreur : " + (err?.message || "réessayez"));
                 } finally {
                   setUpdating(false);
                 }
