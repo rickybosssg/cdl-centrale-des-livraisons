@@ -192,12 +192,22 @@ export default function NewCourseAlert({ course, onClose, user }) {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -120, opacity: 0 }}
           transition={{ type: "spring", damping: 22, stiffness: 320 }}
-          className="fixed top-0 left-0 right-0 z-[9999] flex justify-center px-3 pt-2"
-          style={{ paddingTop: "env(safe-area-inset-top)" }}
+          className="fixed flex justify-center"
+          style={{
+            top: "80px",
+            left: "10px",
+            right: "10px",
+            zIndex: 99999,
+            backgroundColor: "#ff0000",
+            border: "3px solid #ffff00",
+            borderRadius: "16px",
+            padding: "16px",
+            boxShadow: "0 10px 40px rgba(255,0,0,0.5)"
+          }}
           data-testid="new-course-alert"
           data-course-id={course.id}
         >
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden border-2 border-orange-400">
+          <div className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border-2 border-orange-400">
             {/* Header urgence */}
             <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 text-white">
               <div className="flex items-center justify-between">
@@ -209,6 +219,10 @@ export default function NewCourseAlert({ course, onClose, user }) {
                     <Zap className="h-5 w-5" />
                   </motion.div>
                   <p className="text-base font-black tracking-wide">NOUVELLE COURSE !</p>
+                </div>
+                {/* TEST VISUEL ANDROID */}
+                <div className="text-xs font-bold bg-yellow-400 text-black px-2 py-1 rounded">
+                  TEST APK
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Timer circulaire */}
@@ -294,6 +308,11 @@ export default function NewCourseAlert({ course, onClose, user }) {
                   style={{ backgroundColor: timerColor, width: `${timerPercent}%` }}
                   transition={{ duration: 0.5 }}
                 />
+              </div>
+
+              {/* BANDEAU TEST VISUEL */}
+              <div className="mt-3 bg-red-600 text-white text-center py-2 rounded-lg font-black text-sm">
+                🚨 TEST VISUEL ANDROID - BLOC BIEN AFFICHÉ 🚨
               </div>
             </div>
           </div>
