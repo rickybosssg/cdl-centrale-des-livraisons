@@ -295,8 +295,20 @@ export default function DispatchMonitor() {
 
     // Temps réel — Courses
     const unsubCourses = base44.entities.Course.subscribe((event) => {
-      if (event.type === "create") setCourses(prev => [event.data, ...prev]);
-      else if (event.type === "update") setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+      if (event.type === "create") {
+        const d = event.data;
+        if (!d || d.is_deleted || d.statut === 'annulee') return;
+        setCourses(prev => [d, ...prev]);
+      } else if (event.type === "update") {
+        const d = event.data;
+        if (!d || d.is_deleted) {
+          setCourses(prev => prev.filter(c => c.id !== event.id));
+          return;
+        }
+        setCourses(prev => prev.map(c => c.id === event.id ? d : c));
+      } else if (event.type === "delete") {
+        setCourses(prev => prev.filter(c => c.id !== event.id));
+      }
     });
 
     // Temps réel — Livreurs (driver_online, profil_valide, nombre_courses_actives)

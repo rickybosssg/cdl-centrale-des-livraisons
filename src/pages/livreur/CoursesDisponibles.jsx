@@ -96,27 +96,33 @@ export default function CoursesDisponibles() {
       const meEmail = (await base44.auth.me().catch(() => null))?.email;
 
       if (event.type === "create") {
+        const d = event.data;
+        // GARDE GLOBALE : jamais injecter une course supprimée ou annulée
+        if (!d || d.is_deleted || d.statut === 'annulee') return;
         if (mode === 'manuel') {
-          // Mode manuel : afficher SEULEMENT si assignée à moi
-          if (event.data?.statut === "assignee_attente" && event.data?.livreur_email === meEmail) {
+          if (d.statut === "assignee_attente" && d.livreur_email === meEmail) {
             console.log(`[DRIVER_COURSE_VISIBLE] realtime CREATE | mode=manuel | assigned to me | id=${event.id}`);
-            setCourses(prev => prev.find(c => c.id === event.id) ? prev : [event.data, ...prev]);
+            setCourses(prev => prev.find(c => c.id === event.id) ? prev : [d, ...prev]);
           }
-        } else if (event.data?.statut === "en_attente") {
-          setCourses(prev => prev.find(c => c.id === event.id) ? prev : [event.data, ...prev]);
+        } else if (d.statut === "en_attente") {
+          setCourses(prev => prev.find(c => c.id === event.id) ? prev : [d, ...prev]);
         }
       } else if (event.type === "update") {
+        const d = event.data;
+        // GARDE GLOBALE : retirer si supprimée ou annulée
+        if (!d || d.is_deleted || d.statut === 'annulee') {
+          setCourses(prev => prev.filter(c => c.id !== event.id));
+          return;
+        }
         if (mode === 'manuel') {
-          // Mode manuel : n'afficher que assignee_attente pour ce livreur
-          if (event.data?.statut === "assignee_attente" && event.data?.livreur_email === meEmail) {
+          if (d.statut === "assignee_attente" && d.livreur_email === meEmail) {
             console.log(`[DRIVER_COURSE_VISIBLE] realtime UPDATE | mode=manuel | assigned to me | id=${event.id}`);
-            setCourses(prev => prev.find(c => c.id === event.id) ? prev.map(c => c.id === event.id ? event.data : c) : [event.data, ...prev]);
+            setCourses(prev => prev.find(c => c.id === event.id) ? prev.map(c => c.id === event.id ? d : c) : [d, ...prev]);
           } else {
-            // Retirer si plus assignée à moi ou statut changé
             setCourses(prev => prev.filter(c => c.id !== event.id));
           }
         } else {
-          if (event.data?.statut !== "en_attente") {
+          if (d.statut !== "en_attente") {
             setCourses(prev => prev.filter(c => c.id !== event.id));
           }
         }

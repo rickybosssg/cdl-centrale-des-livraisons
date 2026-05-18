@@ -27,11 +27,17 @@ export default function MesLivraisons() {
   useEffect(() => {
     if (!userEmail) return;
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.data?.livreur_email !== userEmail && event.type === 'create') return;
-      if (event.type === 'create' && event.data?.livreur_email === userEmail) {
-        setCourses(prev => [event.data, ...prev]);
+      if (event.type === 'create') {
+        const d = event.data;
+        if (!d || d.is_deleted || d.statut === 'annulee' || d.livreur_email !== userEmail) return;
+        setCourses(prev => [d, ...prev]);
       } else if (event.type === 'update') {
-        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+        const d = event.data;
+        if (!d || d.is_deleted) {
+          setCourses(prev => prev.filter(c => c.id !== event.id));
+          return;
+        }
+        setCourses(prev => prev.map(c => c.id === event.id ? d : c));
       } else if (event.type === 'delete') {
         setCourses(prev => prev.filter(c => c.id !== event.id));
       }

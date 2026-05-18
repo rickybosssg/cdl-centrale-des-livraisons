@@ -33,11 +33,19 @@ export default function MesCourses() {
   useEffect(() => {
     if (!userEmail) return;
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.data?.client_email !== userEmail) return;
       if (event.type === 'create') {
-        setCourses(prev => [event.data, ...prev]);
+        const d = event.data;
+        if (!d || d.is_deleted || d.client_email !== userEmail) return;
+        setCourses(prev => [d, ...prev]);
       } else if (event.type === 'update') {
-        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+        const d = event.data;
+        // GARDE : retirer si suppression logique
+        if (!d || d.is_deleted) {
+          setCourses(prev => prev.filter(c => c.id !== event.id));
+          return;
+        }
+        if (d.client_email !== userEmail) return;
+        setCourses(prev => prev.map(c => c.id === event.id ? d : c));
       } else if (event.type === 'delete') {
         setCourses(prev => prev.filter(c => c.id !== event.id));
       }

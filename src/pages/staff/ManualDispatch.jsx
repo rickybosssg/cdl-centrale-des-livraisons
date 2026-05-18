@@ -100,27 +100,35 @@ export default function ManualDispatch() {
     load().then(count => { prevCountRef.current = count || 0; }).catch(() => setLoading(false));
 
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (["en_attente", "aucun_livreur"].includes(event.data?.statut)) {
-        setCourses(prev => {
-          const exists = prev.find(c => c.id === event.id);
-          let next;
-          if (event.type === "create") {
-            next = [event.data, ...prev];
-            if (next.length > prevCountRef.current) {
-              playAlert();
-              toast("🔔 Nouvelle course à affecter !", { description: `${event.data.quartier_depart} → ${event.data.quartier_arrivee}`, duration: 8000 });
-            }
-          } else if (event.type === "update" && exists) {
-            next = prev.map(c => c.id === event.id ? event.data : c);
-          } else if (event.type === "delete" || !["en_attente","aucun_livreur"].includes(event.data?.statut)) {
-            next = prev.filter(c => c.id !== event.id);
-          } else {
-            next = prev;
+      setCourses(prev => {
+        const d = event.data;
+        // GARDE GLOBALE : jamais injecter/conserver une course supprimée ou annulée
+        if (event.type === "delete" || !d || d.is_deleted || d.statut === 'annulee') {
+          return prev.filter(c => c.id !== event.id);
+        }
+        if (event.type === "create") {
+          if (!["en_attente", "aucun_livreur"].includes(d.statut)) return prev;
+          const next = prev.find(c => c.id === event.id) ? prev : [d, ...prev];
+          if (next.length > prevCountRef.current) {
+            playAlert();
+            toast("🔔 Nouvelle course à affecter !", { description: `${d.quartier_depart} → ${d.quartier_arrivee}`, duration: 8000 });
           }
-          prevCountRef.current = (next || prev).length;
-          return next || prev;
-        });
-      }
+          prevCountRef.current = next.length;
+          return next;
+        }
+        if (event.type === "update") {
+          if (!["en_attente", "aucun_livreur"].includes(d.statut)) {
+            const next = prev.filter(c => c.id !== event.id);
+            prevCountRef.current = next.length;
+            return next;
+          }
+          const exists = prev.find(c => c.id === event.id);
+          const next = exists ? prev.map(c => c.id === event.id ? d : c) : prev;
+          prevCountRef.current = next.length;
+          return next;
+        }
+        return prev;
+      });
     });
     return unsub;
   }, []);

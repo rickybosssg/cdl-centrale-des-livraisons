@@ -94,6 +94,53 @@ if (!ACTIVE_STATUTS.includes(ev.data.statut)) return prev.filter(c => c.id !== e
 
 ---
 
+---
+
+## 🔒 SCAN GLOBAL DES SUBSCRIPTIONS — 2026-05-18
+
+### Résultat du scan complet Course.subscribe() dans le projet
+
+| Fichier | Statut avant scan | Gardes manquantes | Statut après verrouillage |
+|---------|-------------------|-------------------|--------------------------|
+| `pages/dispatcher/GererCourses.jsx` | ⚠️ Partiel | `is_deleted` sur update (corrigé session -1) | ✅ VERROUILLÉ |
+| `components/dashboard/ActiveCourseSummary.jsx` | ⚠️ Partiel | `is_deleted` sur create+update (corrigé session -1) | ✅ VERROUILLÉ |
+| `hooks/useDriverCourseAlert.js` | ⚠️ Partiel | Statuts terminaux sur update+fallback (corrigé session -1) | ✅ VERROUILLÉ |
+| `hooks/useManualDispatchAlert.js` | ⚠️ Partiel | `is_deleted` sur update (corrigé session -1) | ✅ VERROUILLÉ |
+| `pages/livreur/CoursesDisponibles.jsx` | ❌ VULNÉRABLE | `is_deleted` absent sur create (mode auto) et update | ✅ VERROUILLÉ 2026-05-18 |
+| `pages/livreur/MesLivraisons.jsx` | ❌ VULNÉRABLE | `is_deleted` absent sur create+update, pas de guard owner | ✅ VERROUILLÉ 2026-05-18 |
+| `pages/client/MesCourses.jsx` | ❌ VULNÉRABLE | `is_deleted` absent sur create+update | ✅ VERROUILLÉ 2026-05-18 |
+| `pages/dispatcher/DispatchMonitor.jsx` | ❌ VULNÉRABLE | `is_deleted` absent sur create+update, delete event ignoré | ✅ VERROUILLÉ 2026-05-18 |
+| `pages/staff/ManualDispatch.jsx` | ❌ VULNÉRABLE | `is_deleted` absent, logique conditionnelle fragile | ✅ VERROUILLÉ 2026-05-18 |
+| `pages/dispatcher/AuditCoursesActives.jsx` | ✅ OK | Pas de subscription Course (lecture seule) | N/A |
+
+### Pattern de verrouillage appliqué partout (règle définitive)
+
+```js
+// TOUTE subscription Course.subscribe DOIT commencer par ces gardes
+base44.entities.Course.subscribe((event) => {
+  const d = event.data;
+
+  // ── GARDE GLOBALE OBLIGATOIRE ────────────────────────────────────
+  // 1. delete : toujours retirer
+  if (event.type === 'delete') return setCourses(p => p.filter(c => c.id !== event.id));
+  // 2. pas de data : ignorer
+  if (!d) return;
+  // 3. suppression logique : retirer sans condition
+  if (d.is_deleted) return setCourses(p => p.filter(c => c.id !== event.id));
+  // 4. statut annulé : retirer sans condition (sauf vues historiques)
+  // if (d.statut === 'annulee') return setCourses(p => p.filter(c => c.id !== event.id));
+  // ─────────────────────────────────────────────────────────────────
+
+  // ... logique métier spécifique à la vue
+});
+```
+
+> ⚠️ NOTE : Le garde `statut === 'annulee'` est à appliquer selon le contexte :
+> - Vues actives (CoursesDisponibles, DispatchMonitor) → **oui, retirer**
+> - Vues historiques (MesCourses onglet Terminées, MesLivraisons) → **non, conserver**
+
+---
+
 ## 📌 Comment utiliser ce fichier
 
 Si un bug similaire revient, AVANT de corriger :

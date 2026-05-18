@@ -95,6 +95,22 @@ export const BUG_MEMORY = {
       'hooks/useManualDispatchAlert.js',
     ],
 
+    // ── Scan global 2026-05-18 — toutes les subscriptions auditées ──────
+    scan_global_2026_05_18: {
+      date: '2026-05-18',
+      total_subscriptions_scannees: 9,
+      statut: 'COMPLET',
+      vulnerables_trouvees: 5,
+      vulnerables_corrigees: 5,
+      fichiers_verouilles: [
+        'pages/livreur/CoursesDisponibles.jsx',
+        'pages/livreur/MesLivraisons.jsx',
+        'pages/client/MesCourses.jsx',
+        'pages/dispatcher/DispatchMonitor.jsx',
+        'pages/staff/ManualDispatch.jsx',
+      ],
+    },
+
     // ── Subscriptions/hooks à vérifier en priorité si régression ─────────
     subscriptions_a_surveiller: [
       { fichier: 'pages/dispatcher/GererCourses.jsx',       description: 'Course.subscribe update — doit filter si is_deleted' },
