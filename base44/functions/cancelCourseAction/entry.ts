@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   }
   const c = courses[0];
 
-  console.log(`[CANCEL_ACTION_CALLED] course=${courseId} | action=${action} | statut=${c.statut} | user=${user.email} | client_email=${c.client_email} | isAdmin=${isAdmin}`);
+  console.log(`[CANCEL_STARTED] course=${courseId} | action=${action} | statut=${c.statut} | user=${user.email} | isAdmin=${isAdmin} | ts=${new Date().toISOString()}`);
 
   // Vérifier que le client ne peut annuler que ses propres courses
   // Comparaison insensible à la casse pour éviter les faux 403 (APK peut avoir des casses différentes)
@@ -133,7 +133,8 @@ Deno.serve(async (req) => {
         course_id: courseId,
       }).catch(() => {});
 
-      console.log(`[CANCEL_ACTION_SUCCESS] FREE cancel | course=${courseId} | user=${user.email}`);
+      console.log(`[COURSE_UPDATED] FREE cancel | course=${courseId} | nouveau_statut=annulee | ts=${new Date().toISOString()}`);
+    console.log(`[CANCEL_ACTION_SUCCESS] FREE cancel | course=${courseId} | user=${user.email}`);
       return Response.json({ success: true, courseId, statut: 'annulee', fraisAnnulation: 0, gratuit: true });
     }
 
@@ -276,6 +277,7 @@ Deno.serve(async (req) => {
       target_screen: '/mon-bedou',
     }).catch(() => {});
 
+    console.log(`[COURSE_UPDATED] FEE cancel | course=${courseId} | nouveau_statut=annulee | frais=${fraisAnnulation} | ts=${new Date().toISOString()}`);
     console.log(`[CANCEL_ACTION_SUCCESS] FEE cancel | course=${courseId} | frais=${fraisAnnulation} | user=${user.email}`);
     return Response.json({ success: true, courseId, statut: 'annulee', fraisAnnulation, partCdl, partLivreur });
   }
@@ -341,6 +343,7 @@ Deno.serve(async (req) => {
       metadata_json: JSON.stringify({ ancien_statut: ancienStatut, raison, livreur_email: c.livreur_email || null, client_email: c.client_email }),
     }).catch(() => {});
 
+    console.log(`[COURSE_UPDATED] admin cancel | course=${courseId} | nouveau_statut=annulee | admin=${user.email} | ts=${new Date().toISOString()}`);
     console.log(`[CANCEL_ACTION_SUCCESS] admin cancel | course=${courseId} | admin=${user.email}`);
     return Response.json({ success: true, action: 'cancel_admin', courseId, nouveau_statut: 'annulee' });
   }
@@ -370,6 +373,7 @@ Deno.serve(async (req) => {
       metadata_json: JSON.stringify({ statut_au_moment: ancienStatut, raison, client_email: c.client_email, prix: c.prix }),
     }).catch(() => {});
 
+    console.log(`[COURSE_UPDATED] delete_admin | course=${courseId} | is_deleted=true | admin=${user.email} | ts=${new Date().toISOString()}`);
     console.log(`[DELETE_ADMIN_SUCCESS] | course=${courseId} | admin=${user.email}`);
     return Response.json({ success: true, action: 'delete_admin', courseId });
   }

@@ -28,23 +28,40 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
   const handleConfirm = async () => {
     if (!raison.trim()) { toast.error("Veuillez saisir une raison"); return; }
     if (loading) return;
-    console.log(`[ADMIN_CANCEL_START] frontend | course=${course.id} | statut=${course.statut} | mode=${mode} | raison=${raison.trim()}`);
+    const action = mode === 'cancel' ? 'cancel_admin' : 'delete_admin';
+    console.log(`[CANCEL_STARTED] course=${course.id} | statut=${course.statut} | action=${action} | raison=${raison.trim()} | ts=${new Date().toISOString()}`);
     setLoading(true);
     try {
       const res = await base44.functions.invoke("cancelCourseAction", {
         courseId: course.id,
-        action: mode === 'cancel' ? 'cancel_admin' : 'delete_admin',
+        action,
         raison: raison.trim(),
       });
-      console.log(`[ADMIN_CANCEL_SUCCESS] frontend | course=${course.id} | response=`, res?.data);
-      if (!res?.data?.success) throw new Error(res?.data?.error || "Erreur inconnue");
+
+      if (!res?.data?.success) {
+        const errMsg = res?.data?.error || res?.data?.message || "Erreur inconnue";
+        console.error(`[CANCEL_ERROR] course=${course.id} | errMsg=${errMsg} | response=`, res?.data);
+        throw new Error(errMsg);
+      }
+
+      console.log(`[COURSE_UPDATED] course=${course.id} | nouveau_statut=${action === 'cancel_admin' ? 'annulee' : 'deleted'} | ts=${new Date().toISOString()}`);
+
+      // Mise à jour optimiste IMMÉDIATE — avant même le realtime subscription
+      const updatedCourse = action === 'cancel_admin'
+        ? { ...course, statut: 'annulee', annulee_par_admin: true }
+        : { ...course, is_deleted: true };
+
+      // Notifie le parent pour retrait immédiat de la liste courante
+      onDone?.(course.id, action, updatedCourse);
+
+      console.log(`[UI_REMOVED_FROM_LISTS] course=${course.id} | action=${action} | ts=${new Date().toISOString()}`);
+
       toast.success(mode === "cancel" ? "✅ Course annulée avec succès" : "✅ Course supprimée");
       setMode(null);
       setRaison("");
-      onDone?.();
     } catch (err) {
-      console.error(`[ADMIN_CANCEL_ERROR] frontend | course=${course.id} | err=`, err.message);
-      toast.error("❌ Erreur annulation : " + (err.message || "inconnue"));
+      console.error(`[CANCEL_ERROR] course=${course.id} | exception=${err.message}`);
+      toast.error("❌ Erreur : " + (err.message || "inconnue"));
     } finally {
       setLoading(false);
     }

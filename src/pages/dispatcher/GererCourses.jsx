@@ -36,13 +36,33 @@ export default function GererCourses() {
     }
   };
 
+  // Mise à jour optimiste instantanée après annulation/suppression admin
+  // Appelé PAR AdminCourseActions avant même la propagation realtime
+  const handleCancelDone = (courseId, action, updatedCourse) => {
+    console.log(`[REALTIME_PROPAGATED] optimistic update | course=${courseId} | action=${action} | ts=${new Date().toISOString()}`);
+    if (action === 'delete_admin') {
+      // Retirer immédiatement de toutes les listes
+      setCourses(prev => prev.filter(c => c.id !== courseId));
+    } else {
+      // cancel_admin : mettre à jour le statut → la course glisse vers l'onglet "Terminées" immédiatement
+      setCourses(prev => prev.map(c => c.id === courseId ? updatedCourse : c));
+    }
+    // Fermer le détail si ouvert sur cette course
+    if (selectedCourse?.id === courseId) {
+      setDetailDialog(false);
+      setSelectedCourse(null);
+    }
+  };
+
   useEffect(() => {
     loadData();
     
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.type === 'create') {
-        setCourses(prev => [event.data, ...prev]);
-      } else if (event.type === 'update') {
+      if (!event.id) return;
+      if (event.type === 'create' && event.data) {
+        setCourses(prev => prev.find(c => c.id === event.id) ? prev : [event.data, ...prev]);
+      } else if (event.type === 'update' && event.data) {
+        console.log(`[REALTIME_PROPAGATED] subscription update | course=${event.id} | statut=${event.data?.statut}`);
         setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
       } else if (event.type === 'delete') {
         setCourses(prev => prev.filter(c => c.id !== event.id));
@@ -319,12 +339,12 @@ export default function GererCourses() {
                         <UserPlus className="h-3 w-3 mr-1" />
                         Manuel
                       </Button>
-                      <AdminCourseActions course={course} onDone={loadData} />
-                    </>
-                  }
-                />
-              ))}
-              {enAttente.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course en attente</p>}
+                      <AdminCourseActions course={course} onDone={handleCancelDone} />
+                      </>
+                      }
+                      />
+                      ))}
+                      {enAttente.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course en attente</p>}
             </TabsContent>
 
             <TabsContent value="assignees" className="space-y-3 mt-3">
@@ -341,7 +361,7 @@ export default function GererCourses() {
                       <Button size="sm" variant="outline" className="h-8 text-xs text-green-600 border-green-300" onClick={() => changerStatut(course.id, "acceptee")}>
                         Forcer acceptation
                       </Button>
-                      <AdminCourseActions course={course} onDone={loadData} />
+                      <AdminCourseActions course={course} onDone={handleCancelDone} />
                     </>
                   }
                 />
@@ -366,7 +386,7 @@ export default function GererCourses() {
                           Marquer livré
                         </Button>
                       )}
-                      <AdminCourseActions course={course} onDone={loadData} />
+                      <AdminCourseActions course={course} onDone={handleCancelDone} />
                     </>
                   }
                 />
@@ -379,7 +399,7 @@ export default function GererCourses() {
                 <CourseRow
                   key={course.id}
                   course={course}
-                  actions={<AdminCourseActions course={course} onDone={loadData} />}
+                  actions={<AdminCourseActions course={course} onDone={handleCancelDone} />}
                 />
               ))}
               {terminees.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Aucune course terminée</p>}
@@ -460,7 +480,7 @@ export default function GererCourses() {
                 <Button size="sm" variant="outline" className="flex-1" onClick={() => { setDetailDialog(false); setAssignDialog(true); }}>
                   <UserPlus className="h-3.5 w-3.5 mr-1" />Assigner
                 </Button>
-                <AdminCourseActions course={selectedCourse} size="default" onDone={() => { setDetailDialog(false); loadData(); }} />
+                <AdminCourseActions course={selectedCourse} size="default" onDone={(cId, action, updated) => { setDetailDialog(false); handleCancelDone(cId, action, updated); }} />
               </div>
 
               {selectedCourse.historique_assignation && (() => {
