@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
 
   // Vérifier permissions selon l'action
   if ((action === 'cancel_admin' || action === 'delete_admin') && !isAdmin) {
+    console.error(`[CANCEL_ACTION_ERROR] 403 admin required | user=${user.email} | role=${user.role}`);
     return Response.json({ error: 'Accès réservé aux administrateurs' }, { status: 403 });
   }
 
@@ -54,13 +55,22 @@ Deno.serve(async (req) => {
     courses = await base44.asServiceRole.entities.Course.filter({ id: courseId });
   } catch (_) {}
   if (!courses || courses.length === 0) {
+    console.error(`[CANCEL_ACTION_ERROR] course not found | courseId=${courseId}`);
     return Response.json({ error: 'Course introuvable' }, { status: 404 });
   }
   const c = courses[0];
 
+  console.log(`[CANCEL_ACTION_CALLED] course=${courseId} | action=${action} | statut=${c.statut} | user=${user.email} | client_email=${c.client_email} | isAdmin=${isAdmin}`);
+
   // Vérifier que le client ne peut annuler que ses propres courses
-  if (action === 'cancel_client' && !isAdmin && c.client_email !== user.email) {
-    return Response.json({ error: 'Non autorisé — ce n\'est pas votre course' }, { status: 403 });
+  // Comparaison insensible à la casse pour éviter les faux 403 (APK peut avoir des casses différentes)
+  if (action === 'cancel_client' && !isAdmin) {
+    const userEmailNorm = (user.email || '').toLowerCase().trim();
+    const clientEmailNorm = (c.client_email || '').toLowerCase().trim();
+    if (userEmailNorm !== clientEmailNorm) {
+      console.error(`[CANCEL_ACTION_ERROR] 403 not owner | user=${userEmailNorm} | client=${clientEmailNorm}`);
+      return Response.json({ error: 'Non autorisé — ce n\'est pas votre course', debug: { user_email: userEmailNorm, client_email: clientEmailNorm } }, { status: 403 });
+    }
   }
 
   const now = new Date().toISOString();
@@ -123,7 +133,7 @@ Deno.serve(async (req) => {
         course_id: courseId,
       }).catch(() => {});
 
-      console.log(`[cancelCourseAction] FREE cancel OK | course=${courseId}`);
+      console.log(`[CANCEL_ACTION_SUCCESS] FREE cancel | course=${courseId} | user=${user.email}`);
       return Response.json({ success: true, courseId, statut: 'annulee', fraisAnnulation: 0, gratuit: true });
     }
 
@@ -266,7 +276,7 @@ Deno.serve(async (req) => {
       target_screen: '/mon-bedou',
     }).catch(() => {});
 
-    console.log(`[cancelCourseAction] FEE cancel OK | course=${courseId} | frais=${fraisAnnulation}`);
+    console.log(`[CANCEL_ACTION_SUCCESS] FEE cancel | course=${courseId} | frais=${fraisAnnulation} | user=${user.email}`);
     return Response.json({ success: true, courseId, statut: 'annulee', fraisAnnulation, partCdl, partLivreur });
   }
 
@@ -331,7 +341,7 @@ Deno.serve(async (req) => {
       metadata_json: JSON.stringify({ ancien_statut: ancienStatut, raison, livreur_email: c.livreur_email || null, client_email: c.client_email }),
     }).catch(() => {});
 
-    console.log(`[cancelCourseAction] ADMIN cancel OK | course=${courseId} | admin=${user.email}`);
+    console.log(`[CANCEL_ACTION_SUCCESS] admin cancel | course=${courseId} | admin=${user.email}`);
     return Response.json({ success: true, action: 'cancel_admin', courseId, nouveau_statut: 'annulee' });
   }
 
@@ -360,7 +370,7 @@ Deno.serve(async (req) => {
       metadata_json: JSON.stringify({ statut_au_moment: ancienStatut, raison, client_email: c.client_email, prix: c.prix }),
     }).catch(() => {});
 
-    console.log(`[cancelCourseAction] ADMIN delete OK | course=${courseId} | admin=${user.email}`);
+    console.log(`[DELETE_ADMIN_SUCCESS] | course=${courseId} | admin=${user.email}`);
     return Response.json({ success: true, action: 'delete_admin', courseId });
   }
 

@@ -150,13 +150,13 @@ export default function CourseLivreur() {
   };
 
   const livrerColis = async () => {
+    console.log('[DELIVERY_CLICK] livrerColis | course_id:', course?.id, '| statut:', course?.statut, '| settlement:', course?.settlement_status);
 
     if (updating || livreeVerrouilleRef.current) {
       toast.info("Livraison déjà en cours ou terminée");
       return;
     }
     if (course.settlement_status === 'completed') {
-
       livreeVerrouilleRef.current = true;
       setCourse(prev => ({ ...prev, statut: 'livree' }));
       toast.info("Cette course a déjà été réglée");
@@ -168,32 +168,34 @@ export default function CourseLivreur() {
     const gainLivreur = course.gain_livreur || Math.round(montant * 0.8);
     const commissionCdl = course.commission_cdl || (montant - gainLivreur);
 
-    // Timer UI max 10s — libère le bouton même si la promesse est bloquée
+    // Timer de sécurité UI 8s — déblocage garanti même si tout plante
     let uiUnlocked = false;
-    const uiTimer = setTimeout(() => {
+    const unlock = (reason) => {
       if (!uiUnlocked) {
         uiUnlocked = true;
+        clearTimeout(uiTimer);
         setUpdating(false);
-        toast.error('Délai dépassé. Vérifiez votre connexion et réessayez.');
+        if (reason) console.log('[DELIVERY_UI_REFRESH] unlock reason:', reason);
       }
-    }, 10000);
+    };
+    const uiTimer = setTimeout(() => {
+      unlock('UI_TIMEOUT_8S');
+      toast.error('⏱ Délai dépassé (8s). Vérifiez votre connexion et réessayez.');
+    }, 8000);
 
     try {
       // Idempotence : relire la course avant de lancer le settlement
       const freshCourses = await base44.entities.Course.filter({ id: course.id });
       const fresh = freshCourses?.[0];
       if (fresh?.statut === 'livree' || fresh?.settlement_status === 'completed') {
-  
-        uiUnlocked = true;
-        clearTimeout(uiTimer);
+        unlock('ALREADY_DONE');
         livreeVerrouilleRef.current = true;
         setCourse(prev => ({ ...prev, statut: 'livree' }));
         toast.success('Course déjà livrée !');
-        setUpdating(false);
         return;
       }
 
-
+      console.log('[DELIVERY_BACKEND_START] invoking bedouEngine | montant:', montant);
       let res;
       try {
         res = await Promise.race([
@@ -206,49 +208,43 @@ export default function CourseLivreur() {
             livreur_nom: course.livreur_name,
             montant,
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('BEDOU_TIMEOUT')), 9000)),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('BEDOU_TIMEOUT')), 7000)),
         ]);
+        console.log('[DELIVERY_BACKEND_SUCCESS] bedouEngine response:', res?.data?.success, res?.data?.alreadyDone);
       } catch (bedouErr) {
-        if (bedouErr?.message === 'BEDOU_TIMEOUT') {
-          // Ne pas débloquer ici — le timer UI de 10s va le faire proprement
-          return;
-        }
-        throw bedouErr;
+        console.error('[DELIVERY_BACKEND_ERROR] bedouEngine error:', bedouErr?.message);
+        unlock('BEDOU_ERROR');
+        toast.error('Erreur règlement Bedou : ' + (bedouErr?.message || 'réessayez'));
+        return;
       }
 
       if (!res?.data?.success && !res?.data?.alreadyDone) {
-        uiUnlocked = true;
-        clearTimeout(uiTimer);
+        unlock('BEDOU_FAILED');
         if (res?.data?.insuffisant) {
           toast.error(`Solde Bedou client insuffisant (${res.data.solde?.toLocaleString()} FCFA). Contactez l'admin.`);
         } else {
           toast.error(res?.data?.error || 'Erreur lors du règlement');
         }
-        setUpdating(false);
         return;
       }
 
-
-
-      // Mettre à jour statut course → livree
-      await base44.entities.Course.update(id, {
-        statut: 'livree',
-        date_livraison: new Date().toISOString(),
-        statut_paiement: 'paye',
+      // Mettre à jour statut course → livree via backend (service role, pas de 403)
+      console.log('[DELIVERY_BACKEND_START] updating course status → livree');
+      await base44.functions.invoke('updateCourseDelivered', {
+        course_id: course.id,
         commission_cdl: commissionCdl,
         gain_livreur: gainLivreur,
-        statut_paiement_livreur: 'Payé',
       });
+      console.log('[DELIVERY_UI_REFRESH] course status updated → livree');
 
-      uiUnlocked = true;
-      clearTimeout(uiTimer);
+      unlock('SUCCESS');
       livreeVerrouilleRef.current = true;
       setCourse(prev => ({ ...prev, statut: 'livree', date_livraison: new Date().toISOString(), gain_livreur: gainLivreur }));
 
       vibrateSuccess();
       toast.success(`🎉 Livraison confirmée ! +${gainLivreur?.toLocaleString()} FCFA crédités sur votre Bedou.`);
 
-      // Fire & forget — stats UNIQUEMENT (pas de décrémentation ici — déjà faite ailleurs si nécessaire)
+      // Fire & forget — stats + notifs
       base44.entities.User.filter({ email: course.livreur_email }).then(livs => {
         if (livs[0]) base44.entities.User.update(livs[0].id, {
           total_courses_livrees: (livs[0].total_courses_livrees || 0) + 1,
@@ -256,7 +252,6 @@ export default function CourseLivreur() {
       }).catch(() => {});
       base44.functions.invoke('updateLivreurStreak', {}).catch(() => {});
 
-      // Fire & forget — Notifications IDEMPOTENTES avec keys de déduplication
       const notif_key_client = `${course.client_email}__livree__${course.id}__client`;
       const notif_key_admin = `weezyh2@gmail.com__livree__${course.id}__admin`;
       base44.entities.Notification.create({
@@ -278,12 +273,9 @@ export default function CourseLivreur() {
       triggerWhatsAppNotification({ eventType: 'course_completed_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur, messageText: waMsgCourseCompletedDriver(), entityId: course.id, entityType: 'course', priority: 'normal' });
 
     } catch (err) {
-      uiUnlocked = true;
-      clearTimeout(uiTimer);
+      console.error('[DELIVERY_BACKEND_ERROR] unexpected:', err?.message);
+      unlock('CATCH');
       toast.error('Erreur inattendue : ' + (err?.message || 'réessayez'));
-      setUpdating(false);
-    } finally {
-      if (!uiUnlocked) setUpdating(false);
     }
   };
 
