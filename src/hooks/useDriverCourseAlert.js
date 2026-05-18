@@ -1,9 +1,10 @@
 /**
  * useDriverCourseAlert — Hook global realtime pour la carte d'acceptation livreur
  *
- * Source unique : écoute l'entité Course en BDD.
- * Déclenche l'alerte dès qu'une course statut=assignee_attente est assignée à ce livreur,
- * peu importe l'onglet où il se trouve.
+ * SOURCE UNIQUE : Notification interne (entity Notification)
+ * Si notification interne arrive avec course_id → bloc résumé affiché IMMÉDIATEMENT
+ *
+ * RÈGLE ABSOLUE : "notification interne reçue = bloc résumé affiché avec le même course_id"
  *
  * Usage :
  *   const { alertCourse, clearAlert, user } = useDriverCourseAlert();
@@ -18,8 +19,8 @@ export function useDriverCourseAlert() {
   const [alertCourse, setAlertCourse] = useState(null);
   const alertCourseRef = useRef(null);
   const userEmailRef = useRef(null);
-  // File d'attente : events reçus AVANT que userEmail soit connu
-  const pendingEventsRef = useRef([]);
+  // File d'attente : notifications reçues AVANT que userEmail soit connu
+  const pendingNotifsRef = useRef([]);
 
   // ── Charger l'user, puis drainer la file d'attente ─────────────────────
   useEffect(() => {
@@ -32,79 +33,109 @@ export function useDriverCourseAlert() {
       userEmailRef.current = me.email;
       console.log('[COURSE_ALERT_RECEIVED] userEmail ready:', me.email);
 
-      // Vérifier immédiatement s'il y a une course assignée en attente (cas app déjà ouverte)
-      base44.entities.Course.filter({ livreur_email: me.email, statut: "assignee_attente" }, "-created_date", 1)
-        .then(data => {
-          if (data?.[0]) {
-            console.log('[COURSE_ALERT_RECEIVED] initial fetch found pending course:', data[0].id);
-            alertCourseRef.current = data[0];
-            setAlertCourse(data[0]);
+      // Vérifier immédiatement s'il y a une notification "nouvelle course" non lue
+      base44.entities.Notification.filter({ 
+        destinataire_email: me.email, 
+        lue: false,
+        titre: { $regex: "nouvelle course|nouveau trajet|course assignée" }
+      }, "-created_date", 1)
+        .then(notifs => {
+          if (notifs?.[0]?.course_id) {
+            console.log('[COURSE_ALERT_RECEIVED] initial fetch found notification for course:', notifs[0].course_id);
+            // Charger la course depuis BDD
+            base44.entities.Course.filter({ id: notifs[0].course_id }).then(courses => {
+              if (courses?.[0]) {
+                alertCourseRef.current = courses[0];
+                setAlertCourse(courses[0]);
+                console.log('[COURSE_ALERT_RENDERED] showing alert from initial notification, course:', courses[0].id);
+              }
+            }).catch(() => {});
           } else {
-            console.log('[COURSE_ALERT_RECEIVED] initial fetch: no assignee_attente course');
+            console.log('[COURSE_ALERT_RECEIVED] initial fetch: no new course notification');
           }
         })
-        .catch((e) => console.log('[COURSE_ALERT_HIDDEN_REASON] initial fetch error:', e?.message));
+        .catch((e) => console.log('[COURSE_ALERT_HIDDEN_REASON] initial notification fetch error:', e?.message));
 
-      // Drainer les events reçus avant que l'email soit connu
-      const pending = pendingEventsRef.current;
-      pendingEventsRef.current = [];
-      pending.forEach(ev => processEvent(ev, me.email));
+      // Drainer les notifications reçues avant que l'email soit connu
+      const pending = pendingNotifsRef.current;
+      pendingNotifsRef.current = [];
+      pending.forEach(notif => processNotification(notif, me.email));
     }).catch((e) => console.log('[COURSE_ALERT_HIDDEN_REASON] auth.me() error:', e?.message));
   }, []);
 
-  // ── Traitement d'un event Course ────────────────────────────────────────
-  const processEvent = useCallback((ev, emailOverride) => {
+  // ── Traitement d'une notification "nouvelle course" ─────────────────────
+  const processNotification = useCallback((notif, emailOverride) => {
     const email = emailOverride || userEmailRef.current;
     if (!email) {
-      // Email pas encore connu → mettre en file
-      pendingEventsRef.current.push(ev);
-      console.log('[COURSE_ALERT_HIDDEN_REASON] email not ready yet, queuing event', ev.id);
+      pendingNotifsRef.current.push(notif);
+      console.log('[COURSE_ALERT_HIDDEN_REASON] email not ready yet, queuing notification', notif.id);
       return;
     }
-    if (!ev.data) {
-      // Update sans data (rare) → si c'est notre course active, fermer
-      if (alertCourseRef.current?.id === ev.id) {
-        console.log('[COURSE_ALERT_HIDDEN_REASON] event has no data, closing alert for', ev.id);
-        alertCourseRef.current = null;
-        setAlertCourse(null);
+    if (notif.data?.destinataire_email !== email) return;
+    
+    // Vérifier si c'est une notification de nouvelle course
+    const titre = notif.data?.titre || notif.titre;
+    const isCourseNotif = titre && (
+      titre.toLowerCase().includes('nouvelle course') ||
+      titre.toLowerCase().includes('nouveau trajet') ||
+      titre.toLowerCase().includes('course assignée')
+    );
+    
+    if (!isCourseNotif || !notif.data?.course_id) {
+      console.log('[COURSE_ALERT_HIDDEN_REASON] notification not a course alert:', titre);
+      return;
+    }
+
+    console.log('[COURSE_ALERT_RECEIVED] notification course detected:', notif.data.course_id, '| titre:', titre);
+
+    // Charger la course depuis BDD — source de vérité
+    base44.entities.Course.filter({ id: notif.data.course_id }).then(courses => {
+      if (!courses?.[0]) {
+        console.log('[COURSE_ALERT_HIDDEN_REASON] course not found:', notif.data.course_id);
+        return;
       }
-      return;
-    }
+      const course = courses[0];
+      
+      // Vérifier que la course est bien pour ce livreur
+      if (course.livreur_email !== email) {
+        console.log('[COURSE_ALERT_HIDDEN_REASON] course livreur_email mismatch:', course.livreur_email, '!=', email);
+        return;
+      }
 
-    const isForMe = ev.data.livreur_email === email;
-    const isProposed = ev.data.statut === "assignee_attente";
-    const wasOurCourse = alertCourseRef.current?.id === ev.id;
-
-    console.log('[COURSE_ALERT_RECEIVED] event:', ev.type, 'course:', ev.id,
-      '| livreur_email:', ev.data.livreur_email, '| statut:', ev.data.statut,
-      '| isForMe:', isForMe, '| isProposed:', isProposed);
-
-    if (isForMe && isProposed) {
-      if (alertCourseRef.current?.id !== ev.data.id) {
-        console.log('[COURSE_ALERT_RENDERED] showing alert for course:', ev.data.id);
-        alertCourseRef.current = ev.data;
-        setAlertCourse(ev.data);
+      // Afficher l'alerte — PEU IMPORTE LE STATUT
+      // La notification interne est la source de vérité
+      if (alertCourseRef.current?.id !== course.id) {
+        console.log('[COURSE_ALERT_RENDERED] showing alert from notification, course:', course.id, '| statut:', course.statut);
+        alertCourseRef.current = course;
+        setAlertCourse(course);
       } else {
-        console.log('[COURSE_ALERT_HIDDEN_REASON] duplicate event for same course:', ev.data.id);
+        console.log('[COURSE_ALERT_HIDDEN_REASON] duplicate notification for same course:', course.id);
       }
-    } else if (wasOurCourse) {
-      console.log('[COURSE_ALERT_HIDDEN_REASON] our course changed status/driver, closing. new statut:', ev.data.statut);
-      alertCourseRef.current = null;
-      setAlertCourse(null);
-    } else {
-      console.log('[COURSE_ALERT_HIDDEN_REASON] event not for me or wrong status.',
-        'livreur_email:', ev.data.livreur_email, 'expected:', email,
-        'statut:', ev.data.statut);
-    }
+    }).catch((e) => console.log('[COURSE_ALERT_HIDDEN_REASON] course fetch error:', e?.message));
   }, []);
 
-  // ── Subscription BDD — démarre IMMÉDIATEMENT (avant que l'email soit connu) ──
+  // ── Subscription Notification — SOURCE DE VÉRITÉ ────────────────────────
+  useEffect(() => {
+    const unsub = base44.entities.Notification.subscribe((notif) => {
+      console.log('[COURSE_ALERT_NOTIFICATION_EVENT] type:', notif.type, '| id:', notif.id, '| course_id:', notif.data?.course_id, '| titre:', notif.data?.titre);
+      processNotification(notif, null);
+    });
+    console.log('[COURSE_ALERT_NOTIFICATION_SUBSCRIBE] subscription active');
+    return () => { if (unsub) unsub(); };
+  }, [processNotification]);
+
+  // ── Subscription Course — en parallèle (fallback) ───────────────────────
   useEffect(() => {
     const unsub = base44.entities.Course.subscribe((ev) => {
-      processEvent(ev, null);
+      // Seulement si alerte déjà affichée — pour mettre à jour les données
+      if (alertCourseRef.current?.id === ev.id && ev.data) {
+        console.log('[COURSE_ALERT_UPDATE] updating existing alert, course:', ev.id, '| new statut:', ev.data.statut);
+        alertCourseRef.current = ev.data;
+        setAlertCourse(ev.data);
+      }
     });
     return () => { if (unsub) unsub(); };
-  }, [processEvent]);
+  }, []);
 
   const clearAlert = useCallback(() => {
     console.log('[COURSE_ALERT_HIDDEN_REASON] manually cleared by user');

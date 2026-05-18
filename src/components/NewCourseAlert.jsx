@@ -37,7 +37,8 @@ export default function NewCourseAlert({ course, onClose, user }) {
   useEffect(() => {
     if (!course) return;
     setTimeLeft(TIMER_DURATION);
-    console.log(`[DRIVER_ASSIGNED_COURSE_MODAL_SHOWN] course_id=${course.id} | trajet=${course.quartier_depart}→${course.quartier_arrivee} | prix=${course.prix}`);
+    console.log(`[✅ BLOC_RÉSUMÉ_AFFICHÉ] course_id=${course.id} | livreur_email=${course.livreur_email} | statut=${course.statut} | trajet=${course.quartier_depart}→${course.quartier_arrivee} | prix=${course.prix}`);
+    console.log(`[PREUVE] notification_interne_reçue = bloc_résumé_affiché (même course_id: ${course.id})`);
     playAlertSound();
     vibrateNotif();
     // Vibration native via navigator.vibrate (fonctionne sur Android WebView/APK)
@@ -193,6 +194,8 @@ export default function NewCourseAlert({ course, onClose, user }) {
           transition={{ type: "spring", damping: 22, stiffness: 320 }}
           className="fixed top-0 left-0 right-0 z-[9999] flex justify-center px-3 pt-2"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
+          data-testid="new-course-alert"
+          data-course-id={course.id}
         >
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden border-2 border-orange-400">
             {/* Header urgence */}
