@@ -47,7 +47,9 @@ export function useDriverCourseAlert() {
 
       const course = ev.data;
       const isForMe = course.livreur_email === email;
-      const isAssigned = ["assignee_attente", "en_attente"].includes(course.statut);
+      // CRITIQUE : seul "assignee_attente" = assignation admin réelle.
+      // "en_attente" est une course globale visible par tous → NE JAMAIS déclencher l'alerte livreur dessus.
+      const isAssigned = course.statut === "assignee_attente";
 
       if (ev.type === "create" && isForMe && isAssigned) {
         console.log(`[DRIVER_ALERT] course CREATE assigned to me: ${ev.id} | statut: ${course.statut}`);

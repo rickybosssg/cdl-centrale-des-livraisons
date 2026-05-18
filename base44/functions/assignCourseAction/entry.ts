@@ -149,6 +149,7 @@ Deno.serve(async (req) => {
   }).catch(() => {});
 
   console.log(`[ASSIGN_COURSE] Manual OK | course=${course_id} | driver=${driver.email}`);
+  console.log(`[ASSIGNED_DRIVER_ID] course=${course_id} | driver_email=${driver.email} | driver_id=${driver.id} | mode=manual | by=${user.email} | ts=${now}`);
 
   return Response.json({
     success: true,

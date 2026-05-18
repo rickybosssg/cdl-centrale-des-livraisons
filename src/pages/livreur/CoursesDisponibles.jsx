@@ -19,6 +19,7 @@ export default function CoursesDisponibles() {
   const [gainsJour, setGainsJour] = useState(0);
   const [coursesJour, setCoursesJour] = useState(0);
   const [accepting, setAccepting] = useState(null);
+  const [dispatchMode, setDispatchMode] = useState('auto');
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -26,15 +27,31 @@ export default function CoursesDisponibles() {
     const me = await base44.auth.me();
     setUser(me);
 
-
     // Charger le profil livreur pour vérifier le statut de validation
     try {
       const profs = await base44.entities.UserProfile.filter({ user_email: me.email, profile_type: 'livreur', deleted: false });
       setLivreurProfile(profs?.[0] || null);
     } catch (_) {}
 
-    const data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 20);
+    // ── MODE DISPATCH : lecture obligatoire avant d'afficher les courses ─────
+    let dispatchMode = 'auto';
+    try {
+      const modeRows = await base44.entities.DispatchModeState.list('-updated_date', 1);
+      dispatchMode = modeRows?.[0]?.mode === 'manuel' ? 'manuel' : 'auto';
+      console.log(`[DRIVER_COURSE_VISIBLE] loadData | mode=${dispatchMode} | email=${me.email}`);
+    } catch (_) {}
+
+    let data = [];
+    if (dispatchMode === 'manuel') {
+      // Mode manuel : SEULES les courses assignées à CE livreur par l'admin
+      console.log(`[MODE_DISPATCH] manuel actif — affichage restreint aux courses assignées à ${me.email}`);
+      data = await base44.entities.Course.filter({ statut: "assignee_attente", livreur_email: me.email }, "-created_date", 20);
+    } else {
+      // Mode auto : courses disponibles globalement (statut en_attente)
+      data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 20);
+    }
     setCourses(data);
+    setDispatchMode(dispatchMode);
 
     const today = new Date().toDateString();
     const mesLivraisons = await base44.entities.Course.filter(
@@ -65,16 +82,43 @@ export default function CoursesDisponibles() {
   useEffect(() => {
     loadData();
 
-    const unsub = base44.entities.Course.subscribe((event) => {
+    const unsub = base44.entities.Course.subscribe(async (event) => {
       if (!event.data && event.type !== "delete") return;
-      if (event.type === "create" && event.data?.statut === "en_attente") {
-        setCourses(prev => {
-          if (prev.find(c => c.id === event.id)) return prev;
-          return [event.data, ...prev];
-        });
+
+      // Lire le mode depuis l'état React (via ref pour avoir valeur à jour dans la closure)
+      // On re-lit depuis DispatchModeState pour être sûr (une seule lecture légère)
+      let mode = 'auto';
+      try {
+        const modeRows = await base44.entities.DispatchModeState.list('-updated_date', 1);
+        mode = modeRows?.[0]?.mode === 'manuel' ? 'manuel' : 'auto';
+      } catch (_) {}
+
+      const meEmail = (await base44.auth.me().catch(() => null))?.email;
+
+      if (event.type === "create") {
+        if (mode === 'manuel') {
+          // Mode manuel : afficher SEULEMENT si assignée à moi
+          if (event.data?.statut === "assignee_attente" && event.data?.livreur_email === meEmail) {
+            console.log(`[DRIVER_COURSE_VISIBLE] realtime CREATE | mode=manuel | assigned to me | id=${event.id}`);
+            setCourses(prev => prev.find(c => c.id === event.id) ? prev : [event.data, ...prev]);
+          }
+        } else if (event.data?.statut === "en_attente") {
+          setCourses(prev => prev.find(c => c.id === event.id) ? prev : [event.data, ...prev]);
+        }
       } else if (event.type === "update") {
-        if (event.data?.statut !== "en_attente") {
-          setCourses(prev => prev.filter(c => c.id !== event.id));
+        if (mode === 'manuel') {
+          // Mode manuel : n'afficher que assignee_attente pour ce livreur
+          if (event.data?.statut === "assignee_attente" && event.data?.livreur_email === meEmail) {
+            console.log(`[DRIVER_COURSE_VISIBLE] realtime UPDATE | mode=manuel | assigned to me | id=${event.id}`);
+            setCourses(prev => prev.find(c => c.id === event.id) ? prev.map(c => c.id === event.id ? event.data : c) : [event.data, ...prev]);
+          } else {
+            // Retirer si plus assignée à moi ou statut changé
+            setCourses(prev => prev.filter(c => c.id !== event.id));
+          }
+        } else {
+          if (event.data?.statut !== "en_attente") {
+            setCourses(prev => prev.filter(c => c.id !== event.id));
+          }
         }
       } else if (event.type === "delete") {
         setCourses(prev => prev.filter(c => c.id !== event.id));
@@ -193,6 +237,12 @@ export default function CoursesDisponibles() {
       </div>
 
       {/* Liste des courses */}
+      {dispatchMode === 'manuel' && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700">
+          <span className="font-bold">⚠️ Mode manuel actif</span> — seules vos courses assignées par l'admin apparaissent ici.
+        </div>
+      )}
+
       {courses.length > 0 ? (
         <div className="space-y-3">
           <p className="text-sm font-semibold text-gray-700">{courses.length} course(s) à accepter</p>
