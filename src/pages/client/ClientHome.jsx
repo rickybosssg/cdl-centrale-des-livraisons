@@ -168,12 +168,13 @@ export default function ClientHome({ user }) {
   }, [user?.email]);
 
   // Détecter courses à noter au chargement
+  // CORRECTION : inclure `courses` dans les dépendances pour réagir après le chargement
   useEffect(() => {
     if (!loading && courses.length > 0 && !courseANoter) {
       const aNoter = courses.find(c => c?.statut === 'livree' && c?.livreur_email && !c?.note_donnee);
       if (aNoter) setCourseANoter(aNoter);
     }
-  }, [loading]);
+  }, [loading, courses]);
 
   if (!user || !user?.email || !user?.id) {
     return (
@@ -184,7 +185,8 @@ export default function ClientHome({ user }) {
   }
 
   const safeCourses = Array.isArray(courses) ? courses : [];
-  const activeCourses = safeCourses.filter(c => !['livree', 'annulee'].includes(c?.statut));
+  // GARDE is_deleted : ne jamais afficher une course supprimée
+  const activeCourses = safeCourses.filter(c => !['livree', 'annulee', 'annulee_par_admin'].includes(c?.statut) && !c?.is_deleted);
   const completedCourses = safeCourses.filter(c => c?.statut === 'livree');
   const recentCourses = safeCourses.slice(0, 3);
   const prenom = user.full_name?.split(" ")[0] || "Client";

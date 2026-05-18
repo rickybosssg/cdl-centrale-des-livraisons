@@ -153,12 +153,20 @@ export default function LivreurHome({ user: initialUser }) {
       const isForMe = ev.data.livreur_email === email;
       if (!isForMe) return;
       if (ev.type === "create") {
-        setCourses(p => [ev.data, ...p]);
+        // GARDE is_deleted
+        if (!ev.data.is_deleted) setCourses(p => [ev.data, ...p]);
       } else if (ev.type === "update") {
-        setCourses(p => {
-          const exists = p.find(c => c.id === ev.id);
-          return exists ? p.map(c => c.id === ev.id ? ev.data : c) : [ev.data, ...p];
-        });
+        if (ev.data.is_deleted) {
+          // Suppression logique → retirer
+          setCourses(p => p.filter(c => c.id !== ev.id));
+        } else {
+          setCourses(p => {
+            const exists = p.find(c => c.id === ev.id);
+            return exists ? p.map(c => c.id === ev.id ? ev.data : c) : [ev.data, ...p];
+          });
+        }
+      } else if (ev.type === "delete") {
+        setCourses(p => p.filter(c => c.id !== ev.id));
       }
     });
     return unsub;
