@@ -30,7 +30,7 @@ function GlobalDriverAlert({ userEmail }) {
 // ── Alerte globale admin (mode manuel) — montée au niveau layout ──────────
 // Visible sur TOUTES les pages admin. z-index max, pointer-events réels, safe-area APK.
 function GlobalAdminAlert() {
-  const { shouldDisplay, visibleCourses, handleDismiss } = useManualDispatchAlert();
+  const { shouldDisplay, visibleCourses, handleDismiss, removeCourse } = useManualDispatchAlert();
   
   if (!shouldDisplay) return null;
 
@@ -52,6 +52,7 @@ function GlobalAdminAlert() {
             key={course.id}
             course={course}
             onDismiss={() => handleDismiss(course.id)}
+            onAssigned={(id) => removeCourse(id)}
           />
         ))}
       </div>
