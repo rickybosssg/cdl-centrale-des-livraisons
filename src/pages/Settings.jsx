@@ -503,7 +503,11 @@ export default function Settings() {
           </Link>
           <button
             onClick={() => {
+              // Nettoyage complet du cache local
               try { localStorage.removeItem('base44_access_token'); } catch(_) {}
+              try { localStorage.removeItem('activeProfileId'); } catch(_) {}
+              try { localStorage.removeItem('cdl_active_role'); } catch(_) {}
+              try { sessionStorage.clear(); } catch(_) {}
               window.location.href = '/connexion';
             }}
             className="flex items-center gap-3 p-3 rounded-lg border w-full hover:bg-muted transition-colors"

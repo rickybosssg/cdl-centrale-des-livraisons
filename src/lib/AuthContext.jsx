@@ -88,9 +88,14 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
+    // Nettoyage complet du cache local au logout
     try { localStorage.removeItem('base44_access_token'); } catch (_) {}
     try { base44.auth.setToken(null); } catch (_) {}
     try { localStorage.removeItem('cdl_session_creds'); } catch (_) {}
+    try { localStorage.removeItem('activeProfileId'); } catch (_) {}
+    try { localStorage.removeItem('cdl_active_role'); } catch (_) {}
+    try { sessionStorage.removeItem('cdl_active_role'); } catch (_) {}
+    try { sessionStorage.clear(); } catch (_) {}
     window.location.href = '/connexion';
   };
 

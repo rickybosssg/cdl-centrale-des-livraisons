@@ -87,16 +87,22 @@ export default function MesNotifications() {
   };
 
   useEffect(() => {
-    let userEmail = null;
-    base44.auth.me().then(me => { userEmail = me?.email; });
-    load();
-    const unsub = base44.entities.Notification.subscribe((event) => {
-      if (userEmail && event.data?.destinataire_email && event.data.destinataire_email !== userEmail) return;
-      if (event.type === "create") setNotifs(prev => [event.data, ...prev]);
-      else if (event.type === "update") setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
-      else if (event.type === "delete") setNotifs(prev => prev.filter(n => n.id !== event.id));
-    });
-    return unsub;
+    // CORRECTION : race condition — userEmail peut être null quand le 1er event arrive
+    // Solution : charger user d'abord, puis ouvrir la subscription
+    let unsub = null;
+    base44.auth.me().then(me => {
+      const userEmail = me?.email;
+      load();
+      unsub = base44.entities.Notification.subscribe((event) => {
+        // GARDE : filtrer uniquement les notifs de cet utilisateur
+        if (!event.data) return;
+        if (userEmail && event.data.destinataire_email && event.data.destinataire_email !== userEmail) return;
+        if (event.type === "create") setNotifs(prev => [event.data, ...prev]);
+        else if (event.type === "update") setNotifs(prev => prev.map(n => n.id === event.id ? event.data : n));
+        else if (event.type === "delete") setNotifs(prev => prev.filter(n => n.id !== event.id));
+      });
+    }).catch(() => { load(); });
+    return () => { if (unsub) unsub(); };
   }, []);
 
   const markAllRead = async () => {

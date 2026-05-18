@@ -231,7 +231,8 @@ export default function MonBedou() {
     }
   };
 
-  const canRetrait   = user && ["livreur", "partenaire", "commercial"].includes(user.user_type);
+  // SOURCE UNIQUE : active_profile_type (user_type peut être obsolète)
+  const canRetrait = user && ["livreur", "partenaire", "commercial"].includes(user.active_profile_type || user.user_type);
   const bonusPreview = parseInt(form.montant) >= 100 ? getBonus(parseInt(form.montant)) : 0;
   const txFiltrees   = transactions.filter(tx => filterStatut === "tous" || tx.statut === filterStatut);
   const loading      = userLoading || bedouLoading;
