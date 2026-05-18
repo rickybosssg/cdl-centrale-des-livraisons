@@ -31,9 +31,9 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
     console.log(`[ADMIN_CANCEL_START] frontend | course=${course.id} | statut=${course.statut} | mode=${mode} | raison=${raison.trim()}`);
     setLoading(true);
     try {
-      const res = await base44.functions.invoke("adminCourseAction", {
-        course_id: course.id,
-        action: mode,
+      const res = await base44.functions.invoke("cancelCourseAction", {
+        courseId: course.id,
+        action: mode === 'cancel' ? 'cancel_admin' : 'delete_admin',
         raison: raison.trim(),
       });
       console.log(`[ADMIN_CANCEL_SUCCESS] frontend | course=${course.id} | response=`, res?.data);

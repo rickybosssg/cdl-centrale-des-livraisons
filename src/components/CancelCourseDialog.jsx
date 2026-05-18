@@ -9,20 +9,6 @@ import { toast } from 'sonner';
 /** Annulation sans frais (pas encore de livreur confirmé ou en attente de réponse) */
 const FREE_CANCEL_STATUTS = ['en_attente', 'assignee_attente', 'aucun_livreur'];
 
-async function releaseLivreurIfPending(course) {
-  if (!course?.livreur_email || course.statut !== 'assignee_attente') return;
-  try {
-    const livs = await base44.entities.User.filter({ email: course.livreur_email });
-    if (livs?.[0]) {
-      await base44.entities.User.update(livs[0].id, {
-        nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 1) - 1),
-      });
-    }
-  } catch (e) {
-    console.warn('[CancelCourseDialog] release livreur:', e?.message);
-  }
-}
-
 export default function CancelCourseDialog({ open, onOpenChange, course, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -40,23 +26,10 @@ export default function CancelCourseDialog({ open, onOpenChange, course, onSucce
     console.log('[CancelDialog] Annulation course:', course.id, 'statut:', course.statut, 'gratuit:', isFreeCancel);
 
     try {
-      // ── Annulation gratuite : ne pas appeler cancelCourseWithFees (réservé à acceptee / en_cours côté backend)
-      if (isFreeCancel) {
-        await base44.entities.Course.update(course.id, {
-          statut: 'annulee',
-          annulee_par: 'client',
-          frais_annulation: 0,
-          date_annulation: new Date().toISOString(),
-        });
-        await releaseLivreurIfPending(course);
-        toast.success('✅ Course annulée sans frais.');
-        onOpenChange(false);
-        onSuccess?.();
-        return;
-      }
-
-      // ── Annulation avec frais (livreur a accepté)
-      const res = await base44.functions.invoke('cancelCourseWithFees', { courseId: course.id });
+      const res = await base44.functions.invoke('cancelCourseAction', {
+        courseId: course.id,
+        action: 'cancel_client',
+      });
       console.log('[CancelDialog] Réponse:', res?.data);
 
       if (res?.data?.error === 'insufficient_balance') {
@@ -66,7 +39,7 @@ export default function CancelCourseDialog({ open, onOpenChange, course, onSucce
         return;
       }
       if (res?.data?.success) {
-        toast.success('✅ Course annulée. Frais prélevés si applicable.');
+        toast.success(isFreeCancel ? '✅ Course annulée sans frais.' : '✅ Course annulée. Frais prélevés.');
         triggerWhatsAppNotification({
           eventType: 'course_cancelled_by_client',
           recipientRole: 'client',
@@ -98,8 +71,8 @@ export default function CancelCourseDialog({ open, onOpenChange, course, onSucce
       toast.error('Erreur: ' + msg);
     } catch (err) {
       console.error('[CancelDialog] Exception:', err?.message);
-      setErrorMsg(err.message);
-      toast.error('Erreur: ' + (err.message || 'inconnue'));
+      setErrorMsg(err?.message || 'Erreur inconnue');
+      toast.error('Erreur: ' + (err?.message || 'inconnue'));
     } finally {
       setLoading(false);
     }
