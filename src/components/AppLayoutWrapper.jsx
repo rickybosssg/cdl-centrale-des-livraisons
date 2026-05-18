@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { getActiveProfileType, isAdminUser } from "@/lib/activeProfile";
 import AppLayout from "./AppLayout";
@@ -11,14 +10,7 @@ import NewCourseAlert from "./NewCourseAlert";
 import ManualDispatchAlertBlock from "./ManualDispatchAlertBlock";
 import { useDriverCourseAlert } from "@/hooks/useDriverCourseAlert";
 import { useManualDispatchAlert } from "@/hooks/useManualDispatchAlert";
-
-import PermissionsOnboarding, { needsPermissionsOnboarding, markPermissionsConfigured } from "./PermissionsOnboarding";
-import { Bell } from "lucide-react";
-
-// Récupère le token d'auth depuis localStorage pour le fallback APK natif
-function getAuthToken() {
-  try { return localStorage.getItem('base44_access_token') || ''; } catch (_) { return ''; }
-}
+import PermissionsOnboarding, { needsPermissionsOnboarding } from "./PermissionsOnboarding";
 
 // ── Alerte globale livreur — montée UNE SEULE FOIS au niveau layout ───────
 function GlobalDriverAlert({ userEmail }) {
@@ -29,9 +21,17 @@ function GlobalDriverAlert({ userEmail }) {
 
 // ── Alerte globale admin (mode manuel) — montée au niveau layout ──────────
 // Visible sur TOUTES les pages admin. z-index max, pointer-events réels, safe-area APK.
+// CRITIQUE : le hook est TOUJOURS monté (peu importe loading) pour démarrer la subscription immédiatement.
 function GlobalAdminAlert() {
   const { shouldDisplay, visibleCourses, handleDismiss, removeCourse } = useManualDispatchAlert();
-  
+
+  // Log quand le bloc devient visible
+  useEffect(() => {
+    if (shouldDisplay && visibleCourses.length > 0) {
+      console.log(`[BLOC_VISIBLE_AT] ${new Date().toISOString()} | ${visibleCourses.length} course(s) affichée(s) | ids:[${visibleCourses.map(c=>c.id).join(',')}]`);
+    }
+  }, [shouldDisplay, visibleCourses.length]);
+
   if (!shouldDisplay) return null;
 
   return (
@@ -215,16 +215,21 @@ export default function AppLayoutWrapper({ user }) {
 
   // FCM géré par FcmBootstrap (monté dans App.jsx) — indépendant du flux layout
 
+  // CRITIQUE : isAdminEarlyCheck basé sur user (fourni par App.jsx dès le premier render)
+  // GlobalAdminAlert est rendu EN DEHORS des return conditionnels pour monter la subscription UNE FOIS
+  // immédiatement, sans attendre la fin du loading profil.
+  const isAdminEarlyCheck = isAdminUser(user);
+
+  // ── Contenu principal selon l'état de chargement ─────────────────────────
+  let mainContent;
   if (loading) {
-    return (
+    mainContent = (
       <div className="fixed inset-0 flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
-  }
-
-  if (needsPromoStep) {
-    return (
+  } else if (needsPromoStep) {
+    mainContent = (
       <PromoCodeStep
         onContinue={() => {
           sessionStorage.setItem(`cdl_promo_shown_${user?.id}`, '1');
@@ -233,70 +238,49 @@ export default function AppLayoutWrapper({ user }) {
         }}
       />
     );
-  }
-
-  // RoleSetup en cours — onComplete recharge le user
-  if (needsRole) {
-    return <RoleSetup onComplete={async () => {
-      setNeedsRole(false);
-      // Relire le user depuis la BDD pour avoir active_profile_type à jour
-      try {
-        const me = await base44.auth.me();
-        if (me?.active_profile_type) setUserRole(me.active_profile_type);
-        setUserEmail(me.email);
-      } catch (_) {}
-      setInitialized(false); // Re-déclenche le useEffect principal
-    }} />;
-  }
-
-
-
-  // ⚠️ Double-check : userEmail et userRole prêts avant render
-  if (!userEmail || !userRole) {
-    return (
+  } else if (needsRole) {
+    mainContent = (
+      <RoleSetup onComplete={async () => {
+        setNeedsRole(false);
+        try {
+          const me = await base44.auth.me();
+          if (me?.active_profile_type) setUserRole(me.active_profile_type);
+          setUserEmail(me.email);
+        } catch (_) {}
+        setInitialized(false);
+      }} />
+    );
+  } else if (!userEmail || !userRole) {
+    mainContent = (
       <div className="fixed inset-0 flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
+    );
+  } else if (showPermissions) {
+    mainContent = <PermissionsOnboarding onDone={() => setShowPermissions(false)} />;
+  } else {
+    const storedRole = (() => { try { return localStorage.getItem('cdl_active_role') || ''; } catch(_) { return ''; } })();
+    const isLivreur = userRole === "livreur" ||
+      user?.active_profile_type === "livreur" ||
+      user?.current_role === "livreur" ||
+      storedRole === "livreur";
+
+    mainContent = (
+      <>
+        <NotificationPermissionBanner />
+        {showSplash && <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />}
+        {isLivreur && userEmail && <GlobalDriverAlert userEmail={userEmail} />}
+        <AppLayout userRole={userRole} userEmail={userEmail} />
+      </>
     );
   }
 
   return (
     <>
-      {/* PermissionsOnboarding DOIT s'afficher en premier — AVANT AppLayout */}
-      {showPermissions && (
-        <PermissionsOnboarding onDone={() => setShowPermissions(false)} />
-      )}
-
-      {/* Après permissions OK → afficher l'app */}
-      {!showPermissions && (
-        <>
-          <NotificationPermissionBanner />
-          {showSplash && (
-            <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />
-          )}
-
-          {/* ── Alertes globales — actives peu importe l'onglet ── */}
-          {/* GlobalDriverAlert monté si rôle actif=livreur OU si l'user a un profil livreur
-              (couvre le cas où le rôle UI est décalé vs le rôle BDD) */}
-          {/* GlobalDriverAlert — monté si livreur selon TOUTES les sources possibles */}
-          {userEmail && (() => {
-            const storedRole = (() => { try { return localStorage.getItem('cdl_active_role') || ''; } catch(_) { return ''; } })();
-            const isLivreur = userRole === "livreur" ||
-              user?.active_profile_type === "livreur" ||
-              user?.current_role === "livreur" ||
-              storedRole === "livreur";
-            return isLivreur;
-          })() && (
-            <GlobalDriverAlert userEmail={userEmail} />
-          )}
-          {/* GlobalAdminAlert monté si admin — visible sur TOUTES les pages admin */}
-          {(userRole === "admin" || isAdminUser(user)) && (
-            <GlobalAdminAlert />
-          )}
-
-          <AppLayout userRole={userRole} userEmail={userEmail} />
-        </>
-      )}
+      {/* GlobalAdminAlert monté UNE SEULE FOIS dès que user est admin
+          Peu importe loading, needsRole, etc. → subscription active immédiatement */}
+      {isAdminEarlyCheck && <GlobalAdminAlert />}
+      {mainContent}
     </>
   );
 }
