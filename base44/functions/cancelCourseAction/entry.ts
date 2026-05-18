@@ -104,13 +104,14 @@ Deno.serve(async (req) => {
         date_annulation: now,
       });
 
-      // Libérer le livreur si assigné
+      // Libérer le livreur — recalcul réel depuis BDD
       if (c.livreur_email) {
         const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
         if (livs?.[0]) {
-          await base44.asServiceRole.entities.User.update(livs[0].id, {
-            nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 1) - 1),
-          }).catch(() => {});
+          const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
+          const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: c.livreur_email });
+          const realCount = allCourses.filter(x => x.id !== courseId && ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
+          await base44.asServiceRole.entities.User.update(livs[0].id, { nombre_courses_actives: realCount }).catch(() => {});
         }
         await base44.asServiceRole.entities.Notification.create({
           destinataire_email: c.livreur_email,
@@ -219,12 +220,13 @@ Deno.serve(async (req) => {
           target_screen: '/mon-bedou',
         }).catch(() => {});
       }
-      // Libérer le livreur
+      // Libérer le livreur — recalcul réel depuis BDD
       const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
       if (livs?.[0]) {
-        await base44.asServiceRole.entities.User.update(livs[0].id, {
-          nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 1) - 1),
-        }).catch(() => {});
+        const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
+        const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: c.livreur_email });
+        const realCount = allCourses.filter(x => x.id !== courseId && ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
+        await base44.asServiceRole.entities.User.update(livs[0].id, { nombre_courses_actives: realCount }).catch(() => {});
       }
     }
 
@@ -290,13 +292,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Course déjà annulée' }, { status: 409 });
     }
 
-    // Libérer le livreur si présent
+    // Libérer le livreur — recalcul réel depuis BDD
     if (c.livreur_email) {
       const livreurs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
       if (livreurs?.[0]) {
-        await base44.asServiceRole.entities.User.update(livreurs[0].id, {
-          nombre_courses_actives: Math.max(0, (livreurs[0].nombre_courses_actives || 1) - 1),
-        }).catch(() => {});
+        const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
+        const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: c.livreur_email });
+        const realCount = allCourses.filter(x => x.id !== courseId && ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
+        await base44.asServiceRole.entities.User.update(livreurs[0].id, { nombre_courses_actives: realCount }).catch(() => {});
       }
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: c.livreur_email,

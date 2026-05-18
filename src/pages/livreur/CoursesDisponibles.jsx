@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { RefreshCw, TrendingUp, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ export default function CoursesDisponibles() {
   const [coursesJour, setCoursesJour] = useState(0);
   const [accepting, setAccepting] = useState(null);
   const [dispatchMode, setDispatchMode] = useState('auto');
+  const dispatchModeRef = useRef('auto');
+  const userEmailRef = useRef(null);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -50,8 +52,11 @@ export default function CoursesDisponibles() {
       // Mode auto : courses disponibles globalement (statut en_attente)
       data = await base44.entities.Course.filter({ statut: "en_attente" }, "-created_date", 20);
     }
-    setCourses(data);
+    // Filtrer les cours supprimées dès le chargement
+    setCourses(data.filter(c => !c.is_deleted));
     setDispatchMode(dispatchMode);
+    dispatchModeRef.current = dispatchMode;
+    userEmailRef.current = me.email;
 
     const today = new Date().toDateString();
     const mesLivraisons = await base44.entities.Course.filter(
@@ -82,18 +87,19 @@ export default function CoursesDisponibles() {
   useEffect(() => {
     loadData();
 
-    const unsub = base44.entities.Course.subscribe(async (event) => {
+    // Subscription DispatchModeState pour garder le ref à jour (sans re-fetch par event)
+    const unsubMode = base44.entities.DispatchModeState.subscribe((ev) => {
+      if (ev.data?.mode) {
+        dispatchModeRef.current = ev.data.mode;
+        setDispatchMode(ev.data.mode);
+      }
+    });
+
+    const unsub = base44.entities.Course.subscribe((event) => {
       if (!event.data && event.type !== "delete") return;
-
-      // Lire le mode depuis l'état React (via ref pour avoir valeur à jour dans la closure)
-      // On re-lit depuis DispatchModeState pour être sûr (une seule lecture légère)
-      let mode = 'auto';
-      try {
-        const modeRows = await base44.entities.DispatchModeState.list('-updated_date', 1);
-        mode = modeRows?.[0]?.mode === 'manuel' ? 'manuel' : 'auto';
-      } catch (_) {}
-
-      const meEmail = (await base44.auth.me().catch(() => null))?.email;
+      // Lire depuis ref — PAS d'appel DB dans chaque event
+      const mode = dispatchModeRef.current;
+      const meEmail = userEmailRef.current;
 
       if (event.type === "create") {
         const d = event.data;
@@ -131,28 +137,24 @@ export default function CoursesDisponibles() {
       }
     });
 
-    return () => unsub?.();
+    return () => { unsub?.(); unsubMode?.(); };
   }, []);
 
   const accepter = async (course) => {
     if (!user) return;
     if (user.livreur_bloque) { toast.error("Votre compte est bloqué. Contactez l'administration."); return; }
     setAccepting(course.id);
+    // Retrait optimiste immédiat
     setCourses(prev => prev.filter(c => c.id !== course.id));
     try {
-      await base44.entities.Course.update(course.id, {
-        statut: "acceptee",
-        livreur_email: user.email,
-        livreur_name: user.full_name,
-        date_acceptation: new Date().toISOString(),
-        mode_assignation: "manuel",
-        telephone_livreur: user.telephone || "",
-      });
-      await base44.auth.updateMe({
-        nombre_courses_actives: (user.nombre_courses_actives || 0) + 1,
-        courses_acceptees: (user.courses_acceptees || 0) + 1,
-        courses_refusees_consecutives: 0,
-      });
+      // Passer par le backend (évite 403 RLS APK + valide livreur assigné)
+      const res = await base44.functions.invoke('acceptCourseAction', { course_id: course.id });
+      if (!res?.data?.success) {
+        // Remettre la course si refusée
+        setCourses(prev => prev.find(c => c.id === course.id) ? prev : [course, ...prev]);
+        toast.error(res?.data?.error || "Course non disponible");
+        return;
+      }
       vibrateSuccess();
       toast.success("🛵 Course acceptée !");
       triggerWhatsAppNotification({
@@ -167,6 +169,7 @@ export default function CoursesDisponibles() {
       });
       navigate(`/course-livreur/${course.id}`);
     } catch (e) {
+      setCourses(prev => prev.find(c => c.id === course.id) ? prev : [course, ...prev]);
       toast.error("Erreur : " + e.message);
     } finally {
       setAccepting(null);

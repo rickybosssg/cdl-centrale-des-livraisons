@@ -134,18 +134,27 @@ export default function CreateCourse() {
       vibrateSuccess();
       setSearchingCourse(courseData);
 
-      const unsub = base44.entities.Course.subscribe((event) => {
+      let unsubCourse = null;
+      const timeoutId = setTimeout(() => {
+        if (unsubCourse) { unsubCourse(); unsubCourse = null; }
+        setAucunLivreur(prev => !livreurTrouve && !prev ? true : prev);
+      }, 90000);
+
+      unsubCourse = base44.entities.Course.subscribe((event) => {
         if (event.id !== courseData.id) return;
         const c = event.data;
-        if (c?.statut === 'assignee_attente' || c?.statut === 'acceptee') {
+        // GARDE : ne pas traiter les courses supprimées
+        if (!c || c.is_deleted) { clearTimeout(timeoutId); if (unsubCourse) { unsubCourse(); unsubCourse = null; } return; }
+        if (c.statut === 'assignee_attente' || c.statut === 'acceptee') {
+          clearTimeout(timeoutId);
           setLivreurTrouve(c);
-          unsub();
-        } else if (c?.statut === 'aucun_livreur') {
+          if (unsubCourse) { unsubCourse(); unsubCourse = null; }
+        } else if (c.statut === 'aucun_livreur') {
+          clearTimeout(timeoutId);
           setAucunLivreur(true);
-          unsub();
+          if (unsubCourse) { unsubCourse(); unsubCourse = null; }
         }
       });
-      setTimeout(() => { unsub(); if (!livreurTrouve) setAucunLivreur(true); }, 90000);
     } catch (err) {
       toast.error("Erreur création: " + err.message);
     } finally {
