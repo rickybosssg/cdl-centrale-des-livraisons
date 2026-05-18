@@ -28,21 +28,26 @@ function GlobalDriverAlert({ userEmail }) {
 }
 
 // ── Alerte globale admin (mode manuel) — montée au niveau layout ──────────
-// Visible sur TOUTES les pages admin : Dashboard, Courses, Dispatch, Profils, Messages...
+// Visible sur TOUTES les pages admin. z-index max, pointer-events réels, safe-area APK.
 function GlobalAdminAlert() {
   const { shouldDisplay, visibleCourses, handleDismiss } = useManualDispatchAlert();
   
   if (!shouldDisplay) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[9990] px-3 pt-2 space-y-2 pointer-events-none"
-         style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}>
-      <div className="pointer-events-auto max-w-sm mx-auto">
-        <p className="text-xs font-black uppercase tracking-wide text-purple-700 flex items-center gap-1 mb-2">
-          <Bell className="h-3.5 w-3.5" />
-          {visibleCourses.length} course{visibleCourses.length > 1 ? "s" : ""} à assigner manuellement
-        </p>
-        {visibleCourses.slice(0, 5).map(course => (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 99990,
+        padding: "8px 12px 0 12px",
+        paddingTop: "max(env(safe-area-inset-top), 8px)",
+      }}
+    >
+      <div style={{ maxWidth: "420px", margin: "0 auto" }}>
+        {visibleCourses.slice(0, 3).map(course => (
           <ManualDispatchAlertBlock
             key={course.id}
             course={course}
@@ -272,7 +277,15 @@ export default function AppLayoutWrapper({ user }) {
           {/* ── Alertes globales — actives peu importe l'onglet ── */}
           {/* GlobalDriverAlert monté si rôle actif=livreur OU si l'user a un profil livreur
               (couvre le cas où le rôle UI est décalé vs le rôle BDD) */}
-          {userEmail && (userRole === "livreur" || user?.active_profile_type === "livreur" || user?.current_role === "livreur") && (
+          {/* GlobalDriverAlert — monté si livreur selon TOUTES les sources possibles */}
+          {userEmail && (() => {
+            const storedRole = (() => { try { return localStorage.getItem('cdl_active_role') || ''; } catch(_) { return ''; } })();
+            const isLivreur = userRole === "livreur" ||
+              user?.active_profile_type === "livreur" ||
+              user?.current_role === "livreur" ||
+              storedRole === "livreur";
+            return isLivreur;
+          })() && (
             <GlobalDriverAlert userEmail={userEmail} />
           )}
           {/* GlobalAdminAlert monté si admin — visible sur TOUTES les pages admin */}
