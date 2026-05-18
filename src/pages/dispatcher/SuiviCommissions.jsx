@@ -98,12 +98,17 @@ export default function SuiviCommissions() {
       admin_email: admin?.email,
     });
 
+    // CORRECTION : lire les valeurs fraîches depuis BDD avant la mise à jour (évite la stale closure sur selectedLivreur)
+    const freshList = await base44.entities.User.filter({ email: selectedLivreur.email });
+    const freshLivreur = freshList?.[0] || selectedLivreur;
+    const freshSolde = freshLivreur.solde_commission_du || 0;
+    const realNouveauSolde = Math.max(0, freshSolde - montant);
     await base44.entities.User.update(selectedLivreur.id, {
-      solde_commission_du: nouveauSolde,
-      total_commissions_payees: (selectedLivreur.total_commissions_payees || 0) + montant,
+      solde_commission_du: realNouveauSolde,
+      total_commissions_payees: (freshLivreur.total_commissions_payees || 0) + montant,
       date_dernier_paiement: formPaiement.date_paiement,
       montant_dernier_paiement: montant,
-      statut_financier_livreur: nouveauSolde === 0 ? "À jour" : "Doit une commission",
+      statut_financier_livreur: realNouveauSolde === 0 ? "À jour" : "Doit une commission",
     });
 
     toast.success("Paiement enregistré avec succès !");

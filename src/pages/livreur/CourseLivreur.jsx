@@ -265,7 +265,8 @@ export default function CourseLivreur() {
       vibrateSuccess();
       toast.success(`🎉 Livraison confirmée ! +${gainLivreur?.toLocaleString()} FCFA crédités sur votre Bedou.`);
 
-      // Fire & forget — stats + notifs
+      // Fire & forget — stats + notifs (updateCourseDelivered gère déjà nombre_courses_actives)
+      // Ne PAS toucher nombre_courses_actives ici — évite double décrémentation
       base44.entities.User.filter({ email: course.livreur_email }).then(livs => {
         if (livs[0]) base44.entities.User.update(livs[0].id, {
           total_courses_livrees: (livs[0].total_courses_livrees || 0) + 1,

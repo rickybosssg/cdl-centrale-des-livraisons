@@ -293,9 +293,19 @@ export default function ValidationLivreurs() {
 
   useEffect(() => {
     loadData();
+    // CORRECTION : éviter les full-reload à chaque event realtime
+    // Mise à jour locale uniquement → évite appels DB en rafale
     const unsubs = [
-      base44.entities.User.subscribe(e => { if (e.data?.user_type === 'livreur') loadData(); }),
-      base44.entities.UserProfile.subscribe(e => { if (e.data?.profile_type === 'livreur') loadData(); }),
+      base44.entities.UserProfile.subscribe(e => {
+        if (e.data?.profile_type !== 'livreur') return;
+        if (e.type === 'update') {
+          setProfiles(prev => prev.map(p => p.id === e.id ? e.data : p));
+        } else if (e.type === 'create') {
+          setProfiles(prev => prev.find(p => p.id === e.id) ? prev : [...prev, e.data]);
+        } else if (e.type === 'delete') {
+          setProfiles(prev => prev.filter(p => p.id !== e.id));
+        }
+      }),
     ];
     return () => unsubs.forEach(u => u?.());
   }, []);
