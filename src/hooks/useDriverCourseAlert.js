@@ -62,11 +62,18 @@ export function useDriverCourseAlert() {
           alertCourseRef.current = course;
           setAlertCourse(course);
         }
-        // Course déjà affichée → mettre à jour les données
+        // Course déjà affichée → mettre à jour OU effacer si statut terminal
         else if (alertCourseRef.current?.id === ev.id) {
-          console.log(`[DRIVER_ALERT] course UPDATE existing alert: ${ev.id} | new statut: ${course.statut}`);
-          alertCourseRef.current = course;
-          setAlertCourse(course);
+          const STATUTS_INVALIDES = ["annulee", "annulee_par_admin", "livree", "refusee", "aucun_livreur", "acceptee", "en_cours"];
+          if (STATUTS_INVALIDES.includes(course.statut) || course.is_deleted) {
+            console.log(`[DRIVER_ALERT] course UPDATE → statut terminal ${course.statut}, alerte effacée: ${ev.id}`);
+            alertCourseRef.current = null;
+            setAlertCourse(null);
+          } else {
+            console.log(`[DRIVER_ALERT] course UPDATE existing alert: ${ev.id} | new statut: ${course.statut}`);
+            alertCourseRef.current = course;
+            setAlertCourse(course);
+          }
         }
       }
     });
@@ -102,6 +109,12 @@ export function useDriverCourseAlert() {
         const course = courses[0];
         if (course.livreur_email !== email) return;
         if (alertCourseRef.current?.id === course.id) return;
+        // GARDE ANTI-RÉINJECTION : ne jamais afficher une course annulée/supprimée
+        const STATUTS_INVALIDES = ["annulee", "annulee_par_admin", "livree", "refusee", "aucun_livreur"];
+        if (STATUTS_INVALIDES.includes(course.statut) || course.is_deleted) {
+          console.log(`[DRIVER_ALERT] Notification fallback IGNORÉE — course statut=${course.statut} is_deleted=${course.is_deleted}`);
+          return;
+        }
         console.log(`[DRIVER_ALERT] Notification fallback showing course: ${course.id}`);
         alertCourseRef.current = course;
         setAlertCourse(course);

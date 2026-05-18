@@ -124,18 +124,19 @@ export default function ActiveCourseSummary({ courses: propCourses }) {
       try {
         unsub = base44.entities.Course.subscribe((ev) => {
           try {
-            if (ev.type === "create" && ev.data && ACTIVE_STATUTS.includes(ev.data.statut)) {
+            if (ev.type === "create" && ev.data && ACTIVE_STATUTS.includes(ev.data.statut) && !ev.data.is_deleted) {
               setActiveCourses(p => sortCourses([ev.data, ...p]));
               console.log(`[ADMIN_REALTIME_ACTIVITY_OK] nouvelle course active | id=${ev.id}`);
             } else if (ev.type === "update" && ev.data) {
               setActiveCourses(p => {
                 const filtered = p.filter(c => c.id !== ev.id);
-                if (ACTIVE_STATUTS.includes(ev.data.statut)) {
+                // Réinjecter SEULEMENT si actif ET non supprimé logiquement
+                if (ACTIVE_STATUTS.includes(ev.data.statut) && !ev.data.is_deleted) {
                   const updated = sortCourses([ev.data, ...filtered]);
                   console.log(`[ADMIN_REALTIME_ACTIVITY_OK] course mise à jour | id=${ev.id} | statut=${ev.data.statut}`);
                   return updated;
                 }
-                // Plus active → retirer silencieusement
+                // Plus active ou supprimée logiquement → retirer silencieusement
                 return filtered;
               });
             } else if (ev.type === "delete") {

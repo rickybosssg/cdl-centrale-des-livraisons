@@ -62,8 +62,13 @@ export default function GererCourses() {
       if (event.type === 'create' && event.data) {
         setCourses(prev => prev.find(c => c.id === event.id) ? prev : [event.data, ...prev]);
       } else if (event.type === 'update' && event.data) {
-        console.log(`[REALTIME_PROPAGATED] subscription update | course=${event.id} | statut=${event.data?.statut}`);
-        setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+        console.log(`[REALTIME_PROPAGATED] subscription update | course=${event.id} | statut=${event.data?.statut} | is_deleted=${event.data?.is_deleted}`);
+        if (event.data.is_deleted) {
+          // Suppression logique confirmée par BDD → retirer définitivement
+          setCourses(prev => prev.filter(c => c.id !== event.id));
+        } else {
+          setCourses(prev => prev.map(c => c.id === event.id ? event.data : c));
+        }
       } else if (event.type === 'delete') {
         setCourses(prev => prev.filter(c => c.id !== event.id));
       }

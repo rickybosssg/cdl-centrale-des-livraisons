@@ -84,10 +84,10 @@ export function useManualDispatchAlert() {
         }
 
       } else if (ev.type === "update") {
-        console.log(`[REALTIME_EVENT_RECEIVED_AT] ${receivedAt} | update | id:${ev.id} | statut:${ev.data?.statut}`);
+        console.log(`[REALTIME_EVENT_RECEIVED_AT] ${receivedAt} | update | id:${ev.id} | statut:${ev.data?.statut} | is_deleted:${ev.data?.is_deleted}`);
 
-        if (!ev.data || ev.data.statut !== "en_attente") {
-          // Course n'est plus en attente → retirer du bloc
+        if (!ev.data || ev.data.statut !== "en_attente" || ev.data.is_deleted) {
+          // Course n'est plus en attente, ou supprimée logiquement → retirer du bloc (ANTI-FANTÔME)
           setPendingCourses(prev => prev.filter(c => c.id !== ev.id));
         } else {
           // Mettre à jour les données avec ev.data (pas de fetch)
