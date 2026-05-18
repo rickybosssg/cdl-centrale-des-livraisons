@@ -13,11 +13,14 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// CORRECTION CRITIQUE : en_cours → livree ajouté pour éviter blocage si livreur skip arrived_dropoff
+// arrived_dropoff → livree déjà géré par updateCourseDelivered mais aussi autorisé ici
 const LIVREUR_TRANSITIONS = {
   acceptee:               ['driver_en_route_pickup'],
   driver_en_route_pickup: ['arrived_pickup'],
   arrived_pickup:         ['en_cours'],
-  en_cours:               ['arrived_dropoff'],
+  en_cours:               ['arrived_dropoff', 'livree'],
+  arrived_dropoff:        ['livree'],
 };
 
 Deno.serve(async (req) => {

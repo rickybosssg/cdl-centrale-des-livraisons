@@ -42,10 +42,20 @@ Deno.serve(async (req) => {
 
   const c = courses[0];
 
-  const ACCEPTABLE = ['en_attente', 'assignee_attente', 'proposee', 'pending_driver_acceptance', 'en_attente_acceptation'];
-  if (!ACCEPTABLE.includes(c.statut)) {
-    console.error(`[ACCEPT_ACTION_ERROR] wrong statut | statut=${c.statut} | course=${course_id}`);
+  // CRITIQUE : seul 'assignee_attente' est acceptable
+  // 'en_attente' = course non encore assignée à ce livreur → REJECT
+  if (c.statut !== 'assignee_attente') {
+    console.error(`[ACCEPT_ACTION_ERROR] wrong statut | statut=${c.statut} | course=${course_id} | user=${user.email}`);
     return Response.json({ error: `Course non disponible (statut: ${c.statut})`, statut: c.statut }, { status: 409 });
+  }
+
+  // VERROU LIVREUR : seul le livreur assigné peut accepter
+  const livreurAssigne = (c.livreur_email || '').toLowerCase().trim();
+  const userEmail = (user.email || '').toLowerCase().trim();
+  const isAdmin = user.role === 'admin' || user.role === 'dispatcher';
+  if (!isAdmin && livreurAssigne !== userEmail) {
+    console.error(`[ACCEPT_ACTION_ERROR] wrong livreur | assigned=${livreurAssigne} | user=${userEmail}`);
+    return Response.json({ error: 'Vous n\'êtes pas le livreur assigné à cette course', statut: c.statut }, { status: 403 });
   }
 
   const now = new Date().toISOString();

@@ -117,42 +117,34 @@ export default function ActiveCourseSummary({ courses: propCourses }) {
     console.log(`[DASHBOARD_SUPERVISION_MODE_OK] lecture seule activée`);
   }, [propCourses]);
 
-  // Subscription temps réel indépendante
+  // Subscription temps réel — sans délai, source unique (pas de concurrence avec prop)
   useEffect(() => {
     let unsub = null;
-    const timer = setTimeout(() => {
-      try {
-        unsub = base44.entities.Course.subscribe((ev) => {
-          try {
-            if (ev.type === "create" && ev.data && ACTIVE_STATUTS.includes(ev.data.statut) && !ev.data.is_deleted) {
-              setActiveCourses(p => sortCourses([ev.data, ...p]));
-              console.log(`[ADMIN_REALTIME_ACTIVITY_OK] nouvelle course active | id=${ev.id}`);
-            } else if (ev.type === "update" && ev.data) {
-              setActiveCourses(p => {
-                const filtered = p.filter(c => c.id !== ev.id);
-                // Réinjecter SEULEMENT si actif ET non supprimé logiquement
-                if (ACTIVE_STATUTS.includes(ev.data.statut) && !ev.data.is_deleted) {
-                  const updated = sortCourses([ev.data, ...filtered]);
-                  console.log(`[ADMIN_REALTIME_ACTIVITY_OK] course mise à jour | id=${ev.id} | statut=${ev.data.statut}`);
-                  return updated;
-                }
-                // Plus active ou supprimée logiquement → retirer silencieusement
-                return filtered;
-              });
-            } else if (ev.type === "delete") {
-              setActiveCourses(p => p.filter(c => c.id !== ev.id));
-            }
-          } catch (_) {}
-        });
-      } catch (err) {
-        console.warn("[ActiveCourseSummary] subscribe error:", err?.message);
-      }
-    }, 3000);
-
-    return () => {
-      clearTimeout(timer);
-      try { if (unsub) unsub(); } catch (_) {}
-    };
+    try {
+      unsub = base44.entities.Course.subscribe((ev) => {
+        try {
+          if (!ev.id) return;
+          if (ev.type === "create" && ev.data && ACTIVE_STATUTS.includes(ev.data.statut) && !ev.data.is_deleted) {
+            setActiveCourses(p => sortCourses([ev.data, ...p.filter(c => c.id !== ev.id)]));
+            console.log(`[ADMIN_REALTIME_ACTIVITY_OK] nouvelle course active | id=${ev.id}`);
+          } else if (ev.type === "update" && ev.data) {
+            setActiveCourses(p => {
+              const filtered = p.filter(c => c.id !== ev.id);
+              if (ACTIVE_STATUTS.includes(ev.data.statut) && !ev.data.is_deleted) {
+                console.log(`[ADMIN_REALTIME_ACTIVITY_OK] course mise à jour | id=${ev.id} | statut=${ev.data.statut}`);
+                return sortCourses([ev.data, ...filtered]);
+              }
+              return filtered;
+            });
+          } else if (ev.type === "delete" || ev.data?.is_deleted) {
+            setActiveCourses(p => p.filter(c => c.id !== ev.id));
+          }
+        } catch (_) {}
+      });
+    } catch (err) {
+      console.warn("[ActiveCourseSummary] subscribe error:", err?.message);
+    }
+    return () => { try { if (unsub) unsub(); } catch (_) {} };
   }, []);
 
   if (activeCourses.length === 0) return null;

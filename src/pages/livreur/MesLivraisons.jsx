@@ -18,7 +18,8 @@ export default function MesLivraisons() {
         "-created_date",
         20
       );
-      setCourses(data);
+      // GARDE : exclure les courses supprimées après refresh
+      setCourses(data.filter(c => !c.is_deleted));
       setLoading(false);
     };
     load();
@@ -45,7 +46,8 @@ export default function MesLivraisons() {
     return unsub;
   }, [userEmail]);
 
-  const actives = courses.filter(c => ["acceptee", "en_cours"].includes(c.statut));
+  // Inclure toutes les étapes intermédiaires dans "actives" livreur
+  const actives = courses.filter(c => ["assignee_attente", "acceptee", "driver_en_route_pickup", "arrived_pickup", "en_cours", "arrived_dropoff"].includes(c.statut));
   const terminees = courses.filter(c => c.statut === "livree");
 
   if (loading) {

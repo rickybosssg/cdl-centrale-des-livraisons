@@ -71,13 +71,18 @@ Deno.serve(async (req) => {
     settled_at: now,
   });
 
-  // Libérer le livreur (nombre_courses_actives -1)
+  // Libérer le livreur — recalcul réel depuis BDD (pas décrémentation cache)
   try {
     const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
     if (livs?.[0]) {
+      const ACTIVE_STATUTS = new Set(['assignee_attente', 'acceptee', 'driver_en_route_pickup', 'arrived_pickup', 'en_cours', 'arrived_dropoff']);
+      const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: c.livreur_email });
+      // Exclure la course actuelle qu'on vient de passer à 'livree'
+      const realCount = allCourses.filter(x => x.id !== course_id && ACTIVE_STATUTS.has(x.statut)).length;
       await base44.asServiceRole.entities.User.update(livs[0].id, {
-        nombre_courses_actives: Math.max(0, (livs[0].nombre_courses_actives || 1) - 1),
+        nombre_courses_actives: realCount,
       });
+      console.log(`[DELIVERY_BACKEND_SUCCESS] livreur libéré | email=${c.livreur_email} | realCount=${realCount}`);
     }
   } catch (_) {}
 

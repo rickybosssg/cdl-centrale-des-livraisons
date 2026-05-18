@@ -73,11 +73,10 @@ Deno.serve(async (req) => {
     });
   } catch (_) {}
 
-  // Re-dispatcher automatiquement
-  base44.asServiceRole.functions.invoke('autoDispatch', {
+  // Re-dispatcher via moteur unifié (respecte le mode auto/manuel)
+  base44.asServiceRole.functions.invoke('cdlDispatch', {
     course_id,
     exclude_emails: [user.email],
-    force: true,
   }).catch(() => {});
 
   console.log(`[REFUSE_ACTION_SUCCESS] course=${course_id} | livreur=${user.email}`);
