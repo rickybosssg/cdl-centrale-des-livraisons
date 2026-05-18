@@ -70,8 +70,12 @@ Deno.serve(async (req) => {
     if (course.livreur_email) {
       const drivers = await base44.asServiceRole.entities.User.filter({ email: course.livreur_email });
       if (drivers.length > 0) {
+        // Recalcul réel depuis BDD — cohérent avec updateCourseDelivered et cancelCourseAction
+        const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
+        const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: course.livreur_email });
+        const realCount = allCourses.filter(x => x.id !== courseId && ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
         await base44.asServiceRole.entities.User.update(drivers[0].id, {
-          nombre_courses_actives: Math.max(0, (drivers[0].nombre_courses_actives || 0) - 1),
+          nombre_courses_actives: realCount,
           courses_refusees_consecutives: (drivers[0].courses_refusees_consecutives || 0) + 1,
         }).catch(() => {});
       }
