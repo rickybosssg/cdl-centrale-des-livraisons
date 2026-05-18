@@ -187,26 +187,45 @@ export default function NewCourseAlert({ course, onClose, user }) {
   return (
     <AnimatePresence>
       {course && (
-        <motion.div
-          initial={{ y: -120, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -120, opacity: 0 }}
-          transition={{ type: "spring", damping: 22, stiffness: 320 }}
-          className="fixed flex justify-center"
-          style={{
-            top: "80px",
-            left: "10px",
-            right: "10px",
-            zIndex: 99999,
-            backgroundColor: "#ff0000",
-            border: "3px solid #ffff00",
-            borderRadius: "16px",
-            padding: "16px",
-            boxShadow: "0 10px 40px rgba(255,0,0,0.5)"
-          }}
-          data-testid="new-course-alert"
-          data-course-id={course.id}
-        >
+        <>
+          {/* OVERLAY TEST ANDROID - FOND ROUGE GÉANT */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed"
+            style={{
+              position: "fixed",
+              top: "0",
+              left: "0",
+              right: "0",
+              bottom: "0",
+              backgroundColor: "rgba(255, 0, 0, 0.3)",
+              zIndex: 99998,
+              pointerEvents: "none"
+            }}
+          />
+          {/* BLOC PRINCIPAL */}
+          <motion.div
+            initial={{ y: -120, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -120, opacity: 0 }}
+            transition={{ type: "spring", damping: 22, stiffness: 320 }}
+            className="fixed flex justify-center"
+            style={{
+              position: "fixed",
+              top: "80px",
+              left: "10px",
+              right: "10px",
+              zIndex: 99999,
+              backgroundColor: "#ff0000",
+              border: "4px solid #ffff00",
+              borderRadius: "16px",
+              padding: "16px",
+              boxShadow: "0 10px 40px rgba(255,0,0,0.8)"
+            }}
+            data-testid="new-course-alert"
+            data-course-id={course.id}
+          >
           <div className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border-2 border-orange-400">
             {/* Header urgence */}
             <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 text-white">
@@ -311,12 +330,13 @@ export default function NewCourseAlert({ course, onClose, user }) {
               </div>
 
               {/* BANDEAU TEST VISUEL */}
-              <div className="mt-3 bg-red-600 text-white text-center py-2 rounded-lg font-black text-sm">
-                🚨 TEST VISUEL ANDROID - BLOC BIEN AFFICHÉ 🚨
+              <div className="mt-3 bg-yellow-400 text-black text-center py-3 rounded-lg font-black text-base border-2 border-black">
+                🚨 TEST ANDROID - SI VOUS VOYEZ CE BLOC ROUGE AVEC BORDURE JAUNE, ALORS L'AFFICHAGE FONCTIONNE ! 🚨
               </div>
             </div>
           </div>
         </motion.div>
+          </>
       )}
     </AnimatePresence>
   );
