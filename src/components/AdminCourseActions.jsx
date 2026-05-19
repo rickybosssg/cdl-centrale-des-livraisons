@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertTriangle, Trash2, XCircle, Loader2 } from "lucide-react";
+import { AlertTriangle, Trash2, XCircle, Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 /**
@@ -14,9 +14,13 @@ import { toast } from "sonner";
  *   size       : "sm" | "default"
  */
 export default function AdminCourseActions({ course, onDone, size = "sm" }) {
-  const [mode, setMode] = useState(null); // "cancel" | "delete" | null
+  const [mode, setMode] = useState(null); // "cancel" | "delete" | "force_delete" | null
   const [raison, setRaison] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Course bloquée = en_cours / arrived_* / driver_* qui n'est pas annulable normalement
+  const BLOCKED_STATUTS = ['en_cours', 'driver_en_route_pickup', 'arrived_pickup', 'arrived_dropoff', 'acceptee'];
+  const isBlocked = BLOCKED_STATUTS.includes(course?.statut) && !course?.is_deleted;
 
   if (!course) return null;
 
@@ -28,9 +32,38 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
   const handleConfirm = async () => {
     if (!raison.trim()) { toast.error("Veuillez saisir une raison"); return; }
     if (loading) return;
+    setLoading(true);
+
+    // ── FORCE DELETE ──────────────────────────────────────────────────────────
+    if (mode === 'force_delete') {
+      console.log(`[FORCE_DELETE_STARTED] course=${course.id} | statut=${course.statut} | raison=${raison.trim()} | ts=${new Date().toISOString()}`);
+      try {
+        const res = await base44.functions.invoke("forceDeleteCourse", {
+          course_id: course.id,
+          raison: raison.trim(),
+        });
+        if (!res?.data?.success && !res?.data?.already_gone) {
+          throw new Error(res?.data?.error || res?.data?.message || "Erreur inconnue");
+        }
+        console.log(`[FORCE_DELETE_SUCCESS] course=${course.id} | ts=${new Date().toISOString()}`);
+        console.log(`[FORCE_DELETE_REALTIME_PROPAGATED] is_deleted=true propagé cross-device | course=${course.id}`);
+        console.log(`[FORCE_DELETE_UI_REMOVED] retrait optimiste déclenché | course=${course.id}`);
+        onDone?.(course.id, 'delete_admin', { ...course, is_deleted: true });
+        toast.success("✅ Course supprimée de force — propagation realtime déclenchée");
+        setMode(null);
+        setRaison("");
+      } catch (err) {
+        console.error(`[FORCE_DELETE_ERROR] course=${course.id} | ${err.message}`);
+        toast.error("❌ Force delete échoué : " + err.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── CANCEL / DELETE standard ──────────────────────────────────────────────
     const action = mode === 'cancel' ? 'cancel_admin' : 'delete_admin';
     console.log(`[CANCEL_STARTED] course=${course.id} | statut=${course.statut} | action=${action} | raison=${raison.trim()} | ts=${new Date().toISOString()}`);
-    setLoading(true);
     try {
       const res = await base44.functions.invoke("cancelCourseAction", {
         courseId: course.id,
@@ -46,15 +79,12 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
 
       console.log(`[COURSE_UPDATED] course=${course.id} | nouveau_statut=${action === 'cancel_admin' ? 'annulee' : 'deleted'} | ts=${new Date().toISOString()}`);
 
-      // Mise à jour optimiste IMMÉDIATE — avant même le realtime subscription
       const updatedCourse = action === 'cancel_admin'
         ? { ...course, statut: 'annulee', annulee_par_admin: true }
         : { ...course, is_deleted: true };
 
-      // Notifie le parent pour retrait immédiat de la liste courante
       onDone?.(course.id, action, updatedCourse);
-
-      console.log(`[UI_REMOVED_FROM_LISTS] course=${course.id} | action=${action} | ts=${new Date().toISOString()}`);
+      console.log(`[FORCE_DELETE_UI_REMOVED] course=${course.id} | action=${action} | ts=${new Date().toISOString()}`);
 
       toast.success(mode === "cancel" ? "✅ Course annulée avec succès" : "✅ Course supprimée");
       setMode(null);
@@ -92,6 +122,18 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
           <Trash2 className="h-3.5 w-3.5" />
           {size !== "sm" && "Supprimer"}
         </Button>
+        {isBlocked && (
+          <Button
+            size={size}
+            variant="outline"
+            className="border-purple-400 text-purple-700 hover:bg-purple-50 gap-1"
+            title="Suppression forcée — contourne les gardes statut"
+            onClick={(e) => { e.stopPropagation(); setMode("force_delete"); setRaison(""); }}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            {size !== "sm" && "Force"}
+          </Button>
+        )}
       </div>
 
       {/* ── Modal confirmation ── */}
@@ -101,6 +143,8 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
             <DialogTitle className="flex items-center gap-2">
               {mode === "cancel" ? (
                 <><XCircle className="h-5 w-5 text-orange-600" /> Annuler la course</>
+              ) : mode === "force_delete" ? (
+                <><Zap className="h-5 w-5 text-purple-600" /> Suppression forcée</>
               ) : (
                 <><Trash2 className="h-5 w-5 text-red-600" /> Supprimer la course</>
               )}
@@ -122,7 +166,9 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
 
             {/* Impact */}
             <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
-              mode === "cancel" ? "bg-orange-50 border-orange-200 text-orange-800" : "bg-red-50 border-red-200 text-red-800"
+              mode === "cancel" ? "bg-orange-50 border-orange-200 text-orange-800"
+              : mode === "force_delete" ? "bg-purple-50 border-purple-300 text-purple-800"
+              : "bg-red-50 border-red-200 text-red-800"
             }`}>
               <div className="flex items-center gap-1.5 font-bold">
                 <AlertTriangle className="h-3.5 w-3.5" />
@@ -135,6 +181,15 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
                   {course.livreur_name && <li>Livreur <strong>{course.livreur_name}</strong> libéré</li>}
                   <li>Client et livreur notifiés</li>
                   <li>Course conservée dans l'historique</li>
+                </ul>
+              ) : mode === "force_delete" ? (
+                <ul className="space-y-1 ml-5 list-disc">
+                  <li>⚡ Contourne toutes les gardes de statut</li>
+                  <li><strong>is_deleted=true + statut=annulee</strong> simultanément</li>
+                  {course.livreur_name && <li>Livreur <strong>{course.livreur_name}</strong> libéré (recalcul réel)</li>}
+                  <li>Propagation realtime cross-device immédiate</li>
+                  <li>Suppression UI sur Home client, MesCourses, livreur</li>
+                  <li>Toutes notifications liées marquées lues</li>
                 </ul>
               ) : (
                 <ul className="space-y-1 ml-5 list-disc">
@@ -151,7 +206,7 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
                 Raison {mode === "cancel" ? "d'annulation" : "de suppression"} *
               </label>
               <Textarea
-                placeholder={mode === "cancel" ? "Ex: Course en double, erreur de saisie, demande client..." : "Ex: Test, doublon, données incorrectes..."}
+                placeholder={mode === "cancel" ? "Ex: Course en double, erreur de saisie, demande client..." : mode === "force_delete" ? "Ex: Course bloquée, livreur injoignable, erreur système..." : "Ex: Test, doublon, données incorrectes..."}
                 value={raison}
                 onChange={(e) => setRaison(e.target.value)}
                 rows={3}
@@ -177,7 +232,10 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
                 onClick={(e) => { e.stopPropagation(); handleConfirm(); }}
                 disabled={loading || !raison.trim()}
               >
-                {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Traitement...</> : mode === "cancel" ? "Confirmer l'annulation" : "Confirmer la suppression"}
+                {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Traitement...</>
+                  : mode === "cancel" ? "Confirmer l'annulation"
+                  : mode === "force_delete" ? "⚡ Forcer la suppression"
+                  : "Confirmer la suppression"}
               </Button>
             </div>
           </div>
