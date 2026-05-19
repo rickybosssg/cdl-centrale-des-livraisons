@@ -18,9 +18,8 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
   const [raison, setRaison] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Course bloquée = en_cours / arrived_* / driver_* qui n'est pas annulable normalement
-  const BLOCKED_STATUTS = ['en_cours', 'driver_en_route_pickup', 'arrived_pickup', 'arrived_dropoff', 'acceptee'];
-  const isBlocked = BLOCKED_STATUTS.includes(course?.statut) && !course?.is_deleted;
+  // Course éligible au Force Delete (toutes les courses non supprimées)
+  const isBlocked = !course?.is_deleted;
 
   if (!course) return null;
 
