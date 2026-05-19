@@ -145,19 +145,40 @@ export default function ClientHome({ user }) {
     };
     load();
 
+    const TERMINAL_STATUTS = ['annulee', 'annulee_par_admin', 'refusee', 'aucun_livreur'];
+
     const unsub = base44.entities.Course.subscribe((event) => {
       if (!isMounted) return;
-      if (!event?.data?.client_email || event.data.client_email !== user.email) return;
-      if (event.type === "create") {
-        setCourses(prev => [event.data, ...prev]);
-      } else if (event.type === "update") {
-        const updated = event.data;
-        setCourses(prev => prev.map(c => c?.id === event.id ? updated : c));
-        if (updated?.statut === 'livree' && updated?.livreur_email && !updated?.note_donnee) {
-          setCourseANoter(updated);
-        }
-      } else if (event.type === "delete") {
+      console.log(`[REALTIME_EVENT_SOURCE] ClientHome | type=${event.type} | id=${event.id} | statut=${event.data?.statut} | is_deleted=${event.data?.is_deleted}`);
+
+      // Vérifier que l'event concerne bien ce client
+      if (event.type !== 'delete' && (!event?.data?.client_email || event.data.client_email !== user.email)) return;
+
+      if (event.type === "delete") {
+        console.log(`[UI_COURSE_REMOVED] ClientHome | delete event | id=${event.id}`);
         setCourses(prev => prev.filter(c => c?.id !== event.id));
+        return;
+      }
+
+      const d = event.data;
+
+      // GARDE ABSOLUE : supprimer immédiatement si supprimée ou annulée
+      if (!d || d.is_deleted || TERMINAL_STATUTS.includes(d.statut)) {
+        console.log(`[PHANTOM_COURSE_DETECTED] ClientHome | suppression forcée | id=${event.id} | statut=${d?.statut} | is_deleted=${d?.is_deleted}`);
+        console.log(`[UI_COURSE_REMOVED] ClientHome | terminal state | id=${event.id}`);
+        setCourses(prev => prev.filter(c => c?.id !== event.id));
+        return;
+      }
+
+      if (event.type === "create") {
+        console.log(`[COURSE_REINJECTED] ClientHome | create | id=${event.id} | statut=${d.statut}`);
+        setCourses(prev => [d, ...prev.filter(c => c?.id !== event.id)]);
+      } else if (event.type === "update") {
+        console.log(`[COURSE_REINJECTED] ClientHome | update | id=${event.id} | statut=${d.statut}`);
+        setCourses(prev => prev.map(c => c?.id === event.id ? d : c));
+        if (d.statut === 'livree' && d.livreur_email && !d.note_donnee) {
+          setCourseANoter(d);
+        }
       }
     });
 
@@ -185,8 +206,12 @@ export default function ClientHome({ user }) {
   }
 
   const safeCourses = Array.isArray(courses) ? courses : [];
-  // GARDE is_deleted : ne jamais afficher une course supprimée
-  const activeCourses = safeCourses.filter(c => !['livree', 'annulee', 'annulee_par_admin'].includes(c?.statut) && !c?.is_deleted);
+  // GARDE is_deleted + TOUS les statuts terminaux/non-actifs
+  const ACTIVE_STATUTS_CLIENT = ['en_attente', 'assignee_attente', 'acceptee', 'en_cours', 'driver_en_route_pickup', 'arrived_pickup', 'arrived_dropoff'];
+  const activeCourses = safeCourses.filter(c => ACTIVE_STATUTS_CLIENT.includes(c?.statut) && !c?.is_deleted);
+  if (activeCourses.length === 0 && safeCourses.some(c => !ACTIVE_STATUTS_CLIENT.includes(c?.statut) && !['livree', 'annulee', 'annulee_par_admin'].includes(c?.statut))) {
+    console.log(`[PHANTOM_COURSE_DETECTED] ClientHome | courses non-actives filtrées du dashboard | count=${safeCourses.filter(c => !ACTIVE_STATUTS_CLIENT.includes(c?.statut) && !c?.is_deleted && c?.statut !== 'livree').length}`);
+  }
   const completedCourses = safeCourses.filter(c => c?.statut === 'livree');
   const recentCourses = safeCourses.slice(0, 3);
   const prenom = user.full_name?.split(" ")[0] || "Client";

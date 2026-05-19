@@ -33,28 +33,38 @@ export default function MesCourses() {
   useEffect(() => {
     if (!userEmail) return;
     const unsub = base44.entities.Course.subscribe((event) => {
-      if (event.type === 'create') {
-        const d = event.data;
-        if (!d || d.is_deleted || d.client_email !== userEmail) return;
-        setCourses(prev => [d, ...prev]);
-      } else if (event.type === 'update') {
-        const d = event.data;
-        // GARDE : retirer si suppression logique
-        if (!d || d.is_deleted) {
-          setCourses(prev => prev.filter(c => c.id !== event.id));
-          return;
-        }
-        if (d.client_email !== userEmail) return;
-        setCourses(prev => prev.map(c => c.id === event.id ? d : c));
-      } else if (event.type === 'delete') {
+      console.log(`[REALTIME_EVENT_SOURCE] MesCourses | type=${event.type} | id=${event.id} | statut=${event.data?.statut} | is_deleted=${event.data?.is_deleted}`);
+
+      if (event.type === 'delete') {
+        console.log(`[UI_COURSE_REMOVED] MesCourses | delete | id=${event.id}`);
         setCourses(prev => prev.filter(c => c.id !== event.id));
+        return;
+      }
+
+      const d = event.data;
+      // GARDE ABSOLUE : supprimer si is_deleted ou pas de données
+      if (!d || d.is_deleted) {
+        console.log(`[PHANTOM_COURSE_DETECTED] MesCourses | is_deleted ou data null | id=${event.id}`);
+        console.log(`[UI_COURSE_REMOVED] MesCourses | is_deleted | id=${event.id}`);
+        setCourses(prev => prev.filter(c => c.id !== event.id));
+        return;
+      }
+      if (d.client_email !== userEmail) return;
+
+      if (event.type === 'create') {
+        console.log(`[COURSE_REINJECTED] MesCourses | create | id=${event.id} | statut=${d.statut}`);
+        setCourses(prev => [d, ...prev.filter(c => c.id !== event.id)]);
+      } else if (event.type === 'update') {
+        console.log(`[COURSE_REINJECTED] MesCourses | update | id=${event.id} | statut=${d.statut}`);
+        setCourses(prev => prev.map(c => c.id === event.id ? d : c));
       }
     });
     return unsub;
   }, [userEmail]);
 
-  const actives = courses.filter(c => !["livree", "annulee"].includes(c.statut));
-  const terminees = courses.filter(c => ["livree", "annulee"].includes(c.statut));
+  const TERMINAL = ["livree", "annulee", "annulee_par_admin", "refusee", "aucun_livreur"];
+  const actives = courses.filter(c => !TERMINAL.includes(c.statut) && !c.is_deleted);
+  const terminees = courses.filter(c => TERMINAL.includes(c.statut) || c.is_deleted);
 
   if (loading) {
     return (
