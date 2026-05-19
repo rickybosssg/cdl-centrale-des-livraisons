@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
 
   const base44 = createClientFromRequest(req);
 
-  // Auth
+  // Auth — tentative user-token, fallback service-role si token preview/staff
   let user = null;
   try { user = await base44.auth.me(); } catch (_) {}
 
@@ -32,10 +32,23 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Non authentifié' }, { status: 401 });
   }
 
-  const isAdmin = user.role === 'admin' || user.role === 'dispatcher' || user.email === CDL_ADMIN_EMAIL;
+  // Accepter admin, dispatcher, staff, super-admin et l'email CDL hardcodé
+  const ALLOWED_ROLES = new Set(['admin', 'dispatcher', 'staff', 'super_admin']);
+  const isAdmin = ALLOWED_ROLES.has(user.role) || user.email === CDL_ADMIN_EMAIL;
+
   if (!isAdmin) {
-    console.error(`[FORCE_DELETE_ERROR] 403 | user=${user.email} | role=${user.role}`);
-    return Response.json({ error: 'Accès réservé aux administrateurs' }, { status: 403 });
+    // Double-check via service-role : lire le User BDD pour confirmer le vrai rôle
+    let dbRole = null;
+    try {
+      const dbUsers = await base44.asServiceRole.entities.User.filter({ email: user.email });
+      dbRole = dbUsers?.[0]?.role;
+    } catch (_) {}
+    const isAdminByDb = dbRole && ALLOWED_ROLES.has(dbRole);
+    if (!isAdminByDb) {
+      console.error(`[FORCE_DELETE_ERROR] 403 | user=${user.email} | token_role=${user.role} | db_role=${dbRole}`);
+      return Response.json({ error: `Accès refusé — rôle token: ${user.role}, rôle BDD: ${dbRole || '?'}` }, { status: 403 });
+    }
+    console.log(`[FORCE_DELETE_AUTH] role corrigé via DB | email=${user.email} | db_role=${dbRole}`);
   }
 
   let body = {};
