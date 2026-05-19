@@ -18,7 +18,7 @@ let _flushTimer = null;
 const FLUSH_INTERVAL_MS = 5000;
 const MAX_BUFFER_SIZE = 20;
 
-console.log(`[ENGINE_INIT] AuditEngine v${ENGINE_VERSION}`);
+
 
 /** Flush buffer → BDD */
 async function flushBuffer() {
@@ -148,6 +148,6 @@ const AuditEngine = {
   },
 };
 
-console.log(`[ENGINE_READY] AuditEngine v${ENGINE_VERSION} chargé`);
+
 
 export default AuditEngine;

@@ -1,7 +1,7 @@
 /**
  * SystemHealth — Page admin /system-health
- * Supervision en temps réel de tous les moteurs CDL
- * Lecture seule + boutons de relance admin uniquement
+ * Supervision directe CDL — sans HealthMonitorEngine ni RecoveryEngine (supprimés).
+ * Vérifie directement : Auth, Réseau, FCM, Bedou, Dispatch, Notifications.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,22 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   CheckCircle2, AlertTriangle, XCircle, RefreshCw, Activity,
   Wifi, WifiOff, ArrowLeft, Clock, Zap, Shield, Database,
-  Bell, MapPin, Truck, User
+  Bell, Truck, User
 } from 'lucide-react';
-
-const ENGINE_ICONS = {
-  AuthEngine:         User,
-  NetworkEngine:      Wifi,
-  FcmTokenEngine:     Bell,
-  BedouEngine:        Database,
-  NotificationEngine: Bell,
-  RealtimeSyncEngine: Activity,
-  DispatchEngine:     Truck,
-  PermissionEngine:   Shield,
-  CacheEngine:        Database,
-  LocationEngine:     MapPin,
-  default:            Zap,
-};
 
 const STATUS_CFG = {
   ok:       { color: 'text-green-600',  bg: 'bg-green-50  border-green-200',  icon: CheckCircle2,   label: 'OK' },
@@ -35,6 +21,87 @@ const STATUS_CFG = {
   critical: { color: 'text-red-600',    bg: 'bg-red-50    border-red-200',    icon: XCircle,        label: 'CRITIQUE' },
   unknown:  { color: 'text-gray-400',   bg: 'bg-gray-50   border-gray-200',   icon: Clock,          label: '—' },
 };
+
+const ENGINE_ICONS = {
+  Auth:          User,
+  Réseau:        Wifi,
+  FCM:           Bell,
+  Bedou:         Database,
+  Notifications: Bell,
+  Dispatch:      Truck,
+  default:       Zap,
+};
+
+// ── Checks directs sans moteur externe ─────────────────────────────────────────
+
+async function checkAuth() {
+  const start = Date.now();
+  try {
+    const user = await base44.auth.me();
+    if (!user) return { name: 'Auth', status: 'critical', message: 'Non connecté', latencyMs: Date.now() - start };
+    return { name: 'Auth', status: 'ok', message: `Connecté : ${user.email}`, latencyMs: Date.now() - start, details: { email: user.email, role: user.role } };
+  } catch (e) {
+    return { name: 'Auth', status: 'critical', message: e.message, latencyMs: Date.now() - start };
+  }
+}
+
+async function checkNetwork() {
+  const start = Date.now();
+  const online = navigator.onLine;
+  return { name: 'Réseau', status: online ? 'ok' : 'critical', message: online ? 'En ligne' : 'Hors ligne', latencyMs: Date.now() - start };
+}
+
+async function checkFcm() {
+  const start = Date.now();
+  try {
+    const tokens = await base44.entities.FcmToken.filter({ is_active: true }, null, 20);
+    const count = tokens?.length || 0;
+    return {
+      name: 'FCM',
+      status: count > 0 ? 'ok' : 'warn',
+      message: count > 0 ? `${count} token(s) actif(s)` : 'Aucun token FCM actif',
+      latencyMs: Date.now() - start,
+      details: { active_tokens: count },
+    };
+  } catch (e) {
+    return { name: 'FCM', status: 'critical', message: e.message, latencyMs: Date.now() - start };
+  }
+}
+
+async function checkBedou() {
+  const start = Date.now();
+  try {
+    const records = await base44.entities.Bedou.list(null, 1);
+    return { name: 'Bedou', status: 'ok', message: 'Service Bedou opérationnel', latencyMs: Date.now() - start, details: { sample_count: records?.length } };
+  } catch (e) {
+    return { name: 'Bedou', status: 'critical', message: e.message, latencyMs: Date.now() - start };
+  }
+}
+
+async function checkNotifications() {
+  const start = Date.now();
+  try {
+    const recent = await base44.entities.Notification.list('-created_date', 5);
+    const unread = recent?.filter(n => !n.lue)?.length || 0;
+    return { name: 'Notifications', status: 'ok', message: `Service OK · ${unread} non lues récentes`, latencyMs: Date.now() - start, details: { recent_count: recent?.length, unread } };
+  } catch (e) {
+    return { name: 'Notifications', status: 'critical', message: e.message, latencyMs: Date.now() - start };
+  }
+}
+
+async function checkDispatch() {
+  const start = Date.now();
+  try {
+    const rows = await base44.entities.DispatchModeState.list('-updated_date', 1);
+    const doc = rows[0];
+    if (!doc) return { name: 'Dispatch', status: 'warn', message: 'Aucun doc DispatchModeState', latencyMs: Date.now() - start };
+    return { name: 'Dispatch', status: 'ok', message: `Mode : ${doc.mode}`, latencyMs: Date.now() - start, details: { mode: doc.mode } };
+  } catch (e) {
+    return { name: 'Dispatch', status: 'critical', message: e.message, latencyMs: Date.now() - start };
+  }
+}
+
+// ── Composants UI ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CFG[status] || STATUS_CFG.unknown;
@@ -47,11 +114,10 @@ function StatusBadge({ status }) {
   );
 }
 
-function EngineCard({ result, onRecover, recovering }) {
+function EngineCard({ result }) {
   if (!result) return null;
   const cfg = STATUS_CFG[result.status] || STATUS_CFG.unknown;
   const Icon = ENGINE_ICONS[result.name] || ENGINE_ICONS.default;
-  const StatusIcon = cfg.icon;
 
   return (
     <div className={`rounded-xl border p-4 space-y-2 ${cfg.bg}`}>
@@ -72,7 +138,6 @@ function EngineCard({ result, onRecover, recovering }) {
           <StatusBadge status={result.status} />
         </div>
       </div>
-
       {result.details && (
         <details className="text-xs">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Détails</summary>
@@ -81,93 +146,68 @@ function EngineCard({ result, onRecover, recovering }) {
           </pre>
         </details>
       )}
-
-      {(result.status === 'warn' || result.status === 'critical') && onRecover && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full gap-1.5 text-xs"
-          disabled={recovering === result.name}
-          onClick={() => onRecover(result.name)}
-        >
-          {recovering === result.name
-            ? <><span className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /> Relance...</>
-            : <><RefreshCw className="w-3 h-3" /> Relancer {result.name}</>
-          }
-        </Button>
-      )}
     </div>
   );
 }
 
+// ── Page principale ─────────────────────────────────────────────────────────
+
 export default function SystemHealth() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [report, setReport] = useState(null);
+  const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
-  const [recovering, setRecovering] = useState(null);
-  const [recoveryLog, setRecoveryLog] = useState([]);
   const [fcmTokens, setFcmTokens] = useState([]);
   const [lastChecked, setLastChecked] = useState(null);
-  const [registrySummary, setRegistrySummary] = useState(null);
 
-  useEffect(() => {
-    base44.auth.me().then(u => {
-      setUser(u);
-      if (u?.role === 'admin') runHealthCheck();
-    });
-  }, []);
-
-  const runHealthCheck = useCallback(async () => {
+  const runChecks = useCallback(async () => {
     setRunning(true);
     try {
-      const HealthMonitorEngine = (await import('@/lib/HealthMonitorEngine')).default;
-      const RecoveryEngine = (await import('@/lib/RecoveryEngine')).default;
-
-      const [healthReport, recLog] = await Promise.all([
-        HealthMonitorEngine.runAll(),
-        Promise.resolve(RecoveryEngine.getLog()),
+      const checks = await Promise.allSettled([
+        checkAuth(),
+        checkNetwork(),
+        checkFcm(),
+        checkBedou(),
+        checkNotifications(),
+        checkDispatch(),
       ]);
 
-      setReport(healthReport);
-      setRegistrySummary(null);
-      setRecoveryLog(recLog.slice(0, 10));
+      const r = checks.map((c, i) => {
+        if (c.status === 'fulfilled') return c.value;
+        const names = ['Auth', 'Réseau', 'FCM', 'Bedou', 'Notifications', 'Dispatch'];
+        return { name: names[i], status: 'critical', message: c.reason?.message || 'Erreur', latencyMs: 0 };
+      });
+
+      setResults(r);
       setLastChecked(new Date());
 
-      // Charger tokens FCM actifs
+      // Tokens FCM récents
       try {
         const tokens = await base44.entities.FcmToken.filter({ is_active: true }, '-last_used', 10);
         setFcmTokens(tokens || []);
       } catch (_) {}
 
-    } catch (e) {
-      console.error('[SystemHealth] runHealthCheck error:', e.message);
     } finally {
       setRunning(false);
       setLoading(false);
     }
   }, []);
 
-  const handleRecover = async (engineName) => {
-    if (user?.role !== 'admin') return;
-    setRecovering(engineName);
-    try {
-      const RecoveryEngine = (await import('@/lib/RecoveryEngine')).default;
-      const result = await RecoveryEngine.recover(engineName, { force: true });
-      console.log(`[SystemHealth] Recovery ${engineName}:`, result);
-      // Recheck après recovery
-      setTimeout(runHealthCheck, 1500);
-    } catch (e) {
-      console.error('[SystemHealth] recovery error:', e.message);
-    } finally {
-      setRecovering(null);
-    }
-  };
+  useEffect(() => {
+    base44.auth.me().then(u => {
+      setUser(u);
+      if (u?.role === 'admin') runChecks();
+      else setLoading(false);
+    });
+  }, []);
 
   const isAdmin = user?.role === 'admin';
-  const globalStatus = report?.globalStatus || 'unknown';
-  const globalCfg = STATUS_CFG[globalStatus] || STATUS_CFG.unknown;
+  const ok = results.filter(r => r.status === 'ok').length;
+  const warn = results.filter(r => r.status === 'warn').length;
+  const critical = results.filter(r => r.status === 'critical').length;
+  const globalStatus = critical > 0 ? 'critical' : warn > 0 ? 'warn' : results.length > 0 ? 'ok' : 'unknown';
+  const globalCfg = STATUS_CFG[globalStatus];
   const GlobalIcon = globalCfg.icon;
 
   if (loading) {
@@ -175,7 +215,7 @@ export default function SystemHealth() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-muted-foreground">Analyse des moteurs CDL...</p>
+          <p className="text-sm text-muted-foreground">Analyse système CDL...</p>
         </div>
       </div>
     );
@@ -210,19 +250,14 @@ export default function SystemHealth() {
             </p>
           )}
         </div>
-        <Button
-          size="sm"
-          onClick={runHealthCheck}
-          disabled={running}
-          className="gap-1.5"
-        >
+        <Button size="sm" onClick={runChecks} disabled={running} className="gap-1.5">
           <RefreshCw className={`w-4 h-4 ${running ? 'animate-spin' : ''}`} />
           {running ? 'Analyse...' : 'Actualiser'}
         </Button>
       </div>
 
       {/* Statut global */}
-      {report && (
+      {results.length > 0 && (
         <div className={`rounded-2xl border-2 p-5 ${globalCfg.bg}`}>
           <div className="flex items-center gap-3">
             <div className={`p-3 rounded-xl ${globalStatus === 'ok' ? 'bg-green-100' : globalStatus === 'warn' ? 'bg-amber-100' : 'bg-red-100'}`}>
@@ -233,55 +268,20 @@ export default function SystemHealth() {
                 Système {globalStatus === 'ok' ? 'Opérationnel' : globalStatus === 'warn' ? 'Dégradé' : 'En Erreur'}
               </p>
               <p className="text-sm text-muted-foreground">
-                {report.summary.ok}/{report.summary.total} moteurs OK
-                {report.summary.warn > 0 && ` · ${report.summary.warn} avertissements`}
-                {report.summary.critical > 0 && ` · ${report.summary.critical} critiques`}
+                {ok}/{results.length} checks OK
+                {warn > 0 && ` · ${warn} avertissement(s)`}
+                {critical > 0 && ` · ${critical} critique(s)`}
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Résumé EngineRegistry */}
-      {registrySummary && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Database className="w-4 h-4" /> Registry des moteurs
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-4 gap-2 text-center">
-              {[
-                { label: 'Total', value: registrySummary.total, color: 'text-foreground' },
-                { label: 'Prêts', value: registrySummary.ready, color: 'text-green-600' },
-                { label: 'En erreur', value: registrySummary.error, color: 'text-red-600' },
-                { label: 'En chargement', value: registrySummary.loading, color: 'text-amber-600' },
-              ].map(s => (
-                <div key={s.label} className="p-2 rounded-lg bg-muted/50">
-                  <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Moteurs */}
-      {report?.results && (
+      {/* Checks individuels */}
+      {results.length > 0 && (
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">État des moteurs</p>
-          <div className="space-y-2">
-            {report.results.map(result => (
-              <EngineCard
-                key={result.name}
-                result={result}
-                onRecover={isAdmin ? handleRecover : null}
-                recovering={recovering}
-              />
-            ))}
-          </div>
+          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Checks système</p>
+          {results.map(r => <EngineCard key={r.name} result={r} />)}
         </div>
       )}
 
@@ -332,64 +332,13 @@ export default function SystemHealth() {
         </CardContent>
       </Card>
 
-      {/* Logs de recovery */}
-      {recoveryLog.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" /> Historique recovery
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1">
-              {recoveryLog.map((entry, i) => (
-                <div key={i} className={`flex items-center gap-2 p-2 rounded-lg text-xs ${
-                  entry.status === 'ok' ? 'bg-green-50 text-green-800' :
-                  entry.status === 'failed' ? 'bg-red-50 text-red-800' :
-                  'bg-gray-50 text-gray-600'
-                }`}>
-                  {entry.status === 'ok' ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> :
-                   entry.status === 'failed' ? <XCircle className="w-3 h-3 flex-shrink-0" /> :
-                   <Clock className="w-3 h-3 flex-shrink-0" />}
-                  <span className="font-semibold">{entry.name}</span>
-                  <span className="flex-1 truncate">{entry.detail}</span>
-                  <span className="text-muted-foreground flex-shrink-0">
-                    {new Date(entry.ts).toLocaleTimeString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Actions admin */}
       {isAdmin && (
         <Card className="border-blue-200 bg-blue-50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-blue-900">Actions admin</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full gap-1.5 text-xs"
-              disabled={running}
-              onClick={async () => {
-                setRunning(true);
-                try {
-                  const RecoveryEngine = (await import('@/lib/RecoveryEngine')).default;
-                  await RecoveryEngine.recoverAll();
-                  setTimeout(runHealthCheck, 1500);
-                } finally {
-                  setRunning(false);
-                }
-              }}
-            >
-              <Zap className="w-3 h-3" />
-              Relancer tous les moteurs en erreur
-            </Button>
-
+          <CardContent>
             <Button
               size="sm"
               variant="outline"
@@ -400,7 +349,7 @@ export default function SystemHealth() {
                 try {
                   const res = await base44.functions.invoke('cleanupStaleTokens', {});
                   alert(`✅ FCM nettoyé\n- Supprimés (inactifs > 7j) : ${res.data?.deleted_stale ?? 0}\n- Dédupliqués (actifs) : ${res.data?.deduped_active ?? 0}`);
-                  setTimeout(runHealthCheck, 500);
+                  runChecks();
                 } catch (e) {
                   alert(`❌ Erreur: ${e.message}`);
                 } finally {

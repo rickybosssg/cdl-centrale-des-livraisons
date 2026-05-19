@@ -9,7 +9,7 @@
 
 const ENGINE_VERSION = '1.0.0';
 
-console.log(`[ENGINE_INIT] PermissionEngine v${ENGINE_VERSION}`);
+
 
 /** Détecter si on est dans une app native Capacitor */
 function isNative() {
@@ -163,6 +163,6 @@ const PermissionEngine = {
   },
 };
 
-console.log(`[ENGINE_READY] PermissionEngine v${ENGINE_VERSION} chargé`);
+
 
 export default PermissionEngine;

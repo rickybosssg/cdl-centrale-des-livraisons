@@ -12,7 +12,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import AuthEngine from '@/lib/AuthEngine';
 import NetworkEngine from '@/lib/NetworkEngine';
-import AuditEngine from '@/lib/AuditEngine';
 
 
 export function useEngines() {
@@ -58,8 +57,6 @@ export function useEngines() {
     // Network
     isOnline,
 
-    // Engines (accès direct si besoin)
-    AuditEngine,
   };
 }
 
@@ -79,14 +76,4 @@ export function useNetworkStatus() {
   }, []);
 
   return { isOnline, latencyMs };
-}
-
-/**
- * useAudit — Hook léger pour logger des actions dans les composants
- */
-export function useAudit(context) {
-  return {
-    log: (action, meta) => AuditEngine.log(context, action, meta),
-    error: (action, err, meta) => AuditEngine.logError(`${context}:${action}`, err, meta),
-  };
 }

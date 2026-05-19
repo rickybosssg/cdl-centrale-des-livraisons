@@ -42,15 +42,4 @@ export function triggerWhatsAppNotification({
   });
 }
 
-// Exports conservés pour compatibilité avec les appels existants (valeur ignorée)
-export const waMsgCourseCreatedClient = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgDriverCourseAssigned = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgCourseAcceptedByDriver = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgCourseAcceptedDriver = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgCourseCancelledClient = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgCourseCancelledDriver = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgCourseCompletedClient = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgCourseCompletedDriver = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgBedouTopupRequested = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgBedouWithdrawRequested = () => UNIVERSAL_WA_MESSAGE;
-export const waMsgDriverProfileSubmitted = () => UNIVERSAL_WA_MESSAGE;
+// Stubs supprimés — message universel unique géré par triggerWhatsAppNotification

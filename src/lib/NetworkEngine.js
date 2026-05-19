@@ -14,7 +14,7 @@ const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 const OFFLINE_QUEUE_MAX = 50;
 
-console.log(`[ENGINE_INIT] NetworkEngine v${ENGINE_VERSION}`);
+
 
 // Queue des opérations offline
 const _offlineQueue = [];
@@ -173,6 +173,6 @@ const NetworkEngine = {
   queueSize() { return _offlineQueue.length; },
 };
 
-console.log(`[ENGINE_READY] NetworkEngine v${ENGINE_VERSION} chargé | online=${_isOnline}`);
+
 
 export default NetworkEngine;

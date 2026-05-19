@@ -25,7 +25,7 @@ const PROFILE_ROLES = {
   annonceur:   { canAdmin: false, canOrder: false, canDeliver: false, canAds: true },
 };
 
-console.log(`[ENGINE_INIT] AuthEngine v${ENGINE_VERSION}`);
+
 
 const AuthEngine = {
   version: ENGINE_VERSION,
@@ -108,6 +108,6 @@ const AuthEngine = {
   get _raw() { return base44.auth; },
 };
 
-console.log(`[ENGINE_READY] AuthEngine v${ENGINE_VERSION} chargé`);
+
 
 export default AuthEngine;

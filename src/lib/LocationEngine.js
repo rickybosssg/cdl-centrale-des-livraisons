@@ -14,7 +14,7 @@ const GPS_HIGH_ACCURACY_TIMEOUT = 10_000;
 const GPS_LOW_ACCURACY_TIMEOUT  = 5_000;
 const EARTH_RADIUS_KM = 6371;
 
-console.log(`[ENGINE_INIT] LocationEngine v${ENGINE_VERSION}`);
+
 
 // Cache position récente (30s)
 let _lastPosition = null;
@@ -166,6 +166,6 @@ const LocationEngine = {
   },
 };
 
-console.log(`[ENGINE_READY] LocationEngine v${ENGINE_VERSION} chargé`);
+
 
 export default LocationEngine;

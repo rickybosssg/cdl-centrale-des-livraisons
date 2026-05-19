@@ -80,12 +80,4 @@ export function runFrontendAudit() {
   };
 }
 
-// Compteur d'erreurs console global (installé au boot)
-if (typeof window !== 'undefined') {
-  window.__cdl_error_count = 0;
-  const origError = console.error.bind(console);
-  console.error = (...args) => {
-    window.__cdl_error_count = (window.__cdl_error_count || 0) + 1;
-    origError(...args);
-  };
-}
+// Wrapper console.error supprimé — interférait avec les outils de debug natifs

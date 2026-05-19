@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { vibrateSuccess } from "@/lib/vibration";
-import { triggerWhatsAppNotification, waMsgCourseCreatedClient } from "@/lib/whatsappNotifications";
+import { triggerWhatsAppNotification } from "@/lib/whatsappNotifications";
 import { useBedouSync } from "@/lib/useBedouSync";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -126,7 +126,6 @@ export default function CreateCourse() {
         recipientRole: 'client',
         recipientName: user.full_name,
         recipientPhone: telephone_expediteur,
-        messageText: waMsgCourseCreatedClient(),
         entityId: courseData.id,
         entityType: 'course',
         priority: 'normal',
