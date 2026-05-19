@@ -43,13 +43,14 @@ const ACTIVE_STATUTS = new Set([
   'arrived_pickup', 'en_cours', 'arrived_dropoff',
 ]);
 
-// ─── Module unique d'éligibilité livreur ─────────────────────────────────────
-// Source de vérité unique (cdlDispatch et checkPendingAssignments ont leurs propres copies
-// identiques — pas d'import local possible en Deno deploy isolé)
+// ─── Éligibilité : copie locale (identique à driverEligibilityEngine.isDriverEligible) ──
+// PAS d'import local possible en Deno deploy — règle : ne JAMAIS modifier sans
+// synchroniser driverEligibilityEngine.js (source de vérité documentée)
 function isDriverEligible(driver, realActiveCount = null) {
   if (driver.driver_online !== true) return false;
   if (!driver.profil_valide && driver.statut_validation_livreur !== 'valide' && driver.statut_validation_livreur !== 'actif') return false;
-  if (driver.livreur_bloque || driver.livreur_suspendu) return false;
+  if (driver.livreur_bloque === true) return false;
+  if (driver.livreur_suspendu === true) return false;
   if (driver.disponible === false) return false;
   const count = realActiveCount !== null ? realActiveCount : (driver.nombre_courses_actives || 0);
   if (count >= 2) return false;
@@ -105,6 +106,9 @@ function notifyAsync(base44, notif) {
 function pushAsync(base44, payload) {
   base44.asServiceRole.functions.invoke('sendCdlNotification', payload).catch(() => {});
 }
+
+// ─── Constante admin centralisée ──────────────────────────────────────────────
+const ADMIN_EMAIL = Deno.env.get('CDL_ADMIN_EMAIL') || 'weezyh2@gmail.com';
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
@@ -210,25 +214,26 @@ Deno.serve(async (req) => {
     });
 
     // Side-effects fire-and-forget
-    syncDriverStats(base44, course.livreur_email, {
-      total_courses_livrees: undefined, // géré par updateLivreurStreak
-    });
+    syncDriverStats(base44, course.livreur_email);
     base44.asServiceRole.functions.invoke('updateLivreurStreak', {}).catch(() => {});
 
-    notifyAsync(base44, {
-      destinataire_email: course.client_email, destinataire_role: 'client',
-      titre: '✅ Colis livré !',
-      message: `Votre colis a été livré par ${course.livreur_name}. ${montant.toLocaleString()} FCFA débités.`,
-      type: 'success', lue: false, course_id,
-      target_screen: `/course/${course_id}/track`,
-      notification_key: `${course.client_email}__livree__${course_id}`,
-    });
-    pushAsync(base44, {
-      user_email: course.client_email,
-      title: '✅ Livraison confirmée',
-      body: `Votre colis est arrivé à ${course.quartier_arrivee}.`,
-      data: { notif_route: `/course/${course_id}/track` },
-    });
+    // Notifications via notificationOrchestrator (SOURCE UNIQUE — ne pas dupliquer ici)
+    base44.asServiceRole.functions.invoke('notificationOrchestrator', {
+      event: 'course_delivered',
+      course_id,
+      course: {
+        client_email: course.client_email,
+        client_name: course.client_name,
+        livreur_email: course.livreur_email,
+        livreur_name: course.livreur_name,
+        quartier_depart: course.quartier_depart,
+        quartier_arrivee: course.quartier_arrivee,
+        gain_livreur: gainLivreur,
+        prix: montant,
+        telephone_expediteur: course.telephone_expediteur,
+        telephone_livreur: course.telephone_livreur,
+      },
+    }).catch(() => {});
 
     console.log(`[CSM] DELIVER OK | course=${course_id} | gain=${gainLivreur}`);
     return Response.json({ success: true, statut: 'livree', gain_livreur: gainLivreur });
@@ -273,11 +278,8 @@ Deno.serve(async (req) => {
 
   // Side-effects fire-and-forget par action
   if (action === 'ACCEPT') {
-    syncDriverStats(base44, user.email, {
-      courses_acceptees: undefined, // incrémenté dans syncDriverStats depuis BDD
-      courses_refusees_consecutives: 0,
-    }).then(async () => {
-      // Incrémenter courses_acceptees séparément (besoin du +1)
+    // Stats livreur : recalcul atomique depuis BDD + incrément courses_acceptees
+    syncDriverStats(base44, user.email).then(async () => {
       const freshUsers = await base44.asServiceRole.entities.User.filter({ email: user.email });
       const fu = freshUsers?.[0];
       if (fu) await base44.asServiceRole.entities.User.update(fu.id, {
@@ -286,22 +288,21 @@ Deno.serve(async (req) => {
       }).catch(() => {});
     }).catch(() => {});
 
-    notifyAsync(base44, {
-      destinataire_email: course.client_email, destinataire_role: 'client',
-      titre: '🛵 Livreur en route !',
-      message: `${user.full_name || 'Un livreur'} a accepté votre course ${course.quartier_depart}→${course.quartier_arrivee}.`,
-      type: 'success', lue: false, course_id,
-      target_screen: `/course/${course_id}/track`,
-    });
-    pushAsync(base44, {
-      user_email: course.client_email,
-      title: '🛵 Livreur en route',
-      body: `${user.full_name || 'Un livreur'} prend en charge votre course.`,
-      data: { notif_route: `/course/${course_id}/track` },
-    });
+    // Notification via orchestrateur (SOURCE UNIQUE)
+    base44.asServiceRole.functions.invoke('notificationOrchestrator', {
+      event: 'course_accepted',
+      course_id,
+      course: {
+        client_email: course.client_email,
+        livreur_name: user.full_name || user.email,
+        quartier_depart: course.quartier_depart,
+        quartier_arrivee: course.quartier_arrivee,
+      },
+    }).catch(() => {});
   }
 
   if (action === 'REFUSE') {
+    // Stats : recalcul BDD + incrément refus
     syncDriverStats(base44, user.email).then(async () => {
       const freshUsers = await base44.asServiceRole.entities.User.filter({ email: user.email });
       const fu = freshUsers?.[0];

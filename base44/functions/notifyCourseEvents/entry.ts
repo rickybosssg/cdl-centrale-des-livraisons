@@ -37,130 +37,72 @@ Deno.serve(async (req) => {
       );
     };
 
-    // ── CRÉATION — géré exclusivement par notifyNewCourse (éviter doublon) ───
+    // ── TOUTES LES NOTIFICATIONS sont gérées par notificationOrchestrator ──────
+    // notifyCourseEvents est désormais un ROUTEUR LÉGER vers notificationOrchestrator.
+    // Il ne construit plus les payloads lui-même — SOURCE UNIQUE dans notificationOrchestrator.
+
+    // Skip create — géré par notifyNewCourse + notificationOrchestrator.course_assigned
     if (event?.type === 'create') {
       console.log(`[notifyCourseEvents] SKIP create — géré par notifyNewCourse | +${Date.now() - t0}ms`);
       return Response.json({ ok: true, skipped: 'create_handled_by_notifyNewCourse' });
     }
 
-    // ── UPDATE : seulement si statut a changé ─────────────────────────────────
+    // Skip si pas de changement de statut
     if (event?.type !== 'update' || statut === oldStatut) {
       return Response.json({ ok: true });
     }
 
-    const tasks = [];
+    // Mapping statut → event orchestrateur
+    const STATUT_TO_EVENT = {
+      acceptee:               'course_accepted',
+      driver_en_route_pickup: 'course_en_route',
+      arrived_pickup:         'course_arrived_pickup',
+      arrivee_point_depart:   'course_arrived_pickup',
+      en_cours:               'course_pickup',
+      arrived_dropoff:        'course_arrived_dropoff',
+      proche_destination:     'course_arrived_dropoff',
+      livree:                 'course_delivered',
+      annulee:                'course_cancelled',
+    };
 
-    // assignee_attente → push livreur déjà envoyé par autoDispatch/createSmartDispatch
-    // NE PAS renvoyer ici pour éviter le doublon
-    if (statut === 'assignee_attente') {
-      console.log(`[notifyCourseEvents] SKIP assignee_attente push livreur — déjà envoyé par autoDispatch`);
+    const orchEvent = STATUT_TO_EVENT[statut];
+    if (!orchEvent) {
+      console.log(`[notifyCourseEvents] statut=${statut} → pas de notif orchestrateur | +${Date.now() - t0}ms`);
+      return Response.json({ ok: true });
     }
 
-    // Acceptée → client
-    if (statut === 'acceptee' && course.client_email) {
-      tasks.push(notify({
-        user_email: course.client_email,
-        title: '✅ Livreur en chemin !',
-        body: `${course.livreur_name || 'Votre livreur'} a accepté votre course et arrive bientôt.`,
-        data: { type: 'course_accepted', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
-      }));
-    }
-
-    // Livreur en route vers départ → client
-    if (statut === 'driver_en_route_pickup' && course.client_email) {
-      tasks.push(notify({
-        user_email: course.client_email,
-        title: '🛵 Votre livreur est en route !',
-        body: `${course.livreur_name || 'Votre livreur'} se dirige vers le point de récupération.`,
-        data: { type: 'course_assigned', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
-      }));
-    }
-
-    // Livreur arrivé au point de départ → client (statuts anciens + nouveaux)
-    if ((statut === 'arrived_pickup' || statut === 'arrivee_point_depart') && course.client_email) {
-      tasks.push(notify({
-        user_email: course.client_email,
-        title: '📍 Votre livreur est arrivé !',
-        body: `${course.livreur_name || 'Votre livreur'} est au point de récupération. Préparez votre colis.`,
-        data: { type: 'livreur_arrived_pickup', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
-      }));
-    }
-
-    // En cours (colis récupéré) → client
-    if (statut === 'en_cours' && course.client_email) {
-      tasks.push(notify({
-        user_email: course.client_email,
-        title: '📦 Colis récupéré — en route !',
-        body: `Votre colis est en livraison vers ${course.quartier_arrivee}.`,
-        data: { type: 'course_in_progress', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
-      }));
-    }
-
-    // Livreur arrivé à destination → client
-    if ((statut === 'arrived_dropoff' || statut === 'proche_destination') && course.client_email) {
-      tasks.push(notify({
-        user_email: course.client_email,
-        title: '⚡ Livreur à destination !',
-        body: `${course.livreur_name || 'Votre livreur'} est arrivé à destination. Préparez-vous à recevoir votre colis.`,
-        data: { type: 'livreur_near_destination', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
-      }));
-    }
-
-    // Livrée → client + livreur
+    // livree : déjà géré par courseStateMachine.DELIVER → notificationOrchestrator
+    // On skip ici pour éviter le doublon
     if (statut === 'livree') {
-      if (course.client_email) {
-        tasks.push(notify({
-          user_email: course.client_email,
-          title: '🎉 Colis livré !',
-          body: `Votre colis a été livré par ${course.livreur_name || 'votre livreur'}. Notez-le !`,
-          data: { type: 'course_delivered', entity_id: courseId, entity_type: 'Course', notif_route: `/course/${courseId}/track` },
-        }));
-      }
-      if (course.livreur_email) {
-        tasks.push(notify({
-          user_email: course.livreur_email,
-          title: '💰 Livraison confirmée !',
-          body: `${course.quartier_arrivee} — Gain : +${course.gain_livreur || 0} F crédités sur votre Bedou.`,
-          data: { type: 'course_delivered_driver', entity_id: courseId, entity_type: 'Course', notif_route: '/mes-livraisons' },
-        }));
-      }
+      console.log(`[notifyCourseEvents] SKIP livree — géré par courseStateMachine → notificationOrchestrator | +${Date.now() - t0}ms`);
+      return Response.json({ ok: true, skipped: 'livree_handled_by_courseStateMachine' });
     }
 
-    // Paiement validé → livreur
-    if (statut === 'paiement_valide' && course.livreur_email) {
-      tasks.push(notify({
-        user_email: course.livreur_email,
-        title: '💸 Paiement reçu !',
-        body: `Le paiement de ${course.gain_livreur || course.prix || 0} F a été validé — ${course.quartier_depart} → ${course.quartier_arrivee}.`,
-        data: { type: 'payment_validated', entity_id: courseId, entity_type: 'Course', notif_route: '/mes-gains' },
-      }));
-    }
-
-    // Annulée → client + livreur
+    // annulee : déjà géré par cancelCourseAction → notificationOrchestrator
     if (statut === 'annulee') {
-      if (course.client_email) {
-        tasks.push(notify({
-          user_email: course.client_email,
-          title: '❌ Course annulée',
-          body: course.frais_annulation > 0
-            ? `Votre course a été annulée. Frais : ${course.frais_annulation.toLocaleString()} F.`
-            : `Votre course ${course.quartier_depart} → ${course.quartier_arrivee} a été annulée.`,
-          data: { type: 'course_cancelled', entity_id: courseId, entity_type: 'Course', notif_route: '/mes-courses' },
-        }));
-      }
-      if (course.livreur_email) {
-        tasks.push(notify({
-          user_email: course.livreur_email,
-          title: '❌ Course annulée',
-          body: `La course ${course.quartier_depart} → ${course.quartier_arrivee} a été annulée.`,
-          data: { type: 'course_cancelled', entity_id: courseId, entity_type: 'Course', notif_route: '/courses-disponibles' },
-        }));
-      }
+      console.log(`[notifyCourseEvents] SKIP annulee — géré par cancelCourseAction → notificationOrchestrator | +${Date.now() - t0}ms`);
+      return Response.json({ ok: true, skipped: 'annulee_handled_by_cancelCourseAction' });
     }
 
-    await Promise.allSettled(tasks);
-    console.log(`[notifyCourseEvents] DONE update statut=${statut} tasks=${tasks.length} | +${Date.now() - t0}ms`);
-    return Response.json({ ok: true });
+    // Pour les autres transitions : déléguer à notificationOrchestrator
+    await base44.asServiceRole.functions.invoke('notificationOrchestrator', {
+      event: orchEvent,
+      course_id: courseId,
+      course: {
+        client_email: course.client_email,
+        livreur_email: course.livreur_email,
+        livreur_name: course.livreur_name,
+        quartier_depart: course.quartier_depart,
+        quartier_arrivee: course.quartier_arrivee,
+        gain_livreur: course.gain_livreur,
+        prix: course.prix,
+        telephone_expediteur: course.telephone_expediteur,
+        telephone_livreur: course.telephone_livreur,
+      },
+    }).catch(e => console.warn('[notifyCourseEvents] orchestrateur error (non-fatal):', e.message));
+
+    console.log(`[notifyCourseEvents] → notificationOrchestrator | event=${orchEvent} | statut=${statut} | +${Date.now() - t0}ms`);
+    return Response.json({ ok: true, routed_to: 'notificationOrchestrator', event: orchEvent });
 
   } catch (err) {
     // Protection globale — jamais throw bloquant

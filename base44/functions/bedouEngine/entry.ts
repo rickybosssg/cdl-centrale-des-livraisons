@@ -5,6 +5,7 @@ const COMMISSION_PARTENAIRE = 0.05; // 5% CDL
 const BONUS_COMMERCIAL = 50; // 50 F CFA fixe
 // CDL_EMAIL : compte wallet CDL — configurable via variable d'env ou fallback hardcodé
 const CDL_EMAIL = Deno.env.get('CDL_WALLET_EMAIL') || 'weezyh2@gmail.com';
+const ADMIN_EMAIL = Deno.env.get('CDL_ADMIN_EMAIL') || 'weezyh2@gmail.com';
 
 // Bonus sur les 3 premières recharges uniquement
 const BONUS_RECHARGE = [
@@ -482,113 +483,49 @@ Deno.serve(async (req) => {
     return Response.json({ success: true, bonus: BONUS_COMMERCIAL });
   }
 
-  // ── ACTION: relancer_settlement (admin) — relance les courses bloquées en pending ──
+  // ── ACTION: relancer_settlement (admin) ─────────────────────────────────────
+  // SOURCE UNIQUE : délègue à finaliser_course (élimine la logique dupliquée)
   if (action === 'relancer_settlement') {
     if (user.role !== 'admin') return Response.json({ error: 'Interdit' }, { status: 403 });
     const { course_id } = body;
     const L = (msg) => console.log(`[relancer_settlement] ${new Date().toISOString()} | ${msg}`);
 
-    // Charger la course
     const courseList = await base44.asServiceRole.entities.Course.filter({ id: course_id });
     const course = courseList?.[0];
     if (!course) return Response.json({ error: 'Course introuvable' }, { status: 404 });
-
-    if (course.settlement_status === 'completed') {
-      L(`SKIP — déjà réglée`);
-      return Response.json({ success: true, alreadyDone: true });
-    }
+    if (course.settlement_status === 'completed') return Response.json({ success: true, alreadyDone: true });
     if (!['livree', 'en_cours'].includes(course.statut)) {
       return Response.json({ error: `Statut invalide pour règlement : ${course.statut}` }, { status: 400 });
     }
     if (!course.prix || !course.client_email || !course.livreur_email) {
-      return Response.json({ error: 'Données course incomplètes (prix/client/livreur manquants)' }, { status: 400 });
+      return Response.json({ error: 'Données course incomplètes' }, { status: 400 });
     }
 
-    const montant = course.prix;
-    const client_email = course.client_email;
-    const livreur_email = course.livreur_email;
-    const client_nom = course.client_name || course.client_email;
-    const livreur_nom = course.livreur_name || course.livreur_email;
-    const settledAt = new Date().toISOString();
-    L(`START | course=${course_id} | montant=${montant} | client=${client_email} | livreur=${livreur_email}`);
+    L(`Délégation à finaliser_course | course=${course_id}`);
     console.log(`[SETTLEMENT_TRIGGERED] course_id=${course_id} | source=relancer_settlement_admin`);
 
-    // Anti-doublon : transaction paiement existante ?
-    const existingTx = await base44.asServiceRole.entities.Transaction.filter({ reference_id: course_id, type: 'paiement' }).catch(() => []);
-    if (existingTx.length > 0) {
-      L(`SKIP — transaction paiement déjà présente`);
-      await base44.asServiceRole.entities.Course.update(course_id, { settlement_status: 'completed', settled_at: settledAt }).catch(() => {});
-      return Response.json({ success: true, alreadyDone: true });
-    }
-
-    const gainLivreur = Math.round(montant * 0.8);
-    const commissionCdl = montant - gainLivreur;
-
-    // Log règlement
-    let settlementLog = null;
-    try {
-      settlementLog = await base44.asServiceRole.entities.CourseSettlementLog.create({
-        course_id, client_email, client_nom, driver_email: livreur_email, driver_nom: livreur_nom,
-        cdl_wallet_email: CDL_EMAIL, course_amount: montant,
-        client_debit: montant, driver_credit: gainLivreur, cdl_commission: commissionCdl,
-        settlement_status: 'pending',
-      });
-    } catch (_) {}
-
-    const updateLog = (upd) => settlementLog?.id
-      ? base44.asServiceRole.entities.CourseSettlementLog.update(settlementLog.id, upd).catch(() => {})
-      : Promise.resolve();
-
-    // Vérifier solde client
-    console.log(`[BEDOU_BALANCE_CHECK] client=${client_email} | montant_requis=${montant}`);
-    const bedouClient = await getBedou(client_email);
-    if (!bedouClient) {
-      await updateLog({ settlement_status: 'failed', error_message: 'Bedou client introuvable' });
-      await base44.asServiceRole.entities.Course.update(course_id, { settlement_status: 'failed', settlement_error: 'Bedou client introuvable' }).catch(() => {});
-      console.log(`[SETTLEMENT_FAILED] course_id=${course_id} | raison=bedou_client_introuvable`);
-      return Response.json({ success: false, error: 'Bedou client introuvable' }, { status: 404 });
-    }
-    const soldeBonus = bedouClient.solde_bonus || 0;
-    const soldeDispo = bedouClient.solde_disponible || 0;
-    const totalSolde = soldeBonus + soldeDispo;
-    console.log(`[BEDOU_BALANCE_CHECK] client=${client_email} | total=${totalSolde} | requis=${montant} | suffisant=${totalSolde >= montant}`);
-    if (totalSolde < montant) {
-      await updateLog({ settlement_status: 'failed', error_message: `Solde insuffisant: ${totalSolde}` });
-      await base44.asServiceRole.entities.Course.update(course_id, { settlement_status: 'failed', settlement_error: `Solde insuffisant: ${totalSolde}` }).catch(() => {});
-      console.log(`[SETTLEMENT_FAILED] course_id=${course_id} | raison=solde_insuffisant | solde=${totalSolde}`);
-      return Response.json({ success: false, insuffisant: true, solde: totalSolde });
-    }
-    const fromBonus = Math.min(soldeBonus, montant);
-    const fromDispo = montant - fromBonus;
-
-    // Débiter client
-    await updateBedou(bedouClient.id, {
-      solde: Math.max(0, (bedouClient.solde || 0) - montant),
-      solde_bonus: Math.max(0, soldeBonus - fromBonus),
-      solde_disponible: Math.max(0, soldeDispo - fromDispo),
-      depenses_totales: (bedouClient.depenses_totales || 0) + montant,
+    // Délégation totale à finaliser_course — SOURCE UNIQUE du calcul
+    const result = await base44.asServiceRole.functions.invoke('bedouEngine', {
+      action: 'finaliser_course',
+      course_id,
+      client_email: course.client_email,
+      client_nom: course.client_name || course.client_email,
+      livreur_email: course.livreur_email,
+      livreur_nom: course.livreur_name || course.livreur_email,
+      montant: course.prix,
     });
-    const txClient = await createTransaction({ user_email: client_email, user_nom: client_nom, role: 'client', type: 'paiement', sens: 'debit', montant, source: 'course', methode: 'interne', reference_id: course_id, description: `Paiement course ${course_id} via Bedou (relance admin)`, statut: 'valide' });
-    console.log(`[BEDOU_DEBIT_CLIENT_SUCCESS] course_id=${course_id} | client=${client_email} | montant=${montant} | tx_id=${txClient?.id}`);
-
-    // Créditer livreur 80%
-    const bedouLivreur = await ensureBedou(livreur_email, 'livreur', livreur_nom);
-    await updateBedou(bedouLivreur.id, { solde: (bedouLivreur.solde || 0) + gainLivreur, solde_disponible: (bedouLivreur.solde_disponible || 0) + gainLivreur, gains_totaux: (bedouLivreur.gains_totaux || 0) + gainLivreur });
-    const txLivreur = await createTransaction({ user_email: livreur_email, user_nom: livreur_nom, role: 'livreur', type: 'gain', sens: 'credit', montant: gainLivreur, source: 'course', methode: 'interne', reference_id: course_id, description: `Gain course ${course_id} — relance admin`, statut: 'valide' });
-    console.log(`[BEDOU_CREDIT_DRIVER_SUCCESS] course_id=${course_id} | livreur=${livreur_email} | gain=${gainLivreur} | tx_id=${txLivreur?.id}`);
-
-    // Créditer CDL 20%
-    const bedouCdl = await ensureBedou(CDL_EMAIL, 'admin', 'CDL');
-    await updateBedou(bedouCdl.id, { solde: (bedouCdl.solde || 0) + commissionCdl, solde_disponible: (bedouCdl.solde_disponible || 0) + commissionCdl, gains_totaux: (bedouCdl.gains_totaux || 0) + commissionCdl });
-    const txCdl = await createTransaction({ user_email: CDL_EMAIL, user_nom: 'CDL', role: 'admin', type: 'commission', sens: 'credit', montant: commissionCdl, source: 'course', methode: 'interne', reference_id: course_id, description: `Commission CDL 20% — course ${course_id} (relance admin)`, statut: 'valide' });
-    console.log(`[CDL_COMMISSION_SUCCESS] course_id=${course_id} | commission=${commissionCdl} | tx_id=${txCdl?.id}`);
-
-    // Marquer completed
-    await base44.asServiceRole.entities.Course.update(course_id, { settlement_status: 'completed', settled_at: settledAt, statut: 'livree', date_livraison: settledAt, statut_paiement: 'paye', gain_livreur: gainLivreur, commission_cdl: commissionCdl, statut_paiement_livreur: 'Payé' }).catch(() => {});
-    await updateLog({ settlement_status: 'completed', settled_at: settledAt, tx_client_id: txClient?.id || '', tx_driver_id: txLivreur?.id || '', tx_cdl_id: txCdl?.id || '' });
-    console.log(`[SETTLEMENT_COMPLETED] course_id=${course_id} | source=relance_admin | gainLivreur=${gainLivreur} | commissionCdl=${commissionCdl}`);
-
-    return Response.json({ success: true, gainLivreur, commissionCdl, settlement_log_id: settlementLog?.id });
+    const res = result?.data;
+    if (res?.success || res?.alreadyDone) {
+      // Marquer explicitement livree si course était en_cours
+      if (course.statut === 'en_cours') {
+        await base44.asServiceRole.entities.Course.update(course_id, {
+          statut: 'livree', date_livraison: new Date().toISOString(),
+          statut_paiement: 'paye', statut_paiement_livreur: 'Payé',
+        }).catch(() => {});
+      }
+      return Response.json({ success: true, gainLivreur: res?.gainLivreur, commissionCdl: res?.commissionCdl, alreadyDone: res?.alreadyDone });
+    }
+    return Response.json({ success: false, error: res?.error || 'Échec settlement' }, { status: 500 });
   }
 
   // ── ACTION: audit_settlement_pending (admin) — liste les courses pending ──
@@ -610,10 +547,10 @@ Deno.serve(async (req) => {
   }
 
   // ── ACTION: finaliser_course ──────────────────────────────────────────────
-  // Débite client, crédite livreur (80%) + CDL (20%).
-  // APPEL UNIQUE : quand le livreur clique "Colis livré".
+  // SOURCE UNIQUE DE VÉRITÉ settlement — appelé par courseStateMachine.DELIVER uniquement.
   // ATOMICITÉ : si le débit client échoue, rien n'est crédité.
   // ANTI-DOUBLON RENFORCÉ : vérification Transaction + settlement_status Course.
+  // Notifications : gérées par notificationOrchestrator (via courseStateMachine) — PAS ici.
   if (action === 'finaliser_course') {
     const { course_id, client_email, client_nom, livreur_email, livreur_nom, montant } = body;
     const L = (msg) => console.log(`[bedouEngine/finaliser_course] ${new Date().toISOString()} | ${msg}`);
@@ -811,30 +748,10 @@ Deno.serve(async (req) => {
     console.log(`[SETTLEMENT_COMPLETED] course_id=${course_id} | settlement_log_id=${settlementLog?.id} | gainLivreur=${gainLivreur} | commissionCdl=${commissionCdl} | client=${client_email} | livreur=${livreur_email}`);
     L(`CourseSettlementLog mis à jour — completed`);
 
-    // ── ÉTAPE 7 : Notifications push (fire & forget) ──────────────────────────
-    // Client
-    base44.asServiceRole.functions.invoke('sendCdlNotification', {
-      user_email: client_email,
-      title: '💳 Paiement course effectué',
-      body: `Votre Bedou a été débité de ${montant.toLocaleString()} F CFA.`,
-      data: { type: 'course_delivered', entity_id: course_id, entity_type: 'Course', notif_route: `/course/${course_id}/track` },
-    }).catch(e => L(`Push client non-bloquant: ${e.message}`));
-
-    // Livreur
-    base44.asServiceRole.functions.invoke('sendCdlNotification', {
-      user_email: livreur_email,
-      title: '💰 Gain course crédité',
-      body: `Votre Bedou a été crédité de ${gainLivreur.toLocaleString()} F CFA.`,
-      data: { type: 'course_delivered_driver', entity_id: course_id, entity_type: 'Course', notif_route: '/mes-gains' },
-    }).catch(e => L(`Push livreur non-bloquant: ${e.message}`));
-
-    // Admin/CDL
-    base44.asServiceRole.functions.invoke('sendCdlNotification', {
-      role: 'admin',
-      title: '📊 Commission CDL reçue',
-      body: `CDL a reçu ${commissionCdl.toLocaleString()} F CFA sur une course livrée.`,
-      data: { type: 'payment_validated', entity_id: course_id, entity_type: 'Course', notif_route: '/admin/financial-dashboard' },
-    }).catch(e => L(`Push admin non-bloquant: ${e.message}`));
+    // ── ÉTAPE 7 : Notifications gérées par notificationOrchestrator ──────────
+    // bedouEngine ne notifie PAS directement — SOURCE UNIQUE = notificationOrchestrator
+    // Les notifications sont envoyées depuis courseStateMachine.DELIVER → notificationOrchestrator
+    L(`Notifications déléguées à notificationOrchestrator via courseStateMachine`);
 
     console.log(`[COURSE_TEST_AUDIT_END] course_id=${course_id} | status=SUCCESS | gainLivreur=${gainLivreur} | commissionCdl=${commissionCdl} | settlementLog=${settlementLog?.id}`);
     L(`DONE | gainLivreur=${gainLivreur} commissionCdl=${commissionCdl} settlementLog=${settlementLog?.id}`);

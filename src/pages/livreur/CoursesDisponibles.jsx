@@ -147,25 +147,29 @@ export default function CoursesDisponibles() {
     // Retrait optimiste immédiat
     setCourses(prev => prev.filter(c => c.id !== course.id));
     try {
-      // Passer par le backend (évite 403 RLS APK + valide livreur assigné)
-      const res = await base44.functions.invoke('acceptCourseAction', { course_id: course.id });
-      if (!res?.data?.success) {
-        // Remettre la course si refusée
+      // ✅ MIGRÉ → courseStateMachine (source unique de vérité)
+      // Remplace acceptCourseAction — notifs gérées par notificationOrchestrator côté backend
+      const res = await base44.functions.invoke('courseStateMachine', {
+        course_id: course.id,
+        action: 'ACCEPT',
+      });
+      if (!res?.data?.success && !res?.data?.alreadyDone) {
         setCourses(prev => prev.find(c => c.id === course.id) ? prev : [course, ...prev]);
-        toast.error(res?.data?.error || "Course non disponible");
+        const currentStatut = res?.data?.current_statut || '?';
+        if (currentStatut === 'acceptee' || currentStatut === 'en_cours') {
+          toast.info("Course déjà acceptée.");
+        } else {
+          toast.error(res?.data?.error || "Course non disponible");
+        }
         return;
       }
       vibrateSuccess();
       toast.success("🛵 Course acceptée !");
+      // WhatsApp : fire & forget uniquement (notifications push gérées par notificationOrchestrator)
       triggerWhatsAppNotification({
         eventType: 'course_accepted_by_driver', recipientRole: 'client',
         recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur,
         entityId: course.id, entityType: 'course', priority: 'high',
-      });
-      triggerWhatsAppNotification({
-        eventType: 'course_accepted_driver', recipientRole: 'driver',
-        recipientName: user.full_name, recipientPhone: user.telephone,
-        entityId: course.id, entityType: 'course', priority: 'normal',
       });
       navigate(`/course-livreur/${course.id}`);
     } catch (e) {

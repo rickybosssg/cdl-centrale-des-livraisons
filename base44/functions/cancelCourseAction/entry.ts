@@ -15,7 +15,20 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const CDL_EMAIL = 'weezyh2@gmail.com';
+// ── Constantes globales CDL ────────────────────────────────────────────────────
+const CDL_EMAIL = Deno.env.get('CDL_WALLET_EMAIL') || 'weezyh2@gmail.com';
+const ADMIN_EMAIL = Deno.env.get('CDL_ADMIN_EMAIL') || 'weezyh2@gmail.com';
+const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
+
+// ── Libération livreur — SOURCE UNIQUE dans ce fichier ────────────────────────
+async function libererLivreur(base44, livreurEmail, excludeCourseId) {
+  if (!livreurEmail) return;
+  const livs = await base44.asServiceRole.entities.User.filter({ email: livreurEmail });
+  if (!livs?.[0]) return;
+  const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: livreurEmail });
+  const realCount = allCourses.filter(x => x.id !== excludeCourseId && ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
+  await base44.asServiceRole.entities.User.update(livs[0].id, { nombre_courses_actives: realCount }).catch(() => {});
+}
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -104,15 +117,9 @@ Deno.serve(async (req) => {
         date_annulation: now,
       });
 
-      // Libérer le livreur — recalcul réel depuis BDD
+      // Libérer le livreur — SOURCE UNIQUE : libererLivreur()
       if (c.livreur_email) {
-        const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
-        if (livs?.[0]) {
-          const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
-          const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: c.livreur_email });
-          const realCount = allCourses.filter(x => x.id !== courseId && ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
-          await base44.asServiceRole.entities.User.update(livs[0].id, { nombre_courses_actives: realCount }).catch(() => {});
-        }
+        await libererLivreur(base44, c.livreur_email, courseId);
         await base44.asServiceRole.entities.Notification.create({
           destinataire_email: c.livreur_email,
           destinataire_role: 'livreur',
@@ -220,14 +227,8 @@ Deno.serve(async (req) => {
           target_screen: '/mon-bedou',
         }).catch(() => {});
       }
-      // Libérer le livreur — recalcul réel depuis BDD
-      const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
-      if (livs?.[0]) {
-        const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
-        const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: c.livreur_email });
-        const realCount = allCourses.filter(x => x.id !== courseId && ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
-        await base44.asServiceRole.entities.User.update(livs[0].id, { nombre_courses_actives: realCount }).catch(() => {});
-      }
+      // Libérer le livreur — SOURCE UNIQUE : libererLivreur()
+      await libererLivreur(base44, c.livreur_email, courseId);
     }
 
     // Créditer CDL (20% des frais)
@@ -373,18 +374,9 @@ Deno.serve(async (req) => {
       telephone_livreur: null,
     });
 
-    // 2. Libérer le livreur si assigné
+    // 2. Libérer le livreur si assigné — SOURCE UNIQUE : libererLivreur()
     if (c.livreur_email) {
-      const livs = await base44.asServiceRole.entities.User.filter({ email: c.livreur_email });
-      if (livs?.[0]) {
-        const realCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: c.livreur_email });
-        const realActive = realCourses.filter(rc =>
-          ['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff'].includes(rc.statut) && !rc.is_deleted && rc.id !== courseId
-        ).length;
-        await base44.asServiceRole.entities.User.update(livs[0].id, {
-          nombre_courses_actives: realActive,
-        }).catch(() => {});
-      }
+      await libererLivreur(base44, c.livreur_email, courseId);
       // Notifier le livreur
       await base44.asServiceRole.entities.Notification.create({
         destinataire_email: c.livreur_email,

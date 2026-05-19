@@ -29,12 +29,14 @@ async function getRealActiveCount(base44, email) {
   return courses.filter(c => ACTIVE_STATUTS.has(c.statut)).length;
 }
 
-// ── Critères d'éligibilité UNIFIÉS ────────────────────────────────────────────
+// ── Éligibilité : copie locale (identique à driverEligibilityEngine.isDriverEligible) ──
+// PAS d'import local possible en Deno deploy — règle : ne JAMAIS modifier sans
+// synchroniser driverEligibilityEngine.js (source de vérité documentée)
 function isDriverEligible(d, realCount = null) {
   if (d.driver_online !== true) return false;
-  if (d.profil_valide !== true && d.statut_validation_livreur !== 'valide' && d.statut_validation_livreur !== 'actif') return false;
-  if (d.livreur_bloque) return false;
-  if (d.livreur_suspendu) return false;
+  if (!d.profil_valide && d.statut_validation_livreur !== 'valide' && d.statut_validation_livreur !== 'actif') return false;
+  if (d.livreur_bloque === true) return false;
+  if (d.livreur_suspendu === true) return false;
   if (d.disponible === false) return false;
   const count = realCount !== null ? realCount : (d.nombre_courses_actives || 0);
   if (count >= 2) return false;

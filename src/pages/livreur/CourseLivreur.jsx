@@ -115,20 +115,25 @@ export default function CourseLivreur() {
     return unsub;
   }, [id]);
 
-  // GPS tracking — partage la position du livreur en temps réel
+  // GPS tracking — SOURCE UNIQUE : User.gps_latitude/gps_longitude
+  // La position livreur est écrite UNIQUEMENT sur User (via auth.updateMe).
+  // Course.livreur_lat/lng est mis à jour toutes les 15s pour le tracking client (throttle).
   useEffect(() => {
     if (!course || !['acceptee', 'driver_en_route_pickup', 'arrived_pickup', 'en_cours', 'driver_en_route_dropoff', 'arrived_dropoff'].includes(course.statut)) return;
     if (!navigator.geolocation) return;
+    let lastCourseUpdate = 0;
+    const COURSE_UPDATE_THROTTLE = 15000; // 15s max pour Course (économie BDD)
     const update = (pos) => {
-      base44.entities.Course.update(id, {
-        livreur_lat: pos.coords.latitude,
-        livreur_lng: pos.coords.longitude,
-      });
-      // Aussi sur le profil livreur
-      base44.auth.updateMe({
-        gps_latitude: pos.coords.latitude,
-        gps_longitude: pos.coords.longitude,
-      });
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      // SOURCE UNIQUE GPS livreur : User
+      base44.auth.updateMe({ gps_latitude: lat, gps_longitude: lng }).catch(() => {});
+      // Course.livreur_lat/lng : throttlé à 15s (pour tracking client uniquement)
+      const now = Date.now();
+      if (now - lastCourseUpdate >= COURSE_UPDATE_THROTTLE) {
+        lastCourseUpdate = now;
+        base44.entities.Course.update(id, { livreur_lat: lat, livreur_lng: lng }).catch(() => {});
+      }
     };
     const watchId = navigator.geolocation.watchPosition(update, null, { enableHighAccuracy: true, maximumAge: 8000, timeout: 10000 });
     return () => navigator.geolocation.clearWatch(watchId);
@@ -290,16 +295,8 @@ export default function CourseLivreur() {
       vibrateSuccess();
       toast.success(`🎉 Livraison confirmée ! +${finalGain?.toLocaleString()} FCFA crédités sur votre Bedou.`);
 
-      // Fire & forget — notifs admin et WhatsApp (les stats livreur sont gérées par courseStateMachine)
-      base44.entities.Notification.create({
-        destinataire_email: 'weezyh2@gmail.com', destinataire_role: 'admin',
-        titre: '📦 Course livrée',
-        message: `Course ${course.quartier_depart}→${course.quartier_arrivee} livrée par ${course.livreur_name}. ${(course.prix||0).toLocaleString()} FCFA réglés.`,
-        type: 'success', lue: false, course_id: course.id, target_screen: '/gerer-courses',
-        notification_key: `weezyh2@gmail.com__livree__${course.id}__admin`,
-      }).catch(() => {});
-      triggerWhatsAppNotification({ eventType: 'course_completed', recipientRole: 'client', recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur, entityId: course.id, entityType: 'course', priority: 'normal' });
-      triggerWhatsAppNotification({ eventType: 'course_completed_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur, entityId: course.id, entityType: 'course', priority: 'normal' });
+      // Notifications gérées par notificationOrchestrator (appelé depuis courseStateMachine.DELIVER)
+      // NE PAS dupliquer ici — source unique = notificationOrchestrator
 
     } catch (err) {
       console.error('[CSM_ERROR] DELIVER unexpected:', err?.message);

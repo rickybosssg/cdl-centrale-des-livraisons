@@ -13,32 +13,36 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// ── Constante admin centralisée ───────────────────────────────────────────────
+const ADMIN_EMAIL = Deno.env.get('CDL_ADMIN_EMAIL') || 'weezyh2@gmail.com';
+
 // ── Statuts de course réellement actifs ──────────────────────────────────────
 const ACTIVE_COURSE_STATUTS = new Set([
   'assignee_attente', 'acceptee', 'driver_en_route_pickup',
   'arrived_pickup', 'en_cours', 'arrived_dropoff',
 ]);
 
-// ── Éligibilité livreur (critères unifiés) ────────────────────────────────────
+// ── Éligibilité : délégation à driverEligibilityEngine (SOURCE UNIQUE) ────────
+// Copie locale nécessaire (pas d'import local possible en Deno deploy isolé)
+// RÈGLE : identique à driverEligibilityEngine.isDriverEligible — ne pas modifier ici
 function isEligible(driver, excluded = new Set(), realActiveCount = null) {
   if (excluded.has(driver.email)) return false;
   if (driver.driver_online !== true) return false;
   if (!driver.profil_valide && driver.statut_validation_livreur !== 'valide' && driver.statut_validation_livreur !== 'actif') return false;
-  if (driver.livreur_bloque || driver.livreur_suspendu) return false;
+  if (driver.livreur_bloque === true) return false;
+  if (driver.livreur_suspendu === true) return false;
   if (driver.disponible === false) return false;
-  // Utiliser le vrai compteur BDD si disponible, sinon le champ User (fallback)
   const activeCount = realActiveCount !== null ? realActiveCount : (driver.nombre_courses_actives || 0);
   if (activeCount >= 2) return false;
   return true;
 }
 
-// ── Recalcul des vrais compteurs actifs depuis les courses ────────────────────
-// Limité aux 100 dernières courses (les compteurs sont maintenant maintenus en BDD)
+// ── Recalcul bulk depuis BDD (identique à driverEligibilityEngine.getRealActiveCountsBulk) ──
 async function getRealActiveCountsFromDB(base44) {
-  const courses = await base44.asServiceRole.entities.Course.list('-created_date', 100);
+  const courses = await base44.asServiceRole.entities.Course.list('-created_date', 200);
   const counts = {};
   for (const c of courses) {
-    if (c.livreur_email && ACTIVE_COURSE_STATUTS.has(c.statut)) {
+    if (c.livreur_email && ACTIVE_COURSE_STATUTS.has(c.statut) && !c.is_deleted) {
       counts[c.livreur_email] = (counts[c.livreur_email] || 0) + 1;
     }
   }
@@ -160,12 +164,16 @@ Deno.serve(async (req) => {
         historique_assignation: JSON.stringify([...historique, { heure: ts, statut: 'aucun_livreur', raison: reason }]),
       });
 
-      // Notif admin
-      await base44.asServiceRole.functions.invoke('sendCdlNotification', {
-        role: 'admin',
-        title: '🚨 Aucun livreur',
-        body: `${course.quartier_depart}→${course.quartier_arrivee} — ${reason}`,
-        data: { notif_route: '/dispatch-monitor' },
+      // Notif admin (via notificationOrchestrator)
+      await base44.asServiceRole.functions.invoke('notificationOrchestrator', {
+        event: 'course_no_driver',
+        course_id: courseId,
+        course: {
+          client_email: course.client_email,
+          quartier_depart: course.quartier_depart,
+          quartier_arrivee: course.quartier_arrivee,
+          reason,
+        },
       }).catch(() => {});
 
       // Notif client
@@ -222,37 +230,19 @@ Deno.serve(async (req) => {
       derniere_proposition_at: now,
     }).catch(() => {});
 
-    // ── 8. Notifications (bonus, pas critiques) ───────────────────────────────
-    // In-app notification livreur
-    await base44.asServiceRole.entities.Notification.create({
-      destinataire_email: chosen.email,
-      destinataire_role: 'livreur',
-      titre: '🛵 Nouvelle course !',
-      message: `${course.quartier_depart} → ${course.quartier_arrivee} · ${course.prix || 0} FCFA · Répondez en 60s`,
-      type: 'success', lue: false, course_id: courseId,
-      target_screen: `/course-livreur/${courseId}`,
-      target_entity_id: courseId, target_entity_type: 'course',
+    // ── 8. Notifications via notificationOrchestrator (SOURCE UNIQUE) ────────
+    // Notif livreur assigné via notificationOrchestrator (SOURCE UNIQUE)
+    await base44.asServiceRole.functions.invoke('notificationOrchestrator', {
+    event: 'course_assigned',
+    course_id: courseId,
+    course: {
+      livreur_email: chosen.email,
+      livreur_name: chosen.full_name,
+      quartier_depart: course.quartier_depart,
+      quartier_arrivee: course.quartier_arrivee,
+      prix: course.prix,
+    },
     }).catch(() => {});
-
-    // Push FCM (alerte bonus — non critique)
-    await base44.asServiceRole.functions.invoke('sendCdlNotification', {
-      user_email: chosen.email,
-      title: '📦 Nouvelle course',
-      body: `${course.quartier_depart} → ${course.quartier_arrivee} (${course.prix || 0} F)`,
-      data: { type: 'dispatch_offer', course_id: courseId, notif_route: `/course-livreur/${courseId}` },
-    }).catch(() => {});
-
-    // In-app client
-    if (course.client_email) {
-      await base44.asServiceRole.entities.Notification.create({
-        destinataire_email: course.client_email,
-        destinataire_role: 'client',
-        titre: '🔍 Livreur trouvé',
-        message: `Un livreur a été contacté — en attente de confirmation.`,
-        type: 'info', lue: false, course_id: courseId,
-        target_screen: `/course/${courseId}`,
-      }).catch(() => {});
-    }
 
     console.log(`[CDL_DISPATCH] OK | course=${courseId} | driver=${chosen.email} | score=${score} | eligible=${eligible.length}`);
 
