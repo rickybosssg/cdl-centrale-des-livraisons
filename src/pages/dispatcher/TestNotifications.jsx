@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { ArrowLeft, Send, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, CheckCircle2, AlertCircle, RefreshCw, Smartphone, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -11,10 +12,12 @@ export default function TestNotifications() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEmail, setSelectedEmail] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState('livreur');
   const [sending, setSending] = useState(false);
   const [testLogs, setTestLogs] = useState([]);
   const [lastResult, setLastResult] = useState(null);
+  const [refreshingTokens, setRefreshingTokens] = useState(false);
 
   // Charger les utilisateurs avec token FCM (connectés sur l'APK)
   useEffect(() => {
@@ -93,9 +96,11 @@ export default function TestNotifications() {
     loadLogs();
   }, []);
 
+  const effectiveEmail = manualEmail.trim() || selectedEmail;
+
   const sendTest = async () => {
-    if (!selectedEmail) {
-      toast.error('Sélectionne un utilisateur');
+    if (!effectiveEmail) {
+      toast.error('Sélectionne ou saisis un email');
       return;
     }
 
@@ -104,9 +109,9 @@ export default function TestNotifications() {
     setSending(true);
     
     try {
-      console.log('[TestNotifications] Calling sendTestPush for:', selectedEmail);
+      console.log('[TestNotifications] Calling sendTestPush for:', effectiveEmail);
       const res = await base44.functions.invoke('sendTestPush', {
-        target_email: selectedEmail,
+        target_email: effectiveEmail,
       });
 
       console.log('[TestNotifications] Response:', res.data);
@@ -118,19 +123,21 @@ export default function TestNotifications() {
         toast.success(`✅ Push envoyé ! channel: cdl_critical_alerts_v3`);
         setLastResult({
           ok: true,
-          msg: `✅ Envoyé ! fcm_sent=${d.fcm_sent} | msg_id=${d.firebase_message_id || 'N/A'}`,
+          msg: `✅ Envoyé ! fcm_sent=${d.fcm_sent} token(s) | msg_id=${d.firebase_message_id || 'N/A'}`,
           sent: d.fcm_sent,
-          tokens_found: d.token_info?.token_count || 0,
-          recipient_email: selectedEmail,
+          tokens_found: d.token_info?.token_count || d.total || 0,
+          recipient_email: effectiveEmail,
           timestamp: new Date().toISOString(),
+          bdd: d.bdd,
         });
       } else {
-        const errMsg = d?.note || d?.error || (d?.token_info?.token_found === false ? 'Aucun token FCM — ouvrir l\'APK d\'abord' : 'Push échoué');
-        console.log('[TestNotifications] ❌ FAILED:', errMsg);
+        const errMsg = d?.note || d?.error || (d?.token_count_zero ? 'Aucun token FCM — ouvrir l\'APK d\'abord' : 'Push échoué');
+        console.log('[TestNotifications] ❌ FAILED:', errMsg, d);
         toast.error(`❌ ${errMsg}`);
         setLastResult({
           ok: false,
           msg: errMsg,
+          detail: d,
         });
       }
 
@@ -240,10 +247,10 @@ export default function TestNotifications() {
 
           {/* Sélection utilisateur */}
           <div>
-            <label className="text-sm font-medium mb-2 block">Utilisateur</label>
+            <label className="text-sm font-medium mb-2 block">Utilisateur (token FCM actif)</label>
             <select
               value={selectedEmail}
-              onChange={e => setSelectedEmail(e.target.value)}
+              onChange={e => { setSelectedEmail(e.target.value); setManualEmail(''); }}
               className="w-full px-3 py-2 border rounded-lg bg-background text-foreground text-sm"
             >
               <option value="">— Sélectionne un utilisateur —</option>
@@ -251,16 +258,30 @@ export default function TestNotifications() {
                 .filter(u => u.role === selectedRole)
                 .map(u => (
                   <option key={u.email} value={u.email}>
-                    {u.full_name} ({u.email})
+                    {u.full_name} ({u.email}) · {u.token_device}
                   </option>
                 ))}
             </select>
           </div>
 
+          {/* Email manuel */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Ou saisir un email directement</label>
+            <Input
+              placeholder="email@exemple.com"
+              value={manualEmail}
+              onChange={e => { setManualEmail(e.target.value); setSelectedEmail(''); }}
+              className="text-sm"
+            />
+            {manualEmail && (
+              <p className="text-xs text-amber-600 mt-1">⚠️ L'utilisateur doit avoir un token FCM actif (APK ouvert + notifications autorisées)</p>
+            )}
+          </div>
+
           {/* Bouton envoi */}
           <Button
             onClick={sendTest}
-            disabled={!selectedEmail || sending}
+            disabled={!effectiveEmail || sending}
             className="w-full bg-primary hover:bg-primary/90"
           >
             {sending ? (

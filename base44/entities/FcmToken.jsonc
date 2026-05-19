@@ -38,6 +38,11 @@
       "title": "Plateforme",
       "default": "android"
     },
+    "active_profile_type": {
+      "type": "string",
+      "title": "Profil actif au moment de l'enregistrement",
+      "description": "Ex: client, livreur, admin \u2014 mis \u00e0 jour \u00e0 chaque login et switch profil"
+    },
     "registered_at": {
       "type": "string",
       "title": "Date d'enregistrement"
@@ -45,6 +50,10 @@
     "last_used": {
       "type": "string",
       "title": "Derni\u00e8re utilisation"
+    },
+    "last_seen": {
+      "type": "string",
+      "title": "Derni\u00e8re synchronisation (login/switch/heartbeat)"
     },
     "is_active": {
       "type": "boolean",

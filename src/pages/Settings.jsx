@@ -215,6 +215,12 @@ export default function Settings() {
       setSwitching(null);
       if (result.data?.success) {
         console.log('[Settings.handleSwitchProfile] SUCCÈS, rechargement...');
+        // Stocker le profil actif dans localStorage pour que FcmTokenEngine le lise
+        try { localStorage.setItem('cdl_active_profile_type', profileType); } catch (_) {}
+        // Re-déclencher le save FCM avec le nouveau profil
+        window.dispatchEvent(new CustomEvent('cdl_fcm_force_register', {
+          detail: { email: user?.email, cause: 'profile_switch', profile_type: profileType }
+        }));
         toast.success(`🔄 Profil basculé : ${PROFILES.find(p => p.type === profileType)?.label}`);
         // Hard reload pour forcer le rechargement complet de l'UI (APK + navigateur)
         setTimeout(() => { window.location.href = '/'; }, 500);

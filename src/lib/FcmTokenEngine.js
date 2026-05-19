@@ -81,6 +81,10 @@ function writeLocalToken(token, email) {
 
 // ── Save token via backend public ─────────────────────────────────────────────
 async function saveTokenToBackend(userEmail, token, deviceMeta) {
+  // Lire active_profile_type depuis localStorage (mis à jour par switchActiveProfile)
+  let activeProfileType = null;
+  try { activeProfileType = localStorage.getItem('cdl_active_profile_type'); } catch (_) {}
+
   const res = await fetch(`${APP_BASE_URL}/functions/saveFcmTokenPublic`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -91,6 +95,7 @@ async function saveTokenToBackend(userEmail, token, deviceMeta) {
       device_id: deviceMeta.device_id,
       platform: deviceMeta.platform,
       engine_version: ENGINE_VERSION,
+      active_profile_type: activeProfileType || undefined,
     }),
   });
   const text = await res.text();

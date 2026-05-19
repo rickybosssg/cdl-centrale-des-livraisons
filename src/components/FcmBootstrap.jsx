@@ -137,6 +137,21 @@ export default function FcmBootstrap({ userEmail }) {
     }
   }, [native, startFcm]);
 
+  // ── Sync active_profile_type dans localStorage (pour FcmTokenEngine) ─────
+  useEffect(() => {
+    if (!userEmail) return;
+    const syncProfile = async () => {
+      try {
+        const me = await import('@/api/base44Client').then(m => m.base44.auth.me());
+        const profileType = me?.active_profile_type || me?.user_type || null;
+        if (profileType) {
+          localStorage.setItem('cdl_active_profile_type', profileType);
+        }
+      } catch (_) {}
+    };
+    syncProfile();
+  }, [userEmail]);
+
   // ── Effect principal ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!userEmail) return;

@@ -27,9 +27,9 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { user_email, token, device_type = 'android_native', device_id = null, platform = 'android' } = body;
+    const { user_email, token, device_type = 'android_native', device_id = null, platform = 'android', active_profile_type = null } = body;
 
-    console.log(`[FCM_SAVE] user=${user_email || 'VIDE'} | token_len=${token?.length || 0} | device_id=${device_id || 'null'} | platform=${platform}`);
+    console.log(`[FCM_SAVE] user=${user_email || 'VIDE'} | token_len=${token?.length || 0} | device_id=${device_id || 'null'} | platform=${platform} | profile=${active_profile_type || 'null'}`);
 
     if (!user_email || !token) {
       return Response.json({ success: false, error: `Paramètre manquant: ${!user_email ? 'user_email' : 'token'}` }, { status: 400, headers: corsHeaders });
@@ -47,6 +47,10 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
     const now = new Date().toISOString();
+    const extraFields = {
+      last_seen: now,
+      ...(active_profile_type ? { active_profile_type } : {}),
+    };
 
     // Charger tous les tokens existants de cet utilisateur
     const allTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: cleanEmail }, null, 50);
@@ -60,6 +64,7 @@ Deno.serve(async (req) => {
         device_type,
         platform,
         ...(device_id ? { device_id } : {}),
+        ...extraFields,
       });
       // Désactiver les autres tokens actifs
       for (const t of allTokens) {
@@ -82,6 +87,7 @@ Deno.serve(async (req) => {
         device_type,
         platform,
         device_id,
+        ...extraFields,
       });
       // Désactiver les autres tokens actifs
       for (const t of allTokens) {
@@ -103,6 +109,7 @@ Deno.serve(async (req) => {
       registered_at: now,
       last_used: now,
       is_active: true,
+      ...extraFields,
     });
 
     // Désactiver les anciens tokens APRÈS création du nouveau

@@ -65,7 +65,9 @@ Deno.serve(async (req) => {
 
     console.log(`[SwitchProfile] ${user.email} → ${profile_type} | driver_online=${onlineFields.driver_online}`);
 
-    return Response.json({ success: true, activeProfileType: profile_type, onlineFields, user: updatedUser });
+    // Déclencher un re-save FCM avec le nouveau profil (via notification FCM engine update)
+    // Le frontend écoute cdl_profile_switched pour re-sauvegarder le token avec le nouveau profil
+    return Response.json({ success: true, activeProfileType: profile_type, onlineFields, user: updatedUser, fcm_profile_update: true });
   } catch (error) {
     console.error('[SwitchProfile] Erreur:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
