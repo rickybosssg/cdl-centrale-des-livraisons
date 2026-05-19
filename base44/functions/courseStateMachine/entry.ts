@@ -35,7 +35,13 @@ const TRANSITIONS = {
   PICKUP:          { from: ['arrived_pickup'],                      to: 'en_cours' },
   ARRIVED_DROPOFF: { from: ['en_cours'],                           to: 'arrived_dropoff' },
   DELIVER:         { from: ['en_cours', 'arrived_dropoff'],        to: 'livree' },
+  // CANCEL : délégué à cancelCourseAction — jamais géré directement ici
+  // SOURCE UNIQUE : cancelCourseAction (notifications, Bedou, libération livreur, logs)
 };
+
+// ─── Statuts terminaux — toute tentative d'écrire directement "annulee" est bloquée ─
+// LEGACY_CANCEL_BLOCKED : protège contre tout bypass de cancelCourseAction
+const TERMINAL_STATUTS = new Set(['annulee', 'annulee_par_admin', 'livree']);
 
 // ─── Statuts actifs (source unique — identique à cdlDispatch et checkPendingAssignments) ──
 const ACTIVE_STATUTS = new Set([
@@ -128,6 +134,18 @@ Deno.serve(async (req) => {
 
   if (!course_id || !action) {
     return Response.json({ error: 'course_id et action requis' }, { status: 400 });
+  }
+
+  // ── CANCEL : déléguer immédiatement à cancelCourseAction (SOURCE UNIQUE) ────
+  if (action === 'CANCEL') {
+    const { raison, cancel_action = 'cancel_admin' } = body;
+    console.warn(`[LEGACY_CANCEL_BLOCKED] courseStateMachine.CANCEL | course=${course_id} | caller=${user?.email} | delegating to cancelCourseAction{${cancel_action}}`);
+    const res = await base44.asServiceRole.functions.invoke('cancelCourseAction', {
+      courseId: course_id,
+      action: cancel_action,
+      raison: raison || 'Annulation admin (via courseStateMachine)',
+    }).catch(e => ({ data: { success: false, error: e.message } }));
+    return Response.json(res?.data || { success: false, reason: 'cancel_delegated_to_cancelCourseAction' });
   }
 
   const isAdmin = user.role === 'admin' || user.role === 'dispatcher';
@@ -242,6 +260,16 @@ Deno.serve(async (req) => {
   // ── 5. Toutes les autres transitions ─────────────────────────────────────
   const now = new Date().toISOString();
   const updateData = { statut: to, ...extra };
+
+  // ── GARDE ANTI-BYPASS CANCEL : ne jamais écrire 'annulee' ici ────────────
+  // Si quelqu'un passe extra: { statut: 'annulee' } → bloquer immédiatement
+  if (TERMINAL_STATUTS.has(updateData.statut) && action !== 'DELIVER') {
+    console.error(`[LEGACY_CANCEL_BLOCKED] courseStateMachine detected statut=${updateData.statut} in updateData | action=${action} | course=${course_id} | caller=${user.email} | use cancelCourseAction instead`);
+    return Response.json({
+      error: `Écriture directe de statut="${updateData.statut}" interdite. Utilisez cancelCourseAction pour toute annulation.`,
+      blocked: true,
+    }, { status: 400 });
+  }
 
   // Données spécifiques par action
   if (action === 'ACCEPT') {
