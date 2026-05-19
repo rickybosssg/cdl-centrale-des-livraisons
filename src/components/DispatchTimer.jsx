@@ -1,6 +1,10 @@
 /**
- * CDL — Timer visuel pour livreur (60s pour accepter une course proposée)
- * onExpire : appelé une fois à l’expiration (ex. relance serveur sans attendre le cron 5 min)
+ * CDL — Timer visuel UNIQUEMENT (60s pour accepter une course proposée)
+ *
+ * RÔLE UNIQUE : affichage du compte à rebours.
+ * Zéro logique backend. Les timeouts sont gérés exclusivement par
+ * checkPendingAssignments (cron toutes les 5 min, côté serveur).
+ * onExpire : optionnel, uniquement pour UI (ex: changer le message affiché).
  */
 import { useState, useEffect, useRef } from "react";
 import { Clock } from "lucide-react";
@@ -27,11 +31,10 @@ export default function DispatchTimer({ heureAssignation, dureeSecondes = 60, on
       setRemaining(r);
       if (r <= 0) {
         clearInterval(interval);
+        // UI seulement — aucun appel backend ici
         if (!fired.current && expireCb.current) {
           fired.current = true;
-          try {
-            expireCb.current();
-          } catch (_) {}
+          try { expireCb.current(); } catch (_) {}
         }
       }
     }, 1000);
@@ -48,7 +51,7 @@ export default function DispatchTimer({ heureAssignation, dureeSecondes = 60, on
     return (
       <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-300 text-red-700 text-sm font-semibold">
         <Clock className="h-4 w-4 flex-shrink-0" />
-        ⚠️ Délai expiré — la course peut être réassignée
+        ⚠️ Délai expiré — en attente de réassignation par le serveur
       </div>
     );
   }
@@ -66,7 +69,6 @@ export default function DispatchTimer({ heureAssignation, dureeSecondes = 60, on
           {remaining}s
         </span>
       </div>
-      {/* Barre de progression */}
       <div className="h-2 rounded-full bg-white/60 overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-1000 ${isUrgent ? 'bg-red-500' : 'bg-amber-500'}`}

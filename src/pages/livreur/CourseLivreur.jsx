@@ -40,20 +40,13 @@ export default function CourseLivreur() {
     dispatchExpireFiredRef.current = false;
   }, [id, course?.heure_assignation]);
 
+  // Timer expiré → affichage uniquement, le serveur gère le timeout via checkPendingAssignments (cron 5min)
   const onDispatchTimerExpire = useCallback(() => {
     if (dispatchExpireFiredRef.current) return;
-    // Ne jamais déclencher le redispatch automatique si la course est en mode assignation manuelle
-    const modeAssign = (course?.mode_assignation || '').toLowerCase();
-    const isManual = modeAssign === 'manuel' || modeAssign === 'manuel_admin' || modeAssign === 'manuel_force';
-    if (isManual) {
-      console.log(`[DISPATCH_TIMER_EXPIRE] mode_assignation=manuel — redispatch auto BLOQUÉ | course=${id}`);
-      return;
-    }
     dispatchExpireFiredRef.current = true;
-    base44.functions
-      .invoke("checkPendingAssignments", { course_id: id, force_immediate: true })
-      .catch(() => {});
-  }, [id, course?.mode_assignation]);
+    // Aucun appel backend ici — le cron checkPendingAssignments est la seule source de redispatch
+    console.log(`[DISPATCH_TIMER_EXPIRE] UI only — backend handles timeout | course=${id}`);
+  }, [id]);
 
   useEffect(() => {
     const load = async () => {
@@ -141,33 +134,33 @@ export default function CourseLivreur() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [course?.statut, id]);
 
-  // ── Transitions de statut valides pour le livreur ──────────────────────────
-  const LIVREUR_TRANSITIONS = {
-    acceptee:               ['driver_en_route_pickup'],
-    driver_en_route_pickup: ['arrived_pickup'],
-    arrived_pickup:         ['en_cours'],
-    en_cours:               ['arrived_dropoff', 'livree'],
-    arrived_dropoff:        ['livree'],
+  // ── Map statut → action courseStateMachine ───────────────────────────────
+  const STATUT_TO_ACTION = {
+    driver_en_route_pickup: 'EN_ROUTE',
+    arrived_pickup:         'ARRIVED_PICKUP',
+    en_cours:               'PICKUP',
+    arrived_dropoff:        'ARRIVED_DROPOFF',
+    livree:                 'DELIVER',
   };
 
+  // ── Transition via machine d'état centrale (seule source de vérité) ────────
   const updateStatut = async (newStatut, extra = {}) => {
     if (updating || updatingRef.current) return;
-    const validNext = LIVREUR_TRANSITIONS[course?.statut] || [];
-    if (!validNext.includes(newStatut)) return;
+    const action = STATUT_TO_ACTION[newStatut];
+    if (!action) return;
     updatingRef.current = true;
     setUpdating(true);
     const fromStatut = course?.statut;
-    console.log(`[STATUT_CLICK] ${fromStatut} → ${newStatut} | course=${id}`);
+    console.log(`[CSM_CALL] action=${action} | ${fromStatut} → ${newStatut} | course=${id}`);
     CourseTrace.traceTransition({ course_id: id, from_statut: fromStatut, to_statut: newStatut, source: 'CourseLivreur.updateStatut', trigger: 'button_click' });
     try {
       setCourse(prev => ({ ...prev, statut: newStatut, ...extra }));
-      CourseTrace.traceBackend({ course_id: id, source: 'CourseLivreur', fn: 'updateCourseStatut', payload_summary: `${fromStatut}→${newStatut}` });
-      await base44.functions.invoke('updateCourseStatut', { course_id: id, new_statut: newStatut, extra });
-      CourseTrace.trace('CourseLivreur', 'BACKEND_OK', { course_id: id, fn: 'updateCourseStatut', to_statut: newStatut });
+      await base44.functions.invoke('courseStateMachine', { course_id: id, action, extra });
+      CourseTrace.trace('CourseLivreur', 'BACKEND_OK', { course_id: id, fn: 'courseStateMachine', action, to_statut: newStatut });
       vibrateSuccess();
     } catch (err) {
-      console.error(`[STATUT_ERROR] ${newStatut} | ${err?.message}`);
-      CourseTrace.traceError({ course_id: id, source: 'CourseLivreur.updateStatut', error: err, context: { fn: 'updateCourseStatut', to_statut: newStatut } });
+      console.error(`[CSM_ERROR] action=${action} | ${err?.message}`);
+      CourseTrace.traceError({ course_id: id, source: 'CourseLivreur.updateStatut', error: err, context: { fn: 'courseStateMachine', action } });
       toast.error("Erreur : " + (err?.message || "réessayez"));
       setCourse(prev => ({ ...prev, statut: fromStatut }));
     } finally {
@@ -253,7 +246,7 @@ export default function CourseLivreur() {
     updatingRef.current = true;
 
     try {
-      // Idempotence : relire la course avant de lancer le settlement
+      // Idempotence : relire avant d'appeler le backend
       const freshCourses = await base44.entities.Course.filter({ id: course.id });
       const fresh = freshCourses?.[0];
       if (fresh?.statut === 'livree' || fresh?.settlement_status === 'completed') {
@@ -264,99 +257,55 @@ export default function CourseLivreur() {
         return;
       }
 
-      CourseTrace.traceBackend({ course_id: id, source: 'CourseLivreur', fn: 'bedouEngine.finaliser_course', payload_summary: `montant=${montant}` });
-      console.log('[DELIVERY_BACKEND_START] invoking bedouEngine | montant:', montant);
-      let res;
-      const bedouAbort = new AbortController();
-      const bedouTimer = setTimeout(() => bedouAbort.abort(), 7000);
-      try {
-        res = await Promise.race([
-          base44.functions.invoke('bedouEngine', {
-            action: 'finaliser_course',
-            course_id: course.id,
-            client_email: course.client_email,
-            client_nom: course.client_name,
-            livreur_email: course.livreur_email,
-            livreur_nom: course.livreur_name,
-            montant,
-          }),
-          new Promise((_, reject) => {
-            bedouAbort.signal.addEventListener('abort', () => reject(new Error('BEDOU_TIMEOUT')));
-          }),
-        ]);
-        clearTimeout(bedouTimer);
-        console.log('[DELIVERY_BACKEND_SUCCESS] bedouEngine response:', res?.data?.success, res?.data?.alreadyDone);
-        CourseTrace.trace('CourseLivreur', 'BACKEND_OK', { course_id: id, fn: 'bedouEngine', success: res?.data?.success, alreadyDone: res?.data?.alreadyDone });
-      } catch (bedouErr) {
-        clearTimeout(bedouTimer);
-        console.error('[DELIVERY_BACKEND_ERROR] bedouEngine error:', bedouErr?.message);
-        CourseTrace.traceError({ course_id: id, source: 'CourseLivreur', error: bedouErr, context: { fn: 'bedouEngine', phase: 'settlement' } });
-        unlock('BEDOU_ERROR');
-        toast.error('Erreur règlement Bedou : ' + (bedouErr?.message || 'réessayez'));
+      // Appel unique à courseStateMachine — settlement + transition atomique en une seule fonction
+      CourseTrace.traceBackend({ course_id: id, source: 'CourseLivreur', fn: 'courseStateMachine.DELIVER', payload_summary: `montant=${course.prix}` });
+      console.log('[CSM_CALL] action=DELIVER | course:', id);
+
+      const res = await base44.functions.invoke('courseStateMachine', { course_id: course.id, action: 'DELIVER' });
+      const resData = res?.data;
+
+      if (resData?.alreadyDone) {
+        unlock('ALREADY_DONE');
+        livreeVerrouilleRef.current = true;
+        setCourse(prev => ({ ...prev, statut: 'livree' }));
+        toast.success('Course déjà livrée !');
         return;
       }
 
-      if (!res?.data?.success && !res?.data?.alreadyDone) {
-        unlock('BEDOU_FAILED');
-        if (res?.data?.insuffisant) {
-          toast.error(`Solde Bedou client insuffisant (${res.data.solde?.toLocaleString()} FCFA). Contactez l'admin.`);
+      if (!resData?.success) {
+        unlock('CSM_FAILED');
+        if (resData?.insuffisant) {
+          toast.error(`Solde Bedou client insuffisant. Contactez l'admin.`);
         } else {
-          toast.error(res?.data?.error || 'Erreur lors du règlement');
+          toast.error(resData?.error || 'Erreur lors de la livraison');
         }
         return;
       }
 
-      // Mettre à jour statut course → livree via backend (service role, pas de 403)
-      console.log('[DELIVERY_BACKEND_START] updating course status → livree');
-      await base44.functions.invoke('updateCourseDelivered', {
-        course_id: course.id,
-        commission_cdl: commissionCdl,
-        gain_livreur: gainLivreur,
-      });
-      console.log('[DELIVERY_UI_REFRESH] course status updated → livree');
-
+      const finalGain = resData?.gain_livreur || gainLivreur;
       unlock('SUCCESS');
       livreeVerrouilleRef.current = true;
-      setCourse(prev => ({ ...prev, statut: 'livree', date_livraison: new Date().toISOString(), gain_livreur: gainLivreur }));
+      setCourse(prev => ({ ...prev, statut: 'livree', date_livraison: new Date().toISOString(), gain_livreur: finalGain }));
 
       vibrateSuccess();
-      toast.success(`🎉 Livraison confirmée ! +${gainLivreur?.toLocaleString()} FCFA crédités sur votre Bedou.`);
+      toast.success(`🎉 Livraison confirmée ! +${finalGain?.toLocaleString()} FCFA crédités sur votre Bedou.`);
 
-      // Fire & forget — stats + notifs (updateCourseDelivered gère déjà nombre_courses_actives)
-      // Ne PAS toucher nombre_courses_actives ici — évite double décrémentation
-      base44.entities.User.filter({ email: course.livreur_email }).then(livs => {
-        if (livs[0]) base44.entities.User.update(livs[0].id, {
-          total_courses_livrees: (livs[0].total_courses_livrees || 0) + 1,
-        }).catch(() => {});
-      }).catch(() => {});
-      base44.functions.invoke('updateLivreurStreak', {}).catch(() => {});
-
-      const notif_key_client = `${course.client_email}__livree__${course.id}__client`;
-      const notif_key_admin = `weezyh2@gmail.com__livree__${course.id}__admin`;
-      base44.entities.Notification.create({
-        destinataire_email: course.client_email, destinataire_role: 'client',
-        titre: '✅ Colis livré ! Notez votre livreur',
-        message: `Votre colis a été livré par ${course.livreur_name}. ${montant.toLocaleString()} FCFA débités de votre Bedou.`,
-        type: 'success', lue: false, course_id: course.id,
-        target_screen: `/course/${course.id}/track`,
-        notification_key: notif_key_client,
-      }).catch(() => {});
+      // Fire & forget — notifs admin et WhatsApp (les stats livreur sont gérées par courseStateMachine)
       base44.entities.Notification.create({
         destinataire_email: 'weezyh2@gmail.com', destinataire_role: 'admin',
         titre: '📦 Course livrée',
-        message: `Course ${course.quartier_depart}→${course.quartier_arrivee} livrée par ${course.livreur_name}. ${montant.toLocaleString()} FCFA réglés.`,
+        message: `Course ${course.quartier_depart}→${course.quartier_arrivee} livrée par ${course.livreur_name}. ${(course.prix||0).toLocaleString()} FCFA réglés.`,
         type: 'success', lue: false, course_id: course.id, target_screen: '/gerer-courses',
-        notification_key: notif_key_admin,
+        notification_key: `weezyh2@gmail.com__livree__${course.id}__admin`,
       }).catch(() => {});
-      triggerWhatsAppNotification({ eventType: 'course_completed', recipientRole: 'client', recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur,  entityId: course.id, entityType: 'course', priority: 'normal' });
-      triggerWhatsAppNotification({ eventType: 'course_completed_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur,  entityId: course.id, entityType: 'course', priority: 'normal' });
+      triggerWhatsAppNotification({ eventType: 'course_completed', recipientRole: 'client', recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur, entityId: course.id, entityType: 'course', priority: 'normal' });
+      triggerWhatsAppNotification({ eventType: 'course_completed_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur, entityId: course.id, entityType: 'course', priority: 'normal' });
 
     } catch (err) {
-      console.error('[DELIVERY_BACKEND_ERROR] unexpected:', err?.message);
+      console.error('[CSM_ERROR] DELIVER unexpected:', err?.message);
       unlock('CATCH');
       toast.error('Erreur inattendue : ' + (err?.message || 'réessayez'));
     } finally {
-      // Garantit le déverrouillage même si un return intermédiaire a manqué unlock()
       if (!uiUnlocked) unlock('FINALLY');
     }
   };
@@ -611,16 +560,16 @@ export default function CourseLivreur() {
               disabled={updating || updatingRef.current}
               onClick={async () => {
                 if (updatingRef.current) return;
-                console.log(`[REFUSE_CLICK] course=${id} | statut=${course?.statut}`);
+                console.log(`[CSM_CALL] action=REFUSE | course=${id}`);
                 updatingRef.current = true;
                 setUpdating(true);
                 let shouldNavigate = false;
                 try {
-                  await base44.functions.invoke('refuseCourseAction', { course_id: id });
+                  await base44.functions.invoke('courseStateMachine', { course_id: id, action: 'REFUSE' });
                   toast.info("Course refusée");
                   shouldNavigate = true;
                 } catch (err) {
-                  console.error(`[REFUSE_ERROR] ${err?.message}`);
+                  console.error(`[CSM_ERROR] REFUSE | ${err?.message}`);
                   toast.error("Erreur refus : " + (err?.message || "réessayez"));
                 } finally {
                   updatingRef.current = false;
@@ -636,27 +585,24 @@ export default function CourseLivreur() {
               disabled={updating || updatingRef.current}
               onClick={async () => {
                 if (updatingRef.current) return;
-                console.log(`[ACCEPT_CLICK] course=${id} | statut=${course?.statut}`);
+                console.log(`[CSM_CALL] action=ACCEPT | course=${id}`);
                 updatingRef.current = true;
                 setUpdating(true);
                 try {
-                  const res = await base44.functions.invoke('acceptCourseAction', { course_id: id });
-                  if (res?.data?.success) {
-                    console.log(`[ACCEPT_SUCCESS] course=${id}`);
+                  const res = await base44.functions.invoke('courseStateMachine', { course_id: id, action: 'ACCEPT' });
+                  if (res?.data?.success || res?.data?.alreadyDone) {
                     toast.success("✅ Course acceptée !");
-                    // Le realtime subscription mettra à jour le statut → les boutons disparaissent naturellement
+                    // La subscription realtime met à jour le statut automatiquement
                   } else {
-                    const errStatut = res?.data?.statut || '?';
-                    console.error(`[ACCEPT_REJECTED] statut=${errStatut}`);
-                    if (errStatut === 'acceptee' || errStatut === 'en_cours') {
-                      // Course déjà acceptée (race condition) → naviguer quand même
-                      toast.info("Course déjà acceptée — ouverture...");
+                    const currentStatut = res?.data?.current_statut || '?';
+                    if (currentStatut === 'acceptee' || currentStatut === 'en_cours') {
+                      toast.info("Course déjà acceptée.");
                     } else {
-                      toast.error("Course non disponible (statut: " + errStatut + ")");
+                      toast.error("Course non disponible (statut: " + currentStatut + ")");
                     }
                   }
                 } catch (err) {
-                  console.error(`[ACCEPT_ERROR] ${err?.message}`);
+                  console.error(`[CSM_ERROR] ACCEPT | ${err?.message}`);
                   toast.error("Erreur : " + (err?.message || "réessayez"));
                 } finally {
                   updatingRef.current = false;
