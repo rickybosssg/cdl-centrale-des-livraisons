@@ -1,100 +1,29 @@
 /**
- * refuseCourseAction — Refus d'une course par un livreur
- * Remplace le Course.update direct frontend (évite 403 RLS APK)
+ * refuseCourseAction — LEGACY BLOCKED v6
  *
- * Payload: { course_id }
+ * ⛔ BLOQUÉ — Ne plus utiliser.
+ * Remplacé par : courseStateMachine { action: "REFUSE" }
+ *
+ * Toutes les pages ont été migrées vers courseStateMachine.
+ * Ce fichier existe uniquement pour logger les appels résiduels.
  */
-
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
-  if (req.method !== 'POST') {
-    return Response.json({ error: 'POST required' }, { status: 405 });
-  }
-
   const base44 = createClientFromRequest(req);
+  const body = await req.json().catch(() => ({}));
+  const course_id = body.course_id || '?';
 
-  let user = null;
-  try { user = await base44.auth.me(); } catch (_) {}
-  if (!user) {
-    return Response.json({ error: 'Non authentifié' }, { status: 401 });
-  }
+  let caller = '?';
+  try { const u = await base44.auth.me(); caller = u?.email || '?'; } catch (_) {}
 
-  const body = await req.json();
-  const { course_id } = body;
+  console.warn(`[LEGACY_CALL_BLOCKED] refuseCourseAction | course=${course_id} | caller=${caller} | use courseStateMachine{action:REFUSE} instead`);
 
-  if (!course_id) {
-    return Response.json({ error: 'course_id requis' }, { status: 400 });
-  }
+  // Rediriger vers courseStateMachine pour éviter tout blocage utilisateur
+  const res = await base44.asServiceRole.functions.invoke('courseStateMachine', {
+    course_id,
+    action: 'REFUSE',
+  }).catch(e => ({ data: { success: false, error: e.message } }));
 
-  console.log(`[REFUSE_ACTION_START] course=${course_id} | user=${user.email}`);
-
-  // Récupérer la course
-  let courses = [];
-  try {
-    courses = await base44.asServiceRole.entities.Course.filter({ id: course_id });
-  } catch (_) {}
-
-  if (!courses || courses.length === 0) {
-    console.error(`[REFUSE_ACTION_ERROR] course not found | course=${course_id}`);
-    return Response.json({ error: 'Course introuvable' }, { status: 404 });
-  }
-
-  const c = courses[0];
-  const now = new Date().toISOString();
-
-  // Mettre à jour l'historique
-  let historique = [];
-  try {
-    if (c.historique_assignation) historique = JSON.parse(c.historique_assignation);
-  } catch (_) {}
-
-  historique = historique.map(h =>
-    h.livreur_email?.toLowerCase().trim() === user.email?.toLowerCase().trim() && h.statut === 'proposee'
-      ? { ...h, statut: 'refuse', heure_refus: now }
-      : h
-  );
-
-  await base44.asServiceRole.entities.Course.update(course_id, {
-    statut: 'en_attente',
-    livreur_email: null,
-    livreur_name: null,
-    telephone_livreur: null,
-    heure_assignation: null,
-    historique_assignation: JSON.stringify(historique),
-  });
-
-  // Mettre à jour les stats livreur — recalcul réel depuis BDD (cohérent avec updateCourseDelivered)
-  // CORRECTION : ne jamais décrémenter par cache — recalcul depuis la BDD fraîche
-  try {
-    const freshUsers = await base44.asServiceRole.entities.User.filter({ email: user.email });
-    const freshUser = freshUsers?.[0];
-    if (freshUser) {
-      const ACTIVE_STATUTS = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
-      const allCourses = await base44.asServiceRole.entities.Course.filter({ livreur_email: user.email });
-      // La course vient d'être remise à en_attente (livreur_email = null), donc elle n'est plus dans ACTIVE_STATUTS
-      const realCount = allCourses.filter(x => ACTIVE_STATUTS.has(x.statut) && !x.is_deleted).length;
-      await base44.asServiceRole.entities.User.update(freshUser.id, {
-        nombre_courses_actives: realCount,
-        courses_refusees: (freshUser.courses_refusees || 0) + 1,
-        courses_refusees_consecutives: (freshUser.courses_refusees_consecutives || 0) + 1,
-      });
-    }
-  } catch (_) {}
-
-  // Re-dispatcher UNIQUEMENT si la course était en mode auto (pas manuel)
-  // mode_assignation = 'manuel'/'manuel_admin'/'manuel_force' → l'admin re-assignera lui-même
-  const modeAssign = (c.mode_assignation || '').toLowerCase();
-  const isManual = modeAssign === 'manuel' || modeAssign === 'manuel_admin' || modeAssign === 'manuel_force';
-  if (!isManual) {
-    base44.asServiceRole.functions.invoke('cdlDispatch', {
-      course_id,
-      exclude_emails: [user.email],
-    }).catch(() => {});
-  } else {
-    console.log(`[REFUSE_ACTION] mode_assignation=manuel — pas de redispatch auto | course=${course_id}`);
-  }
-
-  console.log(`[REFUSE_ACTION_SUCCESS] course=${course_id} | livreur=${user.email}`);
-  return Response.json({ success: true, courseId: course_id, statut: 'en_attente' });
+  return Response.json(res?.data || { success: false, reason: 'legacy_blocked' });
 });

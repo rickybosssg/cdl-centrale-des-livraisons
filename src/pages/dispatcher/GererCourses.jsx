@@ -95,37 +95,29 @@ export default function GererCourses() {
     setTimeout(loadData, 500);
   };
 
+  // ── Transition admin via courseStateMachine (SOURCE UNIQUE) ───────────────
+  const ADMIN_STATUT_TO_ACTION = {
+    driver_en_route_pickup: 'EN_ROUTE',
+    arrived_pickup:         'ARRIVED_PICKUP',
+    en_cours:               'PICKUP',
+    arrived_dropoff:        'ARRIVED_DROPOFF',
+    livree:                 'DELIVER',
+    acceptee:               'ACCEPT',
+  };
+
   const changerStatut = async (courseId, newStatut) => {
+    const action = ADMIN_STATUT_TO_ACTION[newStatut];
+    if (!action) {
+      toast.error(`Transition non supportée: ${newStatut}`);
+      return;
+    }
     try {
-      const updateData = { statut: newStatut };
-      if (newStatut === "livree") {
-        updateData.date_livraison = new Date().toISOString();
-        const course = courses.find(c => c.id === courseId);
-        if (course) {
-          const avecPromo = !!course.code_promo_utilise;
-          const commissionCdl = avecPromo ? 0 : (course.prix || 0) * 0.2;
-          const gainLivreur = avecPromo ? (course.prix || 0) : (course.prix || 0) * 0.8;
-          updateData.commission_cdl = commissionCdl;
-          updateData.gain_livreur = gainLivreur;
-          updateData.statut_paiement_livreur = avecPromo ? "Payé" : "Commission due";
-          const livreursData = await base44.entities.User.filter({ email: course.livreur_email });
-          if (livreursData.length > 0) {
-            const l = livreursData[0];
-            const nouveauSolde = (l.solde_commission_du || 0) + commissionCdl;
-            await base44.entities.User.update(l.id, {
-              solde_commission_du: nouveauSolde,
-              total_courses_livrees: (l.total_courses_livrees || 0) + 1,
-              total_commissions_generees: (l.total_commissions_generees || 0) + commissionCdl,
-              statut_financier_livreur: nouveauSolde > 0 ? "Doit une commission" : "À jour",
-              nombre_courses_actives: Math.max(0, (l.nombre_courses_actives || 0) - 1),
-            });
-          }
-        }
+      const res = await base44.functions.invoke('courseStateMachine', { course_id: courseId, action });
+      if (res?.data?.success || res?.data?.alreadyDone) {
+        toast.success("Statut mis à jour");
+      } else {
+        toast.error(res?.data?.error || 'Erreur lors de la transition');
       }
-      if (newStatut === "en_cours") updateData.date_recuperation = new Date().toISOString();
-      if (newStatut === "annulee") updateData.date_livraison = new Date().toISOString();
-      await base44.entities.Course.update(courseId, updateData);
-      toast.success("Statut mis à jour");
       setTimeout(loadData, 500);
     } catch (err) {
       console.error('[changerStatut]', err);
