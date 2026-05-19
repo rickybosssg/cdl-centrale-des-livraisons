@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import StatusBadge from "../../components/StatusBadge";
 import { toast } from "sonner";
 import { vibrateSuccess, vibrateMedium, vibrateNotif, playNotificationSound } from "@/lib/vibration";
-import { triggerWhatsAppNotification, waMsgCourseCompletedClient, waMsgCourseCompletedDriver } from "@/lib/whatsappNotifications";
+import { triggerWhatsAppNotification } from "@/lib/whatsappNotifications";
 import ContactCard from "@/components/ContactCard";
 import { MapPin } from "lucide-react";
 
@@ -324,8 +324,8 @@ export default function CourseLivreur() {
         type: 'success', lue: false, course_id: course.id, target_screen: '/gerer-courses',
         notification_key: notif_key_admin,
       }).catch(() => {});
-      triggerWhatsAppNotification({ eventType: 'course_completed', recipientRole: 'client', recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur, messageText: waMsgCourseCompletedClient(), entityId: course.id, entityType: 'course', priority: 'normal' });
-      triggerWhatsAppNotification({ eventType: 'course_completed_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur, messageText: waMsgCourseCompletedDriver(), entityId: course.id, entityType: 'course', priority: 'normal' });
+      triggerWhatsAppNotification({ eventType: 'course_completed', recipientRole: 'client', recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur,  entityId: course.id, entityType: 'course', priority: 'normal' });
+      triggerWhatsAppNotification({ eventType: 'course_completed_driver', recipientRole: 'driver', recipientName: course.livreur_name || '', recipientPhone: course.telephone_livreur,  entityId: course.id, entityType: 'course', priority: 'normal' });
 
     } catch (err) {
       console.error('[DELIVERY_BACKEND_ERROR] unexpected:', err?.message);

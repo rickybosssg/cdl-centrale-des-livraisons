@@ -8,7 +8,7 @@ import CourseCardSimple from "@/components/CourseCardSimple";
 import LivreurValidationGate from "@/components/LivreurValidationGate";
 import { toast } from "sonner";
 import { vibrateSuccess } from "@/lib/vibration";
-import { triggerWhatsAppNotification, waMsgCourseAcceptedByDriver, waMsgCourseAcceptedDriver } from "@/lib/whatsappNotifications";
+import { triggerWhatsAppNotification } from "@/lib/whatsappNotifications";
 import { useNavigate } from "react-router-dom";
 
 export default function CoursesDisponibles() {
@@ -160,12 +160,12 @@ export default function CoursesDisponibles() {
       triggerWhatsAppNotification({
         eventType: 'course_accepted_by_driver', recipientRole: 'client',
         recipientName: course.client_name || 'Client', recipientPhone: course.telephone_expediteur,
-        messageText: waMsgCourseAcceptedByDriver(), entityId: course.id, entityType: 'course', priority: 'high',
+        entityId: course.id, entityType: 'course', priority: 'high',
       });
       triggerWhatsAppNotification({
         eventType: 'course_accepted_driver', recipientRole: 'driver',
         recipientName: user.full_name, recipientPhone: user.telephone,
-        messageText: waMsgCourseAcceptedDriver(), entityId: course.id, entityType: 'course', priority: 'normal',
+        entityId: course.id, entityType: 'course', priority: 'normal',
       });
       navigate(`/course-livreur/${course.id}`);
     } catch (e) {
