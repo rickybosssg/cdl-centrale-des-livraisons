@@ -23,10 +23,12 @@ export default function CourseLivreur() {
   const [updating, setUpdating] = useState(false);
   /** Évite qu'un événement temps réel en retard remette la course en "en_cours" après livraison */
   const livreeVerrouilleRef = useRef(false);
+  const deliveryInProgressRef = useRef(false);
   const dispatchExpireFiredRef = useRef(false);
 
   useEffect(() => {
     livreeVerrouilleRef.current = false;
+    deliveryInProgressRef.current = false;
   }, [id]);
 
   useEffect(() => {
@@ -203,10 +205,12 @@ export default function CourseLivreur() {
     console.log('[DELIVERY_CLICK] livrerColis | course_id:', course?.id, '| statut:', course?.statut, '| settlement:', course?.settlement_status);
     CourseTrace.traceTransition({ course_id: id, from_statut: course?.statut, to_statut: 'livree', source: 'CourseLivreur.livrerColis', trigger: 'button_click' });
 
-    if (updating || livreeVerrouilleRef.current) {
+    // Verrou dur multi-couche : double-clic, re-render, ou subscription concurrente
+    if (updating || livreeVerrouilleRef.current || deliveryInProgressRef.current) {
       toast.info("Livraison déjà en cours ou terminée");
       return;
     }
+    deliveryInProgressRef.current = true;
     if (course.settlement_status === 'completed') {
       livreeVerrouilleRef.current = true;
       setCourse(prev => ({ ...prev, statut: 'livree' }));
@@ -219,20 +223,16 @@ export default function CourseLivreur() {
     const gainLivreur = course.gain_livreur || Math.round(montant * 0.8);
     const commissionCdl = course.commission_cdl || (montant - gainLivreur);
 
-    // Timer de sécurité UI 8s — déblocage garanti même si tout plante
+    // Verrou de déverrouillage UI — garanti une seule exécution
     let uiUnlocked = false;
     const unlock = (reason) => {
       if (!uiUnlocked) {
         uiUnlocked = true;
-        clearTimeout(uiTimer);
+        deliveryInProgressRef.current = false;
         setUpdating(false);
         if (reason) console.log('[DELIVERY_UI_REFRESH] unlock reason:', reason);
       }
     };
-    const uiTimer = setTimeout(() => {
-      unlock('UI_TIMEOUT_8S');
-      toast.error('⏱ Délai dépassé (8s). Vérifiez votre connexion et réessayez.');
-    }, 8000);
 
     try {
       // Idempotence : relire la course avant de lancer le settlement
@@ -249,6 +249,8 @@ export default function CourseLivreur() {
       CourseTrace.traceBackend({ course_id: id, source: 'CourseLivreur', fn: 'bedouEngine.finaliser_course', payload_summary: `montant=${montant}` });
       console.log('[DELIVERY_BACKEND_START] invoking bedouEngine | montant:', montant);
       let res;
+      const bedouAbort = new AbortController();
+      const bedouTimer = setTimeout(() => bedouAbort.abort(), 7000);
       try {
         res = await Promise.race([
           base44.functions.invoke('bedouEngine', {
@@ -260,11 +262,15 @@ export default function CourseLivreur() {
             livreur_nom: course.livreur_name,
             montant,
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('BEDOU_TIMEOUT')), 7000)),
+          new Promise((_, reject) => {
+            bedouAbort.signal.addEventListener('abort', () => reject(new Error('BEDOU_TIMEOUT')));
+          }),
         ]);
+        clearTimeout(bedouTimer);
         console.log('[DELIVERY_BACKEND_SUCCESS] bedouEngine response:', res?.data?.success, res?.data?.alreadyDone);
         CourseTrace.trace('CourseLivreur', 'BACKEND_OK', { course_id: id, fn: 'bedouEngine', success: res?.data?.success, alreadyDone: res?.data?.alreadyDone });
       } catch (bedouErr) {
+        clearTimeout(bedouTimer);
         console.error('[DELIVERY_BACKEND_ERROR] bedouEngine error:', bedouErr?.message);
         CourseTrace.traceError({ course_id: id, source: 'CourseLivreur', error: bedouErr, context: { fn: 'bedouEngine', phase: 'settlement' } });
         unlock('BEDOU_ERROR');
@@ -331,6 +337,9 @@ export default function CourseLivreur() {
       console.error('[DELIVERY_BACKEND_ERROR] unexpected:', err?.message);
       unlock('CATCH');
       toast.error('Erreur inattendue : ' + (err?.message || 'réessayez'));
+    } finally {
+      // Garantit le déverrouillage même si un return intermédiaire a manqué unlock()
+      if (!uiUnlocked) unlock('FINALLY');
     }
   };
 

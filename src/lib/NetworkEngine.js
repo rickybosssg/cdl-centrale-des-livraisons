@@ -37,9 +37,12 @@ function setOnline(online) {
   if (online) NetworkEngine._flushQueue();
 }
 
-// Écouter les events natifs
-window.addEventListener('online',  () => setOnline(true));
-window.addEventListener('offline', () => setOnline(false));
+// Singleton guard — un seul jeu de listeners même si le module est réévalué (HMR / APK)
+if (!window.__cdl_network_listeners_installed) {
+  window.__cdl_network_listeners_installed = true;
+  window.addEventListener('online',  () => setOnline(true));
+  window.addEventListener('offline', () => setOnline(false));
+}
 
 const NetworkEngine = {
   version: ENGINE_VERSION,
