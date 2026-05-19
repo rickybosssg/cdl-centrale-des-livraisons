@@ -35,25 +35,33 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
 
     // ── FORCE DELETE ──────────────────────────────────────────────────────────
     if (mode === 'force_delete') {
-      console.log(`[FORCE_DELETE_STARTED] course=${course.id} | statut=${course.statut} | raison=${raison.trim()} | ts=${new Date().toISOString()}`);
+      console.log(`[FORCE_DELETE_CLICK] course=${course.id} | statut=${course.statut} | raison="${raison.trim()}" | ts=${new Date().toISOString()}`);
       try {
-        const res = await base44.functions.invoke("forceDeleteCourse", {
+        console.log(`[FORCE_DELETE_FUNCTION_CALLED] invoking forceDeleteCourse | course_id=${course.id}`);
+        const axiosRes = await base44.functions.invoke("forceDeleteCourse", {
           course_id: course.id,
           raison: raison.trim(),
         });
-        if (!res?.data?.success && !res?.data?.already_gone) {
-          throw new Error(res?.data?.error || res?.data?.message || "Erreur inconnue");
+
+        // base44.functions.invoke retourne un objet axios → payload réel dans axiosRes.data
+        const payload = axiosRes?.data ?? axiosRes;
+        console.log(`[FORCE_DELETE_RESPONSE] course=${course.id} | payload=`, JSON.stringify(payload));
+
+        if (!payload?.success && !payload?.already_gone) {
+          const errMsg = payload?.error || payload?.message || `HTTP ${axiosRes?.status || '?'} — réponse inattendue`;
+          console.error(`[FORCE_DELETE_ERROR] course=${course.id} | errMsg=${errMsg} | full_payload=`, payload);
+          throw new Error(errMsg);
         }
-        console.log(`[FORCE_DELETE_SUCCESS] course=${course.id} | ts=${new Date().toISOString()}`);
-        console.log(`[FORCE_DELETE_REALTIME_PROPAGATED] is_deleted=true propagé cross-device | course=${course.id}`);
-        console.log(`[FORCE_DELETE_UI_REMOVED] retrait optimiste déclenché | course=${course.id}`);
-        onDone?.(course.id, 'delete_admin', { ...course, is_deleted: true });
-        toast.success("✅ Course supprimée de force — propagation realtime déclenchée");
+
+        console.log(`[FORCE_DELETE_SUCCESS] course=${course.id} | statut_avant=${payload?.statut_avant} | ts=${new Date().toISOString()}`);
+        console.log(`[UI_REMOVED_AFTER_FORCE_DELETE] onDone déclenché | course=${course.id}`);
         setMode(null);
         setRaison("");
+        onDone?.(course.id, 'delete_admin', { ...course, is_deleted: true, statut: 'annulee' });
+        toast.success("✅ Course supprimée de force !");
       } catch (err) {
-        console.error(`[FORCE_DELETE_ERROR] course=${course.id} | ${err.message}`);
-        toast.error("❌ Force delete échoué : " + err.message);
+        console.error(`[FORCE_DELETE_ERROR] course=${course.id} | exception=${err.message}`);
+        toast.error("❌ Erreur : " + (err.message || "inconnue"));
       } finally {
         setLoading(false);
       }
@@ -226,7 +234,9 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
               <Button
                 type="button"
                 className={`flex-1 gap-2 ${
-                  mode === "cancel" ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"
+                  mode === "cancel" ? "bg-orange-600 hover:bg-orange-700 text-white"
+                  : mode === "force_delete" ? "bg-purple-600 hover:bg-purple-700 text-white"
+                  : "bg-red-600 hover:bg-red-700 text-white"
                 }`}
                 onClick={(e) => { e.stopPropagation(); handleConfirm(); }}
                 disabled={loading || !raison.trim()}
