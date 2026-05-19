@@ -9,7 +9,7 @@
  * LOGS : [ENGINE_RECOVERY_START] [ENGINE_RECOVERY_OK] [ENGINE_RECOVERY_FAILED] [ENGINE_RECOVERY_SKIP]
  */
 
-import EngineRegistry from './EngineRegistry';
+// EngineRegistry supprimé — recovery simplifié sans registre
 
 const ENGINE_VERSION = '1.0.0';
 const RECOVERY_COOLDOWN_MS = 2 * 60_000; // 2 min entre deux tentatives sur le même moteur
@@ -67,13 +67,8 @@ const RECOVERY_STRATEGIES = {
   },
 
   RealtimeSyncEngine: async () => {
-    const mod = await import('./RealtimeSyncEngine');
-    const engine = mod.default;
-    if (engine.reconnect) {
-      await engine.reconnect();
-      return 'Realtime reconnecté';
-    }
-    return 'Realtime — pas de méthode reconnect';
+    // RealtimeSyncEngine supprimé — les subscriptions sont directes par composant
+    return 'Realtime géré par subscriptions directes';
   },
 
   NetworkEngine: async () => {
@@ -88,10 +83,8 @@ const RECOVERY_STRATEGIES = {
   },
 
   CacheEngine: async () => {
-    const mod = await import('./CacheEngine');
-    const engine = mod.default;
-    engine.clear();
-    return 'Cache vidé';
+    // CacheEngine supprimé
+    return 'Cache supprimé — rien à vider';
   },
 
   AuthEngine: async () => {
@@ -103,22 +96,17 @@ const RECOVERY_STRATEGIES = {
   },
 
   BedouEngine: async () => {
-    // Pas de recovery destructive sur Bedou — on invalide juste le cache
-    const mod = await import('./CacheEngine');
-    mod.default.invalidateNamespace('bedou');
-    return 'Cache Bedou invalidé';
+    // Déclencher un refresh Bedou via event
+    window.dispatchEvent(new CustomEvent('bedou_sync_refresh'));
+    return 'Bedou refresh event dispatché';
   },
 
   NotificationEngine: async () => {
-    const mod = await import('./CacheEngine');
-    mod.default.invalidateNamespace('notifications');
-    return 'Cache notifications invalidé';
+    return 'Notifications gérées par subscription directe';
   },
 
   DispatchEngine: async () => {
-    const mod = await import('./CacheEngine');
-    mod.default.invalidateNamespace('dispatch');
-    return 'Cache dispatch invalidé';
+    return 'Dispatch géré par cdlDispatch backend';
   },
 };
 
@@ -159,12 +147,10 @@ const RecoveryEngine = {
     try {
       const detail = await strategy();
       resetAttempts(name);
-      EngineRegistry.updateHeartbeat(name);
       logRecovery(name, 'ok', detail);
       return { success: true, detail };
     } catch (e) {
       logRecovery(name, 'failed', e.message);
-      EngineRegistry.markError(name, e.message);
       return { success: false, reason: 'strategy_failed', error: e.message };
     }
   },
@@ -194,15 +180,12 @@ const RecoveryEngine = {
     }
   },
 
-  /** Forcer recovery de tous les moteurs en erreur */
+  /** Forcer recovery de tous les moteurs avec stratégie disponible */
   async recoverAll() {
     console.log(`[ENGINE_RECOVERY_START] RecoveryEngine.recoverAll`);
-    const statuses = EngineRegistry.getAllStatuses();
     const results = {};
-    for (const [name, entry] of Object.entries(statuses)) {
-      if (entry.status === 'error') {
-        results[name] = await this.recover(name, { force: true });
-      }
+    for (const name of Object.keys(RECOVERY_STRATEGIES)) {
+      results[name] = await this.recover(name, { force: true });
     }
     return results;
   },

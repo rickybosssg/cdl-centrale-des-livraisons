@@ -33,8 +33,9 @@ function isEligible(driver, excluded = new Set(), realActiveCount = null) {
 }
 
 // ── Recalcul des vrais compteurs actifs depuis les courses ────────────────────
+// Limité aux 100 dernières courses (les compteurs sont maintenant maintenus en BDD)
 async function getRealActiveCountsFromDB(base44) {
-  const courses = await base44.asServiceRole.entities.Course.list('-created_date', 500);
+  const courses = await base44.asServiceRole.entities.Course.list('-created_date', 100);
   const counts = {};
   for (const c of courses) {
     if (c.livreur_email && ACTIVE_COURSE_STATUTS.has(c.statut)) {
@@ -133,13 +134,14 @@ Deno.serve(async (req) => {
       getRealActiveCountsFromDB(base44),
     ]);
 
-    // Corriger silencieusement les compteurs divergents (fire & forget)
+    // Corriger les compteurs divergents uniquement pour les livreurs éligibles actifs
     for (const d of allUsers) {
+      if (!d.driver_online) continue; // ne pas corriger les hors-ligne inutilement
       const real = realCounts[d.email] || 0;
       const stored = d.nombre_courses_actives || 0;
       if (stored !== real) {
         base44.asServiceRole.entities.User.update(d.id, { nombre_courses_actives: real }).catch(() => {});
-        d.nombre_courses_actives = real; // mettre à jour l'objet local
+        d.nombre_courses_actives = real;
       }
     }
 

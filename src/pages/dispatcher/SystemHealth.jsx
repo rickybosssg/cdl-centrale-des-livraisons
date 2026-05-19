@@ -123,20 +123,15 @@ export default function SystemHealth() {
     setRunning(true);
     try {
       const HealthMonitorEngine = (await import('@/lib/HealthMonitorEngine')).default;
-      const EngineRegistry = (await import('@/lib/EngineRegistry')).default;
       const RecoveryEngine = (await import('@/lib/RecoveryEngine')).default;
 
-      // Init registry si pas encore fait
-      await EngineRegistry.init();
-
-      const [healthReport, summary, recLog] = await Promise.all([
+      const [healthReport, recLog] = await Promise.all([
         HealthMonitorEngine.runAll(),
-        Promise.resolve(EngineRegistry.getSummary()),
         Promise.resolve(RecoveryEngine.getLog()),
       ]);
 
       setReport(healthReport);
-      setRegistrySummary(summary);
+      setRegistrySummary(null);
       setRecoveryLog(recLog.slice(0, 10));
       setLastChecked(new Date());
 
@@ -394,19 +389,7 @@ export default function SystemHealth() {
               <Zap className="w-3 h-3" />
               Relancer tous les moteurs en erreur
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full gap-1.5 text-xs"
-              onClick={async () => {
-                const CacheEngine = (await import('@/lib/CacheEngine')).default;
-                CacheEngine.clear();
-                runHealthCheck();
-              }}
-            >
-              <Database className="w-3 h-3" />
-              Vider tout le cache
-            </Button>
+
             <Button
               size="sm"
               variant="outline"

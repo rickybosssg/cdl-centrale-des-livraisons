@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import RealtimeSyncEngine from "@/lib/RealtimeSyncEngine";
 import { Bell } from "lucide-react";
 import { vibrateNotif, vibrateCritical, playNotificationSound, playNotificationSoundCritical } from "@/lib/vibration";
 import { resolveNotifPriority } from "@/lib/notificationRouter";
@@ -109,8 +108,7 @@ export default function NotificationBell({ userEmail }) {
         }
       });
       console.log(`[APK_NOTIFICATION_RUNTIME_CHECK] notification_subscribe_active=true | websocket_started=true`);
-      // Signaler au moteur centralisé que le WS est actif
-      if (unsub) RealtimeSyncEngine.registerExternalSubscription('notifications', unsub, userEmail);
+
     } catch (err) {
       console.warn(`[APK_NOTIFICATION_RUNTIME_CHECK] subscribe_error=${err?.message} | websocket_connected=false`);
     }
@@ -150,7 +148,6 @@ export default function NotificationBell({ userEmail }) {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('bedou_recharge_approved', onFcmBedou);
       try { if (unsub) unsub(); } catch (_) {}
-      RealtimeSyncEngine._cleanup?.('notifications');
     };
   }, [userEmail]);
 

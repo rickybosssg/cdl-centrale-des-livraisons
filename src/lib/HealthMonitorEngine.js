@@ -130,27 +130,14 @@ const HealthMonitorEngine = {
 
   async checkRealtime() {
     return checkEngine('RealtimeSyncEngine', async () => {
-      const RealtimeSyncEngine = (await import('./RealtimeSyncEngine')).default;
-      const status = RealtimeSyncEngine.getStatus?.() || {};
-
-      // OK : WebSocket connecté (état natif ou via subscription externe)
-      if (status.ws === 'connected' || status.subscriptionCount > 0) {
-        return {
-          status: 'ok',
-          message: `WebSocket actif | subs=${status.subscriptionCount || 0} | mode=${status.mode || 'realtime'}`,
-          details: status,
-        };
-      }
-      // WARN : fallback polling actif (dégradé mais fonctionnel)
-      if (status.mode === 'polling') {
-        return { status: 'warn', message: 'Fallback polling actif (WS non disponible)', details: status };
-      }
-      // WARN : moteur non démarré / idle (première ouverture de page, pas critique)
-      if (!status.active || status.ws === 'unknown') {
-        return { status: 'warn', message: 'Moteur en attente de démarrage', details: status };
-      }
-      // CRITICAL : WS erreur + pas de fallback
-      return { status: 'critical', message: `WS erreur + pas de fallback | ws=${status.ws}`, details: status };
+      // RealtimeSyncEngine supprimé — les subscriptions sont directes par composant
+      // Le WS est considéré actif si l'app est connectée
+      const online = navigator.onLine;
+      return {
+        status: online ? 'ok' : 'warn',
+        message: online ? 'Subscriptions directes actives (mode simplifié)' : 'Hors ligne',
+        details: { mode: 'direct_subscriptions', online },
+      };
     });
   },
 

@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 import AuthEngine from '@/lib/AuthEngine';
 import NetworkEngine from '@/lib/NetworkEngine';
 import AuditEngine from '@/lib/AuditEngine';
-import CacheEngine from '@/lib/CacheEngine';
+
 
 export function useEngines() {
   const [user, setUser] = useState(null);
@@ -60,7 +60,6 @@ export function useEngines() {
 
     // Engines (accès direct si besoin)
     AuditEngine,
-    CacheEngine,
   };
 }
 

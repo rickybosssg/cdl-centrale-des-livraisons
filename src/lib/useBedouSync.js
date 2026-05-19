@@ -142,14 +142,6 @@ export function useBedouSync(userEmail) {
     };
     window.addEventListener('bedou_updated', onBedouUpdated);
 
-    // 7. Reloads de sécurité après mount — plus agressifs sur APK
-    const isNative = (() => { try { const p = window.location?.protocol; return p === 'capacitor:' || p === 'file:' || (typeof window.Capacitor !== 'undefined'); } catch(_) { return false; } })();
-    const t800 = setTimeout(() => fetchBedou('safety_800ms'), 800);
-    const t3 = setTimeout(() => fetchBedou('safety_3s'), 3000);
-    const t8 = setTimeout(() => fetchBedou('safety_8s'), 8000);
-    // Sur APK : reload additionnel à 15s pour compenser les WS instables
-    const t15 = isNative ? setTimeout(() => fetchBedou('safety_apk_15s'), 15000) : null;
-
     return () => {
       unsubBedou?.();
       unsubTx?.();
@@ -158,10 +150,6 @@ export function useBedouSync(userEmail) {
       window.removeEventListener('bedou_recharge_approved', onFcmBedou);
       window.removeEventListener('bedou_sync_refresh', onManualRefresh);
       window.removeEventListener('bedou_updated', onBedouUpdated);
-      clearTimeout(t800);
-      clearTimeout(t3);
-      clearTimeout(t8);
-      if (t15) clearTimeout(t15);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
   }, [userEmail, fetchBedou]);
