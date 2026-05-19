@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import moment from "moment";
 import BeDouHistory from "@/components/BeDouHistory";
-import { triggerWhatsAppNotification, waMsgBedouWithdrawRequested } from "@/lib/whatsappNotifications";
+import { triggerWhatsAppNotification } from "@/lib/whatsappNotifications";
 import { useBedouSync } from "@/lib/useBedouSync";
 
 const METHODES = [
@@ -225,7 +225,7 @@ export default function MonBedou() {
       const rd = res?.data ?? res;
       if (rd?.success) {
         toast.success("Demande de retrait envoyée !");
-        try { triggerWhatsAppNotification({ eventType: "bedou_withdraw_requested", recipientRole: "driver", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, messageText: waMsgBedouWithdrawRequested(), entityId: user?.id, entityType: "bedou", priority: "high" }); } catch (_) {}
+        try { triggerWhatsAppNotification({ eventType: "bedou_withdraw_requested", recipientRole: "driver", recipientName: user?.full_name || "", recipientPhone: user?.telephone || null, entityId: user?.id, entityType: "bedou", priority: "high" }); } catch (_) {}
         setRetraitForm({ montant: "", methode: "orange_money", numero_reception: "" });
         reloadBedou('retrait_success');
         setTab("historique");

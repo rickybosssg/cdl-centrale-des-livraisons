@@ -133,13 +133,17 @@ export default function CreateCourse() {
       vibrateSuccess();
       setSearchingCourse(courseData);
 
+      // Stocker refs pour nettoyage au démontage du composant
       let unsubCourse = null;
+      let isMounted = true;
       const timeoutId = setTimeout(() => {
+        if (!isMounted) return;
         if (unsubCourse) { unsubCourse(); unsubCourse = null; }
         setAucunLivreur(prev => !livreurTrouve && !prev ? true : prev);
       }, 90000);
 
       unsubCourse = base44.entities.Course.subscribe((event) => {
+        if (!isMounted) return;
         if (event.id !== courseData.id) return;
         const c = event.data;
         // GARDE : ne pas traiter les courses supprimées
@@ -154,6 +158,13 @@ export default function CreateCourse() {
           if (unsubCourse) { unsubCourse(); unsubCourse = null; }
         }
       });
+
+      // Nettoyage au démontage — évite setState sur composant démonté
+      return () => {
+        isMounted = false;
+        clearTimeout(timeoutId);
+        if (unsubCourse) { unsubCourse(); unsubCourse = null; }
+      };
     } catch (err) {
       toast.error("Erreur création: " + err.message);
     } finally {

@@ -109,8 +109,8 @@ export function useDriverCourseAlert() {
         const course = courses[0];
         if (course.livreur_email !== email) return;
         if (alertCourseRef.current?.id === course.id) return;
-        // GARDE ANTI-RÉINJECTION : ne jamais afficher une course annulée/supprimée
-        const STATUTS_INVALIDES = ["annulee", "annulee_par_admin", "livree", "refusee", "aucun_livreur"];
+        // GARDE ANTI-RÉINJECTION : identique à Course.subscribe — ne jamais réinjecter une course terminée
+        const STATUTS_INVALIDES = ["annulee", "annulee_par_admin", "livree", "refusee", "aucun_livreur", "acceptee", "en_cours", "driver_en_route_pickup", "arrived_pickup", "arrived_dropoff"];
         if (STATUTS_INVALIDES.includes(course.statut) || course.is_deleted) {
           console.log(`[DRIVER_ALERT] Notification fallback IGNORÉE — course statut=${course.statut} is_deleted=${course.is_deleted}`);
           return;

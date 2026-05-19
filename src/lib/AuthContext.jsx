@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { installAuthExpiredInterceptor } from '@/lib/authExpiredInterceptor';
-import { startSessionPing, silentRefresh, hasCredentials } from '@/lib/sessionManager';
+import { startSessionPing, stopSessionPing, silentRefresh, hasCredentials } from '@/lib/sessionManager';
 
 const AuthContext = createContext(null);
 
@@ -88,6 +88,8 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
+    // Arrêter le ping de session — évite les tentatives de re-login après logout volontaire
+    try { stopSessionPing(); } catch (_) {}
     // Nettoyage complet du cache local au logout
     try { localStorage.removeItem('base44_access_token'); } catch (_) {}
     try { base44.auth.setToken(null); } catch (_) {}
