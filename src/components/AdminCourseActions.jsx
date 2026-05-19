@@ -37,9 +37,10 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
     if (mode === 'force_delete') {
       console.log(`[FORCE_DELETE_CLICK] course=${course.id} | statut=${course.statut} | raison="${raison.trim()}" | ts=${new Date().toISOString()}`);
       try {
-        console.log(`[FORCE_DELETE_FUNCTION_CALLED] invoking forceDeleteCourse | course_id=${course.id}`);
-        const axiosRes = await base44.functions.invoke("forceDeleteCourse", {
+        console.log(`[FORCE_DELETE_FUNCTION_CALLED] invoking adminCourseAction/force_delete | course_id=${course.id}`);
+        const axiosRes = await base44.functions.invoke("adminCourseAction", {
           course_id: course.id,
+          action: "force_delete",
           raison: raison.trim(),
         });
 
@@ -47,9 +48,9 @@ export default function AdminCourseActions({ course, onDone, size = "sm" }) {
         const payload = axiosRes?.data ?? axiosRes;
         console.log(`[FORCE_DELETE_RESPONSE] course=${course.id} | payload=`, JSON.stringify(payload));
 
-        if (!payload?.success && !payload?.already_gone) {
+        if (!payload?.success) {
           const errMsg = payload?.error || payload?.message || `HTTP ${axiosRes?.status || '?'} — réponse inattendue`;
-          console.error(`[FORCE_DELETE_ERROR] course=${course.id} | errMsg=${errMsg} | full_payload=`, payload);
+          console.error(`[FORCE_DELETE_ERROR] course=${course.id} | errMsg=${errMsg}`);
           throw new Error(errMsg);
         }
 

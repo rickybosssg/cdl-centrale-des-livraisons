@@ -12,20 +12,30 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-    const isStaff =
-      user?.role === 'admin' ||
-      user?.role === 'dispatcher' ||
-      user?.user_type === 'admin';
+    const ALLOWED_ROLES = new Set(['admin', 'dispatcher', 'staff', 'super_admin']);
+    let isStaff = ALLOWED_ROLES.has(user?.role) || user?.user_type === 'admin';
+
+    // Fallback : si le token JWT a un mauvais rôle, vérifier le vrai rôle en BDD
+    if (!isStaff && user?.email) {
+      try {
+        const dbUsers = await base44.asServiceRole.entities.User.filter({ email: user.email });
+        const dbRole = dbUsers?.[0]?.role;
+        isStaff = ALLOWED_ROLES.has(dbRole);
+        if (isStaff) console.log(`[adminCourseAction] rôle corrigé via DB | email=${user.email} | db_role=${dbRole}`);
+      } catch (_) {}
+    }
+
     if (!user || !isStaff) {
-      return Response.json({ error: 'Accès refusé — administration requise' }, { status: 403 });
+      console.error(`[adminCourseAction] 403 | email=${user?.email} | token_role=${user?.role}`);
+      return Response.json({ error: `Accès refusé — rôle token: ${user?.role}` }, { status: 403 });
     }
 
     const { course_id, action, raison } = await req.json();
     if (!course_id || !action || !raison?.trim()) {
       return Response.json({ error: 'Paramètres manquants (course_id, action, raison)' }, { status: 400 });
     }
-    if (!['cancel', 'delete'].includes(action)) {
-      return Response.json({ error: 'Action invalide — valeurs acceptées : cancel | delete' }, { status: 400 });
+    if (!['cancel', 'delete', 'force_delete'].includes(action)) {
+      return Response.json({ error: 'Action invalide — valeurs acceptées : cancel | delete | force_delete' }, { status: 400 });
     }
 
     // ── 1. Récupérer la course ──────────────────────────────────────────────
@@ -131,7 +141,52 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, action: 'cancel', course_id, nouveau_statut: 'annulee', ancien_statut: ancienStatut });
     }
 
-    // ── 4. SUPPRESSION LOGIQUE ─────────────────────────────────────────────
+    // ── 4. FORCE DELETE — bypass toutes les gardes statut ─────────────────
+    if (action === 'force_delete') {
+      const ancienStatutForce = course.statut;
+      console.log(`[FORCE_DELETE_START] course=${course_id} | statut=${ancienStatutForce} | admin=${user.email} | livreur=${course.livreur_email || 'aucun'}`);
+
+      await base44.asServiceRole.entities.Course.update(course_id, {
+        is_deleted: true,
+        statut: 'annulee',
+        deleted_at: now,
+        deleted_by_admin: user.email,
+        delete_reason: raison.trim(),
+        livreur_email: null,
+        livreur_name: null,
+        telephone_livreur: null,
+        heure_assignation: null,
+      });
+      console.log(`[FORCE_DELETE_DB_UPDATED] is_deleted=true + statut=annulee | course=${course_id}`);
+
+      // Libérer le livreur
+      if (course.livreur_email) {
+        try {
+          const livs = await base44.asServiceRole.entities.User.filter({ email: course.livreur_email });
+          if (livs?.[0]) {
+            const allActive = await base44.asServiceRole.entities.Course.filter({ livreur_email: course.livreur_email });
+            const ACTIVE = new Set(['assignee_attente','acceptee','driver_en_route_pickup','arrived_pickup','en_cours','arrived_dropoff']);
+            const realCount = allActive.filter(x => x.id !== course_id && ACTIVE.has(x.statut) && !x.is_deleted).length;
+            await base44.asServiceRole.entities.User.update(livs[0].id, { nombre_courses_actives: realCount });
+            console.log(`[FORCE_DELETE_REALTIME_SENT] livreur libéré | email=${course.livreur_email} | new_count=${realCount}`);
+          }
+        } catch (_) {}
+      }
+
+      await base44.asServiceRole.entities.AdminActionLog.create({
+        admin_email: user.email,
+        admin_name: user.full_name || user.email,
+        action_type: 'COURSE_FORCE_DELETED',
+        entity_type: 'Course',
+        entity_id: course_id,
+        details: `Force delete — Raison: ${raison.trim()} | Statut avant: ${ancienStatutForce} | Client: ${course.client_email} | Livreur: ${course.livreur_email || 'aucun'}`,
+      }).catch(() => {});
+
+      console.log(`[FORCE_DELETE_SUCCESS] course=${course_id} | statut_avant=${ancienStatutForce}`);
+      return Response.json({ success: true, action: 'force_delete', course_id, statut_avant: ancienStatutForce });
+    }
+
+    // ── 5. SUPPRESSION LOGIQUE ─────────────────────────────────────────────
     if (action === 'delete') {
       await base44.asServiceRole.entities.Course.update(course_id, {
         is_deleted: true,
