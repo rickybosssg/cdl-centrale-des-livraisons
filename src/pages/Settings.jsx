@@ -7,7 +7,7 @@ import {
   ArrowLeft, Plus, Trash2, CheckCircle2, XCircle, Shield, FileText,
   LogOut, User, Truck, Store, Megaphone, RefreshCw, Lock, Keyboard,
 } from "lucide-react";
-import { isKeyboardFxEnabled, setKeyboardFxEnabled } from "@/lib/keyboardFeedback";
+import { isKeyboardFxEnabled, setKeyboardFxEnabled, isKeyboardSoundEnabled, setKeyboardSoundEnabled, isNativeApp } from "@/lib/keyboardFeedback";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -76,6 +76,7 @@ export default function Settings() {
   const [deplError, setDeplError] = useState(false);
   const [codePromo, setCodePromo] = useState("");
   const [keyFxEnabled, setKeyFxState] = useState(() => isKeyboardFxEnabled());
+  const [keySoundEnabled, setKeySoundState] = useState(() => isKeyboardSoundEnabled());
   const [codePromoError, setCodePromoError] = useState("");
 
   const load = async () => {
@@ -464,21 +465,47 @@ export default function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
-            <div>
-              <p className="text-sm font-semibold">Effets clavier</p>
-              <p className="text-xs text-muted-foreground">Vibration, son discret et animation lors de la saisie</p>
+          <div className="space-y-2">
+            {/* Vibration + animation */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
+              <div>
+                <p className="text-sm font-semibold">Effets clavier</p>
+                <p className="text-xs text-muted-foreground">
+                  {isNativeApp() ? 'Vibration + animation lors de la saisie' : 'Animation lors de la saisie'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const next = !keyFxEnabled;
+                  setKeyFxState(next);
+                  setKeyboardFxEnabled(next);
+                }}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${keyFxEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${keyFxEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
             </div>
-            <button
-              onClick={() => {
-                const next = !keyFxEnabled;
-                setKeyFxState(next);
-                setKeyboardFxEnabled(next);
-              }}
-              className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${keyFxEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${keyFxEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
+            {/* Son clavier CDL — indépendant */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
+              <div>
+                <p className="text-sm font-semibold">Sons clavier CDL</p>
+                <p className="text-xs text-muted-foreground">
+                  {isNativeApp()
+                    ? 'Son discret à chaque frappe (désactivé par défaut pour ne pas doubler le son Android)'
+                    : 'Son discret à chaque frappe dans le navigateur'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const next = !keySoundEnabled;
+                  setKeySoundState(next);
+                  setKeyboardSoundEnabled(next);
+                }}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${keySoundEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${keySoundEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>
