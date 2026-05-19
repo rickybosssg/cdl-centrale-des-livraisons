@@ -152,6 +152,7 @@ import AdminLogs from './pages/dispatcher/AdminLogs';
 import IntegrityDashboard from './pages/dispatcher/IntegrityDashboard';
 import SandboxTest from './pages/dispatcher/SandboxTest.jsx';
 import CourseAlertProofTest from './components/CourseAlertProofTest.jsx';
+import CourseTraceViewer from './pages/dispatcher/CourseTraceViewer.jsx';
 
 
 // ─── Capturer notif_route AVANT tout rendu React (app fermée) ─────────────
@@ -486,6 +487,7 @@ const AuthenticatedApp = () => {
           <Route path="/integrity-dashboard" element={<IntegrityDashboard />} />
           <Route path="/sandbox-test" element={<SandboxTest />} />
           <Route path="/course-alert-proof" element={<CourseAlertProofTest />} />
+          <Route path="/course-trace" element={<CourseTraceViewer />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
           <Route path="/fcm-audit" element={<FcmAuditDashboard />} />
           {/* Dashboard PRO & Profils centralisés */}

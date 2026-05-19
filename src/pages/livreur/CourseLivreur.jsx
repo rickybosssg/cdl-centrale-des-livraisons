@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import CourseTrace from "@/lib/CourseTrace";
 import { ArrowLeft, Phone, Package, CheckCircle2, Navigation, Zap } from "lucide-react";
 import MiniChat from "../../components/MiniChat";
 import DispatchTimer from "../../components/DispatchTimer";
@@ -42,17 +43,21 @@ export default function CourseLivreur() {
 
   useEffect(() => {
     const load = async () => {
+      CourseTrace.trace('CourseLivreur', 'MOUNT', { course_id: id, trigger: 'useEffect[id]' });
       const courses = await base44.entities.Course.filter({ id });
       const c = courses[0];
       if (c) {
-        // GARDE : course supprimée au chargement → retour immédiat
+        CourseTrace.trace('CourseLivreur', 'INITIAL_LOAD', { course_id: id, statut: c.statut, settlement_status: c.settlement_status });
         if (c.is_deleted) {
+          CourseTrace.trace('CourseLivreur', 'REDIRECT', { course_id: id, reason: 'is_deleted', to: '/mes-livraisons' });
           setLoading(false);
           navigate('/mes-livraisons');
           return;
         }
         if (c.statut === "livree") livreeVerrouilleRef.current = true;
         setCourse(c);
+      } else {
+        CourseTrace.trace('CourseLivreur', 'COURSE_NOT_FOUND', { course_id: id });
       }
       setLoading(false);
     };
@@ -61,23 +66,43 @@ export default function CourseLivreur() {
     // Subscription temps réel
     const unsub = base44.entities.Course.subscribe((event) => {
       if (event.id !== id) return;
-      // GARDE : course supprimée ou delete → quitter la vue immédiatement
+
+      CourseTrace.traceRealtimeEvent({
+        course_id: id,
+        event_type: event.type,
+        statut: event.data?.statut,
+        source: 'CourseLivreur',
+        subscription: 'Course.subscribe',
+        extra: { is_deleted: event.data?.is_deleted, has_data: !!event.data },
+      });
+
       if (!event.data || event.data.is_deleted || event.type === 'delete') {
+        CourseTrace.trace('CourseLivreur', 'REDIRECT', { course_id: id, reason: 'deleted_or_no_data', event_type: event.type, to: '/mes-livraisons' });
         console.log(`[CourseLivreur] course supprimée id=${id}, retour automatique`);
         navigate('/mes-livraisons');
         return;
       }
       const incoming = event.data;
-      // GARDE : course annulée → quitter aussi
       if (incoming.statut === 'annulee') {
+        CourseTrace.trace('CourseLivreur', 'REDIRECT', { course_id: id, reason: 'annulee', to: '/mes-livraisons' });
         toast.info("Cette course a été annulée.");
         navigate('/mes-livraisons');
         return;
       }
       if (livreeVerrouilleRef.current && incoming.statut !== "livree") {
+        CourseTrace.trace('CourseLivreur', 'LIVREE_LOCK_BLOCKED', { course_id: id, incoming_statut: incoming.statut });
         return;
       }
       if (incoming.statut === "livree") livreeVerrouilleRef.current = true;
+
+      CourseTrace.traceSetState({
+        course_id: id,
+        source: 'CourseLivreur',
+        field: 'course',
+        old_value: 'prev_statut',
+        new_value: incoming.statut,
+        trigger: 'Course.subscribe realtime',
+      });
       setCourse(incoming);
     });
     return unsub;
@@ -116,16 +141,20 @@ export default function CourseLivreur() {
     const validNext = LIVREUR_TRANSITIONS[course?.statut] || [];
     if (!validNext.includes(newStatut)) return;
     setUpdating(true);
-    console.log(`[STATUT_CLICK] ${course?.statut} → ${newStatut} | course=${id}`);
+    const fromStatut = course?.statut;
+    console.log(`[STATUT_CLICK] ${fromStatut} → ${newStatut} | course=${id}`);
+    CourseTrace.traceTransition({ course_id: id, from_statut: fromStatut, to_statut: newStatut, source: 'CourseLivreur.updateStatut', trigger: 'button_click' });
     try {
       setCourse(prev => ({ ...prev, statut: newStatut, ...extra }));
+      CourseTrace.traceBackend({ course_id: id, source: 'CourseLivreur', fn: 'updateCourseStatut', payload_summary: `${fromStatut}→${newStatut}` });
       await base44.functions.invoke('updateCourseStatut', { course_id: id, new_statut: newStatut, extra });
+      CourseTrace.trace('CourseLivreur', 'BACKEND_OK', { course_id: id, fn: 'updateCourseStatut', to_statut: newStatut });
       vibrateSuccess();
     } catch (err) {
       console.error(`[STATUT_ERROR] ${newStatut} | ${err?.message}`);
+      CourseTrace.traceError({ course_id: id, source: 'CourseLivreur.updateStatut', error: err, context: { fn: 'updateCourseStatut', to_statut: newStatut } });
       toast.error("Erreur : " + (err?.message || "réessayez"));
-      // Rollback UI
-      setCourse(prev => ({ ...prev, statut: course?.statut }));
+      setCourse(prev => ({ ...prev, statut: fromStatut }));
     } finally {
       setUpdating(false);
     }
@@ -172,6 +201,7 @@ export default function CourseLivreur() {
 
   const livrerColis = async () => {
     console.log('[DELIVERY_CLICK] livrerColis | course_id:', course?.id, '| statut:', course?.statut, '| settlement:', course?.settlement_status);
+    CourseTrace.traceTransition({ course_id: id, from_statut: course?.statut, to_statut: 'livree', source: 'CourseLivreur.livrerColis', trigger: 'button_click' });
 
     if (updating || livreeVerrouilleRef.current) {
       toast.info("Livraison déjà en cours ou terminée");
@@ -216,6 +246,7 @@ export default function CourseLivreur() {
         return;
       }
 
+      CourseTrace.traceBackend({ course_id: id, source: 'CourseLivreur', fn: 'bedouEngine.finaliser_course', payload_summary: `montant=${montant}` });
       console.log('[DELIVERY_BACKEND_START] invoking bedouEngine | montant:', montant);
       let res;
       try {
@@ -232,8 +263,10 @@ export default function CourseLivreur() {
           new Promise((_, reject) => setTimeout(() => reject(new Error('BEDOU_TIMEOUT')), 7000)),
         ]);
         console.log('[DELIVERY_BACKEND_SUCCESS] bedouEngine response:', res?.data?.success, res?.data?.alreadyDone);
+        CourseTrace.trace('CourseLivreur', 'BACKEND_OK', { course_id: id, fn: 'bedouEngine', success: res?.data?.success, alreadyDone: res?.data?.alreadyDone });
       } catch (bedouErr) {
         console.error('[DELIVERY_BACKEND_ERROR] bedouEngine error:', bedouErr?.message);
+        CourseTrace.traceError({ course_id: id, source: 'CourseLivreur', error: bedouErr, context: { fn: 'bedouEngine', phase: 'settlement' } });
         unlock('BEDOU_ERROR');
         toast.error('Erreur règlement Bedou : ' + (bedouErr?.message || 'réessayez'));
         return;
