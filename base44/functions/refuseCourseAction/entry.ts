@@ -82,11 +82,18 @@ Deno.serve(async (req) => {
     }
   } catch (_) {}
 
-  // Re-dispatcher via moteur unifié (respecte le mode auto/manuel)
-  base44.asServiceRole.functions.invoke('cdlDispatch', {
-    course_id,
-    exclude_emails: [user.email],
-  }).catch(() => {});
+  // Re-dispatcher UNIQUEMENT si la course était en mode auto (pas manuel)
+  // mode_assignation = 'manuel'/'manuel_admin'/'manuel_force' → l'admin re-assignera lui-même
+  const modeAssign = (c.mode_assignation || '').toLowerCase();
+  const isManual = modeAssign === 'manuel' || modeAssign === 'manuel_admin' || modeAssign === 'manuel_force';
+  if (!isManual) {
+    base44.asServiceRole.functions.invoke('cdlDispatch', {
+      course_id,
+      exclude_emails: [user.email],
+    }).catch(() => {});
+  } else {
+    console.log(`[REFUSE_ACTION] mode_assignation=manuel — pas de redispatch auto | course=${course_id}`);
+  }
 
   console.log(`[REFUSE_ACTION_SUCCESS] course=${course_id} | livreur=${user.email}`);
   return Response.json({ success: true, courseId: course_id, statut: 'en_attente' });

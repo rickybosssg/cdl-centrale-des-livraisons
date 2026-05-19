@@ -25,10 +25,15 @@ export default function CourseLivreur() {
   const livreeVerrouilleRef = useRef(false);
   const deliveryInProgressRef = useRef(false);
   const dispatchExpireFiredRef = useRef(false);
+  /** Verrou atomique updating — garantit le reset même si navigate() coupe le render */
+  const updatingRef = useRef(false);
+  const pendingNavigateRef = useRef(null);
 
   useEffect(() => {
     livreeVerrouilleRef.current = false;
     deliveryInProgressRef.current = false;
+    updatingRef.current = false;
+    pendingNavigateRef.current = null;
   }, [id]);
 
   useEffect(() => {
@@ -37,11 +42,18 @@ export default function CourseLivreur() {
 
   const onDispatchTimerExpire = useCallback(() => {
     if (dispatchExpireFiredRef.current) return;
+    // Ne jamais déclencher le redispatch automatique si la course est en mode assignation manuelle
+    const modeAssign = (course?.mode_assignation || '').toLowerCase();
+    const isManual = modeAssign === 'manuel' || modeAssign === 'manuel_admin' || modeAssign === 'manuel_force';
+    if (isManual) {
+      console.log(`[DISPATCH_TIMER_EXPIRE] mode_assignation=manuel — redispatch auto BLOQUÉ | course=${id}`);
+      return;
+    }
     dispatchExpireFiredRef.current = true;
     base44.functions
       .invoke("checkPendingAssignments", { course_id: id, force_immediate: true })
       .catch(() => {});
-  }, [id]);
+  }, [id, course?.mode_assignation]);
 
   useEffect(() => {
     const load = async () => {
@@ -139,9 +151,10 @@ export default function CourseLivreur() {
   };
 
   const updateStatut = async (newStatut, extra = {}) => {
-    if (updating) return;
+    if (updating || updatingRef.current) return;
     const validNext = LIVREUR_TRANSITIONS[course?.statut] || [];
     if (!validNext.includes(newStatut)) return;
+    updatingRef.current = true;
     setUpdating(true);
     const fromStatut = course?.statut;
     console.log(`[STATUT_CLICK] ${fromStatut} → ${newStatut} | course=${id}`);
@@ -158,6 +171,7 @@ export default function CourseLivreur() {
       toast.error("Erreur : " + (err?.message || "réessayez"));
       setCourse(prev => ({ ...prev, statut: fromStatut }));
     } finally {
+      updatingRef.current = false;
       setUpdating(false);
     }
   };
@@ -165,9 +179,10 @@ export default function CourseLivreur() {
   const recupererColis = () => updateStatut("en_cours", { date_recuperation: new Date().toISOString() });
 
   const signalerProbleme = async () => {
-    if (updating) return;
+    if (updating || updatingRef.current) return;
     const desc = window.prompt("Décrivez le problème :");
     if (!desc) return;
+    updatingRef.current = true;
     setUpdating(true);
     try {
       await base44.entities.CourseIssue.create({
@@ -197,6 +212,7 @@ export default function CourseLivreur() {
     } catch (err) {
       toast.error("Erreur signalement : " + err.message);
     } finally {
+      updatingRef.current = false;
       setUpdating(false);
     }
   };
@@ -206,7 +222,7 @@ export default function CourseLivreur() {
     CourseTrace.traceTransition({ course_id: id, from_statut: course?.statut, to_statut: 'livree', source: 'CourseLivreur.livrerColis', trigger: 'button_click' });
 
     // Verrou dur multi-couche : double-clic, re-render, ou subscription concurrente
-    if (updating || livreeVerrouilleRef.current || deliveryInProgressRef.current) {
+    if (updating || updatingRef.current || livreeVerrouilleRef.current || deliveryInProgressRef.current) {
       toast.info("Livraison déjà en cours ou terminée");
       return;
     }
@@ -229,10 +245,12 @@ export default function CourseLivreur() {
       if (!uiUnlocked) {
         uiUnlocked = true;
         deliveryInProgressRef.current = false;
+        updatingRef.current = false;
         setUpdating(false);
         if (reason) console.log('[DELIVERY_UI_REFRESH] unlock reason:', reason);
       }
     };
+    updatingRef.current = true;
 
     try {
       // Idempotence : relire la course avant de lancer le settlement
@@ -350,6 +368,7 @@ export default function CourseLivreur() {
     }
     // ANTI-DOUBLE : si déjà livree via settlement, la décrémentation s'est faire ailleurs
     // Cet écran est juste pour "fermer" la vue — ne pas re-décrémenter
+    updatingRef.current = true;
     setUpdating(true);
     try {
       vibrateSuccess();
@@ -358,6 +377,7 @@ export default function CourseLivreur() {
     } catch (err) {
       toast.error(err.message || 'Erreur inattendue — Réessayez.');
     } finally {
+      updatingRef.current = false;
       setUpdating(false);
     }
   };
@@ -588,46 +608,62 @@ export default function CourseLivreur() {
           />
           <div className="flex gap-3">
             <button
-              disabled={updating}
+              disabled={updating || updatingRef.current}
               onClick={async () => {
+                if (updatingRef.current) return;
                 console.log(`[REFUSE_CLICK] course=${id} | statut=${course?.statut}`);
+                updatingRef.current = true;
                 setUpdating(true);
+                let shouldNavigate = false;
                 try {
                   await base44.functions.invoke('refuseCourseAction', { course_id: id });
                   toast.info("Course refusée");
-                  navigate(-1);
+                  shouldNavigate = true;
                 } catch (err) {
                   console.error(`[REFUSE_ERROR] ${err?.message}`);
                   toast.error("Erreur refus : " + (err?.message || "réessayez"));
                 } finally {
+                  updatingRef.current = false;
                   setUpdating(false);
+                  if (shouldNavigate) navigate(-1);
                 }
               }}
-              className="flex-1 py-4 rounded-xl border-2 border-gray-200 text-gray-500 text-sm font-medium active:scale-95 transition-all"
+              className="flex-1 py-4 rounded-xl border-2 border-gray-200 text-gray-500 text-sm font-medium active:scale-95 transition-all disabled:opacity-50"
             >
               Refuser
             </button>
             <button
-              disabled={updating}
+              disabled={updating || updatingRef.current}
               onClick={async () => {
+                if (updatingRef.current) return;
                 console.log(`[ACCEPT_CLICK] course=${id} | statut=${course?.statut}`);
+                updatingRef.current = true;
                 setUpdating(true);
                 try {
                   const res = await base44.functions.invoke('acceptCourseAction', { course_id: id });
                   if (res?.data?.success) {
                     console.log(`[ACCEPT_SUCCESS] course=${id}`);
                     toast.success("✅ Course acceptée !");
+                    // Le realtime subscription mettra à jour le statut → les boutons disparaissent naturellement
                   } else {
-                    toast.error("Course non disponible (statut: " + (res?.data?.statut || "?") + ")");
+                    const errStatut = res?.data?.statut || '?';
+                    console.error(`[ACCEPT_REJECTED] statut=${errStatut}`);
+                    if (errStatut === 'acceptee' || errStatut === 'en_cours') {
+                      // Course déjà acceptée (race condition) → naviguer quand même
+                      toast.info("Course déjà acceptée — ouverture...");
+                    } else {
+                      toast.error("Course non disponible (statut: " + errStatut + ")");
+                    }
                   }
                 } catch (err) {
                   console.error(`[ACCEPT_ERROR] ${err?.message}`);
                   toast.error("Erreur : " + (err?.message || "réessayez"));
                 } finally {
+                  updatingRef.current = false;
                   setUpdating(false);
                 }
               }}
-              className="flex-[2] py-4 rounded-xl bg-green-500 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-green-200"
+              className="flex-[2] py-4 rounded-xl bg-green-500 text-white text-base font-extrabold active:scale-95 transition-all shadow-md shadow-green-200 disabled:opacity-50"
             >
               ✅ ACCEPTER
             </button>

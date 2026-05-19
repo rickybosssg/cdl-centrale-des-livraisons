@@ -51,6 +51,14 @@ async function readDispatchMode(base44) {
 }
 
 async function processOnePendingCourse(base44, course, now, forceImmediate) {
+  // ── VERROU ABSOLU mode manuel : jamais réassigner une course assignée manuellement ──
+  // mode_assignation = 'manuel' OU 'manuel_admin' OU 'manuel_force' → intouchable par l'automatisme
+  const modeAssign = (course.mode_assignation || '').toLowerCase();
+  if (modeAssign === 'manuel' || modeAssign === 'manuel_admin' || modeAssign === 'manuel_force') {
+    console.log(`[CHECK_PENDING] SKIPPED — mode_assignation=manuel | course=${course.id} | livreur=${course.livreur_email}`);
+    return 'skipped_manual';
+  }
+
   const assignedAt = course.heure_assignation ? new Date(course.heure_assignation).getTime() : 0;
   const elapsed = now - assignedAt;
   const livreurEmail = course.livreur_email;
