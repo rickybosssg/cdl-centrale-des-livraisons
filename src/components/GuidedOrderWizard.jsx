@@ -275,7 +275,7 @@ function StepContact({ typeService, form, setForm, onNext }) {
   const isEnvoyer = typeService === "envoyer";
   const isRecevoir = typeService === "recevoir";
   const isDepl = typeService === "deplacement";
-  const valid = isDepl ? true : isEnvoyer ? (form.nom_destinataire && form.telephone_destinataire) : form.telephone_expediteur;
+  const valid = isDepl ? true : isEnvoyer ? !!form.telephone_destinataire : !!form.telephone_expediteur;
 
   return (
     <div className="px-5 pt-2 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 160px)" }}>
