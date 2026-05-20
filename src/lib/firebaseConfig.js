@@ -51,12 +51,22 @@ if (!resolved.hasAppId) missingVars.push('VITE_FIREBASE_APP_ID');
 if (!resolved.hasVapidKey) missingVars.push('VITE_FIREBASE_VAPID_KEY');
 
 if (missingVars.length > 0) {
-  console.error('[firebaseConfig] ❌ Variables manquantes (PLACEHOLDER actifs):', missingVars);
-  console.error('[firebaseConfig] → Aller sur Firebase Console → Paramètres → Config SDK → Copier les valeurs dans Base44 Secrets');
+  console.error('[firebaseConfig] ❌ PLACEHOLDER ACTIFS — variables manquantes:', missingVars);
+  console.error('[firebaseConfig] → Ces tokens FCM seront invalides. Vérifier les secrets Base44.');
 } else {
-  console.log('[firebaseConfig] ✅ Config complète:', {
+  console.log('[firebaseConfig] ✅ Config complète — aucun PLACEHOLDER:', {
     projectId: resolved.projectId,
     messagingSenderId: String(firebaseConfig.messagingSenderId).slice(0, 6) + '...',
     appId: String(firebaseConfig.appId).slice(0, 15) + '...',
+    hasVapidKey: resolved.hasVapidKey,
   });
 }
+
+// ── Rapport de build visible dans les logs APK ────────────────────────────────
+console.log('[firebaseConfig] BUILD_REPORT:', {
+  VITE_FIREBASE_PROJECT_ID: !!import.meta.env.VITE_FIREBASE_PROJECT_ID ? '✅ SET' : '❌ PLACEHOLDER',
+  VITE_FIREBASE_API_KEY: !!import.meta.env.VITE_FIREBASE_API_KEY ? '✅ SET' : '❌ PLACEHOLDER',
+  VITE_FIREBASE_APP_ID: !!import.meta.env.VITE_FIREBASE_APP_ID ? '✅ SET' : '❌ PLACEHOLDER',
+  VITE_FIREBASE_MESSAGING_SENDER_ID: !!import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ? '✅ SET' : '❌ PLACEHOLDER',
+  VITE_FIREBASE_VAPID_KEY: !!import.meta.env.VITE_FIREBASE_VAPID_KEY ? '✅ SET' : '❌ PLACEHOLDER',
+});
