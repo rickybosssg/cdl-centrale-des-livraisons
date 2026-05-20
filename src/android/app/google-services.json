@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "741243319367",
+    "firebase_url": "https://cdl-app-4743c-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "cdl-app-4743c",
+    "storage_bucket": "cdl-app-4743c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:741243319367:android:3c44c818a1f6917236ed62",
+        "android_client_info": {
+          "package_name": "com.cdl.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "741243319367-7arish1hr47bp07t5iepqsqnoaoic75s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdwfpA2W625trBL3qGli3nByk7hIj61oc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "741243319367-7arish1hr47bp07t5iepqsqnoaoic75s.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
