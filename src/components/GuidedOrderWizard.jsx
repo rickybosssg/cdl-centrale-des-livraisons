@@ -300,9 +300,6 @@ function StepQuartier({ title, subtitle, icon, value, onChange, onNext, onUseGPS
         <h2 className="text-2xl font-extrabold text-gray-900">{title}</h2>
         <p className="text-sm text-gray-400 mt-1">{subtitle}</p>
       </div>
-      <div style={{ opacity: lieuInconnu ? 0.4 : 1, pointerEvents: lieuInconnu ? "none" : "auto" }}>
-        <QuartierInput value={lieuInconnu ? "" : value} onChange={onChange} placeholder="Ex: Ouaga 2000, Pissy..." onUseGPS={onUseGPS} autoFocus={!lieuInconnu} />
-      </div>
 
       {showLieuInconnu && (
         <button
@@ -326,11 +323,15 @@ function StepQuartier({ title, subtitle, icon, value, onChange, onNext, onUseGPS
           <div>
             <p className="text-sm font-bold" style={{ color: lieuInconnu ? "#92400E" : "#374151" }}>Lieu inconnu</p>
             <p className="text-xs mt-0.5" style={{ color: lieuInconnu ? "#B45309" : "#9CA3AF" }}>
-              Le livreur contactera le destinataire à l'arrivée
+              Le livreur contactera le destinataire.
             </p>
           </div>
         </button>
       )}
+
+      <div style={{ opacity: lieuInconnu ? 0.4 : 1, pointerEvents: lieuInconnu ? "none" : "auto" }}>
+        <QuartierInput value={lieuInconnu ? "" : value} onChange={onChange} placeholder="Ex: Ouaga 2000, Pissy..." onUseGPS={onUseGPS} autoFocus={!lieuInconnu} />
+      </div>
 
       <BigBtn onClick={onNext} disabled={!canContinue} color={PRIMARY} fixed>
         Continuer <ChevronRight className="h-4 w-4" />
