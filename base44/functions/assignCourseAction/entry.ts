@@ -78,11 +78,19 @@ Deno.serve(async (req) => {
   const now = new Date().toISOString();
   let historique = [];
   try { if (course.historique_assignation) historique = JSON.parse(course.historique_assignation); } catch (_) {}
+
+  // ── GUARD ANTI-DOUBLON : ne pas réassigner si même livreur déjà en assignee_attente ──
+  if (course.statut === 'assignee_attente' && course.livreur_email === driver_email) {
+    console.log(`[ASSIGN_COURSE] GUARD doublon — livreur déjà assigné | course=${course_id} | driver=${driver_email}`);
+    return Response.json({ success: false, reason: 'Ce livreur est déjà assigné à cette course' });
+  }
+
   historique.push({
     livreur_email: driver.email,
     livreur_nom: driver.full_name,
     heure: now,
-    statut: 'manuel',
+    statut: 'proposee',
+    mode: 'manuel_admin',
     assigne_par: user.email,
   });
 
@@ -105,15 +113,17 @@ Deno.serve(async (req) => {
     derniere_proposition_at: now,
   }).catch(() => {});
 
-  // Notif in-app livreur
+  // Notif in-app livreur (avec notification_key pour déduplication)
+  const notifKey = `${driver.email}__assigned__${course_id}__${Date.now()}`;
   await base44.asServiceRole.entities.Notification.create({
     destinataire_email: driver.email,
     destinataire_role: 'livreur',
-    titre: '📦 Nouvelle course assignée',
-    message: `${course.quartier_depart} → ${course.quartier_arrivee} · ${course.prix || 0} FCFA · Répondez en 60s`,
-    type: 'info', lue: false, course_id,
+    titre: "🛵 Nouvelle course assignée par l'admin !",
+    message: `Course de ${course.quartier_depart} → ${course.quartier_arrivee}. Prix: ${course.prix || 0} FCFA.`,
+    type: 'success', lue: false, course_id,
     target_screen: `/course-livreur/${course_id}`,
     target_entity_id: course_id, target_entity_type: 'course',
+    notification_key: notifKey,
   }).catch(() => {});
 
   // Push FCM livreur

@@ -115,11 +115,15 @@ Deno.serve(async (req) => {
         annulee_par: 'client',
         frais_annulation: 0,
         date_annulation: now,
+        livreur_email: null,
+        livreur_name: null,
+        telephone_livreur: null,
       });
 
       // Libérer le livreur — SOURCE UNIQUE : libererLivreur()
       if (c.livreur_email) {
         await libererLivreur(base44, c.livreur_email, courseId);
+        const notifKeyCancel = `${c.livreur_email}__course_cancelled__${courseId}__${new Date().toDateString()}`;
         await base44.asServiceRole.entities.Notification.create({
           destinataire_email: c.livreur_email,
           destinataire_role: 'livreur',
@@ -128,6 +132,10 @@ Deno.serve(async (req) => {
           type: 'warning',
           lue: false,
           course_id: courseId,
+          notification_key: notifKeyCancel,
+          target_screen: '/courses-disponibles',
+          target_entity_id: courseId,
+          target_entity_type: 'Course',
         }).catch(() => {});
       }
 
@@ -258,7 +266,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Mettre à jour la course
+    // Mettre à jour la course — vider livreur systématiquement
     await base44.asServiceRole.entities.Course.update(c.id, {
       statut: 'annulee',
       date_annulation: now,
@@ -267,6 +275,9 @@ Deno.serve(async (req) => {
       montant_livreur_annulation: partLivreur,
       montant_cdl_annulation: partCdl,
       statut_paiement: 'frais_preleves',
+      livreur_email: null,
+      livreur_name: null,
+      telephone_livreur: null,
     });
 
     await base44.asServiceRole.entities.Notification.create({

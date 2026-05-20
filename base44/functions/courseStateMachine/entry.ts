@@ -79,10 +79,17 @@ async function getDispatchMode(base44) {
 function validateTransition(action, currentStatut, isAdmin) {
   const rule = TRANSITIONS[action];
   if (!rule) return { ok: false, reason: `Action inconnue: ${action}` };
+
+  // Bloquer TOUTE transition depuis un statut terminal, même pour admin
+  // (sauf DELIVER qui a sa propre idempotence)
+  if (TERMINAL_STATUTS.has(currentStatut) && action !== 'DELIVER') {
+    return { ok: false, reason: `Transition impossible depuis statut terminal: ${currentStatut}` };
+  }
+
   if (!isAdmin && !rule.from.includes(currentStatut)) {
     return { ok: false, reason: `Transition invalide: ${currentStatut} → ${action} (attendu: ${rule.from.join('|')})` };
   }
-  // Admin peut forcer certaines transitions (ex: depuis en_cours si bug)
+  // Admin peut forcer certaines transitions intermédiaires (ex: depuis en_cours si bug)
   if (isAdmin && !rule.from.includes(currentStatut)) {
     console.log(`[CSM] Admin force transition | ${currentStatut} → ${action}`);
   }
@@ -278,6 +285,13 @@ Deno.serve(async (req) => {
     updateData.telephone_livreur = user.telephone || '';
     updateData.date_acceptation = now;
     updateData.mode_assignation = course.mode_assignation || 'auto';
+    // Synchroniser urgence ↔ niveau_urgence (source unique : niveau_urgence)
+    if (!course.urgence && course.niveau_urgence) {
+      updateData.urgence = course.niveau_urgence;
+    }
+    if (!course.niveau_urgence && course.urgence) {
+      updateData.niveau_urgence = course.urgence;
+    }
   }
 
   if (action === 'REFUSE') {
