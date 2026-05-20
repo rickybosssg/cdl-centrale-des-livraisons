@@ -485,25 +485,29 @@ function StepPrix({ form, setForm, onNext }) {
 }
 
 // ── ÉTAPE 7 : Urgence ────────────────────────────────────────────────────────
-function StepUrgence({ urgence, setUrgence, onNext }) {
+function StepUrgence({ urgence, setUrgence, prixBase, onNext }) {
   const levels = [
-    { id: "normal",      emoji: "🟢", label: "Normal",      desc: "Livraison standard",   supplement: 0,    color: GREEN,  bg: `${GREEN}15` },
-    { id: "urgent",      emoji: "🔔", label: "Urgent",      desc: "Moins de 30 min",       supplement: 500,  color: ORANGE, bg: `${ORANGE}18` },
-    { id: "tres_urgent", emoji: "🚨", label: "Très urgent", desc: "Moins de 20 min",       supplement: 1000, color: RED,    bg: `${RED}15` },
+    { id: "normal",      emoji: "🟢", label: "Normal",      desc: "Livraison standard",  supplement: 0,    color: GREEN,  bg: `${GREEN}15` },
+    { id: "urgent",      emoji: "🔔", label: "Urgent",      desc: "Moins de 30 min",      supplement: 500,  color: ORANGE, bg: `${ORANGE}18` },
+    { id: "tres_urgent", emoji: "🚨", label: "Très urgent", desc: "Moins de 20 min",      supplement: 1000, color: RED,    bg: `${RED}15` },
   ];
+  const selected = levels.find(l => l.id === urgence);
+  const prixTotal = (prixBase || 0) + (selected?.supplement || 0);
+
   return (
-    <div className="px-5 pt-2 pb-8 space-y-4">
+    <div className="px-5 pt-2 space-y-4" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 160px)" }}>
       <div>
         <div className="text-3xl mb-2">⚡</div>
         <h2 className="text-2xl font-extrabold text-gray-900">Niveau d'urgence</h2>
         <p className="text-sm text-gray-400 mt-1">Choisissez selon votre besoin</p>
       </div>
+
       {levels.map(l => {
         const active = urgence === l.id;
         return (
           <PressBtn
             key={l.id}
-            onClick={() => { setUrgence(l.id); setTimeout(onNext, 180); }}
+            onClick={() => setUrgence(l.id)}
             className="w-full flex items-center gap-4 p-5 rounded-2xl border-2 text-left transition-all"
             style={{
               borderColor: active ? l.color : "#E5E7EB",
@@ -525,6 +529,22 @@ function StepUrgence({ urgence, setUrgence, onNext }) {
           </PressBtn>
         );
       })}
+
+      {/* Récap prix dynamique */}
+      {urgence && prixBase > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+          className="p-4 rounded-2xl flex items-center justify-between"
+          style={{ background: `${PRIMARY}10`, border: `1.5px solid ${PRIMARY}25` }}
+        >
+          <p className="text-sm text-gray-500 font-medium">Total estimé</p>
+          <p className="text-2xl font-extrabold" style={{ color: PRIMARY }}>{fmt(prixTotal)}</p>
+        </motion.div>
+      )}
+
+      <BigBtn onClick={onNext} disabled={!urgence} color={PRIMARY} fixed>
+        Continuer <ChevronRight className="h-4 w-4" />
+      </BigBtn>
     </div>
   );
 }
@@ -678,12 +698,12 @@ export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmi
       ? <StepPrix form={form} setForm={setForm} onNext={next} />
       : <StepColis form={form} setForm={setForm} onNext={next} />;
     if (step === 6) return isDepl
-      ? <StepUrgence urgence={urgence} setUrgence={setUrgence} onNext={next} />
+      ? <StepUrgence urgence={urgence} setUrgence={setUrgence} prixBase={prixBase} onNext={next} />
       : <StepPrix form={form} setForm={setForm} onNext={next} />;
     if (step === 7) return isDepl
       ? <StepRecap typeService={typeService} form={form} urgence={urgence} prixBase={prixBase}
           supplement={supplement} prixTotal={prixTotal} soldeBedou={soldeBedou} loading={loading} onConfirm={handleConfirm} />
-      : <StepUrgence urgence={urgence} setUrgence={setUrgence} onNext={next} />;
+      : <StepUrgence urgence={urgence} setUrgence={setUrgence} prixBase={prixBase} onNext={next} />;
     if (step === 8) return (
       <StepRecap typeService={typeService} form={form} urgence={urgence} prixBase={prixBase}
         supplement={supplement} prixTotal={prixTotal} soldeBedou={soldeBedou} loading={loading} onConfirm={handleConfirm} />
