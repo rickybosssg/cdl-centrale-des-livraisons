@@ -254,7 +254,8 @@ function StepType({ onSelect }) {
 }
 
 // ── ÉTAPE 2 & 3 : Quartier ───────────────────────────────────────────────────
-function StepQuartier({ title, subtitle, icon, value, onChange, onNext, onUseGPS }) {
+function StepQuartier({ title, subtitle, icon, value, onChange, onNext, onUseGPS, showLieuInconnu = false, lieuInconnu = false, onLieuInconnuChange }) {
+  const canContinue = lieuInconnu || !!value;
   return (
     <div className="px-5 pt-2 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 160px)" }}>
       <div>
@@ -262,8 +263,39 @@ function StepQuartier({ title, subtitle, icon, value, onChange, onNext, onUseGPS
         <h2 className="text-2xl font-extrabold text-gray-900">{title}</h2>
         <p className="text-sm text-gray-400 mt-1">{subtitle}</p>
       </div>
-      <QuartierInput value={value} onChange={onChange} placeholder="Ex: Ouaga 2000, Pissy..." onUseGPS={onUseGPS} autoFocus />
-      <BigBtn onClick={onNext} disabled={!value} color={PRIMARY} fixed>
+      <div style={{ opacity: lieuInconnu ? 0.4 : 1, pointerEvents: lieuInconnu ? "none" : "auto" }}>
+        <QuartierInput value={lieuInconnu ? "" : value} onChange={onChange} placeholder="Ex: Ouaga 2000, Pissy..." onUseGPS={onUseGPS} autoFocus={!lieuInconnu} />
+      </div>
+
+      {showLieuInconnu && (
+        <button
+          type="button"
+          onClick={() => onLieuInconnuChange?.(!lieuInconnu)}
+          className="flex items-center gap-3 w-full p-4 rounded-2xl border-2 text-left transition-all"
+          style={{
+            borderColor: lieuInconnu ? "#F59E0B" : "#E5E7EB",
+            background: lieuInconnu ? "#FEF3C7" : "#F9FAFB",
+          }}
+        >
+          <div
+            className="h-6 w-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all"
+            style={{
+              borderColor: lieuInconnu ? "#F59E0B" : "#D1D5DB",
+              background: lieuInconnu ? "#F59E0B" : "#fff",
+            }}
+          >
+            {lieuInconnu && <span className="text-white text-sm font-bold">✓</span>}
+          </div>
+          <div>
+            <p className="text-sm font-bold" style={{ color: lieuInconnu ? "#92400E" : "#374151" }}>Lieu inconnu</p>
+            <p className="text-xs mt-0.5" style={{ color: lieuInconnu ? "#B45309" : "#9CA3AF" }}>
+              Le livreur contactera le destinataire à l'arrivée
+            </p>
+          </div>
+        </button>
+      )}
+
+      <BigBtn onClick={onNext} disabled={!canContinue} color={PRIMARY} fixed>
         Continuer <ChevronRight className="h-4 w-4" />
       </BigBtn>
     </div>
@@ -655,6 +687,7 @@ export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmi
   }, [step]);
   const [typeService, setType]    = useState(null);
   const [urgence, setUrgence]     = useState("normal");
+  const [lieuInconnu, setLieuInconnu] = useState(false);
   const [form, setForm]           = useState({
     quartier_depart: "", quartier_arrivee: "",
     nom_expediteur: user?.full_name || "", telephone_expediteur: user?.telephone || "",
@@ -677,7 +710,7 @@ export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmi
 
   const handleSelectType = (t) => { setType(t); setDir(1); setStep(2); };
   const handleUseGPS = () => { if (gpsDepart?.lat) setForm(f => ({ ...f, quartier_depart: "Ma position GPS" })); };
-  const handleConfirm = () => onSubmit({ form, typeService, urgence, prixBase, supplement, prixTotal });
+  const handleConfirm = () => onSubmit({ form, typeService, urgence, prixBase, supplement, prixTotal, lieuInconnu });
 
   // Mapping step → composant
   // Steps: 1=type, 2=depart, 3=arrivee, 4=contact, 5=colis(skip si depl), 6=prix(5 si depl), 7=urgence(6 si depl), 8=recap(7 si depl)
@@ -691,7 +724,15 @@ export default function GuidedOrderWizard({ user, soldeBedou, gpsDepart, onSubmi
     if (step === 3) return (
       <StepQuartier title="Lieu de livraison" subtitle="Où doit être livré le colis ?" icon="🏁"
         value={form.quartier_arrivee} onChange={v => setForm(f => ({ ...f, quartier_arrivee: v }))}
-        onNext={next} />
+        onNext={next}
+        showLieuInconnu
+        lieuInconnu={lieuInconnu}
+        onLieuInconnuChange={(val) => {
+          setLieuInconnu(val);
+          if (val) setForm(f => ({ ...f, quartier_arrivee: "Lieu inconnu" }));
+          else setForm(f => ({ ...f, quartier_arrivee: "" }));
+        }}
+      />
     );
     if (step === 4) return <StepContact typeService={typeService} form={form} setForm={setForm} onNext={next} />;
     if (step === 5) return isDepl

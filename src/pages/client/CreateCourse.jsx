@@ -50,7 +50,7 @@ export default function CreateCourse() {
     } catch (_) {}
   };
 
-  const handleSubmit = async ({ form, typeService, urgence, prixBase, supplement, prixTotal }) => {
+  const handleSubmit = async ({ form, typeService, urgence, prixBase, supplement, prixTotal, lieuInconnu }) => {
     if (!prixBase || prixBase <= 0) { toast.error("Prix requis"); return; }
     
     // SÉCURITÉ : Vérifier solde Bedou AVANT création de course
@@ -117,6 +117,7 @@ export default function CreateCourse() {
         gain_livreur: gainLivreur,
         statut_paiement_livreur: "Commission due",
         nombre_tentatives: 0,
+        lieu_inconnu_arrivee: lieuInconnu || false,
       });
 
       // Dispatch déclenché exclusivement par automation entity Course.create → createSmartDispatch (backend)
