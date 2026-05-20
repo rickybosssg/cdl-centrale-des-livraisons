@@ -368,7 +368,7 @@ function StepContact({ typeService, form, setForm, onNext }) {
 
       {isEnvoyer && (
         <div className="space-y-4">
-          <FieldInput label="Nom du destinataire *" placeholder="Nom complet" value={form.nom_destinataire}
+          <FieldInput label="Nom du destinataire" placeholder="Nom complet" value={form.nom_destinataire}
             onChange={v => setForm(f => ({ ...f, nom_destinataire: v }))} autoFocus />
           <FieldInput label="Numéro du destinataire *" placeholder="+226 XX XX XX XX" type="tel"
             value={form.telephone_destinataire} onChange={v => setForm(f => ({ ...f, telephone_destinataire: v }))} />
