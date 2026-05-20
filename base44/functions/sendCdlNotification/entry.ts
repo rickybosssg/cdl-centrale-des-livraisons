@@ -135,6 +135,85 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
   }
 }
 
+// ── Utilitaire : délai async ──────────────────────────────────────────────────
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// ── Fetch paginé avec retry exponentiel sur 429 ───────────────────────────────
+// PAGE_SIZE = 50 (sécurisé anti-rate-limit)
+// Récupère UNIQUEMENT les tokens des emails ciblés via boucle paginée
+const PAGE_SIZE = 50;
+const MAX_RETRIES = 3;
+const THROTTLE_MS = 100; // pause entre pages
+
+async function fetchWithRetry(fn, retries = MAX_RETRIES) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const is429 = e?.message?.toLowerCase().includes('rate limit') || e?.message?.includes('429');
+      if (is429 && attempt < retries) {
+        const delay = 200 * Math.pow(2, attempt); // 200ms, 400ms, 800ms
+        console.warn(`[FCM_RETRY] 429 rate limit — retry ${attempt + 1}/${retries} in ${delay}ms`);
+        await sleep(delay);
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+// ── Résolution tokens paginée — zéro 429 ─────────────────────────────────────
+// Mode PROD : récupère seulement les tokens des emails ciblés, page par page
+// Mode AUDIT (emailSet large > 20) : limite à 2 pages max pour éviter surcharge
+async function resolveTokensPaginated(base44, targetEmails, isAuditMode = false) {
+  const emailSet = new Set(targetEmails.map(e => e.toLowerCase()));
+  const collected = [];
+  const maxPages = isAuditMode ? 2 : 20; // audit : max 2 pages / prod : jusqu'à 20
+  let page = 0;
+  let skip = 0;
+
+  while (page < maxPages) {
+    try {
+      const batch = await fetchWithRetry(() =>
+        base44.asServiceRole.entities.FcmToken.filter(
+          { is_active: true }, '-last_used', PAGE_SIZE, skip
+        )
+      );
+
+      if (!batch || batch.length === 0) break;
+
+      const matched = batch.filter(t =>
+        t.token &&
+        !isTestToken(t.token) &&
+        t.user_email &&
+        emailSet.has(t.user_email.toLowerCase()) &&
+        getTokenAge(t) < FALLBACK_MAX_AGE_MS
+      );
+      collected.push(...matched);
+
+      console.log(`[FCM_TOKEN_PAGE] page=${page + 1} | batch=${batch.length} | matched=${matched.length} | total_so_far=${collected.length}`);
+
+      // Stop si on a trouvé un token pour chaque destinataire
+      const covered = new Set(collected.map(t => t.user_email?.toLowerCase()));
+      if (covered.size >= emailSet.size) {
+        console.log(`[FCM_TOKEN_PAGE] all recipients covered — stopping pagination`);
+        break;
+      }
+
+      if (batch.length < PAGE_SIZE) break; // dernière page
+
+      skip += PAGE_SIZE;
+      page++;
+      if (page < maxPages) await sleep(THROTTLE_MS); // throttle entre pages
+    } catch (e) {
+      console.warn(`[FCM_TOKEN_PAGE] page=${page + 1} error: ${e.message} — stopping`);
+      break;
+    }
+  }
+
+  return collected;
+}
+
 // ── Anti-doublon : clé event_type+entity_id+recipient_email (fenêtre 60s) ────
 async function isDuplicate(base44, recipientEmail, data, title) {
   try {
@@ -276,7 +355,7 @@ Deno.serve(async (req) => {
       console.error(`[sendCdlNotification] ❌ BDD batch: ${e.message}`);
     }
 
-    // ── 3. FCM Push — résolution tokens EN BATCH (une seule requête BDD) ────
+    // ── 3. FCM Push — résolution tokens paginée (anti-429) ───────────────────
     let sent = 0, failed = 0, firstMsgId = null;
 
     if (!SA_JSON) {
@@ -284,67 +363,62 @@ Deno.serve(async (req) => {
       return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'FCM désactivé (SA manquant)' });
     }
 
-    // ── BATCH : une seule requête pour tous les tokens actifs ────────────────
-    // Évite le rate limit 429 qui survenait avec N requêtes parallèles
-    let allActiveTokens = [];
+    // Détection mode audit : si destinataires > 20 → mode audit (limite pages)
+    // Mode prod (user_email unique ou rôle ciblé) : pagination complète
+    const isAuditMode = targetEmails.length > 20;
+    if (isAuditMode) {
+      console.log(`[FCM_MODE] AUDIT (${targetEmails.length} recipients) — pagination limitée à 2 pages`);
+    }
+
+    // Résolution paginée avec retry exponentiel — zéro 429
+    let tokenRecords = [];
     try {
-      // Récupérer tous les tokens actifs pour tous les destinataires en une fois
-      const batchResults = await base44.asServiceRole.entities.FcmToken.filter(
-        { is_active: true }, '-last_used', 500
-      );
-      const emailSet = new Set(targetEmails);
-      allActiveTokens = (batchResults || []).filter(t =>
-        t.token &&
-        !isTestToken(t.token) &&
-        t.user_email &&
-        emailSet.has(t.user_email.toLowerCase()) &&
-        getTokenAge(t) < FALLBACK_MAX_AGE_MS
-      );
-      console.log(`[FCM_TOKEN_BATCH] found=${allActiveTokens.length} active tokens for ${targetEmails.length} recipients`);
+      tokenRecords = await resolveTokensPaginated(base44, targetEmails, isAuditMode);
+      console.log(`[FCM_TOKEN_BATCH] found=${tokenRecords.length} tokens for ${targetEmails.length} recipients | mode=${isAuditMode ? 'audit' : 'prod'}`);
     } catch (e) {
-      console.error(`[FCM_TOKEN_BATCH] Error: ${e.message}`);
+      console.warn(`[FCM_TOKEN_BATCH] résolution échouée: ${e.message} — fallback silencieux`);
     }
 
-    // Fallback : pour les emails sans token actif, chercher le dernier inactif récent
-    const emailsWithToken = new Set(allActiveTokens.map(t => t.user_email?.toLowerCase()));
-    const emailsWithoutToken = targetEmails.filter(e => !emailsWithToken.has(e));
+    // Fallback inactif récent pour emails sans token (max 10 emails, prod seulement)
+    if (!isAuditMode) {
+      const emailsWithToken = new Set(tokenRecords.map(t => t.user_email?.toLowerCase()));
+      const emailsWithoutToken = targetEmails.filter(e => !emailsWithToken.has(e)).slice(0, 10);
 
-    if (emailsWithoutToken.length > 0 && emailsWithoutToken.length <= 20) {
-      // Fallback seulement si petit lot (évite rate limit)
-      try {
-        const fallbackResults = await base44.asServiceRole.entities.FcmToken.filter(
-          {}, '-updated_date', 500
-        );
-        for (const email of emailsWithoutToken) {
-          const recent = (fallbackResults || [])
-            .filter(t => t.user_email?.toLowerCase() === email && t.token && !isTestToken(t.token) && getTokenAge(t) < FALLBACK_MAX_AGE_MS)
-            .sort((a, b) => getTokenAge(a) - getTokenAge(b));
-          if (recent.length > 0) {
-            console.warn(`[FCM_TOKEN_FALLBACK] email=${email} | using_inactive_token | preview=${recent[0].token.slice(0, 30)}...`);
-            allActiveTokens.push(recent[0]);
-            // Réactiver
-            base44.asServiceRole.entities.FcmToken.update(recent[0].id, { is_active: true, last_used: new Date().toISOString() }).catch(() => {});
-          } else {
-            console.error(`[FCM_ENGINE_REPAIR_NEEDED] email=${email} | token_count=0 | cause=NO_TOKEN_IN_BDD`);
+      if (emailsWithoutToken.length > 0) {
+        try {
+          const fallbackPage = await fetchWithRetry(() =>
+            base44.asServiceRole.entities.FcmToken.filter({}, '-updated_date', PAGE_SIZE)
+          );
+          for (const email of emailsWithoutToken) {
+            const recent = (fallbackPage || [])
+              .filter(t => t.user_email?.toLowerCase() === email && t.token && !isTestToken(t.token) && getTokenAge(t) < FALLBACK_MAX_AGE_MS)
+              .sort((a, b) => getTokenAge(a) - getTokenAge(b));
+            if (recent.length > 0) {
+              console.warn(`[FCM_TOKEN_FALLBACK] email=${email} | inactive token réactivé | preview=${recent[0].token.slice(0, 30)}...`);
+              tokenRecords.push(recent[0]);
+              base44.asServiceRole.entities.FcmToken.update(recent[0].id, { is_active: true, last_used: new Date().toISOString() }).catch(() => {});
+            } else {
+              console.log(`[FCM_NO_TOKEN] email=${email} | NO_TOKEN_IN_BDD — utilisateur pas encore sur APK`);
+            }
           }
+        } catch (e) {
+          console.warn(`[FCM_TOKEN_FALLBACK] fallback silencieux: ${e.message}`);
         }
-      } catch (e) {
-        console.warn(`[FCM_TOKEN_FALLBACK] Batch fallback error: ${e.message}`);
       }
-    } else if (emailsWithoutToken.length > 20) {
-      console.warn(`[FCM_TOKEN_BATCH] ${emailsWithoutToken.length} recipients without token — skipping individual fallback (too many)`);
     }
 
-    const tokenRecords = allActiveTokens;
-
-    // Log par destinataire
-    for (const email of targetEmails) {
+    // Log résumé par destinataire (limité à 10 lignes en mode audit)
+    const logSample = isAuditMode ? targetEmails.slice(0, 5) : targetEmails;
+    for (const email of logSample) {
       const emailTokens = tokenRecords.filter(t => t.user_email?.toLowerCase() === email);
       if (emailTokens.length === 0) {
-        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN`);
+        console.log(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | NO_ACTIVE_TOKEN`);
       } else {
-        console.log(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=true | token_count=${emailTokens.length} | best_token_preview=${emailTokens[0].token.slice(0, 30)}...`);
+        console.log(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=true | token_count=${emailTokens.length}`);
       }
+    }
+    if (isAuditMode && targetEmails.length > 5) {
+      console.log(`[FCM_SEND_RESULT] ... +${targetEmails.length - 5} autres destinataires (mode audit)`);
     }
 
     const tokensCount = tokenRecords.length;
