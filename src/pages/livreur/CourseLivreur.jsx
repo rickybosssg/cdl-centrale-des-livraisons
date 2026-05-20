@@ -55,10 +55,11 @@ export default function CourseLivreur() {
       const c = courses[0];
       if (c) {
         CourseTrace.trace('CourseLivreur', 'INITIAL_LOAD', { course_id: id, statut: c.statut, settlement_status: c.settlement_status });
-        if (c.is_deleted) {
-          CourseTrace.trace('CourseLivreur', 'REDIRECT', { course_id: id, reason: 'is_deleted', to: '/mes-livraisons' });
+        if (c.is_deleted || c.statut === 'annulee') {
+          CourseTrace.trace('CourseLivreur', 'REDIRECT', { course_id: id, reason: c.is_deleted ? 'is_deleted' : 'annulee', to: '/' });
+          toast.warning("⚠️ Course annulée par le client.");
           setLoading(false);
-          navigate('/mes-livraisons');
+          navigate('/');
           return;
         }
         if (c.statut === "livree") livreeVerrouilleRef.current = true;
@@ -90,10 +91,10 @@ export default function CourseLivreur() {
         return;
       }
       const incoming = event.data;
-      if (incoming.statut === 'annulee') {
-        CourseTrace.trace('CourseLivreur', 'REDIRECT', { course_id: id, reason: 'annulee', to: '/mes-livraisons' });
-        toast.info("Cette course a été annulée.");
-        navigate('/mes-livraisons');
+      if (incoming.statut === 'annulee' || incoming.is_deleted) {
+        CourseTrace.trace('CourseLivreur', 'REDIRECT', { course_id: id, reason: 'annulee', to: '/' });
+        toast.warning("⚠️ Course annulée par le client.");
+        navigate('/');
         return;
       }
       if (livreeVerrouilleRef.current && incoming.statut !== "livree") {

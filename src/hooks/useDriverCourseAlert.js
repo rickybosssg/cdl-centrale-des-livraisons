@@ -28,10 +28,12 @@ export function useDriverCourseAlert() {
       // Rattrapage initial : course en attente assignée à ce livreur non encore vue
       base44.entities.Course.filter({ livreur_email: me.email, statut: "assignee_attente" }, "-created_date", 1)
         .then(courses => {
-          if (courses?.[0] && alertCourseRef.current?.id !== courses[0].id) {
-            console.log('[DRIVER_ALERT] initial rattrapage course:', courses[0].id);
-            alertCourseRef.current = courses[0];
-            setAlertCourse(courses[0]);
+          const c = courses?.[0];
+          // GARDE : ne jamais afficher une course annulée ou supprimée
+          if (c && !c.is_deleted && c.statut === 'assignee_attente' && alertCourseRef.current?.id !== c.id) {
+            console.log('[DRIVER_ALERT] initial rattrapage course:', c.id);
+            alertCourseRef.current = c;
+            setAlertCourse(c);
           }
         })
         .catch(() => {});

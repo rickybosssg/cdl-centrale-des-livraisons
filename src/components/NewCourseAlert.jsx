@@ -50,6 +50,20 @@ export default function NewCourseAlert({ course, onClose, user }) {
     return () => clearInterval(intervalRef.current);
   }, [course?.id]);
 
+  // Fermer automatiquement si la course affichée est annulée ou supprimée
+  useEffect(() => {
+    if (!course?.id) return;
+    const unsub = base44.entities.Course.subscribe((ev) => {
+      if (ev.id !== course.id) return;
+      const d = ev.data;
+      if (!d || d.is_deleted || d.statut === 'annulee' || ev.type === 'delete') {
+        clearInterval(intervalRef.current);
+        onClose();
+      }
+    });
+    return () => unsub?.();
+  }, [course?.id]);
+
   // ── Refus — via courseStateMachine (gère mode manuel/auto) ─────────────────
   const handleRefuse = async () => {
     if (!course || !user) return;
