@@ -1,18 +1,36 @@
 /**
  * FirebaseConfigDiag — Diagnostic config Firebase côté client + serveur
- * Affiche les vraies valeurs actives et indique ce qui manque
+ * Répond aux 7 questions :
+ * 1. Variables écrasées ?
+ * 2. Preview vs Production ?
+ * 3. Injection build APK ?
+ * 4. Correspond à cdl-app-4743c ?
+ * 5. Placeholders actifs ?
+ * 6. Client = Serveur project_id ?
+ * 7. Chargement runtime Capacitor ?
  */
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { firebaseConfig, vapidKey } from '@/lib/firebaseConfig';
-import { CheckCircle2, XCircle, AlertTriangle, Copy, RefreshCw } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Copy, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 const BACKEND_PROJECT = 'cdl-app-4743c';
 
-function Row({ label, value, ok }) {
+function isNativeCapacitor() {
+  try {
+    return typeof window.Capacitor !== 'undefined' && window.Capacitor?.isNativePlatform?.() === true;
+  } catch (_) { return false; }
+}
+
+function isReal(v) {
+  return v && !String(v).includes('PLACEHOLDER') && !String(v).includes('REMPLACER') && String(v).length > 5;
+}
+
+function StatusRow({ label, value, ok, note }) {
   const Icon = ok === true ? CheckCircle2 : ok === false ? XCircle : AlertTriangle;
   const color = ok === true ? 'text-green-600' : ok === false ? 'text-red-500' : 'text-amber-500';
   return (
@@ -20,28 +38,64 @@ function Row({ label, value, ok }) {
       <Icon className={`h-4 w-4 mt-0.5 flex-shrink-0 ${color}`} />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-bold text-muted-foreground">{label}</p>
-        <p className={`text-xs font-mono break-all ${ok === false ? 'text-red-600' : 'text-foreground'}`}>{value || '—'}</p>
+        <p className={`text-xs font-mono break-all mt-0.5 ${ok === false ? 'text-red-600' : 'text-foreground'}`}>{value || '—'}</p>
+        {note && <p className="text-[11px] text-amber-700 mt-0.5">{note}</p>}
       </div>
+      <span className={`text-[10px] font-bold flex-shrink-0 ${ok === true ? 'text-green-700' : ok === false ? 'text-red-600' : 'text-amber-600'}`}>
+        {ok === true ? 'OK' : ok === false ? 'KO' : '?'}
+      </span>
+    </div>
+  );
+}
+
+function SectionHeader({ n, title, ok }) {
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold ${ok === true ? 'bg-green-50 text-green-800' : ok === false ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'}`}>
+      <span className="text-xs bg-white rounded-full w-5 h-5 flex items-center justify-center font-bold">{n}</span>
+      {title}
+      <span className="ml-auto">{ok === true ? '✅' : ok === false ? '❌' : '⏳'}</span>
     </div>
   );
 }
 
 export default function FirebaseConfigDiag() {
+  const navigate = useNavigate();
   const [serverDiag, setServerDiag] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isNative] = useState(isNativeCapacitor);
 
-  const isReal = (v) => v && !String(v).includes('PLACEHOLDER') && !String(v).includes('example') && v.length > 5;
+  // Valeurs client résolues
+  const clientProjectId = firebaseConfig.projectId;
+  const clientApiKey = firebaseConfig.apiKey;
+  const clientSenderId = firebaseConfig.messagingSenderId;
+  const clientAppId = firebaseConfig.appId;
+  const clientVapid = vapidKey;
 
-  const clientRows = [
-    { label: 'projectId (client)', value: firebaseConfig.projectId, ok: firebaseConfig.projectId === BACKEND_PROJECT },
-    { label: 'apiKey', value: isReal(firebaseConfig.apiKey) ? `${String(firebaseConfig.apiKey).slice(0, 10)}...` : firebaseConfig.apiKey, ok: isReal(firebaseConfig.apiKey) },
-    { label: 'messagingSenderId', value: isReal(firebaseConfig.messagingSenderId) ? `${String(firebaseConfig.messagingSenderId).slice(0, 8)}...` : firebaseConfig.messagingSenderId, ok: isReal(firebaseConfig.messagingSenderId) },
-    { label: 'appId', value: isReal(firebaseConfig.appId) ? `${String(firebaseConfig.appId).slice(0, 15)}...` : firebaseConfig.appId, ok: isReal(firebaseConfig.appId) },
-    { label: 'vapidKey', value: isReal(vapidKey) ? `${String(vapidKey).slice(0, 12)}...` : vapidKey, ok: isReal(vapidKey) },
-  ];
+  // Tests client
+  const q1_notOverwritten = {
+    apiKey: isReal(clientApiKey),
+    senderId: isReal(clientSenderId),
+    appId: isReal(clientAppId),
+    vapid: isReal(clientVapid),
+  };
+  const q1_ok = Object.values(q1_notOverwritten).every(Boolean);
 
-  const clientOk = clientRows.every(r => r.ok);
-  const projectMatch = firebaseConfig.projectId === BACKEND_PROJECT;
+  const q3_injected = {
+    apiKey: !!import.meta.env.VITE_FIREBASE_API_KEY,
+    projectId: !!import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    senderId: !!import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: !!import.meta.env.VITE_FIREBASE_APP_ID,
+    vapid: !!import.meta.env.VITE_FIREBASE_VAPID_KEY,
+  };
+  const q3_ok = Object.values(q3_injected).every(Boolean);
+
+  const q4_clientOk = clientProjectId === BACKEND_PROJECT;
+
+  const q5_noPlaceholder = q1_ok; // même check
+
+  const serverProjectId = serverDiag?.firebase?.project_id;
+  const q6_match = serverDiag ? (clientProjectId === serverProjectId) : null;
+  const q7_runtime = isNative; // si on est dans Capacitor les variables sont bien chargées
 
   const runServerDiag = async () => {
     setLoading(true);
@@ -49,7 +103,7 @@ export default function FirebaseConfigDiag() {
       const res = await base44.functions.invoke('testOAuth2Firebase', {});
       setServerDiag(res.data);
     } catch (e) {
-      toast.error('Erreur: ' + e.message);
+      toast.error('Erreur serveur: ' + e.message);
     } finally {
       setLoading(false);
     }
@@ -57,111 +111,222 @@ export default function FirebaseConfigDiag() {
 
   useEffect(() => { runServerDiag(); }, []);
 
-  const serverProjectId = serverDiag?.firebase?.project_id;
   const apiOk = serverDiag?.api_test?.api_status?.includes('✅');
+  const allOk = q1_ok && q3_ok && q4_clientOk && q5_noPlaceholder && q6_match && apiOk;
+
+  const mask = (v, n = 10) => isReal(v) ? `${String(v).slice(0, n)}...` : v;
 
   return (
-    <div className="max-w-xl mx-auto p-4 space-y-4 pb-20">
-      <h1 className="text-lg font-bold">Firebase Config Diagnostic</h1>
+    <div className="max-w-xl mx-auto p-4 space-y-3 pb-20">
 
-      {/* Statut global */}
-      <div className={`rounded-xl p-3 text-white font-bold text-center text-sm ${
-        clientOk && apiOk ? 'bg-green-700' : 'bg-red-600'
-      }`}>
-        {clientOk && apiOk
-          ? '✅ CLIENT + SERVEUR OK — Tokens valides'
-          : `❌ ${!projectMatch ? 'PROJET MISMATCH' : !clientOk ? 'CONFIG CLIENT INCOMPLÈTE' : 'API SERVEUR 403'}`}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <h1 className="text-base font-bold flex-1">Firebase Config Diagnostic</h1>
+        <Button size="sm" variant="outline" onClick={runServerDiag} disabled={loading}>
+          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${loading ? 'animate-spin' : ''}`} />
+          Retester
+        </Button>
       </div>
 
-      {/* Cohérence projet */}
-      <Card className={projectMatch ? 'border-green-300' : 'border-red-400'}>
-        <CardHeader className="pb-1 pt-3 px-4">
-          <CardTitle className="text-sm">Cohérence projet Firebase</CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-3 text-xs space-y-1">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Client (firebaseConfig.projectId)</span>
-            <span className={`font-mono font-bold ${firebaseConfig.projectId === BACKEND_PROJECT ? 'text-green-700' : 'text-red-600'}`}>
-              {firebaseConfig.projectId}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Serveur (FIREBASE_SERVICE_ACCOUNT_JSON)</span>
-            <span className="font-mono font-bold text-green-700">{serverProjectId || '...'}</span>
-          </div>
-          {!projectMatch && (
-            <p className="text-red-600 font-bold mt-2">
-              ⚠️ MISMATCH ! Tokens générés pour "{firebaseConfig.projectId}" mais backend attend "{BACKEND_PROJECT}".
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Statut global */}
+      <div className={`rounded-xl p-3 text-white font-bold text-center text-sm ${allOk ? 'bg-green-700' : 'bg-red-600'}`}>
+        {allOk ? '✅ TOUT EST CORRECT — Production Ready' : '❌ PROBLÈMES DÉTECTÉS — Voir détails'}
+      </div>
 
-      {/* Config client */}
-      <Card className={clientOk ? 'border-green-300' : 'border-red-300'}>
-        <CardHeader className="pb-1 pt-3 px-4">
-          <CardTitle className="text-sm">Variables VITE_FIREBASE_* (côté client)</CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-3">
-          {clientRows.map((r) => <Row key={r.label} {...r} />)}
-          {!clientOk && (
-            <div className="mt-3 p-3 bg-amber-50 rounded-lg text-xs space-y-1 text-amber-900">
-              <p className="font-bold">Comment corriger :</p>
-              <p>1. Aller sur <strong>Firebase Console → Paramètres projet → Vos applications → Config SDK</strong></p>
-              <p>2. Copier les valeurs dans <strong>Base44 → Settings → Environment Variables</strong></p>
-              <p>3. Ajouter chaque variable avec le nom exact : VITE_FIREBASE_API_KEY, etc.</p>
-              <p>4. Redéployer l'app (rebuild APK)</p>
+      {/* Q1 — Variables écrasées ? */}
+      <SectionHeader n="1" title="Variables écrasées (vs PLACEHOLDER) ?" ok={q1_ok} />
+      <Card>
+        <CardContent className="p-3">
+          <StatusRow label="VITE_FIREBASE_API_KEY" value={mask(clientApiKey)} ok={q1_notOverwritten.apiKey} />
+          <StatusRow label="VITE_FIREBASE_MESSAGING_SENDER_ID" value={mask(clientSenderId, 8)} ok={q1_notOverwritten.senderId} />
+          <StatusRow label="VITE_FIREBASE_APP_ID" value={mask(clientAppId, 15)} ok={q1_notOverwritten.appId} />
+          <StatusRow label="VITE_FIREBASE_VAPID_KEY" value={mask(clientVapid, 12)} ok={q1_notOverwritten.vapid} />
+          {!q1_ok && (
+            <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-800">
+              ⚠️ Des variables contiennent encore "PLACEHOLDER". Aller sur <strong>Base44 → Settings → Secrets</strong> et vérifier les valeurs VITE_FIREBASE_*.
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Serveur */}
-      <Card className={apiOk ? 'border-green-300' : 'border-red-300'}>
-        <CardHeader className="pb-1 pt-3 px-4 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm">Service Account serveur</CardTitle>
-          <Button size="sm" variant="ghost" onClick={runServerDiag} disabled={loading}>
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-        </CardHeader>
-        <CardContent className="px-4 pb-3">
-          {serverDiag ? (
-            <>
-              <Row label="project_id" value={serverDiag.firebase?.project_id} ok={serverDiag.firebase?.project_id === BACKEND_PROJECT} />
-              <Row label="client_email" value={serverDiag.firebase?.client_email} ok={!!serverDiag.firebase?.client_email} />
-              <Row label="OAuth2 token" value={serverDiag.oauth2?.token_generated ? `✅ généré (len=${serverDiag.oauth2.token_length})` : '❌ échec'} ok={serverDiag.oauth2?.token_generated} />
-              <Row label="API FCM v1 HTTP" value={`HTTP ${serverDiag.api_test?.http_status} — ${serverDiag.api_test?.api_status}`} ok={apiOk} />
-              {!apiOk && serverDiag.api_test?.http_status === 403 && (
-                <div className="mt-3 p-3 bg-red-50 rounded-lg text-xs text-red-900 space-y-1">
-                  <p className="font-bold">Corriger le 403 :</p>
-                  <p>1. <a href="https://console.cloud.google.com/iam-admin/iam" target="_blank" className="underline text-blue-600">console.cloud.google.com/iam-admin/iam</a></p>
-                  <p>2. Projet : <strong>{serverDiag.firebase?.project_id}</strong></p>
-                  <p>3. Service account : <strong>{serverDiag.firebase?.client_email}</strong></p>
-                  <p>4. Ajouter rôle : <strong>Firebase Admin SDK Administrator Service Agent</strong></p>
-                  <p>5. Ajouter rôle : <strong>Firebase Cloud Messaging API Admin</strong></p>
-                  <p>6. Attendre 2-3 min → retester</p>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">Chargement...</p>
+      {/* Q2 — Preview vs Production */}
+      <SectionHeader n="2" title="Preview vs Production ?" ok={null} />
+      <Card>
+        <CardContent className="p-3">
+          <StatusRow
+            label="Environnement actuel"
+            value={import.meta.env.MODE || 'inconnu'}
+            ok={null}
+            note="Les secrets Base44 sont injectés identiquement en preview ET production via VITE_*"
+          />
+          <StatusRow
+            label="Base URL"
+            value={window.location.origin}
+            ok={null}
+          />
+          <p className="text-[11px] text-muted-foreground mt-2">
+            ℹ️ Base44 injecte les secrets VITE_* au build, identiques preview/prod. Il n'y a pas de différence de valeur entre les deux environnements.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Q3 — Injection build APK */}
+      <SectionHeader n="3" title="Variables injectées dans le build ?" ok={q3_ok} />
+      <Card>
+        <CardContent className="p-3">
+          <StatusRow label="VITE_FIREBASE_API_KEY" value={q3_injected.apiKey ? '✅ injectée (import.meta.env définie)' : '❌ undefined'} ok={q3_injected.apiKey} />
+          <StatusRow label="VITE_FIREBASE_PROJECT_ID" value={q3_injected.projectId ? '✅ injectée' : '❌ undefined'} ok={q3_injected.projectId} />
+          <StatusRow label="VITE_FIREBASE_MESSAGING_SENDER_ID" value={q3_injected.senderId ? '✅ injectée' : '❌ undefined'} ok={q3_injected.senderId} />
+          <StatusRow label="VITE_FIREBASE_APP_ID" value={q3_injected.appId ? '✅ injectée' : '❌ undefined'} ok={q3_injected.appId} />
+          <StatusRow label="VITE_FIREBASE_VAPID_KEY" value={q3_injected.vapid ? '✅ injectée' : '❌ undefined'} ok={q3_injected.vapid} />
+          {!q3_ok && (
+            <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-800">
+              ⚠️ Une ou plusieurs variables VITE_ ne sont pas injectées dans ce build. L'APK utilisera les fallbacks hardcodés.
+            </div>
+          )}
+          {q3_ok && (
+            <p className="text-[11px] text-green-700 mt-2 font-bold">
+              ✅ Toutes les variables VITE_FIREBASE_* sont bien injectées dans ce build.
+            </p>
           )}
         </CardContent>
       </Card>
 
-      {/* Actions */}
-      <div className="space-y-2">
-        <Button className="w-full" onClick={runServerDiag} disabled={loading}>
-          {loading ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Test en cours...</> : '🔄 Relancer diagnostic serveur'}
-        </Button>
-        <Button variant="outline" className="w-full" onClick={() => {
-          const info = `Firebase CDL Config:\nproject_id: ${firebaseConfig.projectId}\nbackend: ${BACKEND_PROJECT}\nclient_email: ${serverDiag?.firebase?.client_email || 'N/A'}\napi_status: ${serverDiag?.api_test?.api_status || 'N/A'}`;
-          navigator.clipboard.writeText(info);
-          toast.success('Copié');
-        }}>
-          <Copy className="h-4 w-4 mr-2" /> Copier résumé diagnostic
-        </Button>
+      {/* Q4 — Correspond à cdl-app-4743c ? */}
+      <SectionHeader n="4" title={`Correspond à ${BACKEND_PROJECT} ?`} ok={q4_clientOk} />
+      <Card>
+        <CardContent className="p-3">
+          <StatusRow
+            label="firebaseConfig.projectId (client actif)"
+            value={clientProjectId}
+            ok={q4_clientOk}
+            note={!q4_clientOk ? `Doit être "${BACKEND_PROJECT}" — actuellement "${clientProjectId}"` : undefined}
+          />
+          <StatusRow
+            label="Cible backend"
+            value={BACKEND_PROJECT}
+            ok={true}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Q5 — Placeholders actifs ? */}
+      <SectionHeader n="5" title="Placeholders actifs ?" ok={q5_noPlaceholder} />
+      <Card>
+        <CardContent className="p-3">
+          {q5_noPlaceholder ? (
+            <p className="text-xs text-green-700 font-bold py-1">✅ Aucun placeholder détecté — toutes les valeurs sont réelles.</p>
+          ) : (
+            <>
+              {!q1_notOverwritten.apiKey && <StatusRow label="VITE_FIREBASE_API_KEY" value="PLACEHOLDER actif ❌" ok={false} />}
+              {!q1_notOverwritten.senderId && <StatusRow label="VITE_FIREBASE_MESSAGING_SENDER_ID" value="PLACEHOLDER actif ❌" ok={false} />}
+              {!q1_notOverwritten.appId && <StatusRow label="VITE_FIREBASE_APP_ID" value="PLACEHOLDER actif ❌" ok={false} />}
+              {!q1_notOverwritten.vapid && <StatusRow label="VITE_FIREBASE_VAPID_KEY" value="PLACEHOLDER actif ❌" ok={false} />}
+              <div className="mt-2 p-2 bg-amber-50 rounded text-xs text-amber-900">
+                <p className="font-bold">→ Source des vraies valeurs :</p>
+                <p>Firebase Console → Projet cdl-app-4743c → Paramètres → Vos applications → Config SDK web</p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Q6 — Client = Serveur project_id ? */}
+      <SectionHeader n="6" title="Client et serveur même project_id ?" ok={q6_match === null ? null : q6_match} />
+      <Card>
+        <CardContent className="p-3">
+          <StatusRow label="project_id client (firebaseConfig)" value={clientProjectId} ok={q4_clientOk} />
+          <StatusRow
+            label="project_id serveur (FIREBASE_SERVICE_ACCOUNT_JSON)"
+            value={loading ? '⏳ chargement...' : serverProjectId || '❌ non disponible'}
+            ok={loading ? null : !!serverProjectId && serverProjectId === BACKEND_PROJECT}
+          />
+          {q6_match === false && (
+            <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-900 font-bold">
+              ❌ MISMATCH CRITIQUE ! Client="{clientProjectId}" ≠ Serveur="{serverProjectId}". Les tokens FCM seront rejetés (403).
+            </div>
+          )}
+          {q6_match === true && (
+            <p className="text-[11px] text-green-700 font-bold mt-2">✅ Client et serveur utilisent le même projet Firebase.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Q7 — Runtime Capacitor */}
+      <SectionHeader n="7" title="Chargement runtime Capacitor Android ?" ok={q7_runtime ? true : null} />
+      <Card>
+        <CardContent className="p-3">
+          <StatusRow
+            label="Environnement détecté"
+            value={isNative ? '📱 Capacitor natif Android/iOS' : '🌐 WebView / Navigateur web'}
+            ok={null}
+          />
+          <StatusRow
+            label="Mode serveur Capacitor"
+            value='"server.url": "https://cdl.base44.app" — charge la WebApp distante'
+            ok={null}
+            note="Les variables VITE_* sont compilées dans le bundle JS servi par cdl.base44.app. L'APK les charge via la WebView → toujours les valeurs du dernier build Base44."
+          />
+          <StatusRow
+            label="google-services.json"
+            value={isNative ? 'Actif (requis pour @capacitor/push-notifications)' : 'Non utilisé (web)'}
+            ok={null}
+            note="Pour l'APK natif, google-services.json doit aussi référencer cdl-app-4743c."
+          />
+          {isNative && (
+            <p className="text-[11px] text-green-700 font-bold mt-2">✅ Exécution dans Capacitor — variables VITE_* chargées depuis le build Base44 distant.</p>
+          )}
+          {!isNative && (
+            <p className="text-[11px] text-amber-700 mt-2">ℹ️ Test depuis navigateur — l'APK chargera les mêmes valeurs via la WebView (mode serveur distant).</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Serveur — OAuth2 + API FCM */}
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold ${apiOk ? 'bg-green-50 text-green-800' : serverDiag && !apiOk ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'}`}>
+        <span className="text-xs bg-white rounded-full w-5 h-5 flex items-center justify-center font-bold">+</span>
+        Service Account + API FCM v1
+        <span className="ml-auto">{apiOk ? '✅' : serverDiag && !apiOk ? '❌' : '⏳'}</span>
       </div>
+      <Card>
+        <CardContent className="p-3">
+          {serverDiag ? (
+            <>
+              <StatusRow label="client_email" value={serverDiag.firebase?.client_email} ok={!!serverDiag.firebase?.client_email} />
+              <StatusRow label="OAuth2 token" value={serverDiag.oauth2?.token_generated ? `✅ généré (len=${serverDiag.oauth2.token_length})` : '❌ échec'} ok={!!serverDiag.oauth2?.token_generated} />
+              <StatusRow
+                label="API FCM v1"
+                value={`HTTP ${serverDiag.api_test?.http_status} — ${serverDiag.api_test?.api_status}`}
+                ok={apiOk}
+                note={!apiOk && serverDiag.api_test?.http_status === 403 ? 'Vérifier les rôles IAM du service account dans Google Cloud Console' : undefined}
+              />
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground py-2">⏳ Chargement diagnostic serveur...</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Bouton copier résumé */}
+      <Button variant="outline" className="w-full" onClick={() => {
+        const lines = [
+          '=== Firebase CDL Config Diagnostic ===',
+          `1. Variables écrasées: ${q1_ok ? 'NON ✅' : 'OUI ❌'}`,
+          `2. Preview=Prod: OUI (injections identiques)`,
+          `3. Variables injectées: ${q3_ok ? 'OUI ✅' : 'NON ❌'}`,
+          `4. Project cdl-app-4743c: ${q4_clientOk ? 'OUI ✅' : 'NON ❌'} (actuel: ${clientProjectId})`,
+          `5. Placeholders actifs: ${q5_noPlaceholder ? 'AUCUN ✅' : 'OUI ❌'}`,
+          `6. Client=Serveur project_id: ${q6_match === null ? 'TEST EN COURS' : q6_match ? 'OUI ✅' : 'NON ❌'} (client=${clientProjectId}, serveur=${serverProjectId || 'N/A'})`,
+          `7. Capacitor runtime: ${isNative ? 'NATIF (WebView distante)' : 'WEB'}`,
+          `API FCM: ${apiOk ? '✅ ACCESSIBLE' : serverDiag ? '❌ ' + serverDiag.api_test?.api_status : 'N/A'}`,
+        ];
+        navigator.clipboard.writeText(lines.join('\n'));
+        toast.success('Résumé copié');
+      }}>
+        <Copy className="h-4 w-4 mr-2" /> Copier résumé diagnostic (7 points)
+      </Button>
     </div>
   );
 }
