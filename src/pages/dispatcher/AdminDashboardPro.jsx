@@ -478,6 +478,7 @@ export default function AdminDashboardPro() {
             { to: "/audit-complet",    label: "Audit complet", icon: Eye,       color: "text-purple-600", bg: "bg-purple-50 border-purple-200" },
             { to: "/bedou-audit",      label: "Audit Bedou",  icon: Wallet,    color: "text-green-600", bg: "bg-green-50 border-green-200" },
             { to: "/admin/logs",       label: "Historiques",  icon: Activity,  color: "text-blue-600",  bg: "bg-blue-50 border-blue-200" },
+            { to: "/fcm-final-audit",  label: "🚨 FCM Final Audit", icon: ShieldCheck, color: "text-red-600", bg: "bg-red-50 border-red-200" },
           ].map(({ to, label, icon: Icon, color, bg }) => (
             <Link key={to} to={to}>
               <div className={`flex items-center gap-3 p-3 rounded-xl border ${bg} hover:shadow-sm transition-all active:scale-95 cursor-pointer`}>
