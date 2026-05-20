@@ -199,58 +199,6 @@ async function createInternalNotif(base44, { recipientEmail, title, body, data =
   }
 }
 
-// ── FcmTokenEngine.getActiveTokens — SOURCE UNIQUE pour résolution tokens ─────
-// Règle : actifs valides en premier, fallback inactif récent si token_count=0
-// Si token_count=0 → logger cause exacte + déclencher repair via Notification entity
-async function resolveTokensForEmail(base44, email) {
-  // 1. Tokens actifs valides
-  const activeTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email, is_active: true });
-  const validActive = (activeTokens || []).filter(t => t.token && !isTestToken(t.token) && getTokenAge(t) < FALLBACK_MAX_AGE_MS);
-
-  if (validActive.length > 0) {
-    validActive.sort((a, b) => new Date(b.last_used || b.registered_at || 0) - new Date(a.last_used || a.registered_at || 0));
-    console.log(`[FCM_TOKEN_RESOLVE] engine=FcmTokenEngine | email=${email} | active_count=${validActive.length} | best_preview=${validActive[0].token.slice(0, 30)}...`);
-    return { tokens: validActive, usedFallback: false };
-  }
-
-  // 2. Fallback : dernier inactif récent (< 7 jours)
-  console.warn(`[FCM_TOKEN_RESOLVE] engine=FcmTokenEngine | email=${email} | active_count=0 → fallback token inactif récent`);
-  const allTokens = await base44.asServiceRole.entities.FcmToken.filter({ user_email: email }, '-updated_date', 20);
-  const recentInactive = (allTokens || [])
-    .filter(t => t.token && !isTestToken(t.token) && getTokenAge(t) < FALLBACK_MAX_AGE_MS)
-    .sort((a, b) => getTokenAge(a) - getTokenAge(b));
-
-  if (recentInactive.length > 0) {
-    const best = recentInactive[0];
-    const ageH = Math.round(getTokenAge(best) / 3600000);
-    console.warn(`[FCM_TOKEN_FALLBACK] engine=FcmTokenEngine | email=${email} | using_inactive_token | age_hours=${ageH} | preview=${best.token.slice(0, 30)}...`);
-    try {
-      await base44.asServiceRole.entities.FcmToken.update(best.id, { is_active: true, last_used: new Date().toISOString() });
-    } catch (_) {}
-    return { tokens: [best], usedFallback: true };
-  }
-
-  // token_count=0 → NE PAS SKIP silencieusement — logger cause exacte
-  const totalInBdd = (allTokens || []).length;
-  const cause = totalInBdd === 0 ? 'NO_TOKEN_EVER_SAVED' : 'ALL_TOKENS_EXPIRED_OR_INACTIVE';
-  console.error(`[FCM_ENGINE_REPAIR_NEEDED] engine=FcmTokenEngine | recipient_email=${email} | token_count=0 | cause=${cause} | total_in_bdd=${totalInBdd}`);
-
-  // Créer une Notification interne de réparation pour que le client re-register au prochain login
-  try {
-    await base44.asServiceRole.entities.Notification.create({
-      destinataire_email: email,
-      titre: '🔧 Synchronisation notifications',
-      message: 'Votre connexion aux notifications nécessite une mise à jour. Ouvrez l\'app pour la rétablir.',
-      type: 'warning',
-      lue: false,
-      target_screen: '/settings',
-      notification_key: `${email}__fcm_repair__${cause}__${new Date().toDateString()}`,
-    });
-  } catch (_) {}
-
-  return { tokens: [], usedFallback: false, cause };
-}
-
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -328,7 +276,7 @@ Deno.serve(async (req) => {
       console.error(`[sendCdlNotification] ❌ BDD batch: ${e.message}`);
     }
 
-    // ── 3. FCM Push — actifs + fallback inactif récent ───────────────────────
+    // ── 3. FCM Push — résolution tokens EN BATCH (une seule requête BDD) ────
     let sent = 0, failed = 0, firstMsgId = null;
 
     if (!SA_JSON) {
@@ -336,21 +284,67 @@ Deno.serve(async (req) => {
       return Response.json({ sent: 0, failed: 0, total: 0, bdd: bddCreated, note: 'FCM désactivé (SA manquant)' });
     }
 
-    // Résoudre tokens pour chaque destinataire (avec fallback)
-    const tokenResults = await Promise.allSettled(
-      targetEmails.map(email => resolveTokensForEmail(base44, email))
-    );
+    // ── BATCH : une seule requête pour tous les tokens actifs ────────────────
+    // Évite le rate limit 429 qui survenait avec N requêtes parallèles
+    let allActiveTokens = [];
+    try {
+      // Récupérer tous les tokens actifs pour tous les destinataires en une fois
+      const batchResults = await base44.asServiceRole.entities.FcmToken.filter(
+        { is_active: true }, '-last_used', 500
+      );
+      const emailSet = new Set(targetEmails);
+      allActiveTokens = (batchResults || []).filter(t =>
+        t.token &&
+        !isTestToken(t.token) &&
+        t.user_email &&
+        emailSet.has(t.user_email.toLowerCase()) &&
+        getTokenAge(t) < FALLBACK_MAX_AGE_MS
+      );
+      console.log(`[FCM_TOKEN_BATCH] found=${allActiveTokens.length} active tokens for ${targetEmails.length} recipients`);
+    } catch (e) {
+      console.error(`[FCM_TOKEN_BATCH] Error: ${e.message}`);
+    }
 
-    const tokenRecords = [];
-    for (let i = 0; i < targetEmails.length; i++) {
-      const r = tokenResults[i];
-      if (r.status !== 'fulfilled' || r.value.tokens.length === 0) {
-        console.error(`[FCM_SEND_RESULT] recipient_email=${targetEmails[i]} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN`);
-        continue;
+    // Fallback : pour les emails sans token actif, chercher le dernier inactif récent
+    const emailsWithToken = new Set(allActiveTokens.map(t => t.user_email?.toLowerCase()));
+    const emailsWithoutToken = targetEmails.filter(e => !emailsWithToken.has(e));
+
+    if (emailsWithoutToken.length > 0 && emailsWithoutToken.length <= 20) {
+      // Fallback seulement si petit lot (évite rate limit)
+      try {
+        const fallbackResults = await base44.asServiceRole.entities.FcmToken.filter(
+          {}, '-updated_date', 500
+        );
+        for (const email of emailsWithoutToken) {
+          const recent = (fallbackResults || [])
+            .filter(t => t.user_email?.toLowerCase() === email && t.token && !isTestToken(t.token) && getTokenAge(t) < FALLBACK_MAX_AGE_MS)
+            .sort((a, b) => getTokenAge(a) - getTokenAge(b));
+          if (recent.length > 0) {
+            console.warn(`[FCM_TOKEN_FALLBACK] email=${email} | using_inactive_token | preview=${recent[0].token.slice(0, 30)}...`);
+            allActiveTokens.push(recent[0]);
+            // Réactiver
+            base44.asServiceRole.entities.FcmToken.update(recent[0].id, { is_active: true, last_used: new Date().toISOString() }).catch(() => {});
+          } else {
+            console.error(`[FCM_ENGINE_REPAIR_NEEDED] email=${email} | token_count=0 | cause=NO_TOKEN_IN_BDD`);
+          }
+        }
+      } catch (e) {
+        console.warn(`[FCM_TOKEN_FALLBACK] Batch fallback error: ${e.message}`);
       }
-      const { tokens, usedFallback } = r.value;
-      console.log(`[FCM_SEND_RESULT] recipient_email=${targetEmails[i]} | token_found=true | token_count=${tokens.length} | used_fallback=${usedFallback} | best_token_preview=${tokens[0].token.slice(0, 30)}... | last_used=${tokens[0].last_used || tokens[0].registered_at || 'N/A'}`);
-      tokenRecords.push(...tokens);
+    } else if (emailsWithoutToken.length > 20) {
+      console.warn(`[FCM_TOKEN_BATCH] ${emailsWithoutToken.length} recipients without token — skipping individual fallback (too many)`);
+    }
+
+    const tokenRecords = allActiveTokens;
+
+    // Log par destinataire
+    for (const email of targetEmails) {
+      const emailTokens = tokenRecords.filter(t => t.user_email?.toLowerCase() === email);
+      if (emailTokens.length === 0) {
+        console.error(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=false | token_count=0 | error_message=NO_ACTIVE_TOKEN`);
+      } else {
+        console.log(`[FCM_SEND_RESULT] recipient_email=${email} | token_found=true | token_count=${emailTokens.length} | best_token_preview=${emailTokens[0].token.slice(0, 30)}...`);
+      }
     }
 
     const tokensCount = tokenRecords.length;
