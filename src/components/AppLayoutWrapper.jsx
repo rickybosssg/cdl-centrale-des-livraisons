@@ -12,6 +12,7 @@ import { useDriverCourseAlert } from "@/hooks/useDriverCourseAlert";
 import { useManualDispatchAlert } from "@/hooks/useManualDispatchAlert";
 import PermissionsOnboarding, { needsPermissionsOnboarding } from "./PermissionsOnboarding";
 import GlobalRealtimeAlert from "./GlobalRealtimeAlert";
+import RealtimeActionCards from "./RealtimeActionCards";
 
 // ── Alerte globale livreur — montée UNE SEULE FOIS au niveau layout ───────
 function GlobalDriverAlert({ userEmail }) {
@@ -271,6 +272,8 @@ export default function AppLayoutWrapper({ user }) {
         <NotificationPermissionBanner />
         {showSplash && <SplashWelcome prenom={prenom} onDone={() => setShowSplash(false)} />}
         {isLivreur && userEmail && <GlobalDriverAlert userEmail={userEmail} />}
+        {/* Système de notifications visuelles temps réel style Uber — TOUS RÔLES */}
+        {userEmail && userRole && <RealtimeActionCards userEmail={userEmail} userRole={userRole} />}
         {/* Alertes temps réel pour tous les rôles (client, livreur, partenaire, commercial, annonceur) */}
         {userEmail && !isAdminEarlyCheck && <GlobalRealtimeAlert userEmail={userEmail} />}
         <AppLayout userRole={userRole} userEmail={userEmail} />
@@ -280,9 +283,10 @@ export default function AppLayoutWrapper({ user }) {
 
   return (
     <>
-      {/* GlobalAdminAlert monté UNE SEULE FOIS dès que user est admin
-          Peu importe loading, needsRole, etc. → subscription active immédiatement */}
+      {/* GlobalAdminAlert monté UNE SEULE FOIS dès que user est admin */}
       {isAdminEarlyCheck && <GlobalAdminAlert />}
+      {/* Système de notifications visuelles temps réel style Uber — ADMIN */}
+      {isAdminEarlyCheck && user?.email && <RealtimeActionCards userEmail={user.email} userRole="admin" />}
       {/* GlobalRealtimeAlert admin — notifications internes en temps réel */}
       {isAdminEarlyCheck && user?.email && <GlobalRealtimeAlert userEmail={user.email} />}
       {mainContent}
