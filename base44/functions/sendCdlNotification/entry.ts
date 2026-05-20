@@ -78,7 +78,11 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
     if (!stringData.screen && stringData.notif_route) stringData.screen = stringData.notif_route;
     if (!stringData.deep_link && stringData.notif_route) stringData.deep_link = stringData.notif_route;
 
-    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+    const fcmUrl = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
+    console.log('[FCM_HTTP_REQUEST]', fcmUrl);
+    console.log('[FCM_TOKEN_FOUND]', fcmToken ? `len=${fcmToken.length} preview=${fcmToken.slice(0, 30)}...` : 'MISSING');
+    
+    const res = await fetch(fcmUrl, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -116,10 +120,12 @@ async function sendToToken(accessToken, projectId, fcmToken, title, body, data =
     const errCode = !res.ok
       ? (result?.error?.details?.[0]?.errorCode || result?.error?.status || 'FCM_ERROR')
       : null;
+    const errMessage = result?.error?.message || '';
 
     if (res.ok) {
       console.log(`[CDL-FCM] ✅ OK | channel=${CDL_CHANNEL} | token:${fcmToken.slice(0, 20)}... | msgId:${result?.name} | sent_at=${sentAt}`);
     } else {
+      console.error(`[FCM_HTTP_403_REASON] errCode=${errCode} | HTTP=${res.status} | message=${errMessage} | token:${fcmToken.slice(0, 20)}...`);
       console.error(`[CDL-FCM] ❌ FAIL | err=${errCode} | HTTP=${res.status} | token:${fcmToken.slice(0, 20)}...`);
     }
     return { ok: res.ok, result, errCode, token: fcmToken, msgId: result?.name || null };
@@ -356,7 +362,14 @@ Deno.serve(async (req) => {
     }
 
     const sa = JSON.parse(SA_JSON);
+    
+    // ── LOGS DÉTAILLÉS CHAÎNE FIREBASE ──────────────────────────────────────
+    console.log('[FCM_PROJECT_ID]', sa.project_id);
+    console.log('[FCM_CLIENT_EMAIL]', sa.client_email);
+    console.log('[FCM_PRIVATE_KEY_LENGTH]', sa.private_key?.length || 0);
+    
     const accessToken = await getAccessToken(sa);
+    console.log('[FCM_ACCESS_TOKEN_CREATED]', accessToken ? `token_len=${accessToken.length}` : 'FAILED');
 
     const fcmResults = await Promise.allSettled(
       tokenRecords.map(record => sendToToken(accessToken, sa.project_id, record.token, title, msgBody, enrichedData))

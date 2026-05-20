@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
     const { user_email, token, device_type = 'android_native', device_id = null, platform = 'android', active_profile_type = null } = body;
 
     console.log(`[FCM_SAVE] user=${user_email || 'VIDE'} | token_len=${token?.length || 0} | device_id=${device_id || 'null'} | platform=${platform} | profile=${active_profile_type || 'null'}`);
+    console.log('[FCM_TOKEN_RECEIVED]', token ? `len=${token.length} preview=${token.slice(0, 30)}...` : 'MISSING');
 
     if (!user_email || !token) {
       return Response.json({ success: false, error: `Paramètre manquant: ${!user_email ? 'user_email' : 'token'}` }, { status: 400, headers: corsHeaders });
@@ -120,6 +121,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[FCM_SAVE] action=created | id=${created.id} | delay=${Date.now() - t0}ms`);
+    console.log('[FCM_TOKEN_SAVED]', `id=${created.id} | user=${cleanEmail} | token_preview=${cleanToken.slice(0, 30)}...`);
     return Response.json({ success: true, action: 'created', token_id: created.id, user_email: cleanEmail }, { headers: corsHeaders });
 
   } catch (err) {

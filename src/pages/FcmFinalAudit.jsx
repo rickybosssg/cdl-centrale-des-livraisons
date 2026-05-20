@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Play, CheckCircle2, XCircle, Loader2, Terminal, ShieldCheck, Smartphone, Bell, Zap, Eye, Lock, Copy, Layers, MonitorPlay } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Play, CheckCircle2, XCircle, Loader2, Terminal, ShieldCheck, Smartphone, Bell, Zap, Eye, Lock, Copy, Layers, MonitorPlay, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -503,6 +503,43 @@ export default function FcmFinalAudit() {
           {!allOk && errCount > 0 && (
             <p className="mt-2 font-bold text-red-700">❌ CORRIGER LES ERREURS AVANT REBUILD</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Test OAuth2 Firebase */}
+      <Card className="border-orange-200 bg-orange-50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-orange-800 flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> Test OAuth2 + Permissions Firebase
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          <p className="text-xs text-orange-700">
+            Vérifie la chaîne complète: Service Account → Token OAuth2 → API FCM v1
+          </p>
+          <Button
+            onClick={async () => {
+              try {
+                toast.info('Test OAuth2 en cours...');
+                const res = await base44.functions.invoke('testOAuth2Firebase', {});
+                const d = res.data;
+                console.log('[OAUTH2_TEST_RESULT]', d);
+                
+                if (d.success) {
+                  const apiOk = d.api_test?.api_status?.includes('✅');
+                  toast.success(apiOk ? '✅ OAuth2 + API FCM OK' : '⚠️ OAuth2 OK mais API 403');
+                } else {
+                  toast.error('❌ Échec: ' + d.error);
+                }
+              } catch (e) {
+                console.error('[OAUTH2_TEST_ERROR]', e);
+                toast.error('Erreur: ' + e.message);
+              }
+            }}
+            className="w-full bg-orange-600 hover:bg-orange-700"
+          >
+            <KeyRound className="h-4 w-4 mr-2" /> Tester OAuth2 Firebase
+          </Button>
         </CardContent>
       </Card>
 
