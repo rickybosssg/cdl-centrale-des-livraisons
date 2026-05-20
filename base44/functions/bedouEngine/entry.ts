@@ -23,26 +23,28 @@ Deno.serve(async (req) => {
   const { action } = body;
 
   // ── GET or CREATE Bedou ──────────────────────────────────────
+  // Wallet unique par utilisateur (multi-rôles)
   async function getBedou(email) {
     const list = await base44.asServiceRole.entities.Bedou.filter({ user_email: email });
     return list[0] || null;
   }
 
-  async function ensureBedou(email, role, nom) {
+  async function ensureBedou(email, nom) {
     let bedou = await getBedou(email);
     if (!bedou) {
       bedou = await base44.asServiceRole.entities.Bedou.create({
         user_email: email,
         user_nom: nom || email,
-        role: role || 'client',
-        solde: 0,
-        solde_disponible: 0,
-        solde_bloque: 0,
+        solde_global: 0,
+        solde_disponible_global: 0,
         solde_bonus: 0,
         bonus: 0,
         bonus_recharge_count: 0,
-        gains_totaux: 0,
-        depenses_totales: 0,
+        gains_totaux_livreur: 0,
+        gains_totaux_partenaire: 0,
+        gains_totaux_commercial: 0,
+        depenses_totales_client: 0,
+        balance_blocked_commercial: 0,
         statut_bedou: 'actif',
         date_creation: new Date().toISOString(),
       });
@@ -71,8 +73,7 @@ Deno.serve(async (req) => {
 
   // ── ACTION: get_bedou ──────────────────────────────────────
   if (action === 'get_bedou') {
-    // Source unique: active_profile_type (user_type et current_role sont dépréciés)
-    const bedou = await ensureBedou(user.email, user.active_profile_type || 'client', user.full_name);
+    const bedou = await ensureBedou(user.email, user.full_name);
     const transactions = await base44.asServiceRole.entities.Transaction.filter(
       { user_email: user.email }, '-created_date', 50
     );
@@ -83,7 +84,7 @@ Deno.serve(async (req) => {
   if (action === 'demande_recharge') {
     const { montant, methode, preuve_paiement } = body;
     if (!montant || montant < 100) return Response.json({ error: 'Montant minimum 100 F CFA' }, { status: 400 });
-    const bedou = await ensureBedou(user.email, user.active_profile_type || 'client', user.full_name);
+    const bedou = await ensureBedou(user.email, user.full_name);
     if (bedou.statut_bedou === 'suspendu') return Response.json({ error: 'Bedou suspendu' }, { status: 403 });
     // Bonus uniquement sur les 3 premières recharges
     const bonusCount = bedou.bonus_recharge_count || 0;
@@ -144,11 +145,11 @@ Deno.serve(async (req) => {
     if (!demande) return Response.json({ error: 'Demande introuvable' }, { status: 404 });
     if (demande.statut !== 'en_attente') return Response.json({ error: 'Déjà traitée' }, { status: 400 });
 
-    const bedou = await ensureBedou(demande.user_email, demande.role, demande.user_nom);
+    const bedou = await ensureBedou(demande.user_email, demande.user_nom);
     const bonusApplique = demande.bonus_applique || 0;
     const bedouUpdates = {
-      solde: (bedou.solde || 0) + demande.montant + bonusApplique,
-      solde_disponible: (bedou.solde_disponible || 0) + demande.montant,
+      solde_global: (bedou.solde_global || 0) + demande.montant + bonusApplique,
+      solde_disponible_global: (bedou.solde_disponible_global || 0) + demande.montant,
       solde_bonus: (bedou.solde_bonus || 0) + bonusApplique,
       bonus: (bedou.bonus || 0) + bonusApplique,
     };
@@ -165,7 +166,7 @@ Deno.serve(async (req) => {
     await createTransaction({
       user_email: demande.user_email,
       user_nom: demande.user_nom,
-      role: demande.role,
+      transaction_role: demande.role || 'client',
       type: 'recharge',
       sens: 'credit',
       montant: demande.montant,
@@ -180,7 +181,7 @@ Deno.serve(async (req) => {
       await createTransaction({
         user_email: demande.user_email,
         user_nom: demande.user_nom,
-        role: demande.role,
+        transaction_role: demande.role || 'client',
         type: 'bonus',
         sens: 'credit',
         montant: demande.bonus_applique,
@@ -248,13 +249,11 @@ Deno.serve(async (req) => {
     // Bloquer le montant selon le type de rôle
     const retaitUpdates = user.active_profile_type === 'commercial'
       ? {
-          balance_blocked: Math.max(0, (bedou.balance_blocked || 0) - montant),
-          solde: Math.max(0, (bedou.solde || 0) - montant),
-          solde_bloque: (bedou.solde_bloque || 0) + montant,
+          balance_blocked_commercial: Math.max(0, (bedou.balance_blocked_commercial || 0) - montant),
+          solde_global: Math.max(0, (bedou.solde_global || 0) - montant),
         }
       : {
-          solde_disponible: (bedou.solde_disponible || 0) - montant,
-          solde_bloque: (bedou.solde_bloque || 0) + montant,
+          solde_disponible_global: (bedou.solde_disponible_global || 0) - montant,
         };
     await updateBedou(bedou.id, retaitUpdates);
     const demande = await base44.asServiceRole.entities.DemandeRetrait.create({
@@ -291,8 +290,7 @@ Deno.serve(async (req) => {
     const bedou = await getBedou(demande.user_email);
     if (!bedou) return Response.json({ error: 'Bedou introuvable' }, { status: 404 });
     await updateBedou(bedou.id, {
-      solde: Math.max(0, (bedou.solde || 0) - demande.montant),
-      solde_bloque: Math.max(0, (bedou.solde_bloque || 0) - demande.montant),
+      solde_global: Math.max(0, (bedou.solde_global || 0) - demande.montant),
     });
     await base44.asServiceRole.entities.DemandeRetrait.update(demande_id, {
       statut: 'paye',
@@ -302,7 +300,7 @@ Deno.serve(async (req) => {
     await createTransaction({
       user_email: demande.user_email,
       user_nom: demande.user_nom,
-      role: demande.role,
+      transaction_role: demande.role || user.active_profile_type,
       type: 'retrait',
       sens: 'debit',
       montant: demande.montant,
@@ -335,8 +333,7 @@ Deno.serve(async (req) => {
     const bedou = await getBedou(demande.user_email);
     if (bedou) {
       await updateBedou(bedou.id, {
-        solde_disponible: (bedou.solde_disponible || 0) + demande.montant,
-        solde_bloque: Math.max(0, (bedou.solde_bloque || 0) - demande.montant),
+        solde_disponible_global: (bedou.solde_disponible_global || 0) + demande.montant,
       });
     }
     await base44.asServiceRole.entities.DemandeRetrait.update(demande_id, {
@@ -376,16 +373,16 @@ Deno.serve(async (req) => {
 
     const commission = Math.round(montant_course * COMMISSION_LIVREUR);
     const gain = montant_course - commission;
-    const bedou = await ensureBedou(livreur_email, 'livreur', livreur_nom);
+    const bedou = await ensureBedou(livreur_email, livreur_nom);
     await updateBedou(bedou.id, {
-      solde: (bedou.solde || 0) + gain,
-      solde_disponible: (bedou.solde_disponible || 0) + gain,
-      gains_totaux: (bedou.gains_totaux || 0) + gain,
+      solde_global: (bedou.solde_global || 0) + gain,
+      solde_disponible_global: (bedou.solde_disponible_global || 0) + gain,
+      gains_totaux_livreur: (bedou.gains_totaux_livreur || 0) + gain,
     });
     await createTransaction({
       user_email: livreur_email,
       user_nom: livreur_nom,
-      role: 'livreur',
+      transaction_role: 'livreur',
       type: 'gain',
       sens: 'credit',
       montant: gain,
@@ -403,16 +400,16 @@ Deno.serve(async (req) => {
     const { partenaire_email, partenaire_nom, montant_commande, commande_id } = body;
     const commission = Math.round(montant_commande * COMMISSION_PARTENAIRE);
     const gain = montant_commande - commission;
-    const bedou = await ensureBedou(partenaire_email, 'partenaire', partenaire_nom);
+    const bedou = await ensureBedou(partenaire_email, partenaire_nom);
     await updateBedou(bedou.id, {
-      solde: (bedou.solde || 0) + gain,
-      solde_disponible: (bedou.solde_disponible || 0) + gain,
-      gains_totaux: (bedou.gains_totaux || 0) + gain,
+      solde_global: (bedou.solde_global || 0) + gain,
+      solde_disponible_global: (bedou.solde_disponible_global || 0) + gain,
+      gains_totaux_partenaire: (bedou.gains_totaux_partenaire || 0) + gain,
     });
     await createTransaction({
       user_email: partenaire_email,
       user_nom: partenaire_nom,
-      role: 'partenaire',
+      transaction_role: 'partenaire',
       type: 'gain',
       sens: 'credit',
       montant: gain,
@@ -445,19 +442,19 @@ Deno.serve(async (req) => {
     if (autresCourses.length > 0) return Response.json({ skip: true, reason: 'not_first_course' });
     // Vérifier si bonus déjà versé
     if (clientUser.bonus_commercial_traite) return Response.json({ skip: true, reason: 'already_done' });
-    // Créditer le commercial — dans balance_blocked (seuil 5000 F avant retrait)
-    const bedouComm = await ensureBedou(promo.commercial_email, 'commercial', commercial.full_name);
-    const newBalanceBlocked = (bedouComm.balance_blocked || 0) + BONUS_COMMERCIAL;
+    // Créditer le commercial — dans balance_blocked_commercial (seuil 5000 F avant retrait)
+    const bedouComm = await ensureBedou(promo.commercial_email, commercial.full_name);
+    const newBalanceBlocked = (bedouComm.balance_blocked_commercial || 0) + BONUS_COMMERCIAL;
     await updateBedou(bedouComm.id, {
-      solde: (bedouComm.solde || 0) + BONUS_COMMERCIAL,
-      // Ne pas créditer solde_disponible : le gain commercial est bloqué jusqu'au seuil de 5000 F
-      balance_blocked: newBalanceBlocked,
-      gains_totaux: (bedouComm.gains_totaux || 0) + BONUS_COMMERCIAL,
+      solde_global: (bedouComm.solde_global || 0) + BONUS_COMMERCIAL,
+      // Ne pas créditer solde_disponible_global : le gain commercial est bloqué jusqu'au seuil de 5000 F
+      balance_blocked_commercial: newBalanceBlocked,
+      gains_totaux_commercial: (bedouComm.gains_totaux_commercial || 0) + BONUS_COMMERCIAL,
     });
     await createTransaction({
       user_email: promo.commercial_email,
       user_nom: commercial.full_name,
-      role: 'commercial',
+      transaction_role: 'commercial',
       type: 'bonus',
       sens: 'credit',
       montant: BONUS_COMMERCIAL,
@@ -658,21 +655,21 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, insuffisant: true, solde: totalSolde });
     }
 
-    // Ordre de prélèvement : solde_bonus d'abord, puis solde_disponible
+    // Ordre de prélèvement : solde_bonus d'abord, puis solde_disponible_global
     const fromBonus = Math.min(soldeBonus, montant);
     const fromDispo = montant - fromBonus;
 
     // ── ÉTAPE 2 : Débiter client ──────────────────────────────────────────────
     await updateBedou(bedouClient.id, {
-      solde: Math.max(0, (bedouClient.solde || 0) - montant),
+      solde_global: Math.max(0, (bedouClient.solde_global || 0) - montant),
       solde_bonus: Math.max(0, soldeBonus - fromBonus),
-      solde_disponible: Math.max(0, soldeDispo - fromDispo),
-      depenses_totales: (bedouClient.depenses_totales || 0) + montant,
+      solde_disponible_global: Math.max(0, soldeDispo - fromDispo),
+      depenses_totales_client: (bedouClient.depenses_totales_client || 0) + montant,
     });
     const txClient = await createTransaction({
       user_email: client_email,
       user_nom: client_nom,
-      role: 'client',
+      transaction_role: 'client',
       type: 'paiement',
       sens: 'debit',
       montant,
@@ -686,16 +683,16 @@ Deno.serve(async (req) => {
     L(`Client débité — txId=${txClient?.id}`);
 
     // ── ÉTAPE 3 : Créditer livreur (80%) ─────────────────────────────────────
-    const bedouLivreur = await ensureBedou(livreur_email, 'livreur', livreur_nom);
+    const bedouLivreur = await ensureBedou(livreur_email, livreur_nom);
     await updateBedou(bedouLivreur.id, {
-      solde: (bedouLivreur.solde || 0) + gainLivreur,
-      solde_disponible: (bedouLivreur.solde_disponible || 0) + gainLivreur,
-      gains_totaux: (bedouLivreur.gains_totaux || 0) + gainLivreur,
+      solde_global: (bedouLivreur.solde_global || 0) + gainLivreur,
+      solde_disponible_global: (bedouLivreur.solde_disponible_global || 0) + gainLivreur,
+      gains_totaux_livreur: (bedouLivreur.gains_totaux_livreur || 0) + gainLivreur,
     });
     const txLivreur = await createTransaction({
       user_email: livreur_email,
       user_nom: livreur_nom,
-      role: 'livreur',
+      transaction_role: 'livreur',
       type: 'gain',
       sens: 'credit',
       montant: gainLivreur,
@@ -709,16 +706,15 @@ Deno.serve(async (req) => {
     L(`Livreur crédité — gain=${gainLivreur} txId=${txLivreur?.id}`);
 
     // ── ÉTAPE 4 : Créditer CDL (20%) ─────────────────────────────────────────
-    const bedouCdl = await ensureBedou(CDL_EMAIL, 'admin', 'CDL');
+    const bedouCdl = await ensureBedou(CDL_EMAIL, 'CDL');
     await updateBedou(bedouCdl.id, {
-      solde: (bedouCdl.solde || 0) + commissionCdl,
-      solde_disponible: (bedouCdl.solde_disponible || 0) + commissionCdl,
-      gains_totaux: (bedouCdl.gains_totaux || 0) + commissionCdl,
+      solde_global: (bedouCdl.solde_global || 0) + commissionCdl,
+      solde_disponible_global: (bedouCdl.solde_disponible_global || 0) + commissionCdl,
     });
     const txCdl = await createTransaction({
       user_email: CDL_EMAIL,
       user_nom: 'CDL',
-      role: 'admin',
+      transaction_role: 'admin',
       type: 'commission',
       sens: 'credit',
       montant: commissionCdl,
@@ -766,13 +762,13 @@ Deno.serve(async (req) => {
     if (!bedou) return Response.json({ error: 'Bedou introuvable' }, { status: 404 });
     const delta = sens === 'credit' ? montant : -montant;
     await updateBedou(bedou.id, {
-      solde: Math.max(0, (bedou.solde || 0) + delta),
-      solde_disponible: Math.max(0, (bedou.solde_disponible || 0) + delta),
+      solde_global: Math.max(0, (bedou.solde_global || 0) + delta),
+      solde_disponible_global: Math.max(0, (bedou.solde_disponible_global || 0) + delta),
     });
     await createTransaction({
       user_email: target_email,
       user_nom: bedou.user_nom,
-      role: bedou.role,
+      transaction_role: user.active_profile_type || 'admin',
       type: 'ajustement',
       sens,
       montant,

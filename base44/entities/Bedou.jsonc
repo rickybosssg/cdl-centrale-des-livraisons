@@ -8,35 +8,21 @@
     },
     "user_email": {
       "type": "string",
-      "title": "Email utilisateur"
+      "title": "Email utilisateur",
+      "index": true
     },
     "user_nom": {
       "type": "string",
       "title": "Nom utilisateur"
     },
-    "role": {
-      "type": "string",
-      "enum": [
-        "client",
-        "livreur",
-        "partenaire",
-        "commercial"
-      ],
-      "title": "R\u00f4le"
-    },
-    "solde": {
+    "solde_global": {
       "type": "number",
-      "title": "Solde total (F CFA)",
+      "title": "Solde global (F CFA)",
       "default": 0
     },
-    "solde_disponible": {
+    "solde_disponible_global": {
       "type": "number",
-      "title": "Solde disponible (F CFA)",
-      "default": 0
-    },
-    "solde_bloque": {
-      "type": "number",
-      "title": "Solde bloqu\u00e9 (F CFA)",
+      "title": "Solde disponible global (F CFA)",
       "default": 0
     },
     "solde_bonus": {
@@ -54,19 +40,29 @@
       "title": "Nombre de recharges avec bonus re\u00e7u",
       "default": 0
     },
-    "gains_totaux": {
+    "gains_totaux_livreur": {
       "type": "number",
-      "title": "Gains totaux (F CFA)",
+      "title": "Gains totaux livreur (F CFA)",
       "default": 0
     },
-    "depenses_totales": {
+    "gains_totaux_partenaire": {
       "type": "number",
-      "title": "D\u00e9penses totales (F CFA)",
+      "title": "Gains totaux partenaire (F CFA)",
       "default": 0
     },
-    "balance_blocked": {
+    "gains_totaux_commercial": {
       "type": "number",
-      "title": "Balance bloqu\u00e9e commerciale (F CFA)",
+      "title": "Gains totaux commercial (F CFA)",
+      "default": 0
+    },
+    "depenses_totales_client": {
+      "type": "number",
+      "title": "D\u00e9penses totales client (F CFA)",
+      "default": 0
+    },
+    "balance_blocked_commercial": {
+      "type": "number",
+      "title": "Gains commerciaux bloqu\u00e9s (F CFA)",
       "default": 0,
       "description": "Gains commerciaux bloqu\u00e9s jusqu'\u00e0 5000 F"
     },
@@ -85,7 +81,6 @@
     }
   },
   "required": [
-    "user_email",
-    "role"
+    "user_email"
   ]
 }

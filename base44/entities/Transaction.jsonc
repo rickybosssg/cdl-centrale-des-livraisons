@@ -8,13 +8,14 @@
     },
     "user_email": {
       "type": "string",
-      "title": "Email utilisateur"
+      "title": "Email utilisateur",
+      "index": true
     },
     "user_nom": {
       "type": "string",
       "title": "Nom utilisateur"
     },
-    "role": {
+    "transaction_role": {
       "type": "string",
       "enum": [
         "client",
@@ -23,7 +24,8 @@
         "commercial",
         "admin"
       ],
-      "title": "R\u00f4le"
+      "title": "R\u00f4le dans la transaction",
+      "description": "Contexte du r\u00f4le lors de cette transaction"
     },
     "type": {
       "type": "string",
@@ -111,7 +113,7 @@
   },
   "required": [
     "user_email",
-    "role",
+    "transaction_role",
     "type",
     "montant",
     "sens"
