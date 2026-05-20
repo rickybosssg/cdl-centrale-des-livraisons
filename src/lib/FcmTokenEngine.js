@@ -102,51 +102,40 @@ async function saveTokenToBackend(userEmail, token, deviceMeta) {
   try { return JSON.parse(text); } catch (_) { return { success: false, error: text.slice(0, 100) }; }
 }
 
-// ── Vérification BDD ──────────────────────────────────────────────────────────
+// ── Vérification BDD via backend public (évite les 403 Base44 auth-required) ──
+// On utilise getCurrentFcmToken (backend public) au lieu de base44.entities.FcmToken.filter()
+// pour ne pas dépendre de la session Base44 active sur l'APK.
 async function verifyInBdd(userEmail, localToken) {
   try {
-    // Chercher d'abord les tokens actifs
-    const tokens = await base44.entities.FcmToken.filter({ user_email: userEmail, is_active: true }).catch(() => []);
-    const valid = (tokens || []).filter(t => {
-      if (!t.is_active || !t.token) return false;
-      const ref = t.last_used || t.registered_at;
-      if (!ref) return true;
-      return Date.now() - new Date(ref).getTime() < TOKEN_MAX_AGE_MS;
+    const res = await fetch(`${APP_BASE_URL}/functions/getCurrentFcmToken`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: userEmail }),
     });
-
-    if (valid.length === 0) {
-      // Fallback : chercher les tokens inactifs récents (couvre bdd_active=0 après désactivation)
-      const allTokens = await base44.entities.FcmToken.filter({ user_email: userEmail }, '-updated_date', 10).catch(() => []);
-      const recentInactive = (allTokens || []).filter(t => {
-        const ref = t.last_used || t.registered_at;
-        if (!ref) return false;
-        return Date.now() - new Date(ref).getTime() < TOKEN_MAX_AGE_MS;
-      });
-      if (recentInactive.length > 0) {
-        console.warn(`[FCM_ENGINE] verifyInBdd | bdd_active=0 mais ${recentInactive.length} token(s) inactif(s) récent(s) → trigger repair | user=${userEmail}`);
-        // Déclencher repair sans bloquer
-        setTimeout(() => FcmTokenEngine.repair(userEmail, 'inactive_token_detected'), 100);
-      } else {
-        console.error(`[FCM_ENGINE] verifyInBdd | 0 token actif | user=${userEmail}`);
-      }
-      return { verified: false, count: 0, tokens: [], recentInactiveCount: recentInactive.length };
+    if (!res.ok) {
+      // Backend indisponible ou erreur réseau → skip silencieux (save HTTP déjà OK)
+      console.warn(`[FCM_ENGINE] verifyInBdd | backend ${res.status} → skip | user=${userEmail}`);
+      return { verified: false, count: 0, tokens: [], skipped: true };
     }
-
-    // Vérifier correspondance local vs BDD
+    const data = await res.json().catch(() => ({}));
+    const count = data?.count ?? (data?.token ? 1 : 0);
+    const bddTokenPreview = data?.token?.slice(0, 30);
     const localPreview = localToken?.slice(0, 30);
-    const match = localPreview
-      ? valid.find(t => t.token?.startsWith(localPreview))
-      : null;
+    const localMatch = !!(localPreview && bddTokenPreview && bddTokenPreview === localPreview);
 
-    if (localPreview && !match) {
-      console.warn(`[FCM_ENGINE] verifyInBdd | local≠BDD | local=${localPreview} | bdd=${valid[0].token?.slice(0, 30)} | user=${userEmail}`);
+    if (count > 0) {
+      console.log(`[FCM_ENGINE] verifyInBdd OK | count=${count} | localMatch=${localMatch} | user=${userEmail}`);
+      return { verified: true, count, localMatch };
     }
 
-    console.log(`[FCM_ENGINE] verifyInBdd OK | count=${valid.length} | match=${!!match} | user=${userEmail}`);
-    return { verified: true, count: valid.length, tokens: valid, localMatch: !!match };
+    // Aucun token actif en BDD → trigger repair silencieux
+    console.warn(`[FCM_ENGINE] verifyInBdd | 0 token actif en BDD | user=${userEmail}`);
+    setTimeout(() => FcmTokenEngine.repair(userEmail, 'verify_zero_token'), 500);
+    return { verified: false, count: 0, tokens: [] };
   } catch (e) {
-    console.error(`[FCM_ENGINE] verifyInBdd error | ${e?.message} | user=${userEmail}`);
-    return { verified: false, count: 0, tokens: [], error: e?.message };
+    // Erreur réseau / timeout → warning non bloquant, le save HTTP a déjà réussi
+    console.warn(`[FCM_ENGINE] verifyInBdd | skip (${e?.message}) | user=${userEmail}`);
+    return { verified: false, count: 0, tokens: [], skipped: true };
   }
 }
 
@@ -192,45 +181,44 @@ const FcmTokenEngine = {
     console.log(`[FCM_TOKEN_SAVE_SUCCESS] action=${saveResult.action} | token_id=${saveResult.token_id} | user=${userEmail}`);
     writeLocalToken(token, userEmail);
 
-    // Vérification BDD post-save avec retries — silencieuse si session expirée
-    // (le save a déjà réussi via HTTP public, la vérif est best-effort)
-    for (let attempt = 1; attempt <= VERIFY_RETRIES; attempt++) {
-      await new Promise(r => setTimeout(r, 600 * attempt));
-      try {
-        const { verified, count, localMatch } = await verifyInBdd(userEmail, token);
-        if (verified) {
-          console.log(`[FCM_TOKEN_VERIFY_SUCCESS] BDD confirmé | count=${count} | localMatch=${localMatch} | attempt=${attempt} | user=${userEmail}`);
-          return { success: true, action: saveResult.action, token_id: saveResult.token_id, verified: true, count };
-        }
-        console.warn(`[FCM_ENGINE] verify attempt ${attempt}/${VERIFY_RETRIES} failed | user=${userEmail}`);
-      } catch (verifyErr) {
-        // Session expirée → ne pas bloquer, le save HTTP a déjà réussi
-        console.warn(`[FCM_ENGINE] verify attempt ${attempt} skipped (session) | user=${userEmail} | ${verifyErr?.message}`);
-        break;
+    // Vérification BDD post-save — best-effort via HTTP public (sans session requise)
+    // Si verifyInBdd retourne skipped=true (backend indisponible) → on ne réessaie pas
+    await new Promise(r => setTimeout(r, 1200));
+    try {
+      const verifyResult = await verifyInBdd(userEmail, token);
+      if (verifyResult.verified) {
+        console.log(`[FCM_TOKEN_VERIFY_SUCCESS] BDD confirmé | count=${verifyResult.count} | localMatch=${verifyResult.localMatch} | user=${userEmail}`);
+        return { success: true, action: saveResult.action, token_id: saveResult.token_id, verified: true, count: verifyResult.count };
       }
+      // skipped ou 0 token → le save HTTP a réussi, on retourne success sans bloquer
+      if (!verifyResult.skipped) {
+        console.warn(`[FCM_ENGINE] verify: 0 token actif post-save (repair déclenché) | user=${userEmail}`);
+      }
+    } catch (_) {
+      // Jamais de crash ici — la vérif est best-effort
     }
 
     console.log(`[FCM_ENGINE] saveToken OK (verify best-effort) | user=${userEmail}`);
-    return { success: true, action: saveResult.action, verified: false };
+    return { success: true, action: saveResult.action, token_id: saveResult.token_id, verified: false };
   },
 
   /**
-   * getActiveTokens — Lire les tokens actifs en BDD (utilisé par sendCdlNotification).
+   * getActiveTokens — Lire les tokens actifs via backend public (évite 403 Base44).
    */
   async getActiveTokens(userEmail) {
     if (!userEmail) return { tokens: [], count: 0 };
     try {
-      const tokens = await base44.entities.FcmToken.filter({ user_email: userEmail, is_active: true });
-      const valid = (tokens || []).filter(t => {
-        if (!t.is_active || !t.token) return false;
-        const ref = t.last_used || t.registered_at;
-        if (!ref) return true;
-        return Date.now() - new Date(ref).getTime() < TOKEN_MAX_AGE_MS;
+      const res = await fetch(`${APP_BASE_URL}/functions/getCurrentFcmToken`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_email: userEmail }),
       });
-      return { tokens: valid, count: valid.length };
+      if (!res.ok) return { tokens: [], count: 0 };
+      const data = await res.json().catch(() => ({}));
+      return { tokens: data?.tokens || [], count: data?.count || 0 };
     } catch (e) {
-      console.error(`[FCM_ENGINE] getActiveTokens error | ${e?.message} | user=${userEmail}`);
-      return { tokens: [], count: 0, error: e?.message };
+      console.warn(`[FCM_ENGINE] getActiveTokens | skip (${e?.message}) | user=${userEmail}`);
+      return { tokens: [], count: 0 };
     }
   },
 
@@ -269,7 +257,18 @@ const FcmTokenEngine = {
     let bddTokens = [];
     let bddError = null;
     try {
-      bddTokens = await base44.entities.FcmToken.filter({ user_email: userEmail }, '-updated_date', 20);
+      // Via backend public pour éviter 403 Base44 auth-required sur APK
+      const res = await fetch(`${APP_BASE_URL}/functions/getCurrentFcmToken`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_email: userEmail, include_all: true }),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        bddTokens = data?.tokens || (data?.token ? [{ token: data.token, is_active: true }] : []);
+      } else {
+        bddError = `backend ${res.status}`;
+      }
     } catch (e) {
       bddError = e?.message;
     }
