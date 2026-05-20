@@ -70,28 +70,65 @@ function ProgressBar({ step, total }) {
   );
 }
 
-// ── Footer CTA sticky (Uber-style) ───────────────────────────────────────────
-// Hauteur totale réservée : 80px bouton + padding + safe-area
-export const STICKY_FOOTER_HEIGHT = 88; // px, utilisé pour le padding-bottom du contenu
+// ── Hook : détection clavier virtuel (Android WebView + iOS Safari) ──────────
+function useKeyboardHeight() {
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    // API moderne Chrome/Android : visualViewport
+    if (!window.visualViewport) return;
+    const onResize = () => {
+      const gap = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+      setKbHeight(Math.max(0, gap));
+    };
+    window.visualViewport.addEventListener('resize', onResize);
+    window.visualViewport.addEventListener('scroll', onResize);
+    return () => {
+      window.visualViewport.removeEventListener('resize', onResize);
+      window.visualViewport.removeEventListener('scroll', onResize);
+    };
+  }, []);
+  return kbHeight;
+}
 
-function StickyFooter({ onClick, disabled, loading, children, color = PRIMARY }) {
+// ── Bottom Action Bar (Uber/Bolt style) ───────────────────────────────────────
+export const STICKY_FOOTER_HEIGHT = 88;
+
+function BottomActionBar({ onClick, disabled, loading, children, color = PRIMARY, summary = null }) {
+  const kbHeight = useKeyboardHeight();
   const vibrate = () => { try { navigator.vibrate?.(30); } catch (_) {} };
+
+  // Quand clavier ouvert → coller juste au-dessus ; sinon safe-area + tab bar
+  const bottomOffset = kbHeight > 0
+    ? kbHeight
+    : `calc(env(safe-area-inset-bottom) + 60px)`; // 60px = bottom tab bar
+
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-40"
+      className="fixed left-0 right-0 z-50"
       style={{
-        background: "rgba(255,255,255,0.97)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        borderTop: "1px solid rgba(0,0,0,0.06)",
-        boxShadow: "0 -4px 24px rgba(0,0,0,0.08)",
+        bottom: typeof bottomOffset === 'number' ? `${bottomOffset}px` : bottomOffset,
+        background: "rgba(255,255,255,0.98)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+        borderTop: "1px solid rgba(0,0,0,0.07)",
+        boxShadow: "0 -6px 32px rgba(0,0,0,0.10)",
         paddingLeft: "env(safe-area-inset-left)",
         paddingRight: "env(safe-area-inset-right)",
-        /* Safe area Android/iOS — bottom nav ~56px + safe-area */
-        paddingBottom: "calc(env(safe-area-inset-bottom) + 72px)",
-        paddingTop: "12px",
+        paddingTop: summary ? "10px" : "12px",
+        paddingBottom: "12px",
+        transition: "bottom 0.18s ease-out",
       }}
     >
+      {/* Mini résumé optionnel */}
+      {summary && (
+        <div className="flex items-center justify-between px-5 mb-2.5">
+          <span className="text-xs text-gray-400 font-medium truncate max-w-[55%]">{summary.label}</span>
+          {summary.price != null && summary.price > 0 && (
+            <span className="text-base font-extrabold" style={{ color: PRIMARY }}>{fmt(summary.price)} F</span>
+          )}
+        </div>
+      )}
+
       <div className="px-5">
         <motion.button
           onClick={() => { if (!disabled && !loading) { vibrate(); onClick?.(); } }}
@@ -101,7 +138,7 @@ function StickyFooter({ onClick, disabled, loading, children, color = PRIMARY })
           className="w-full flex items-center justify-center gap-2 h-14 rounded-2xl text-white text-base font-bold"
           style={{
             background: disabled ? "#D1D5DB" : `linear-gradient(135deg, ${color}, ${color}CC)`,
-            boxShadow: disabled ? "none" : `0 4px 20px ${color}40`,
+            boxShadow: disabled ? "none" : `0 6px 24px ${color}45`,
           }}
         >
           {loading ? (
@@ -116,10 +153,10 @@ function StickyFooter({ onClick, disabled, loading, children, color = PRIMARY })
   );
 }
 
-// BigBtn conservé pour compat (fixed ignoré, toujours StickyFooter)
-function BigBtn({ onClick, disabled, loading, children, color = PRIMARY, fixed = false }) {
+// BigBtn — toujours BottomActionBar quand fixed=true
+function BigBtn({ onClick, disabled, loading, children, color = PRIMARY, fixed = false, summary = null }) {
   if (fixed) {
-    return <StickyFooter onClick={onClick} disabled={disabled} loading={loading} color={color}>{children}</StickyFooter>;
+    return <BottomActionBar onClick={onClick} disabled={disabled} loading={loading} color={color} summary={summary}>{children}</BottomActionBar>;
   }
   const vibrate = () => { try { navigator.vibrate?.(30); } catch (_) {} };
   return (
@@ -509,7 +546,8 @@ function StepPrix({ form, setForm, onNext }) {
         </p>
       </div>
 
-      <BigBtn onClick={onNext} disabled={!prix || prix <= 0} color={PRIMARY} fixed>
+      <BigBtn onClick={onNext} disabled={!prix || prix <= 0} color={PRIMARY} fixed
+        summary={prix > 0 ? { label: "Prix proposé", price: prix } : null}>
         Continuer <ChevronRight className="h-4 w-4" />
       </BigBtn>
     </div>
@@ -574,7 +612,8 @@ function StepUrgence({ urgence, setUrgence, prixBase, onNext }) {
         </motion.div>
       )}
 
-      <BigBtn onClick={onNext} disabled={!urgence} color={PRIMARY} fixed>
+      <BigBtn onClick={onNext} disabled={!urgence} color={PRIMARY} fixed
+        summary={prixBase > 0 ? { label: urgence ? `Niveau : ${urgence === "normal" ? "Normal" : urgence === "urgent" ? "Urgent" : "Très urgent"}` : "Choisissez un niveau", price: prixTotal } : null}>
         Continuer <ChevronRight className="h-4 w-4" />
       </BigBtn>
     </div>
@@ -665,7 +704,8 @@ function StepRecap({ typeService, form, urgence, prixBase, supplement, prixTotal
         </motion.div>
       )}
 
-      <BigBtn onClick={onConfirm} disabled={soldeInsuffisant} loading={loading} color={GREEN} fixed>
+      <BigBtn onClick={onConfirm} disabled={soldeInsuffisant} loading={loading} color={GREEN} fixed
+        summary={{ label: soldeInsuffisant ? "❌ Solde insuffisant" : "✅ Bedou suffisant", price: prixTotal }}>
         <CheckCircle2 className="h-5 w-5" />
         CONFIRMER LA COMMANDE
       </BigBtn>
