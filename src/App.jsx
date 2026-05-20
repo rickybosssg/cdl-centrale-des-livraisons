@@ -130,6 +130,7 @@ import FcmTokenRefresh from './pages/FcmTokenRefresh';
 import FcmNativeDebug from './pages/FcmNativeDebug';
 import FcmFinalAudit from './pages/FcmFinalAudit';
 import FcmChainAudit from './pages/FcmChainAudit';
+import FirebaseConfigDiag from './pages/dispatcher/FirebaseConfigDiag';
 
 import UberOpsView from './pages/dispatcher/UberOpsView';
 import EmailLogin from './pages/EmailLogin';
@@ -494,6 +495,7 @@ const AuthenticatedApp = () => {
           <Route path="/course-trace" element={<CourseTraceViewer />} />
           <Route path="/fcm-token-debug" element={<FcmTokenDebug />} />
           <Route path="/fcm-audit" element={<FcmAuditDashboard />} />
+          <Route path="/firebase-config-diag" element={<FirebaseConfigDiag />} />
           {/* Dashboard PRO & Profils centralisés */}
           <Route path="/admin-pro" element={<AdminDashboardPro />} />
           <Route path="/profils" element={<ProfilsHub />} />

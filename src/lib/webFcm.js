@@ -11,7 +11,7 @@
 
 import { initializeApp, getApps } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
-import { firebaseConfig } from '@/lib/firebaseConfig';
+import { firebaseConfig, vapidKey } from '@/lib/firebaseConfig';
 import { base44 } from '@/api/base44Client';
 
 let messagingInstance = null;
@@ -116,7 +116,7 @@ export async function initWebFcm({ onToken, onForegroundNotif, onPermissionDenie
   try {
     const messaging = getMessagingInstance();
     token = await getToken(messaging, {
-      vapidKey: firebaseConfig.vapidKey,
+      vapidKey: vapidKey,
       serviceWorkerRegistration: swReg,
     });
 
@@ -134,12 +134,12 @@ export async function initWebFcm({ onToken, onForegroundNotif, onPermissionDenie
     try {
       const me = await base44.auth.me();
       if (me?.email) {
-        const res = await base44.functions.invoke('saveFcmToken', {
+        const res = await base44.functions.invoke('saveFcmTokenPublic', {
           token,
-          userId: me.id,
-          userEmail: me.email,
-          userRole: me.role,
-          deviceType: 'web',
+          user_email: me.email,
+          device_type: 'web',
+          platform: 'web',
+          active_profile_type: me.active_profile_type || null,
         });
         console.log('[webFcm] ✅ Token sauvegardé BDD:', res.data?.action, '— id:', res.data?.token_id);
       }
