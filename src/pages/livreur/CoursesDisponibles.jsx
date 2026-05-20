@@ -180,6 +180,29 @@ export default function CoursesDisponibles() {
     }
   };
 
+  const refuser = async (course) => {
+    if (!user) return;
+    setAccepting(course.id);
+    setCourses(prev => prev.filter(c => c.id !== course.id));
+    try {
+      const res = await base44.functions.invoke('courseStateMachine', {
+        course_id: course.id,
+        action: 'REFUSE',
+      });
+      if (!res?.data?.success && !res?.data?.alreadyDone) {
+        setCourses(prev => prev.find(c => c.id === course.id) ? prev : [course, ...prev]);
+        toast.error(res?.data?.error || "Impossible de refuser");
+      } else {
+        toast.info("Course refusée.");
+      }
+    } catch (e) {
+      setCourses(prev => prev.find(c => c.id === course.id) ? prev : [course, ...prev]);
+      toast.error("Erreur : " + e.message);
+    } finally {
+      setAccepting(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -264,7 +287,7 @@ export default function CoursesDisponibles() {
               key={course.id}
               course={course}
               onAccepter={accepting === course.id ? undefined : () => accepter(course)}
-              onRefuser={undefined}
+              onRefuser={accepting === course.id ? undefined : () => refuser(course)}
             />
           ))}
         </div>

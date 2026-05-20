@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Package, Zap, X, Clock } from "lucide-react";
+import { MapPin, Package, Zap, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { vibrateNotif } from "@/lib/vibration";
 import { toast } from "sonner";
 
-const TIMER_DURATION = 25; // secondes
+const TIMER_DURATION = 25;
 
 function playAlertSound() {
   try {
@@ -31,151 +31,78 @@ export default function NewCourseAlert({ course, onClose, user }) {
   const navigate = useNavigate();
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
   const [accepting, setAccepting] = useState(false);
-  const timerRef = useRef(null);
   const intervalRef = useRef(null);
 
   useEffect(() => {
     if (!course) return;
     setTimeLeft(TIMER_DURATION);
-    console.log(`[✅ BLOC_RÉSUMÉ_AFFICHÉ] course_id=${course.id} | livreur_email=${course.livreur_email} | statut=${course.statut} | trajet=${course.quartier_depart}→${course.quartier_arrivee} | prix=${course.prix}`);
-    console.log(`[PREUVE] notification_interne_reçue = bloc_résumé_affiché (même course_id: ${course.id})`);
     playAlertSound();
     vibrateNotif();
-    // Vibration native via navigator.vibrate (fonctionne sur Android WebView/APK)
     try { navigator.vibrate?.([200, 100, 200, 100, 200]); } catch (_) {}
 
     intervalRef.current = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(intervalRef.current);
-          onClose();
-          return 0;
-        }
+        if (prev <= 1) { clearInterval(intervalRef.current); onClose(); return 0; }
         return prev - 1;
       });
     }, 1000);
 
-    return () => {
-      clearInterval(intervalRef.current);
-      clearTimeout(timerRef.current);
-    };
+    return () => clearInterval(intervalRef.current);
   }, [course?.id]);
 
+  // ── Refus — via courseStateMachine (gère mode manuel/auto) ─────────────────
   const handleRefuse = async () => {
     if (!course || !user) return;
     clearInterval(intervalRef.current);
-    // 1. UI — fermer immédiatement
     onClose();
-    // 2. Mettre à jour l'historique et relancer le dispatch
     try {
-      const fresh = await base44.entities.Course.filter({ id: course.id });
-      const c = fresh?.[0];
-      if (!c || c.statut !== "assignee_attente" || c.livreur_email !== user.email) return;
-      let historique = [];
-      try { if (c.historique_assignation) historique = JSON.parse(c.historique_assignation); } catch (_) {}
-      historique = historique.map(h =>
-        h.livreur_email === user.email && h.statut === 'proposee'
-          ? { ...h, statut: 'refuse', heure_refus: new Date().toISOString() }
-          : h
-      );
-      // Remettre la course en attente, exclure ce livreur
-      await base44.entities.Course.update(course.id, {
-        statut: 'en_attente',
-        livreur_email: null,
-        livreur_name: null,
-        telephone_livreur: null,
-        heure_assignation: null,
-        historique_assignation: JSON.stringify(historique),
-      });
-      // Décrémenter nombre_courses_actives du livreur
-      await base44.auth.updateMe({
-        nombre_courses_actives: Math.max(0, (user.nombre_courses_actives || 1) - 1),
-        courses_refusees: (user.courses_refusees || 0) + 1,
-        courses_refusees_consecutives: (user.courses_refusees_consecutives || 0) + 1,
-      }).catch(() => {});
-      // Relancer dispatch en excluant ce livreur
-      base44.functions.invoke('autoDispatch', {
+      const res = await base44.functions.invoke('courseStateMachine', {
         course_id: course.id,
-        exclude_emails: [user.email],
-        force: true,
-      }).catch(() => {});
-    } catch (_) {}
+        action: 'REFUSE',
+      });
+      if (!res?.data?.success && !res?.data?.alreadyDone) {
+        toast.error(res?.data?.error || "Impossible de refuser cette course");
+      }
+    } catch (err) {
+      toast.error("Erreur refus : " + err.message);
+    }
   };
 
+  // ── Acceptation — via courseStateMachine (source unique) ───────────────────
   const handleAccept = async () => {
     if (!course) return;
-    console.log('[ACCEPT_CLICK] course_id:', course.id, '| user prop:', user?.email);
     setAccepting(true);
     clearInterval(intervalRef.current);
 
     try {
-      // Résoudre le user — fallback sur auth.me() si la prop n'est pas encore résolue
       let me = user;
-      if (!me?.email) {
-        console.log('[ACCEPT_CLICK] user prop null — fallback auth.me()');
-        me = await base44.auth.me();
-      }
+      if (!me?.email) me = await base44.auth.me();
       if (!me?.email) {
         toast.error("Impossible d'identifier votre compte. Réessayez.");
         setAccepting(false);
         return;
       }
 
-      // Lire la course en temps réel pour vérifier qu'elle est encore disponible
-      console.log('[ACCEPT_API_START] fetching fresh course:', course.id);
-      const fresh = await base44.entities.Course.filter({ id: course.id });
-      const c = fresh?.[0];
-
-      console.log('[ACCEPT_PAYLOAD] course statut:', c?.statut, '| livreur_email:', c?.livreur_email, '| me:', me.email);
-
-      const ACCEPTABLE_STATUTS = ["en_attente", "assignee_attente", "proposee", "pending_driver_acceptance", "en_attente_acceptation"];
-      if (!c || !ACCEPTABLE_STATUTS.includes(c.statut)) {
-        console.log('[ACCEPT_API_ERROR] statut not acceptable:', c?.statut);
-        toast.error("Course déjà attribuée ou annulée");
-        onClose();
-        return;
-      }
-
-      // Si la course est assignée à un autre livreur, bloquer
-      if (c.livreur_email && c.livreur_email !== me.email && c.statut === "assignee_attente") {
-        console.log('[ACCEPT_API_ERROR] course assigned to different driver:', c.livreur_email, '!= me:', me.email);
-        toast.error("Cette course a été attribuée à un autre livreur");
-        onClose();
-        return;
-      }
-
-      // Assigner le livreur
-      const now = new Date().toISOString();
-      const payload = {
-        statut: "acceptee",
-        livreur_email: me.email,
-        livreur_name: me.full_name || me.email,
-        telephone_livreur: me.telephone || "",
-        date_acceptation: now,
-        mode_assignation: c.mode_assignation || "auto",
-        heure_assignation: c.heure_assignation || now,
-      };
-      console.log('[ACCEPT_API_START] updating course with payload:', JSON.stringify(payload));
-      await base44.entities.Course.update(course.id, payload);
-      console.log('[ACCEPT_API_SUCCESS] course updated to acceptee');
-
-      // Notifier le client
-      base44.entities.Notification.create({
-        destinataire_email: c.client_email,
-        destinataire_role: "client",
-        titre: "🛵 Votre livreur est en route !",
-        message: `${me.full_name || me.email} a accepté votre course et arrive bientôt.`,
-        type: "success",
+      const res = await base44.functions.invoke('courseStateMachine', {
         course_id: course.id,
-        lue: false,
-      }).catch(() => {});
+        action: 'ACCEPT',
+      });
 
-      console.log('[ACCEPT_STATUS_AFTER] statut=acceptee | navigating to /course-livreur/' + course.id);
-      toast.success("✅ Course acceptée !");
-      onClose();
-      navigate(`/course-livreur/${course.id}`);
+      if (res?.data?.success || res?.data?.alreadyDone) {
+        toast.success("✅ Course acceptée !");
+        onClose();
+        navigate(`/course-livreur/${course.id}`);
+      } else {
+        const statut = res?.data?.current_statut;
+        if (statut === 'acceptee' || statut === 'en_cours') {
+          onClose();
+          navigate(`/course-livreur/${course.id}`);
+        } else {
+          toast.error(res?.data?.error || "Course non disponible");
+          setAccepting(false);
+        }
+      }
     } catch (err) {
-      console.log('[ACCEPT_API_ERROR]', err.message);
       toast.error("Erreur : " + err.message);
       setAccepting(false);
     }
@@ -187,78 +114,42 @@ export default function NewCourseAlert({ course, onClose, user }) {
   return (
     <AnimatePresence>
       {course && (
-        <>
-          {/* OVERLAY TEST ANDROID - FOND ROUGE GÉANT */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed"
-            style={{
-              position: "fixed",
-              top: "0",
-              left: "0",
-              right: "0",
-              bottom: "0",
-              backgroundColor: "rgba(255, 0, 0, 0.3)",
-              zIndex: 99998,
-              pointerEvents: "none"
-            }}
-          />
-          {/* BLOC PRINCIPAL */}
-          <motion.div
-            initial={{ y: -120, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -120, opacity: 0 }}
-            transition={{ type: "spring", damping: 22, stiffness: 320 }}
-            className="fixed flex justify-center"
-            style={{
-              position: "fixed",
-              top: "80px",
-              left: "10px",
-              right: "10px",
-              zIndex: 99999,
-              backgroundColor: "#ff0000",
-              border: "4px solid #ffff00",
-              borderRadius: "16px",
-              padding: "16px",
-              boxShadow: "0 10px 40px rgba(255,0,0,0.8)"
-            }}
-            data-testid="new-course-alert"
-            data-course-id={course.id}
-          >
+        <motion.div
+          initial={{ y: -100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -100, opacity: 0 }}
+          transition={{ type: "spring", damping: 22, stiffness: 300 }}
+          style={{
+            position: "fixed",
+            top: "max(env(safe-area-inset-top), 8px)",
+            left: "10px",
+            right: "10px",
+            zIndex: 99999,
+          }}
+          data-testid="new-course-alert"
+          data-course-id={course.id}
+        >
           <div className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border-2 border-orange-400">
-            {/* Header urgence */}
+            {/* Header */}
             <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 text-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <motion.div
-                    animate={{ scale: [1, 1.4, 1] }}
-                    transition={{ duration: 0.5, repeat: Infinity }}
-                  >
+                  <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity }}>
                     <Zap className="h-5 w-5" />
                   </motion.div>
                   <p className="text-base font-black tracking-wide">NOUVELLE COURSE !</p>
                 </div>
-                {/* TEST VISUEL ANDROID */}
-                <div className="text-xs font-bold bg-yellow-400 text-black px-2 py-1 rounded">
-                  TEST APK
-                </div>
                 <div className="flex items-center gap-2">
-                  {/* Timer circulaire */}
                   <div className="relative h-8 w-8">
                     <svg className="h-8 w-8 -rotate-90" viewBox="0 0 32 32">
                       <circle cx="16" cy="16" r="13" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
-                      <circle
-                        cx="16" cy="16" r="13" fill="none"
-                        stroke="white" strokeWidth="3"
+                      <circle cx="16" cy="16" r="13" fill="none" stroke="white" strokeWidth="3"
                         strokeDasharray={`${2 * Math.PI * 13}`}
                         strokeDashoffset={`${2 * Math.PI * 13 * (1 - timerPercent / 100)}`}
                         style={{ transition: "stroke-dashoffset 1s linear" }}
                       />
                     </svg>
-                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">
-                      {timeLeft}
-                    </span>
+                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">{timeLeft}</span>
                   </div>
                   <button onClick={onClose} className="p-1 rounded-full bg-white/20 hover:bg-white/30">
                     <X className="h-3.5 w-3.5" />
@@ -281,12 +172,11 @@ export default function NewCourseAlert({ course, onClose, user }) {
                   <Package className="h-4 w-4 text-amber-500 flex-shrink-0" />
                   <div>
                     <p className="text-[10px] text-muted-foreground">Colis</p>
-                    <p className="font-bold text-xs">{course.type_colis}</p>
+                    <p className="font-bold text-xs">{course.type_colis || "—"}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Gain */}
               <div className="text-center py-2 rounded-xl bg-green-50 border-2 border-green-300">
                 <p className="text-3xl font-black text-green-700">
                   {(course.gain_livreur || Math.round((course.prix || 0) * 0.8)).toLocaleString()} F CFA
@@ -294,49 +184,26 @@ export default function NewCourseAlert({ course, onClose, user }) {
                 <p className="text-xs text-green-600 font-semibold">💰 Votre gain</p>
               </div>
 
-              {/* Boutons */}
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1 border-red-300 text-red-500 h-11"
-                  onClick={handleRefuse}
-                  disabled={accepting}
-                >
+                <Button variant="outline" className="flex-1 border-red-300 text-red-500 h-11" onClick={handleRefuse} disabled={accepting}>
                   ❌ Refuser
                 </Button>
-                <Button
-                  className="flex-[2] h-14 bg-green-500 hover:bg-green-600 text-white font-black text-lg shadow-lg"
-                  onClick={handleAccept}
-                  disabled={accepting}
-                >
+                <Button className="flex-[2] h-14 bg-green-500 hover:bg-green-600 text-white font-black text-lg shadow-lg" onClick={handleAccept} disabled={accepting}>
                   {accepting ? (
                     <span className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Assignation...
+                      En cours...
                     </span>
-                  ) : (
-                    "✅ ACCEPTER"
-                  )}
+                  ) : "✅ ACCEPTER"}
                 </Button>
               </div>
 
-              {/* Barre de progression timer */}
               <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: timerColor, width: `${timerPercent}%` }}
-                  transition={{ duration: 0.5 }}
-                />
-              </div>
-
-              {/* BANDEAU TEST VISUEL */}
-              <div className="mt-3 bg-yellow-400 text-black text-center py-3 rounded-lg font-black text-base border-2 border-black">
-                🚨 TEST ANDROID - SI VOUS VOYEZ CE BLOC ROUGE AVEC BORDURE JAUNE, ALORS L'AFFICHAGE FONCTIONNE ! 🚨
+                <motion.div className="h-full rounded-full" style={{ backgroundColor: timerColor, width: `${timerPercent}%` }} transition={{ duration: 0.5 }} />
               </div>
             </div>
           </div>
         </motion.div>
-          </>
       )}
     </AnimatePresence>
   );
