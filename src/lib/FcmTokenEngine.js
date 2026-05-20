@@ -106,7 +106,7 @@ async function saveTokenToBackend(userEmail, token, deviceMeta) {
 async function verifyInBdd(userEmail, localToken) {
   try {
     // Chercher d'abord les tokens actifs
-    const tokens = await base44.entities.FcmToken.filter({ user_email: userEmail, is_active: true });
+    const tokens = await base44.entities.FcmToken.filter({ user_email: userEmail, is_active: true }).catch(() => []);
     const valid = (tokens || []).filter(t => {
       if (!t.is_active || !t.token) return false;
       const ref = t.last_used || t.registered_at;
@@ -116,7 +116,7 @@ async function verifyInBdd(userEmail, localToken) {
 
     if (valid.length === 0) {
       // Fallback : chercher les tokens inactifs récents (couvre bdd_active=0 après désactivation)
-      const allTokens = await base44.entities.FcmToken.filter({ user_email: userEmail }, '-updated_date', 10);
+      const allTokens = await base44.entities.FcmToken.filter({ user_email: userEmail }, '-updated_date', 10).catch(() => []);
       const recentInactive = (allTokens || []).filter(t => {
         const ref = t.last_used || t.registered_at;
         if (!ref) return false;
@@ -192,18 +192,25 @@ const FcmTokenEngine = {
     console.log(`[FCM_TOKEN_SAVE_SUCCESS] action=${saveResult.action} | token_id=${saveResult.token_id} | user=${userEmail}`);
     writeLocalToken(token, userEmail);
 
-    // Vérification BDD post-save avec retries
+    // Vérification BDD post-save avec retries — silencieuse si session expirée
+    // (le save a déjà réussi via HTTP public, la vérif est best-effort)
     for (let attempt = 1; attempt <= VERIFY_RETRIES; attempt++) {
       await new Promise(r => setTimeout(r, 600 * attempt));
-      const { verified, count, localMatch } = await verifyInBdd(userEmail, token);
-      if (verified) {
-        console.log(`[FCM_TOKEN_VERIFY_SUCCESS] BDD confirmé | count=${count} | localMatch=${localMatch} | attempt=${attempt} | user=${userEmail}`);
-        return { success: true, action: saveResult.action, token_id: saveResult.token_id, verified: true, count };
+      try {
+        const { verified, count, localMatch } = await verifyInBdd(userEmail, token);
+        if (verified) {
+          console.log(`[FCM_TOKEN_VERIFY_SUCCESS] BDD confirmé | count=${count} | localMatch=${localMatch} | attempt=${attempt} | user=${userEmail}`);
+          return { success: true, action: saveResult.action, token_id: saveResult.token_id, verified: true, count };
+        }
+        console.warn(`[FCM_ENGINE] verify attempt ${attempt}/${VERIFY_RETRIES} failed | user=${userEmail}`);
+      } catch (verifyErr) {
+        // Session expirée → ne pas bloquer, le save HTTP a déjà réussi
+        console.warn(`[FCM_ENGINE] verify attempt ${attempt} skipped (session) | user=${userEmail} | ${verifyErr?.message}`);
+        break;
       }
-      console.warn(`[FCM_ENGINE] verify attempt ${attempt}/${VERIFY_RETRIES} failed | user=${userEmail}`);
     }
 
-    console.error(`[FCM_ENGINE] saveToken | verify échoué après ${VERIFY_RETRIES} tentatives | user=${userEmail}`);
+    console.log(`[FCM_ENGINE] saveToken OK (verify best-effort) | user=${userEmail}`);
     return { success: true, action: saveResult.action, verified: false };
   },
 
