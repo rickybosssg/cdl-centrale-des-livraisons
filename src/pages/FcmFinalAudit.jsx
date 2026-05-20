@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Play, CheckCircle2, XCircle, Loader2, Terminal, ShieldCheck, Smartphone, Bell, Zap, Eye, Lock, Copy, Layers } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Play, CheckCircle2, XCircle, Loader2, Terminal, ShieldCheck, Smartphone, Bell, Zap, Eye, Lock, Copy, Layers, MonitorPlay } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -503,6 +503,48 @@ export default function FcmFinalAudit() {
           {!allOk && errCount > 0 && (
             <p className="mt-2 font-bold text-red-700">❌ CORRIGER LES ERREURS AVANT REBUILD</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Test popup locale */}
+      <Card className="border-purple-200 bg-purple-50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-purple-800 flex items-center gap-2">
+            <MonitorPlay className="h-4 w-4" /> Test Popup Locale (sans BDD)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <p className="text-xs text-purple-700 mb-3">
+            Teste l'overlay RealtimeActionCards sans créer de notification en BDD.
+            Utile pour vérifier si le popup s'affiche sur APK.
+          </p>
+          <Button
+            onClick={() => {
+              // Simuler un événement Course
+              const fakeEvent = {
+                type: 'create',
+                id: `test_${Date.now()}`,
+                data: {
+                  id: `test_${Date.now()}`,
+                  quartier_depart: 'Test Départ',
+                  quartier_arrivee: 'Test Arrivée',
+                  prix: 1000,
+                  type_colis: 'Documents',
+                  statut: 'en_attente',
+                  urgence: 'normale',
+                  created_date: new Date().toISOString(),
+                },
+                old_data: null,
+              };
+              console.log('[TEST_POPUP_LOCALE] Triggering fake event', fakeEvent);
+              // Dispatch event pour RealtimeActionCards
+              window.dispatchEvent(new CustomEvent('cdl_test_realtime_event', { detail: fakeEvent }));
+              toast.success('Popup test déclenché — vérifiez l\'affichage');
+            }}
+            className="w-full bg-purple-600 hover:bg-purple-700"
+          >
+            <MonitorPlay className="h-4 w-4 mr-2" /> Afficher popup test
+          </Button>
         </CardContent>
       </Card>
     </div>

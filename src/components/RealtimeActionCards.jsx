@@ -23,6 +23,7 @@
  * - 0 état incohérent
  */
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, MapPin, Clock, Package, TrendingUp, User, Check, XCircle, Eye, Navigation } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -429,6 +430,30 @@ export default function RealtimeActionCards({ userEmail, userRole }) {
 
     console.log('[RealtimeActionCards] Mounting subscriptions', { userEmail, userRole });
 
+    // ── TEST POPUP LOCALE — Listener pour test sans BDD ──────────────────────
+    const onTestEvent = (e) => {
+      const fakeEvent = e.detail;
+      if (!fakeEvent || !fakeEvent.data) return;
+      
+      console.log('[REALTIME_CARD_RECEIVED] [TEST_POPUP]', {
+        alertId: `test_${Date.now()}`,
+        courseId: fakeEvent.data?.id,
+        statut: fakeEvent.data?.statut,
+        type: fakeEvent.type,
+        userEmail,
+        userRole
+      });
+      console.log('[REALTIME_CARD_VISIBLE_TRUE] [TEST_POPUP]');
+      
+      const alertId = `test_${Date.now()}`;
+      setQueue(prev => {
+        const newQueue = [...prev, { ...fakeEvent, _alertId: alertId, _ts: Date.now() }];
+        return newQueue.slice(-MAX_QUEUE_SIZE);
+      });
+    };
+    
+    window.addEventListener('cdl_test_realtime_event', onTestEvent);
+
     // ─── Subscription Cours ──────────────────────────────────────────────────
     try {
       unsubCourseRef.current = base44.entities.Course.subscribe((event) => {
@@ -465,7 +490,16 @@ export default function RealtimeActionCards({ userEmail, userRole }) {
           return newQueue.slice(-MAX_QUEUE_SIZE);
         });
 
-        console.log('[RealtimeActionCards] Event added', alertId, course.statut);
+        // Logs APK
+        console.log('[REALTIME_CARD_RECEIVED]', {
+          alertId,
+          courseId: course.id,
+          statut: course.statut,
+          type: event.type,
+          userEmail,
+          userRole
+        });
+        console.log('[REALTIME_CARD_VISIBLE_TRUE]', alertId);
       });
 
       console.log('[RealtimeActionCards] Course subscription active');
@@ -505,6 +539,8 @@ export default function RealtimeActionCards({ userEmail, userRole }) {
       console.log('[RealtimeActionCards] Unmounting subscriptions');
       clearInterval(cleanupInterval);
       
+      window.removeEventListener('cdl_test_realtime_event', onTestEvent);
+      
       try {
         if (unsubCourseRef.current) unsubCourseRef.current();
         if (unsubNotifRef.current) unsubNotifRef.current();
@@ -527,14 +563,15 @@ export default function RealtimeActionCards({ userEmail, userRole }) {
   // Max 3 alertes visibles simultanément
   const visible = queue.slice(-3);
 
-  return (
+  // Composant portal pour forcer l'affichage au-dessus de tout
+  const PortalContent = () => (
     <div
       style={{
         position: "fixed",
-        top: "max(env(safe-area-inset-top), 10px)",
-        left: "10px",
-        right: "10px",
-        zIndex: 99999,
+        top: "max(env(safe-area-inset-top), 16px)",
+        left: "12px",
+        right: "12px",
+        zIndex: 999999,
         pointerEvents: "none",
       }}
       role="region"
@@ -544,13 +581,25 @@ export default function RealtimeActionCards({ userEmail, userRole }) {
         <AnimatePresence>
           {visible.map(item => {
             if (item.type === 'notification') return null;
+            
+            // Logs APK
+            console.log('[REALTIME_CARD_RENDERED]', {
+              alertId: item._alertId,
+              courseId: item.data?.id,
+              statut: item.data?.statut,
+              titre: mapEventToNotif(item, userRole, userEmail).titre
+            });
+            
             return (
               <ActionCard
                 key={item._alertId}
                 event={item}
                 userRole={userRole}
                 userEmail={userEmail}
-                onDismiss={() => dismiss(item._alertId)}
+                onDismiss={() => {
+                  console.log('[REALTIME_CARD_DISMISSED]', item._alertId);
+                  dismiss(item._alertId);
+                }}
               />
             );
           })}
@@ -558,4 +607,9 @@ export default function RealtimeActionCards({ userEmail, userRole }) {
       </div>
     </div>
   );
+
+  // Portal vers document.body pour éviter les problèmes de contexte d'empilement
+  return typeof document !== 'undefined' 
+    ? createPortal(<PortalContent />, document.body)
+    : null;
 }
