@@ -214,8 +214,9 @@ async function resolveTokensPaginated(base44, targetEmails, isAuditMode = false)
   return collected;
 }
 
-// ── Anti-doublon : clé event_type+entity_id+recipient_email (fenêtre 60s) ────
-async function isDuplicate(base44, recipientEmail, data, title) {
+// ── Anti-doublon : uniquement pour envois ciblés (1 destinataire) ────────────
+// Pour les broadcasts (N>1), on saute le check individuel pour éviter N requêtes → 429
+async function isDuplicateSingle(base44, recipientEmail, data, title) {
   try {
     const entityId = data?.entity_id || '';
     const eventType = data?.type || '';
@@ -227,55 +228,95 @@ async function isDuplicate(base44, recipientEmail, data, title) {
       notification_key: notifKey,
     }, '-created_date', 1);
     if (existing?.length > 0 && existing[0].created_date > since60s) {
-      console.log(`[CDL_ANTI_DOUBLON] skip | key=${notifKey} | age=${Date.now() - new Date(existing[0].created_date).getTime()}ms`);
+      console.log(`[CDL_ANTI_DOUBLON] skip | key=${notifKey}`);
       return true;
     }
     return false;
   } catch (_) { return false; }
 }
 
-// ── Notification interne BDD ─────────────────────────────────────────────────
-async function createInternalNotif(base44, { recipientEmail, title, body, data = {} }) {
-  const typeMap = {
-    bedou_recharge_request: 'warning', bedou_recharge_approved: 'success',
-    bedou_recharge_rejected: 'danger', bedou_withdrawal_request: 'warning',
-    bedou_withdrawal_approved: 'success', bedou_withdrawal_rejected: 'danger',
-    new_course: 'info', course_created: 'success', course_assigned: 'warning',
-    course_accepted: 'success', course_in_progress: 'info', course_delivered: 'success',
-    course_delivered_driver: 'success', course_cancelled: 'danger',
-    payment_validated: 'success', new_profile_request: 'warning',
-    profile_pending_review: 'warning', profile_validated: 'success',
-    profile_refused: 'danger', profile_suspended: 'danger',
-    new_order: 'info', new_marketplace_order: 'info', order_accepted: 'success',
-    order_ready: 'success', order_delivering: 'info', order_delivered: 'success',
-    order_cancelled: 'danger', new_message: 'info', admin_message: 'warning',
-    new_ad_submitted: 'info', ad_validated: 'success', ad_refused: 'danger',
-    ad_suspended: 'warning', ad_deactivated: 'info', bedou_low_balance: 'warning',
-    livreur_arrived_pickup: 'info', livreur_near_destination: 'info',
-  };
-  const type = typeMap[data?.type] || 'info';
+// ── Type mapper ───────────────────────────────────────────────────────────────
+const TYPE_MAP = {
+  bedou_recharge_request: 'warning', bedou_recharge_approved: 'success',
+  bedou_recharge_rejected: 'danger', bedou_withdrawal_request: 'warning',
+  bedou_withdrawal_approved: 'success', bedou_withdrawal_rejected: 'danger',
+  new_course: 'info', course_created: 'success', course_assigned: 'warning',
+  course_accepted: 'success', course_in_progress: 'info', course_delivered: 'success',
+  course_delivered_driver: 'success', course_cancelled: 'danger',
+  payment_validated: 'success', new_profile_request: 'warning',
+  profile_pending_review: 'warning', profile_validated: 'success',
+  profile_refused: 'danger', profile_suspended: 'danger',
+  new_order: 'info', new_marketplace_order: 'info', order_accepted: 'success',
+  order_ready: 'success', order_delivering: 'info', order_delivered: 'success',
+  order_cancelled: 'danger', new_message: 'info', admin_message: 'warning',
+  new_ad_submitted: 'info', ad_validated: 'success', ad_refused: 'danger',
+  ad_suspended: 'warning', ad_deactivated: 'info', bedou_low_balance: 'warning',
+  livreur_arrived_pickup: 'info', livreur_near_destination: 'info',
+};
+
+function buildNotifRecord(recipientEmail, title, body, data) {
+  const type = TYPE_MAP[data?.type] || 'info';
   const entityId = data?.entity_id || '';
   const entityType = data?.entity_type || '';
   const eventType = data?.type || '';
   const notifKey = entityId && entityType && eventType
     ? `${recipientEmail}__${eventType}__${entityId}__${title}` : '';
-  try {
-    await base44.asServiceRole.entities.Notification.create({
-      destinataire_email: recipientEmail,
-      titre: title,
-      message: body,
-      type,
-      lue: false,
-      target_screen: data?.notif_route || data?.deep_link || '/',
-      target_entity_type: entityType,
-      target_entity_id: entityId,
-      notification_key: notifKey,
-    });
-    return true;
-  } catch (e) {
-    console.warn(`[CDL-BDD] ⚠️ Notif interne échouée pour ${recipientEmail}: ${e.message}`);
-    return false;
+  return {
+    destinataire_email: recipientEmail,
+    titre: title,
+    message: body,
+    type,
+    lue: false,
+    target_screen: data?.notif_route || data?.deep_link || '/',
+    target_entity_type: entityType,
+    target_entity_id: entityId,
+    notification_key: notifKey,
+  };
+}
+
+// ── Notifications internes BDD — bulkCreate pour N>1, create simple pour N=1 ─
+// Évite le 429 : une seule requête bulkCreate au lieu de N requêtes individuelles
+const BULK_CHUNK = 50; // max 50 par appel bulkCreate
+
+async function createNotifsBulk(base44, emails, title, body, data) {
+  const isSingle = emails.length === 1;
+
+  if (isSingle) {
+    // Envoi ciblé → anti-doublon individuel + create simple
+    const dup = await isDuplicateSingle(base44, emails[0], data, title);
+    if (dup) return 0;
+    try {
+      await base44.asServiceRole.entities.Notification.create(
+        buildNotifRecord(emails[0], title, body, data)
+      );
+      return 1;
+    } catch (e) {
+      console.warn(`[CDL-BDD] create failed: ${e.message}`);
+      return 0;
+    }
   }
+
+  // Broadcast → bulkCreate par chunks de 50 (pas d'anti-doublon individuel pour éviter N*2 requêtes)
+  const records = emails.map(email => buildNotifRecord(email, title, body, data));
+  let created = 0;
+  for (let i = 0; i < records.length; i += BULK_CHUNK) {
+    const chunk = records.slice(i, i + BULK_CHUNK);
+    try {
+      await base44.asServiceRole.entities.Notification.bulkCreate(chunk);
+      created += chunk.length;
+    } catch (e) {
+      console.warn(`[CDL-BDD] bulkCreate chunk ${i}-${i + chunk.length} failed: ${e.message}`);
+      // Fallback : créer individuellement avec throttle
+      for (const rec of chunk) {
+        try {
+          await base44.asServiceRole.entities.Notification.create(rec);
+          created++;
+          await sleep(50);
+        } catch (_) {}
+      }
+    }
+  }
+  return created;
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────
@@ -339,17 +380,12 @@ Deno.serve(async (req) => {
       return Response.json({ sent: 0, failed: 0, total: 0, bdd: 0, note: 'Aucun destinataire' });
     }
 
-    // ── 2. Notifications internes BDD (avec anti-doublon) ────────────────────
+    // ── 2. Notifications internes BDD ────────────────────────────────────────
+    // bulkCreate pour N>1 (évite N requêtes individuelles → 429)
+    // anti-doublon uniquement pour N=1 (envoi ciblé)
     let bddCreated = 0;
     try {
-      const bddResults = await Promise.allSettled(
-        targetEmails.map(async (email) => {
-          const dup = await isDuplicate(base44, email, enrichedData, title);
-          if (dup) return false;
-          return createInternalNotif(base44, { recipientEmail: email, title, body: msgBody, data: enrichedData });
-        })
-      );
-      bddCreated = bddResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
+      bddCreated = await createNotifsBulk(base44, targetEmails, title, msgBody, enrichedData);
       console.log(`[sendCdlNotification] BDD notifs créées: ${bddCreated}/${targetEmails.length} | +${Date.now() - t0}ms`);
     } catch (e) {
       console.error(`[sendCdlNotification] ❌ BDD batch: ${e.message}`);
