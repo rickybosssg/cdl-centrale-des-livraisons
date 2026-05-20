@@ -129,6 +129,7 @@ import FcmTestFull from './pages/FcmTestFull';
 import FcmTokenRefresh from './pages/FcmTokenRefresh';
 import FcmNativeDebug from './pages/FcmNativeDebug';
 import FcmFinalAudit from './pages/FcmFinalAudit';
+import FcmChainAudit from './pages/FcmChainAudit';
 
 import UberOpsView from './pages/dispatcher/UberOpsView';
 import EmailLogin from './pages/EmailLogin';
@@ -410,6 +411,7 @@ const AuthenticatedApp = () => {
         <Route path="/fcm-token-refresh" element={<FcmTokenRefresh />} />
         <Route path="/fcm-native-debug" element={<FcmNativeDebug />} />
         <Route path="/fcm-final-audit" element={<FcmFinalAudit />} />
+        <Route path="/fcm-chain-audit" element={<FcmChainAudit />} />
         <Route path="/fcm-apk-audit" element={<FcmApkAudit />} />
         <Route path="/fcm-register-audit" element={<FcmRegisterAudit />} />
         <Route path="/fcm-persistent-diag" element={<FcmPersistentDiag />} />

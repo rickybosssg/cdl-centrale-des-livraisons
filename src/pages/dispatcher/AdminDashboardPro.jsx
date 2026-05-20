@@ -12,7 +12,7 @@ import {
   Package, Users, Truck, TrendingUp, Wallet, Megaphone,
   Zap, Settings, Bell, ChevronRight, Activity,
   MapPin, Star,
-  ShieldCheck, Store, Tag, Eye, Phone, MessageSquare
+  ShieldCheck, Store, Tag, Eye, Phone, MessageSquare, Key
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -478,6 +478,7 @@ export default function AdminDashboardPro() {
             { to: "/audit-complet",    label: "Audit complet", icon: Eye,       color: "text-purple-600", bg: "bg-purple-50 border-purple-200" },
             { to: "/bedou-audit",      label: "Audit Bedou",  icon: Wallet,    color: "text-green-600", bg: "bg-green-50 border-green-200" },
             { to: "/admin/logs",       label: "Historiques",  icon: Activity,  color: "text-blue-600",  bg: "bg-blue-50 border-blue-200" },
+            { to: "/fcm-chain-audit",  label: "🔗 Chaîne FCM", icon: Key, color: "text-amber-600", bg: "bg-amber-50 border-amber-200" },
             { to: "/fcm-final-audit",  label: "🚨 FCM Final Audit", icon: ShieldCheck, color: "text-red-600", bg: "bg-red-50 border-red-200" },
           ].map(({ to, label, icon: Icon, color, bg }) => (
             <Link key={to} to={to}>
