@@ -68,35 +68,53 @@ export default function FcmFinalAudit() {
   const [tests, setTests] = useState({});
   const [logs, setLogs] = useState([]);
   const [token, setToken] = useState(null);
-  const [globalStatus, setGlobalStatus] = useState(null); // 'ready' | 'error'
+  const [globalStatus, setGlobalStatus] = useState(null);
+  // Timestamp de session — change à chaque nouveau lancement, prouve la fraîcheur des résultats
+  const [sessionTs, setSessionTs] = useState(null);
   const listenersRef = useRef([]);
 
   const log = (msg, type = 'info') => {
     const ts = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    console.log(`[FCM_FINAL_AUDIT][${type.toUpperCase()}] ${msg}`);
-    setLogs(prev => [...prev.slice(-100), { ts, msg, type }]);
+    console.log(`[FCM_FINAL_AUDIT_v52][${type.toUpperCase()}] ${msg}`);
+    setLogs(prev => [...prev.slice(-120), { ts, msg, type }]);
   };
 
   const setTest = (key, status, detail = '') => setTests(prev => ({ ...prev, [key]: { status, detail } }));
 
+  // ── Reset complet à chaque montage — aucun résidu de session précédente ───
   useEffect(() => {
+    setTests({});
+    setLogs([]);
+    setGlobalStatus(null);
+    setToken(null);
+    setSessionTs(null);
+    listenersRef.current.forEach(l => { try { l(); } catch (_) {} });
+    listenersRef.current = [];
+
     base44.auth.me().then(me => {
       setUser(me);
-      log(`User: ${me?.email} | role=${me?.role} | native=${isNative ? 'yes' : 'no'}`);
-    }).catch(e => log('auth.me error: ' + e.message, 'error'));
-    return () => { listenersRef.current.forEach(l => { try { l.remove(); } catch (_) {} }); };
+      // Ne pas loger ici — pas encore de session d'audit active
+    }).catch(() => {});
+
+    return () => {
+      listenersRef.current.forEach(l => { try { l(); } catch (_) {} });
+    };
   }, []);
 
   const runFullAudit = async () => {
+    // Reset complet — aucun résidu des runs précédents
     setRunning(true);
     setTests({});
     setLogs([]);
     setGlobalStatus(null);
     setToken(null);
-    for (const l of listenersRef.current) { try { await l.remove(); } catch (_) {} }
+    const now = new Date();
+    const ts = now.toLocaleString('fr-FR');
+    setSessionTs(ts);
+    listenersRef.current.forEach(l => { try { l(); } catch (_) {} });
     listenersRef.current = [];
 
-    log('═══ FCM FINAL AUDIT V5.1 START ═══');
+    log(`═══ FCM FINAL AUDIT V5.2 START — session: ${ts} ═══`);
     const email = user?.email;
     if (!email) { log('Email non résolu — aborted', 'error'); setRunning(false); return; }
 
@@ -157,21 +175,29 @@ export default function FcmFinalAudit() {
     try {
       const res = await base44.functions.invoke('sendCdlNotification', {
         role: 'admin',
-        title: '🧪 FCM FINAL AUDIT — Admin',
-        body: `Test push admin — ${new Date().toLocaleTimeString('fr-FR')}`,
-        data: { type: 'final_audit', entity_id: `audit_${Date.now()}`, entity_type: 'test', notif_route: '/fcm-final-audit' },
+        title: '🧪 FCM AUDIT v5.2 — Admin',
+        body: `Test admin — ${new Date().toLocaleTimeString('fr-FR')}`,
+        data: { type: 'final_audit', entity_id: `audit_admin_${Date.now()}`, entity_type: 'test', notif_route: '/fcm-final-audit' },
       });
       const d = res.data;
-      if ((d?.sent || 0) > 0 || (d?.bdd || 0) > 0) {
-        setTest('push_admin', 'ok', `sent=${d?.sent} bdd=${d?.bdd} total=${d?.total}`);
-        log('TEST 3: Push Admin OK ✅');
+      const msgId = d?.firebase_message_id || '';
+      const projectMatch = msgId ? msgId.match(/projects\/([^/]+)\//) : null;
+      const projectId = projectMatch ? projectMatch[1] : 'N/A';
+      const detailStr = `sent=${d?.sent} bdd=${d?.bdd} total=${d?.total} | msgId=${msgId ? msgId.split('/messages/')[1]?.slice(0,20)+'...' : 'none'} | project=${projectId} | ${d?.elapsed_ms}ms`;
+      if ((d?.sent || 0) > 0) {
+        setTest('push_admin', 'ok', detailStr);
+        log(`TEST 3: Push Admin OK ✅ sent=${d?.sent} project=${projectId} msgId=${msgId.slice(-20)}`);
+      } else if ((d?.bdd || 0) > 0) {
+        setTest('push_admin', 'ok', `bdd=${d?.bdd} (token absent — BDD OK) | project=${projectId}`);
+        log(`TEST 3: Push Admin BDD OK sent=0 (pas de token) bdd=${d?.bdd}`);
       } else {
-        setTest('push_admin', 'error', `sent=0 bdd=0 — aucun admin avec token ?`);
-        log('TEST 3: Push Admin FAILED ❌', 'error');
+        const note = d?.note || d?.error || 'sent=0 bdd=0';
+        setTest('push_admin', 'error', `${note} | project=${projectId}`);
+        log(`TEST 3: Push Admin FAILED ❌ ${note}`, 'error');
         allOk = false;
       }
     } catch (e) {
-      setTest('push_admin', 'error', e.message);
+      setTest('push_admin', 'error', `CRASH: ${e.message}`);
       log('TEST 3 CRASH: ' + e.message, 'error');
       allOk = false;
     }
@@ -181,21 +207,27 @@ export default function FcmFinalAudit() {
     try {
       const res = await base44.functions.invoke('sendCdlNotification', {
         role: 'client',
-        title: '🧪 FCM FINAL AUDIT — Client',
-        body: `Test push client — ${new Date().toLocaleTimeString('fr-FR')}`,
-        data: { type: 'final_audit', entity_id: `audit_${Date.now()}`, entity_type: 'test', notif_route: '/mes-courses' },
+        title: '🧪 FCM AUDIT v5.2 — Client',
+        body: `Test client — ${new Date().toLocaleTimeString('fr-FR')}`,
+        data: { type: 'final_audit', entity_id: `audit_client_${Date.now()}`, entity_type: 'test', notif_route: '/mes-courses' },
       });
       const d = res.data;
-      if ((d?.sent || 0) > 0 || (d?.bdd || 0) > 0) {
-        setTest('push_client', 'ok', `sent=${d?.sent} bdd=${d?.bdd}`);
-        log('TEST 4: Push Client OK ✅');
+      const msgId = d?.firebase_message_id || '';
+      const projectMatch = msgId ? msgId.match(/projects\/([^/]+)\//) : null;
+      const projectId = projectMatch ? projectMatch[1] : 'N/A';
+      if ((d?.sent || 0) > 0) {
+        setTest('push_client', 'ok', `sent=${d?.sent} bdd=${d?.bdd} | project=${projectId} | ${d?.elapsed_ms}ms`);
+        log(`TEST 4: Push Client OK ✅ sent=${d?.sent} project=${projectId}`);
+      } else if ((d?.bdd || 0) > 0) {
+        setTest('push_client', 'ok', `bdd=${d?.bdd} (tokens absents — BDD OK)`);
+        log(`TEST 4: Push Client BDD OK sent=0 bdd=${d?.bdd}`);
       } else {
-        setTest('push_client', 'error', `sent=0 bdd=0`);
-        log('TEST 4: Push Client FAILED ❌', 'error');
+        setTest('push_client', 'error', `sent=0 bdd=0 | ${d?.note || ''}`);
+        log(`TEST 4: Push Client FAILED ❌ sent=0 bdd=0`, 'error');
         allOk = false;
       }
     } catch (e) {
-      setTest('push_client', 'error', e.message);
+      setTest('push_client', 'error', `CRASH: ${e.message}`);
       log('TEST 4 CRASH: ' + e.message, 'error');
       allOk = false;
     }
@@ -205,21 +237,27 @@ export default function FcmFinalAudit() {
     try {
       const res = await base44.functions.invoke('sendCdlNotification', {
         role: 'livreur',
-        title: '🧪 FCM FINAL AUDIT — Livreur',
-        body: `Test push livreur — ${new Date().toLocaleTimeString('fr-FR')}`,
-        data: { type: 'final_audit', entity_id: `audit_${Date.now()}`, entity_type: 'test', notif_route: '/courses-disponibles' },
+        title: '🧪 FCM AUDIT v5.2 — Livreur',
+        body: `Test livreur — ${new Date().toLocaleTimeString('fr-FR')}`,
+        data: { type: 'final_audit', entity_id: `audit_livreur_${Date.now()}`, entity_type: 'test', notif_route: '/courses-disponibles' },
       });
       const d = res.data;
-      if ((d?.sent || 0) > 0 || (d?.bdd || 0) > 0) {
-        setTest('push_livreur', 'ok', `sent=${d?.sent} bdd=${d?.bdd}`);
-        log('TEST 5: Push Livreur OK ✅');
+      const msgId = d?.firebase_message_id || '';
+      const projectMatch = msgId ? msgId.match(/projects\/([^/]+)\//) : null;
+      const projectId = projectMatch ? projectMatch[1] : 'N/A';
+      if ((d?.sent || 0) > 0) {
+        setTest('push_livreur', 'ok', `sent=${d?.sent} bdd=${d?.bdd} | project=${projectId} | ${d?.elapsed_ms}ms`);
+        log(`TEST 5: Push Livreur OK ✅ sent=${d?.sent} project=${projectId}`);
+      } else if ((d?.bdd || 0) > 0) {
+        setTest('push_livreur', 'ok', `bdd=${d?.bdd} (tokens absents — BDD OK)`);
+        log(`TEST 5: Push Livreur BDD OK sent=0 bdd=${d?.bdd}`);
       } else {
-        setTest('push_livreur', 'error', `sent=0 bdd=0`);
-        log('TEST 5: Push Livreur FAILED ❌', 'error');
+        setTest('push_livreur', 'error', `sent=0 bdd=0 | ${d?.note || ''}`);
+        log(`TEST 5: Push Livreur FAILED ❌ sent=0 bdd=0`, 'error');
         allOk = false;
       }
     } catch (e) {
-      setTest('push_livreur', 'error', e.message);
+      setTest('push_livreur', 'error', `CRASH: ${e.message}`);
       log('TEST 5 CRASH: ' + e.message, 'error');
       allOk = false;
     }
@@ -326,8 +364,8 @@ export default function FcmFinalAudit() {
     // ── Résumé global ──────────────────────────────────────────────────────────
     setRunning(false);
     setGlobalStatus(allOk ? 'ready' : 'error');
-    log('═══ FCM FINAL AUDIT V5.1 DONE ═══');
-    toast.success(allOk ? '✅ AUDIT FINAL — PRODUCTION READY' : '❌ AUDIT FINAL — ERREURS DÉTECTÉES');
+    log(`═══ FCM FINAL AUDIT V5.2 DONE — ${new Date().toLocaleString('fr-FR')} ═══`);
+    toast.success(allOk ? '✅ AUDIT V5.2 — PRODUCTION READY' : '❌ AUDIT V5.2 — ERREURS DÉTECTÉES');
   };
 
   const okCount = Object.values(tests).filter(t => t.status === 'ok').length;
@@ -346,7 +384,7 @@ export default function FcmFinalAudit() {
       }`}>
         {globalStatus === 'ready' ? '✅ PRODUCTION READY — APK REBUILD AUTORISÉ' 
          : globalStatus === 'error' ? `❌ ERREURS DÉTECTÉES — ${errCount} TEST(S) ROUGE(S)` 
-         : '🚨 FCM FINAL AUDIT V5.1'}
+         : '🚨 FCM FINAL AUDIT V5.2'}
       </div>
 
       <div className="flex items-center gap-3">
@@ -354,9 +392,9 @@ export default function FcmFinalAudit() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-lg font-bold">Audit Final FCM v5.1</h1>
+          <h1 className="text-lg font-bold">Audit Final FCM v5.2</h1>
           <p className="text-xs text-muted-foreground">
-            Validation unique pré-rebuild APK
+            {sessionTs ? `Session: ${sessionTs}` : 'Appuyer sur ▶ pour lancer'}
             {user && ` | ${user.email}`}
           </p>
         </div>
@@ -435,7 +473,7 @@ export default function FcmFinalAudit() {
           <CardTitle className="text-sm text-primary">Architecture FCM v5.1 CDL</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 text-xs space-y-1 text-primary/80">
-          <p>✅ <strong>Moteur unique :</strong> sendCdlNotification v5.1</p>
+          <p>✅ <strong>Moteur unique :</strong> sendCdlNotification v5.2 (pagination anti-429)</p>
           <p>✅ <strong>Canal :</strong> {CDL_CHANNEL_V3} (importance=5, heads-up, vibration, écran verrouillé)</p>
           <p>✅ <strong>Save token :</strong> saveFcmTokenPublic → FcmToken (unique par device)</p>
           <p>✅ <strong>Multi-profils :</strong> token lié à user_email (stable lors du switch)</p>
