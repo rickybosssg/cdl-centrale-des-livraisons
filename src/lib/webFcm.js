@@ -12,7 +12,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { firebaseConfig, vapidKey } from '@/lib/firebaseConfig';
-import { base44 } from '@/api/base44Client';
 
 let messagingInstance = null;
 
@@ -130,21 +129,27 @@ export async function initWebFcm({ onToken, onForegroundNotif, onPermissionDenie
     // ── 5. Callback onToken ──────────────────────────────────────────────
     if (onToken) onToken(token);
 
-    // ── 6. Sauvegarder en BDD ────────────────────────────────────────────
-    try {
-      const me = await base44.auth.me();
-      if (me?.email) {
-        const res = await base44.functions.invoke('saveFcmTokenPublic', {
-          token,
-          user_email: me.email,
-          device_type: 'web',
-          platform: 'web',
-          active_profile_type: me.active_profile_type || null,
-        });
-        console.log('[webFcm] ✅ Token sauvegardé BDD:', res.data?.action, '— id:', res.data?.token_id);
+    // ── 6. Sauvegarder en BDD — via HTTP public (évite 403 auth_required si session expirée)
+    // onToken est déjà appelé ci-dessus, FcmBootstrap.handleToken() → FcmTokenEngine.saveToken()
+    // Ce bloc est un fallback pour le chemin webFcm standalone (sans FcmBootstrap).
+    if (onToken) {
+      // Le callback onToken gère déjà le save via FcmTokenEngine — rien à faire ici
+      console.log('[webFcm] ✅ Token transmis via onToken — save géré par FcmTokenEngine');
+    } else {
+      // Standalone : sauvegarder directement via HTTP public (sans base44.auth.me() qui peut 403)
+      try {
+        const userEmail = localStorage.getItem('cdl_fcm_last_user') || '';
+        if (userEmail) {
+          await fetch('https://cdl.base44.app/functions/saveFcmTokenPublic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, user_email: userEmail, device_type: 'web', platform: 'web' }),
+          });
+          console.log('[webFcm] ✅ Token sauvegardé BDD (HTTP public standalone)');
+        }
+      } catch (saveErr) {
+        console.warn('[webFcm] ⚠️ Save standalone échoué (non-bloquant):', saveErr.message);
       }
-    } catch (saveErr) {
-      console.error('[webFcm] ❌ Erreur saveFcmToken:', saveErr.message);
     }
   } catch (tokenErr) {
     console.error('[webFcm] ❌ Erreur getToken:', tokenErr.message);

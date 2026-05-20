@@ -144,12 +144,17 @@ async function attachListeners(PN) {
   _listeners = [];
 
   try {
+    // UN SEUL listener 'registration' — gère à la fois le 1er token et les refresh
     _listeners.push(await PN.addListener('registration', (token) => {
       const val = token?.value;
       if (val) {
         console.log('[NativePush] ✅ TOKEN REÇU (registration event):', val.slice(0, 25) + '…');
         if (_onToken) _onToken(val);
         else console.warn('[NativePush] ⚠️ Token reçu mais _onToken est null — callback non installé !');
+        // onTokenRefresh si fourni séparément (ex: re-save silencieux)
+        if (_onTokenRefreshCallback && _onTokenRefreshCallback !== _onToken) {
+          _onTokenRefreshCallback(val);
+        }
       } else {
         console.error('[NativePush] ❌ registration event reçu mais token.value est VIDE');
       }
@@ -158,18 +163,6 @@ async function attachListeners(PN) {
     _listeners.push(await PN.addListener('registrationError', (err) => {
       console.error('[NativePush] ❌ registrationError:', JSON.stringify(err));
     }));
-
-    // onTokenRefresh — Firebase renouvelle le token automatiquement
-    // (expiration, réinstallation, reset FCM) → on le re-sauvegarde immédiatement
-    _listeners.push(await PN.addListener('registration', (token) => {
-      // Ce listener "registration" est aussi déclenché par Firebase lors d'un token refresh
-      // La logique dans le callback principal le gère déjà — ici on loggue explicitement
-      const val = token?.value;
-      if (val && _onTokenRefreshCallback) {
-        console.log('[NativePush] 🔄 onTokenRefresh — nouveau token Firebase détecté:', val.slice(0, 25) + '…');
-        _onTokenRefreshCallback(val);
-      }
-    }).catch(() => null)); // Peut échouer si déjà attaché — non-fatal
 
     _listeners.push(await PN.addListener('pushNotificationReceived', (notif) => {
       console.log('[NativePush] 📬 Notification foreground:', notif?.title);
@@ -247,6 +240,10 @@ export async function initCapacitorPush({ onToken, onTokenRefresh, onForegroundN
   if (perm !== 'granted') {
     console.warn('[NativePush] Permission non accordée:', perm, '→ on continue quand même (Android peut livrer)');
   }
+
+  // Étape 2b : Battery optimization — demander l'exemption silencieusement (Samsung/Tecno/Xiaomi)
+  // Non-bloquant : si ça échoue, FCM continue à fonctionner (mais peut être limité en background)
+  requestBatteryOptimizationExempt().catch(() => {});
 
   // Étape 3 : Installer les callbacks globaux
   _onToken = onToken;
