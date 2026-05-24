@@ -166,6 +166,10 @@ async function attachListeners(PN) {
 
     _listeners.push(await PN.addListener('pushNotificationReceived', (notif) => {
       console.log('[NativePush] 📬 Notification foreground:', notif?.title);
+      try {
+        localStorage.setItem('cdl_last_push_received', new Date().toISOString());
+        window.dispatchEvent(new CustomEvent('cdl_push_received', { detail: notif?.data || {} }));
+      } catch (_) {}
       if (_onForegroundNotif) _onForegroundNotif(notif);
     }));
 
@@ -173,6 +177,10 @@ async function attachListeners(PN) {
       const data = action.notification?.data || {};
       const route = data.notif_route || data.route || data.target_screen || null;
       console.log('[NativePush] 👆 Tap notification → route:', route);
+      try {
+        localStorage.setItem('cdl_last_push_received', new Date().toISOString());
+        window.dispatchEvent(new CustomEvent('cdl_push_received', { detail: data }));
+      } catch (_) {}
       if (_onNotificationTap) _onNotificationTap({ route, data });
       if (route?.startsWith('/')) {
         try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}

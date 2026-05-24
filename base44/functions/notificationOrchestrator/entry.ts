@@ -193,7 +193,15 @@ Deno.serve(async (req) => {
         user_email: livreur_email,
         title: '💰 Livraison confirmée !',
         body: `${quartier_arrivee} — Gain : +${(gain_livreur || 0).toLocaleString()} F crédités sur votre Bedou.`,
-        data: { type: 'course_delivered_driver', course_id, notif_route: '/mes-livraisons' },
+        data: {
+          type: 'course_delivered_driver',
+          course_id,
+          entity_id: course_id,
+          entity_type: 'Course',
+          notif_route: '/mes-livraisons',
+          bedou_refresh: 'true',
+          amount: String(gain_livreur || 0),
+        },
       }));
       tasks.push(notif({
         destinataire_email: livreur_email, destinataire_role: 'livreur',

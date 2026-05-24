@@ -23,9 +23,10 @@ export function useBedouSync(userEmail) {
   const [loading, setLoading] = useState(true);
   const debounceTimer = useRef(null);
   const isFetching = useRef(false);
+  const queuedFetch = useRef(null);
 
   // Fetch direct — sans cache, toujours depuis BDD
-  const fetchBedou = useCallback(async (source = 'manual') => {
+  const fetchBedou = useCallback(async (source = 'manual', options = {}) => {
     if (!userEmail) { setLoading(false); return; }
 
     // Debounce 300ms : annule le timer précédent et repart
@@ -34,8 +35,7 @@ export function useBedouSync(userEmail) {
     debounceTimer.current = setTimeout(async () => {
       // Si un fetch est en cours, on attend qu'il se termine avant d'en lancer un autre
       if (isFetching.current) {
-        // Requeue dans 200ms
-        debounceTimer.current = setTimeout(() => fetchBedou(source), 200);
+        queuedFetch.current = source;
         return;
       }
 
@@ -54,8 +54,13 @@ export function useBedouSync(userEmail) {
       } finally {
         isFetching.current = false;
         setLoading(false);
+        if (queuedFetch.current) {
+          const queuedSource = queuedFetch.current;
+          queuedFetch.current = null;
+          setTimeout(() => fetchBedou(`${queuedSource}_queued`, { immediate: true }), 50);
+        }
       }
-    }, 300);
+    }, options?.immediate ? 0 : 300);
   }, [userEmail]);
 
   useEffect(() => {
@@ -74,8 +79,10 @@ export function useBedouSync(userEmail) {
     // 1. Realtime Bedou entity — create ou update
     const unsubBedou = base44.entities.Bedou.subscribe((ev) => {
       if (ev.type === 'update' || ev.type === 'create') {
+        if (ev.data?.user_email && ev.data.user_email !== userEmail) return;
         console.log(`[BEDOU_SYNC_REALTIME] event=Bedou.${ev.type} | email=${userEmail}`);
-        fetchBedou(`realtime_bedou_${ev.type}`);
+        if (ev.data?.user_email === userEmail) setBedou(ev.data);
+        fetchBedou(`realtime_bedou_${ev.type}`, { immediate: true });
       }
     });
 
@@ -87,7 +94,8 @@ export function useBedouSync(userEmail) {
       const isBedouTx = ['recharge', 'paiement', 'gain', 'bonus', 'retrait', 'ajustement', 'commission'].includes(tx?.type);
       if (!isBedouTx) return;
       console.log(`[BEDOU_SYNC_REALTIME] event=Transaction.${ev.type} | type=${tx?.type} | montant=${tx?.montant} | email=${userEmail}`);
-      fetchBedou(`realtime_tx_${ev.type}`);
+      fetchBedou(`realtime_tx_${ev.type}`, { immediate: true });
+      setTimeout(() => fetchBedou(`realtime_tx_${ev.type}_1s`, { immediate: true }), 1000);
     });
 
     // 3. Notification interne — recharge validée / crédit / débit
@@ -106,39 +114,52 @@ export function useBedouSync(userEmail) {
         n?.target_entity_type === 'transaction';
       if (!isBedouNotif) return;
       console.log(`[BEDOU_SYNC_EVENT_RECEIVED] event=Notification.create | titre="${n?.titre}" | email=${userEmail}`);
-      fetchBedou('realtime_notification');
+      fetchBedou('realtime_notification', { immediate: true });
       // Double reload de sécurité
-      setTimeout(() => fetchBedou('realtime_notification_2s'), 2000);
+      setTimeout(() => fetchBedou('realtime_notification_2s', { immediate: true }), 2000);
     });
 
     // 4. Retour focus / visibilitychange
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         console.log(`[BEDOU_SYNC_FOCUS_REFRESH] visibilitychange → visible | email=${userEmail}`);
-        fetchBedou('focus_refresh');
+        fetchBedou('focus_refresh', { immediate: true });
       }
     };
     document.addEventListener('visibilitychange', onVisible);
 
-    // 5. Push FCM natif bedou_recharge_approved
-    const onFcmBedou = () => {
-      console.log(`[BEDOU_SYNC_EVENT_RECEIVED] event=bedou_recharge_approved | email=${userEmail}`);
-      fetchBedou('fcm_push_bedou');
-      setTimeout(() => fetchBedou('fcm_push_bedou_2s'), 2000);
+    // 5. Push FCM natif : tous les événements qui peuvent impacter Bedou
+    const onFcmBedou = (event) => {
+      const eventName = event?.type || 'bedou_push';
+      console.log(`[BEDOU_SYNC_EVENT_RECEIVED] event=${eventName} | email=${userEmail}`);
+      fetchBedou(`fcm_${eventName}`, { immediate: true });
+      setTimeout(() => fetchBedou(`fcm_${eventName}_800ms`, { immediate: true }), 800);
+      setTimeout(() => fetchBedou(`fcm_${eventName}_2s`, { immediate: true }), 2000);
+      setTimeout(() => fetchBedou(`fcm_${eventName}_5s`, { immediate: true }), 5000);
     };
-    window.addEventListener('bedou_recharge_approved', onFcmBedou);
+    const bedouEvents = [
+      'bedou_recharge_approved',
+      'bedou_recharge_rejected',
+      'bedou_withdrawal_approved',
+      'bedou_withdrawal_rejected',
+      'bedou_low_balance',
+      'course_delivered',
+      'course_delivered_driver',
+      'cdl_push_received',
+    ];
+    bedouEvents.forEach((eventName) => window.addEventListener(eventName, onFcmBedou));
 
     // 6. Refresh manuel externe (ex: après validation admin)
     const onManualRefresh = () => {
       console.log(`[BEDOU_SYNC_EVENT_RECEIVED] event=bedou_sync_refresh (manuel) | email=${userEmail}`);
-      fetchBedou('manual_external_refresh');
+      fetchBedou('manual_external_refresh', { immediate: true });
     };
     window.addEventListener('bedou_sync_refresh', onManualRefresh);
 
     // 6b. Event bedou_updated (dispatché par FcmBootstrap ou autres composants)
     const onBedouUpdated = () => {
       console.log(`[BEDOU_SYNC_EVENT_RECEIVED] event=bedou_updated | email=${userEmail}`);
-      fetchBedou('bedou_updated_event');
+      fetchBedou('bedou_updated_event', { immediate: true });
     };
     window.addEventListener('bedou_updated', onBedouUpdated);
 
@@ -147,7 +168,7 @@ export function useBedouSync(userEmail) {
       unsubTx?.();
       unsubNotif?.();
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('bedou_recharge_approved', onFcmBedou);
+      bedouEvents.forEach((eventName) => window.removeEventListener(eventName, onFcmBedou));
       window.removeEventListener('bedou_sync_refresh', onManualRefresh);
       window.removeEventListener('bedou_updated', onBedouUpdated);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);

@@ -64,6 +64,29 @@ Deno.serve(async (req) => {
     });
   }
 
+  function pushBedouAsync({ user_email, role, title, body, type, entity_id, entity_type, amount, extra = {} }) {
+    if (!user_email && !role) return;
+    base44.asServiceRole.functions.invoke('sendCdlNotification', {
+      user_email,
+      role,
+      title,
+      body,
+      data: {
+        type,
+        entity_id: entity_id || '',
+        entity_type: entity_type || '',
+        target_role: extra.target_role || '',
+        notif_route: extra.notif_route || '/mon-bedou',
+        deep_link: extra.notif_route || '/mon-bedou',
+        user_email: user_email || extra.user_email || '',
+        amount: amount == null ? '' : String(amount),
+        bedou_refresh: 'true',
+        event_created_at: new Date().toISOString(),
+        ...extra,
+      },
+    }).catch(e => console.warn('[bedouEngine] Push Bedou non-bloquant:', e.message));
+  }
+
   // ── ACTION: ensureBedou ──────────────────────────────────────
   if (action === 'ensure_bedou') {
     const { email, role, nom } = body;
@@ -204,6 +227,16 @@ Deno.serve(async (req) => {
       target_screen: '/mon-bedou',
       target_entity_type: 'transaction',
     });
+    pushBedouAsync({
+      user_email: demande.user_email,
+      title: 'Recharge Bedou validee',
+      body: `Votre recharge de ${demande.montant.toLocaleString()} F CFA a ete validee.${demande.bonus_applique ? ` Bonus : +${demande.bonus_applique} F CFA !` : ''}`,
+      type: 'bedou_recharge_approved',
+      entity_id: demande_id,
+      entity_type: 'DemandeRecharge',
+      amount: demande.montant,
+      extra: { target_role: demande.role || 'client', notif_route: '/mon-bedou' },
+    });
     return Response.json({ success: true });
   }
 
@@ -211,12 +244,25 @@ Deno.serve(async (req) => {
   if (action === 'refuser_recharge') {
     if (user.role !== 'admin') return Response.json({ error: 'Interdit' }, { status: 403 });
     const { demande_id, motif } = body;
+    const [demande] = await base44.asServiceRole.entities.DemandeRecharge.filter({ id: demande_id });
     await base44.asServiceRole.entities.DemandeRecharge.update(demande_id, {
       statut: 'refuse',
       motif_refus: motif || 'Refusé par l\'administrateur',
       date_validation: new Date().toISOString(),
       valide_par: user.email,
     });
+    if (demande?.user_email) {
+      pushBedouAsync({
+        user_email: demande.user_email,
+        title: 'Recharge Bedou refusee',
+        body: motif ? `Motif : ${motif}` : `Votre demande de recharge de ${(demande.montant || 0).toLocaleString()} F CFA a ete refusee.`,
+        type: 'bedou_recharge_rejected',
+        entity_id: demande_id,
+        entity_type: 'DemandeRecharge',
+        amount: demande.montant || 0,
+        extra: { target_role: demande.role || 'client', notif_route: '/mon-bedou' },
+      });
+    }
     return Response.json({ success: true });
   }
 
@@ -321,6 +367,16 @@ Deno.serve(async (req) => {
       target_screen: '/mon-bedou',
       target_entity_type: 'transaction',
     });
+    pushBedouAsync({
+      user_email: demande.user_email,
+      title: 'Retrait Bedou valide',
+      body: `Votre retrait de ${demande.montant.toLocaleString()} F CFA a ete paye.`,
+      type: 'bedou_withdrawal_approved',
+      entity_id: demande_id,
+      entity_type: 'DemandeRetrait',
+      amount: demande.montant,
+      extra: { target_role: demande.role || 'livreur', notif_route: '/mon-bedou' },
+    });
     return Response.json({ success: true });
   }
 
@@ -352,6 +408,16 @@ Deno.serve(async (req) => {
       lue: false,
       target_screen: '/mon-bedou',
     }).catch(() => {});
+    pushBedouAsync({
+      user_email: demande.user_email,
+      title: 'Retrait Bedou refuse',
+      body: `Votre demande de retrait de ${demande.montant?.toLocaleString()} F CFA a ete refusee.${motif ? ` Motif : ${motif}` : ''}`,
+      type: 'bedou_withdrawal_rejected',
+      entity_id: demande_id,
+      entity_type: 'DemandeRetrait',
+      amount: demande.montant || 0,
+      extra: { target_role: demande.role || 'livreur', notif_route: '/mon-bedou' },
+    });
     return Response.json({ success: true });
   }
 

@@ -15,6 +15,27 @@ import { useFcmReady } from '@/context/FcmReadyContext';
 import FcmTokenEngine from '@/lib/FcmTokenEngine';
 
 const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // 10 min
+const BEDOU_PUSH_TYPES = new Set([
+  'bedou_recharge_approved',
+  'bedou_recharge_rejected',
+  'bedou_withdrawal_approved',
+  'bedou_withdrawal_rejected',
+  'bedou_low_balance',
+  'course_delivered',
+  'course_delivered_driver',
+]);
+
+function dispatchPushEvents(data = {}) {
+  const notifType = data?.type || data?.event_type || '';
+  try {
+    window.dispatchEvent(new CustomEvent('cdl_push_received', { detail: data }));
+    if (BEDOU_PUSH_TYPES.has(notifType)) {
+      window.dispatchEvent(new CustomEvent(notifType, { detail: data }));
+      window.dispatchEvent(new CustomEvent('bedou_updated', { detail: data }));
+      window.dispatchEvent(new CustomEvent('bedou_sync_refresh', { detail: data }));
+    }
+  } catch (_) {}
+}
 
 // ── Export compat ──────────────────────────────────────────────────────────────
 export async function saveFcmTokenRemote({ user_email, token }) {
@@ -88,21 +109,13 @@ export default function FcmBootstrap({ userEmail }) {
                 } : undefined,
               });
             }).catch(() => {});
-            const notifType = notif?.data?.type || '';
-            if (notifType === 'bedou_recharge_approved') {
-              window.dispatchEvent(new CustomEvent('bedou_recharge_approved'));
-              window.dispatchEvent(new CustomEvent('bedou_updated'));
-            }
+            dispatchPushEvents(notif?.data || {});
           } catch (_) {}
         },
 
         onNotificationTap: ({ route, data }) => {
           try {
-            const notifType = data?.type || '';
-            if (notifType === 'bedou_recharge_approved') {
-              window.dispatchEvent(new CustomEvent('bedou_recharge_approved'));
-              window.dispatchEvent(new CustomEvent('bedou_updated'));
-            }
+            dispatchPushEvents(data || {});
             if (route?.startsWith('/')) {
               try { sessionStorage.setItem('cdl_notif_route', route); } catch (_) {}
               window.dispatchEvent(new CustomEvent('cdl_navigate', { detail: { route } }));

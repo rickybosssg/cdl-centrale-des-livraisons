@@ -67,12 +67,6 @@ Deno.serve(async (req) => {
         ...(device_id ? { device_id } : {}),
         ...extraFields,
       });
-      // Désactiver les autres tokens actifs
-      for (const t of allTokens) {
-        if (t.id !== exactMatch.id && t.is_active) {
-          await base44.asServiceRole.entities.FcmToken.update(t.id, { is_active: false }).catch(() => {});
-        }
-      }
       console.log(`[FCM_SAVE] action=reactivated | id=${exactMatch.id} | delay=${Date.now() - t0}ms`);
       return Response.json({ success: true, action: 'reactivated', token_id: exactMatch.id, user_email: cleanEmail }, { headers: corsHeaders });
     }
@@ -90,9 +84,9 @@ Deno.serve(async (req) => {
         device_id,
         ...extraFields,
       });
-      // Désactiver les autres tokens actifs
+      // Garder les autres appareils actifs. Ne couper que les doublons exacts.
       for (const t of allTokens) {
-        if (t.id !== deviceMatch.id && t.is_active) {
+        if (t.id !== deviceMatch.id && t.token === cleanToken && t.is_active) {
           await base44.asServiceRole.entities.FcmToken.update(t.id, { is_active: false }).catch(() => {});
         }
       }
@@ -113,9 +107,9 @@ Deno.serve(async (req) => {
       ...extraFields,
     });
 
-    // Désactiver les anciens tokens APRÈS création du nouveau
+    // Garder les autres appareils actifs. Ne couper que les doublons exacts.
     for (const t of allTokens) {
-      if (t.is_active) {
+      if (t.token === cleanToken && t.is_active) {
         await base44.asServiceRole.entities.FcmToken.update(t.id, { is_active: false }).catch(() => {});
       }
     }

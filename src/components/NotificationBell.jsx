@@ -122,13 +122,23 @@ export default function NotificationBell({ userEmail }) {
     };
     document.addEventListener('visibilitychange', onVisible);
 
-    // Push FCM bedou_recharge_approved → reload notifs immédiat
-    const onFcmBedou = () => {
-      console.log(`[APK_NOTIFICATION_REALTIME_RECEIVED] event=bedou_recharge_approved FCM → reload notifs`);
+    // Push FCM Bedou/course -> reload notifs immediat
+    const onFcmBedou = (event) => {
+      console.log(`[APK_NOTIFICATION_REALTIME_RECEIVED] event=${event?.type || 'cdl_push_received'} FCM -> reload notifs`);
       if (isMounted) loadNotifs();
       setTimeout(() => { if (isMounted) loadNotifs(); }, 2000);
     };
-    window.addEventListener('bedou_recharge_approved', onFcmBedou);
+    const reloadEvents = [
+      'bedou_recharge_approved',
+      'bedou_recharge_rejected',
+      'bedou_withdrawal_approved',
+      'bedou_withdrawal_rejected',
+      'bedou_low_balance',
+      'course_delivered',
+      'course_delivered_driver',
+      'cdl_push_received',
+    ];
+    reloadEvents.forEach((eventName) => window.addEventListener(eventName, onFcmBedou));
 
     // Sur natif : log diagnostic token FCM après 5s
     if (isNative) {
@@ -146,7 +156,7 @@ export default function NotificationBell({ userEmail }) {
       clearTimeout(initialTimer);
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('bedou_recharge_approved', onFcmBedou);
+      reloadEvents.forEach((eventName) => window.removeEventListener(eventName, onFcmBedou));
       try { if (unsub) unsub(); } catch (_) {}
     };
   }, [userEmail]);

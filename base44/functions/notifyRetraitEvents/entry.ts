@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     if (event?.type === 'update' && statut !== oldStatut) {
 
       // Validé → utilisateur
-      if (statut === 'valide' && demande.user_email) {
+      if ((statut === 'valide' || statut === 'paye') && demande.user_email) {
         await notify({
           user_email: demande.user_email,
           title: '✅ Retrait Bedou validé !',

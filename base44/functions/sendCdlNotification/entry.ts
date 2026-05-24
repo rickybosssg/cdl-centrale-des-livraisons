@@ -168,7 +168,8 @@ async function fetchWithRetry(fn, retries = MAX_RETRIES) {
 async function resolveTokensPaginated(base44, targetEmails, isAuditMode = false) {
   const emailSet = new Set(targetEmails.map(e => e.toLowerCase()));
   const collected = [];
-  const maxPages = isAuditMode ? 2 : 20; // audit : max 2 pages / prod : jusqu'à 20
+  const seen = new Set();
+  const maxPages = 100;
   let page = 0;
   let skip = 0;
 
@@ -189,16 +190,15 @@ async function resolveTokensPaginated(base44, targetEmails, isAuditMode = false)
         emailSet.has(t.user_email.toLowerCase()) &&
         getTokenAge(t) < FALLBACK_MAX_AGE_MS
       );
-      collected.push(...matched);
+      for (const tokenRecord of matched) {
+        const key = tokenRecord.id || tokenRecord.token;
+        if (!seen.has(key)) {
+          seen.add(key);
+          collected.push(tokenRecord);
+        }
+      }
 
       console.log(`[FCM_TOKEN_PAGE] page=${page + 1} | batch=${batch.length} | matched=${matched.length} | total_so_far=${collected.length}`);
-
-      // Stop si on a trouvé un token pour chaque destinataire
-      const covered = new Set(collected.map(t => t.user_email?.toLowerCase()));
-      if (covered.size >= emailSet.size) {
-        console.log(`[FCM_TOKEN_PAGE] all recipients covered — stopping pagination`);
-        break;
-      }
 
       if (batch.length < PAGE_SIZE) break; // dernière page
 
@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
 
     // Détection mode audit : si destinataires > 20 → mode audit (limite pages)
     // Mode prod (user_email unique ou rôle ciblé) : pagination complète
-    const isAuditMode = targetEmails.length > 20;
+    const isAuditMode = false;
     if (isAuditMode) {
       console.log(`[FCM_MODE] AUDIT (${targetEmails.length} recipients) — pagination limitée à 2 pages`);
     }
