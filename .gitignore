@@ -43,3 +43,4 @@ android/capacitor-cordova-android-plugins/
 
 # Node lock (évite conflits)
 package-lock.json
+base44/.app.jsonc
